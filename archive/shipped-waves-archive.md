@@ -19,3 +19,14 @@ This archive contains detailed task prompts for completed development waves.
 2. Create the Splash Screen (`app/index.tsx`) with a dark, atmospheric background (simulating the fog) and a central logo.
 3. Build the main layout shell that transitions from the Splash Screen to `app/(tabs)/map.tsx` (The Cartographer's Desk) and `app/(tabs)/archive.tsx` (The Archive).
 4. Do not build the actual map yet; just place a placeholder `<View>` where MapLibre will eventually go.
+
+---
+
+## Wave 2 — Core DB & Spatial Engine
+
+### Task Prompt: W2-DB — op-sqlite JSI Initialization & WAL Mode
+**Goal**: Configure the high-speed local persistence layer.
+1. Configure `@op-engineering/op-sqlite`.
+2. Create the `explored_hexes` schema using `WITHOUT ROWID` and `h3_index` as the string primary key.
+3. Enable `PRAGMA journal_mode = WAL;` and `PRAGMA synchronous = NORMAL;`.
+4. Create helper functions for inserting hexes (`INSERT OR IGNORE`) and querying all unlocked hexes.

@@ -14,7 +14,7 @@ This document is the single source of truth for all planned development waves.
 |:---:|:---:|:---|:---:|:---:|
 | **1** | **W1-INIT** | **Expo Scaffold & Zustand State** | **S** | ✅ Done |
 | **1** | **W1-NAV** | **Navigation Shell & Splash Screen** | **M** | ✅ Done |
-| **2** | **W2-DB** | **op-sqlite JSI Initialization & WAL Mode** | **M** | Planned |
+| **2** | **W2-DB** | **op-sqlite JSI Initialization & WAL Mode** | **M** | ✅ Done |
 | **2** | **W2-H3** | **h3-js Core Logic & Grid Conversions** | **S** | Planned |
 | **3** | **W3-MAP** | **MapLibre Engine & 3D Terrain Base** | **L** | Planned |
 | **3** | **W3-FOG** | **50km Bounding Box & Inverted Polygon** | **L** | Planned |
@@ -31,13 +31,6 @@ This document is the single source of truth for all planned development waves.
 ---
 
 ## Wave 2 — Core DB & Spatial Engine
-
-### Task Prompt: W2-DB — op-sqlite JSI Initialization & WAL Mode
-**Goal**: Configure the high-speed local persistence layer.
-1. Configure `@op-engineering/op-sqlite`.
-2. Create the `explored_hexes` schema using `WITHOUT ROWID` and `h3_index` as the string primary key.
-3. Enable `PRAGMA journal_mode = WAL;` and `PRAGMA synchronous = NORMAL;`.
-4. Create helper functions for inserting hexes (`INSERT OR IGNORE`) and querying all unlocked hexes.
 
 ### Task Prompt: W2-H3 — h3-js Core Logic & Grid Conversions
 **Goal**: Implement the spatial logic for calculating unlocked areas.
