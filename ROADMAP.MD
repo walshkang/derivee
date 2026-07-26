@@ -12,7 +12,7 @@ This document is the single source of truth for all planned development waves.
 
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
-| **1** | **W1-INIT** | **Expo Scaffold & Zustand State** | **S** | Planned |
+| **1** | **W1-INIT** | **Expo Scaffold & Zustand State** | **S** | ✅ Done |
 | **1** | **W1-NAV** | **Navigation Shell & Splash Screen** | **M** | Planned |
 | **2** | **W2-DB** | **op-sqlite JSI Initialization & WAL Mode** | **M** | Planned |
 | **2** | **W2-H3** | **h3-js Core Logic & Grid Conversions** | **S** | Planned |

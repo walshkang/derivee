@@ -35,3 +35,27 @@ When executing tasks from `roadmap.md`:
 3. **Roadmap Hygiene**: 
    - Once a task is successfully verified, update its status in the **Master Status Table** inside `roadmap.md` from `Planned` to `✅ Done`.
    - Move the completed task's detailed prompt block out of `roadmap.md` and append it to `archive/shipped-waves-archive.md`.
+
+---
+
+## 🧪 Testing & Verification Rules
+
+### 1. Mocking Native JSI & Map Modules (Jest)
+Because we use `@op-engineering/op-sqlite` (JSI-based) and `@maplibre/maplibre-react-native`, standard Node.js/Jest unit tests will crash if not mocked.
+- **Rule**: Provide robust manual mocks when writing unit tests for store logic or utility functions. The JSI engine does not exist in the standard Jest environment.
+
+### 2. H3 Precision Sanity Checks
+JavaScript loses precision on 64-bit integers. It's very easy to accidentally cast an H3 index to a Number during serialization.
+- **Rule**: All tests validating H3 utility functions or database operations must explicitly assert that inputs and outputs are strictly strings (`typeof === 'string'`). Add regression tests using `Number.MAX_SAFE_INTEGER` boundaries to ensure no silent truncation occurs.
+
+### 3. Background Task Emulation
+Testing `expo-task-manager` and `expo-location` background listeners via unit tests is problematic.
+- **Rule**: When writing tests for the "Velocity Gate" (Implied Speed Filter), decouple the coordinate math from the Expo listener. Write pure functions for calculating distance/time so they can be unit-tested without needing the Expo location emitter context.
+
+### 4. Continuous Native Generation (CNG) Prebuild Checks
+In an Expo Managed workflow, native behavior changes (e.g. background location permissions) happen via `app.json` config plugins.
+- **Rule**: Testing native configuration changes requires verifying the prebuild. Always run `npx expo prebuild --clean` to ensure the iOS/Android folders generate successfully and the `Info.plist`/`AndroidManifest.xml` contain the correct values.
+
+### 5. E2E and Performance Profiling
+Since the biggest risk is frame drops during the `h3.cellsToMultiPolygon` merge step, unit tests are insufficient for performance guarantees.
+- **Rule**: UI and map performance verification should be done on a physical device or via an E2E framework (like Maestro). Never trust the iOS Simulator/Android Emulator performance for MapLibre fog rendering.
