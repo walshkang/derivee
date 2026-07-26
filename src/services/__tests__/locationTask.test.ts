@@ -1,6 +1,7 @@
 import {
   BACKGROUND_LOCATION_TASK,
   handleBackgroundLocationUpdate,
+  resetLastAcceptedLocation,
 } from '../locationTask';
 import { useExplorationStore } from '../../store/useExplorationStore';
 import { initDatabase, closeDatabase, getAllUnlockedHexes } from '../../db/database';
@@ -10,6 +11,7 @@ describe('Background Location Task (locationTask.ts)', () => {
   beforeEach(() => {
     initDatabase();
     useExplorationStore.getState().resetExploration();
+    resetLastAcceptedLocation();
   });
 
   afterEach(() => {
@@ -63,6 +65,42 @@ describe('Background Location Task (locationTask.ts)', () => {
     // Verify op-sqlite DB persisted hexes
     const dbHexes = getAllUnlockedHexes();
     expect(dbHexes.length).toBe(7);
+  });
+
+  it('filters out GPS drift coordinates exceeding 12 m/s velocity gate', () => {
+    const now = Date.now();
+    const mockLocations: LocationObject[] = [
+      {
+        coords: {
+          latitude: 40.7128,
+          longitude: -73.956,
+          altitude: null,
+          accuracy: 5,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        },
+        timestamp: now,
+      },
+      {
+        // 500m jump after 2 seconds => 250 m/s (drift jump)
+        coords: {
+          latitude: 40.7173,
+          longitude: -73.956,
+          altitude: null,
+          accuracy: 5,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        },
+        timestamp: now + 2000,
+      },
+    ];
+
+    const unlockedHexes = handleBackgroundLocationUpdate(mockLocations);
+
+    // Only the first location's 7 hexes should be processed; drift jump discarded
+    expect(unlockedHexes.length).toBe(7);
   });
 
   it('skips invalid coordinate objects without throwing exceptions', () => {

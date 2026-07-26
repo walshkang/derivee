@@ -2,6 +2,7 @@ import * as TaskManager from 'expo-task-manager';
 import type { LocationObject } from 'expo-location';
 import { processAndStoreLocationHexes } from '../utils/h3Utils';
 import { useExplorationStore } from '../store/useExplorationStore';
+import { filterLocationsBySpeed } from '../utils/speedFilter';
 
 /**
  * Task identifier for background location updates in expo-task-manager.
@@ -16,7 +17,28 @@ export interface LocationTaskPayload {
 }
 
 /**
+ * Reference to the last accepted location across location batches.
+ * Used for implied speed calculations across sequential background updates.
+ */
+let lastAcceptedLocation: LocationObject | null = null;
+
+/**
+ * Resets the last accepted location reference (useful for tests or exploration reset).
+ */
+export function resetLastAcceptedLocation(): void {
+  lastAcceptedLocation = null;
+}
+
+/**
+ * Gets the current last accepted location reference.
+ */
+export function getLastAcceptedLocation(): LocationObject | null {
+  return lastAcceptedLocation;
+}
+
+/**
  * Pure handler function to process a batch of location updates from background GPS.
+ * Passes locations through the implied speed velocity gate (<= 12 m/s).
  * Decoupled from Expo's task manager listener context for clean unit testing per AGENTS.md.
  *
  * @param locations Array of Expo LocationObject items
@@ -27,9 +49,21 @@ export function handleBackgroundLocationUpdate(locations: LocationObject[]): str
     return [];
   }
 
-  const allUnlockedHexes: string[] = [];
+  // 1. Pass incoming coordinates through the Implied Speed Velocity Gate (AGENTS.md)
+  const { validLocations, lastAcceptedLocation: updatedLast } = filterLocationsBySpeed(
+    locations,
+    lastAcceptedLocation
+  );
+  lastAcceptedLocation = updatedLast;
 
-  for (const location of locations) {
+  if (validLocations.length === 0) {
+    return [];
+  }
+
+  const allUnlockedHexes: string[] = [];
+  let totalNewHexCount = 0;
+
+  for (const location of validLocations) {
     if (!location || !location.coords) continue;
     const { latitude, longitude } = location.coords;
 
@@ -43,7 +77,8 @@ export function handleBackgroundLocationUpdate(locations: LocationObject[]): str
     }
 
     // Convert GPS coordinate to H3 resolution 11 & buffer hexes, insert to op-sqlite DB, update store
-    const { bufferHexes } = processAndStoreLocationHexes(latitude, longitude);
+    const { bufferHexes, newHexCount } = processAndStoreLocationHexes(latitude, longitude);
+    totalNewHexCount += newHexCount;
 
     // Enforce 15-character hex string precision guardrail (AGENTS.md)
     const validHexes = bufferHexes.filter(
@@ -52,10 +87,11 @@ export function handleBackgroundLocationUpdate(locations: LocationObject[]): str
     allUnlockedHexes.push(...validHexes);
   }
 
-  // Synchronously update GeoJSON polygon fog if current location exists
+  // 2. Optimized Geometry Unioning Trigger:
+  // Only trigger expensive h3.cellsToMultiPolygon / updateFogGeoJSON when NEW hexes were actually unlocked.
+  // Avoids CPU congestion and JS bridge rendering stalls when stationary or pacing in unlocked hexes.
   const store = useExplorationStore.getState();
-  if (store.currentLocation) {
-    // Non-blocking trigger to update fog polygon
+  if (store.currentLocation && totalNewHexCount > 0) {
     store.updateFogGeoJSON().catch((err) => {
       console.warn('Failed updating fog GeoJSON in background task handler:', err);
     });

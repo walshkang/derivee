@@ -47,33 +47,43 @@ export function getDb(): OPSQLiteConnection {
  * Uses INSERT OR IGNORE to skip hexes already discovered.
  * Strict type enforcement guarantees only valid strings are processed (AGENTS.md guardrail).
  */
-export function insertUnlockedHexes(hexes: string[], timestamp: number = Date.now()): void {
+export function insertUnlockedHexes(hexes: string[], timestamp: number = Date.now()): number {
   const db = getDb();
 
   // Strict string type assertion for 64-bit H3 indices
   const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
 
   if (validHexes.length === 0) {
-    return;
+    return 0;
   }
+
+  let insertedCount = 0;
 
   if (typeof db.transaction === 'function') {
     db.transaction(async (tx: Transaction) => {
       for (const hex of validHexes) {
-        tx.execute('INSERT OR IGNORE INTO explored_hexes (h3_index, discovered_at) VALUES (?, ?);', [
+        const res = tx.execute('INSERT OR IGNORE INTO explored_hexes (h3_index, discovered_at) VALUES (?, ?);', [
           hex,
           timestamp,
         ]);
+        if (res && typeof res.rowsAffected === 'number') {
+          insertedCount += res.rowsAffected;
+        }
       }
     });
   } else {
     for (const hex of validHexes) {
-      db.execute('INSERT OR IGNORE INTO explored_hexes (h3_index, discovered_at) VALUES (?, ?);', [
+      const res = db.execute('INSERT OR IGNORE INTO explored_hexes (h3_index, discovered_at) VALUES (?, ?);', [
         hex,
         timestamp,
       ]);
+      if (res && typeof res.rowsAffected === 'number') {
+        insertedCount += res.rowsAffected;
+      }
     }
   }
+
+  return insertedCount;
 }
 
 /**

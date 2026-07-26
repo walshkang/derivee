@@ -117,20 +117,23 @@ export function processAndStoreLocationHexes(
   lng: number,
   radius: number = DEFAULT_BUFFER_RADIUS,
   resolution: number = DEFAULT_H3_RESOLUTION
-): { centerHex: string; bufferHexes: string[] } {
+): { centerHex: string; bufferHexes: string[]; newHexCount: number } {
   const centerHex = coordToH3(lat, lng, resolution);
   const bufferHexes = getH3Buffer(centerHex, radius);
 
   // Persist hexes to op-sqlite database
-  insertUnlockedHexes(bufferHexes);
+  const dbInsertedCount = insertUnlockedHexes(bufferHexes);
 
   // Update Zustand store
   const store = useExplorationStore.getState();
   store.setCurrentLocation({ latitude: lat, longitude: lng });
-  store.addUnlockedHexes(bufferHexes);
+  const storeAddedCount = store.addUnlockedHexes(bufferHexes);
+
+  const newHexCount = Math.max(dbInsertedCount, storeAddedCount);
 
   return {
     centerHex,
     bufferHexes,
+    newHexCount,
   };
 }

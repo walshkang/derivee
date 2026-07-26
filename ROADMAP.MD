@@ -19,7 +19,7 @@ This document is the single source of truth for all planned development waves.
 | **3** | **W3-MAP** | **MapLibre Engine & 3D Terrain Base** | **L** | ✅ Done |
 | **3** | **W3-FOG** | **50km Bounding Box & Inverted Polygon** | **L** | ✅ Done |
 | **4** | **W4-TRACK** | **expo-location Background Service & Batching** | **M** | ✅ Done |
-| **4** | **W4-DRIFT** | **Implied Speed Filter & Geometry Unioning** | **M** | Planned |
+| **4** | **W4-DRIFT** | **Implied Speed Filter & Geometry Unioning** | **M** | ✅ Done |
 | **5** | **W5-POI** | **Gamification & POI Integration** | **M** | Planned |
 | **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | Planned |
 
@@ -40,13 +40,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 4 — Background Location & Anti-Drift
-
-### Task Prompt: W4-DRIFT — Implied Speed Filter & Geometry Unioning
-**Goal**: Prevent GPS drift from artificially unlocking areas and maintain 60fps.
-1. Implement the velocity gate inside the background task: discard any coordinate jump yielding an implied speed $> 12 \text{ m/s}$.
-2. Optimize the geometry unioning loop: only trigger `h3.cellsToMultiPolygon` when new hexes are actually inserted, rather than on a dumb timer.
-3. Verify that the UI main thread does not freeze when the background task fires.
+## Wave 4 — Background Location & Anti-Drift (✅ Completed)
+*Tasks W4-TRACK & W4-DRIFT shipped. Prompts archived in `archive/shipped-waves-archive.md`.*
 
 ---
 

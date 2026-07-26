@@ -28,7 +28,7 @@ export interface ExplorationState {
   setIsExploring: (isExploring: boolean) => void;
   setCurrentLocation: (location: Location | null) => void;
   setUnlockedHexes: (hexes: string[]) => void;
-  addUnlockedHexes: (hexes: string[]) => void;
+  addUnlockedHexes: (hexes: string[]) => number;
   updateFogGeoJSON: () => Promise<void>;
   resetExploration: () => void;
 }
@@ -51,11 +51,15 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
 
   addUnlockedHexes: (newHexes: string[]) => {
     const validHexes = newHexes.filter((hex): hex is string => typeof hex === 'string');
+    let addedCount = 0;
     set((state) => {
       const existingSet = new Set(state.unlockedHexes);
+      const initialSize = existingSet.size;
       validHexes.forEach((h) => existingSet.add(h));
+      addedCount = existingSet.size - initialSize;
       return { unlockedHexes: Array.from(existingSet) };
     });
+    return addedCount;
   },
 
   updateFogGeoJSON: async () => {

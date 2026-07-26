@@ -66,3 +66,9 @@ This archive contains detailed task prompts for completed development waves.
 2. Register a headless background task using `expo-task-manager`.
 3. Configure `startLocationUpdatesAsync` with `distanceInterval: 10`, `deferredUpdatesDistance: 50`, and `Location.ActivityType.Fitness`.
 4. Connect incoming background coordinates to the H3 buffer calculation and SQLite insertion pipeline.
+
+### Task Prompt: W4-DRIFT — Implied Speed Filter & Geometry Unioning
+**Goal**: Prevent GPS drift from artificially unlocking areas and maintain 60fps.
+1. Implement the velocity gate inside the background task: discard any coordinate jump yielding an implied speed $> 12 \text{ m/s}$.
+2. Optimize the geometry unioning loop: only trigger `h3.cellsToMultiPolygon` when new hexes are actually inserted, rather than on a dumb timer.
+3. Verify that the UI main thread does not freeze when the background task fires.
