@@ -11,6 +11,7 @@
     "test": "npx jest"
   },
   "dependencies": {
+    "@maplibre/maplibre-react-native": "^10.4.2",
     "@op-engineering/op-sqlite": "^3.0.0",
     "babel-preset-expo": "~11.0.0",
     "expo": "~51.0.0",

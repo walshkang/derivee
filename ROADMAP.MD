@@ -16,7 +16,7 @@ This document is the single source of truth for all planned development waves.
 | **1** | **W1-NAV** | **Navigation Shell & Splash Screen** | **M** | ✅ Done |
 | **2** | **W2-DB** | **op-sqlite JSI Initialization & WAL Mode** | **M** | ✅ Done |
 | **2** | **W2-H3** | **h3-js Core Logic & Grid Conversions** | **S** | ✅ Done |
-| **3** | **W3-MAP** | **MapLibre Engine & 3D Terrain Base** | **L** | Planned |
+| **3** | **W3-MAP** | **MapLibre Engine & 3D Terrain Base** | **L** | ✅ Done |
 | **3** | **W3-FOG** | **50km Bounding Box & Inverted Polygon** | **L** | Planned |
 | **4** | **W4-TRACK** | **expo-location Background Service & Batching** | **M** | Planned |
 | **4** | **W4-DRIFT** | **Implied Speed Filter & Geometry Unioning** | **M** | Planned |
@@ -36,13 +36,6 @@ This document is the single source of truth for all planned development waves.
 ---
 
 ## Wave 3 — The Fog Rendering Engine
-
-### Task Prompt: W3-MAP — MapLibre Engine & 3D Terrain Base
-**Goal**: Render the underlying world that users will uncover.
-1. Initialize `@maplibre/maplibre-react-native` inside `app/(tabs)/map.tsx`.
-2. Configure a Raster DEM Source and 3D terrain extrusion for the base layer.
-3. Add high-resolution satellite imagery as the primary visual reward beneath the fog.
-4. Ensure the camera follows the user's location with a tilted 3D perspective.
 
 ### Task Prompt: W3-FOG — 50km Bounding Box & Inverted Polygon
 **Goal**: Implement the inverted polygon stack and punch holes in the fog.

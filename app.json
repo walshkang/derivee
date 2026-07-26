@@ -26,6 +26,14 @@
       "favicon": "./assets/favicon.png"
     },
     "scheme": "fog-of-wburg",
-    "plugins": ["expo-router"]
+    "plugins": [
+      "expo-router",
+      [
+        "@maplibre/maplibre-react-native",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Fog of Wburg to use your location to uncover the map."
+        }
+      ]
+    ]
   }
 }

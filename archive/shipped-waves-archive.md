@@ -37,3 +37,14 @@ This archive contains detailed task prompts for completed development waves.
 2. Implement a function to convert a GPS coordinate (lat/lng) to a Resolution 11 H3 index string.
 3. Implement a function to calculate a buffer (e.g., k-ring radius) around a given hex to simulate the discovery radius.
 4. Integrate with `op-sqlite` to write these newly discovered hexes to the local database.
+
+---
+
+## Wave 3 — The Fog Rendering Engine
+
+### Task Prompt: W3-MAP — MapLibre Engine & 3D Terrain Base
+**Goal**: Render the underlying world that users will uncover.
+1. Initialize `@maplibre/maplibre-react-native` inside `app/(tabs)/map.tsx`.
+2. Configure a Raster DEM Source and 3D terrain extrusion for the base layer.
+3. Add high-resolution satellite imagery as the primary visual reward beneath the fog.
+4. Ensure the camera follows the user's location with a tilted 3D perspective.

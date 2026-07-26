@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
+import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useExplorationStore } from '@/store/useExplorationStore';
 
 export default function MapScreen() {
@@ -28,20 +29,21 @@ export default function MapScreen() {
         </View>
       </View>
 
-      {/* Map Engine Viewport Placeholder (Reserved for MapLibre in W3-MAP) */}
-      <View testID="map-placeholder" style={styles.mapPlaceholder}>
-        <View style={styles.gridOverlay}>
-          <Text style={styles.placeholderIcon}>🗺️</Text>
-          <Text style={styles.placeholderTitle}>The Cartographer's Desk</Text>
-          <Text style={styles.placeholderSubtitle}>
-            [ MapLibre Viewport Reserved — Wave 3 ]
-          </Text>
-          <Text style={styles.placeholderCoords}>
-            {currentLocation
-              ? `GPS: ${currentLocation.latitude.toFixed(4)} N, ${currentLocation.longitude.toFixed(4)} W`
-              : 'GPS: Standby / Awaiting Signal'}
-          </Text>
-        </View>
+      {/* MapLibre Engine Viewport */}
+      <View style={StyleSheet.absoluteFillObject}>
+        <MapLibreGL.MapView
+          style={StyleSheet.absoluteFillObject}
+          mapStyle={`https://api.maptiler.com/maps/satellite/style.json?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`}
+          logoEnabled={false}
+          attributionEnabled={false}
+        >
+          <MapLibreGL.Camera
+            followUserLocation={isExploring}
+            followPitch={45}
+            followZoomLevel={16}
+          />
+          <MapLibreGL.UserLocation visible={true} />
+        </MapLibreGL.MapView>
       </View>
 
       {/* Bottom HUD Actions & Overlay */}
