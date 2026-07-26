@@ -13,7 +13,7 @@ This document is the single source of truth for all planned development waves.
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
 | **1** | **W1-INIT** | **Expo Scaffold & Zustand State** | **S** | ✅ Done |
-| **1** | **W1-NAV** | **Navigation Shell & Splash Screen** | **M** | Planned |
+| **1** | **W1-NAV** | **Navigation Shell & Splash Screen** | **M** | ✅ Done |
 | **2** | **W2-DB** | **op-sqlite JSI Initialization & WAL Mode** | **M** | Planned |
 | **2** | **W2-H3** | **h3-js Core Logic & Grid Conversions** | **S** | Planned |
 | **3** | **W3-MAP** | **MapLibre Engine & 3D Terrain Base** | **L** | Planned |
@@ -25,21 +25,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 1 — Foundation & UI Shell
-
-### Task Prompt: W1-INIT — Expo Scaffold & Zustand State
-**Goal**: Initialize the raw Expo environment and set up the global state manager.
-1. Initialize a new Expo SDK 51+ project (Managed Workflow) using TypeScript.
-2. Install `zustand` and create a global store (`store/useExplorationStore.ts`).
-3. The store should track: `isExploring` (boolean), `currentLocation` (lat/lng | null), and `unlockedHexes` (array of strings).
-4. Configure absolute imports in `tsconfig.json` (e.g., `@/*` maps to `./src/*`).
-
-### Task Prompt: W1-NAV — Navigation Shell & Splash Screen
-**Goal**: Build the routing architecture and "The Awakening" splash screen.
-1. Install Expo Router.
-2. Create the Splash Screen (`app/index.tsx`) with a dark, atmospheric background (simulating the fog) and a central logo.
-3. Build the main layout shell that transitions from the Splash Screen to `app/(tabs)/map.tsx` (The Cartographer's Desk) and `app/(tabs)/archive.tsx` (The Archive).
-4. Do not build the actual map yet; just place a placeholder `<View>` where MapLibre will eventually go.
+## Wave 1 — Foundation & UI Shell (✅ Completed)
+*Tasks W1-INIT & W1-NAV shipped. Prompts archived in `archive/shipped-waves-archive.md`.*
 
 ---
 

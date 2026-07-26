@@ -25,6 +25,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "fog-of-wburg"
+    "scheme": "fog-of-wburg",
+    "plugins": ["expo-router"]
   }
 }

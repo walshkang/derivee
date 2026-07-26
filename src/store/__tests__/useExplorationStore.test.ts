@@ -65,8 +65,8 @@ describe('useExplorationStore', () => {
       expect(typeof hex).toBe('string');
       // Assert length constraint (15 chars)
       expect(hex.length).toBe(14); // 8b2a100d213fff is 14 hex chars or standard 15-char H3 index string
-      // Confirm no numeric conversion took place
-      expect(Number.isNaN(Number(hex))).toBe(false); // Valid hex string parse
+      // Confirm valid hex string parse
+      expect(Number.isNaN(parseInt(hex, 16))).toBe(false);
     });
   });
 
