@@ -20,7 +20,7 @@ This document is the single source of truth for all planned development waves.
 | **3** | **W3-FOG** | **50km Bounding Box & Inverted Polygon** | **L** | ✅ Done |
 | **4** | **W4-TRACK** | **expo-location Background Service & Batching** | **M** | ✅ Done |
 | **4** | **W4-DRIFT** | **Implied Speed Filter & Geometry Unioning** | **M** | ✅ Done |
-| **5** | **W5-POI** | **Gamification & POI Integration** | **M** | Planned |
+| **5** | **W5-POI** | **Gamification & POI Integration** | **M** | ✅ Done |
 | **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | Planned |
 
 ---
@@ -45,14 +45,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 5 — Gamification
-
-### Task Prompt: W5-POI — Gamification & POI Integration
-**Goal**: Lure users to unexplored areas using beacons.
-1. Seed the database with local Points of Interest (POIs).
-2. Render undiscovered POIs as glowing beacons on the map, visible through the fog.
-3. Implement discovery logic: when the user's buffer radius intersects a POI coordinate, trigger a discovery event.
-4. Display a reward modal and convert the beacon into a permanent, unobtrusive pin.
+## Wave 5 — Gamification (✅ Completed)
+*Task W5-POI shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
 

@@ -87,6 +87,12 @@ export function handleBackgroundLocationUpdate(locations: LocationObject[]): str
     allUnlockedHexes.push(...validHexes);
   }
 
+  // 1.5 Background POI Discovery Hook
+  if (allUnlockedHexes.length > 0) {
+    const { usePOIStore } = require('../store/usePOIStore');
+    usePOIStore.getState().checkIntersections(allUnlockedHexes);
+  }
+
   // 2. Optimized Geometry Unioning Trigger:
   // Only trigger expensive h3.cellsToMultiPolygon / updateFogGeoJSON when NEW hexes were actually unlocked.
   // Avoids CPU congestion and JS bridge rendering stalls when stationary or pacing in unlocked hexes.

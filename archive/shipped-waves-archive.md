@@ -72,3 +72,10 @@ This archive contains detailed task prompts for completed development waves.
 1. Implement the velocity gate inside the background task: discard any coordinate jump yielding an implied speed $> 12 \text{ m/s}$.
 2. Optimize the geometry unioning loop: only trigger `h3.cellsToMultiPolygon` when new hexes are actually inserted, rather than on a dumb timer.
 3. Verify that the UI main thread does not freeze when the background task fires.
+
+### Task Prompt: W5-POI — Gamification & POI Integration
+**Goal**: Lure users to unexplored areas using beacons.
+1. Seed the database with local Points of Interest (POIs).
+2. Render undiscovered POIs as glowing beacons on the map, visible through the fog.
+3. Implement discovery logic: when the user's buffer radius intersects a POI coordinate, trigger a discovery event.
+4. Display a reward modal and convert the beacon into a permanent, unobtrusive pin.

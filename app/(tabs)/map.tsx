@@ -3,11 +3,19 @@ import { StyleSheet, Text, View, Pressable } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useExplorationStore } from '@/store/useExplorationStore';
 import { useBackgroundLocation } from '@/hooks/useBackgroundLocation';
+import { usePOIStore } from '@/store/usePOIStore';
+import { POIRewardModal } from '@/components/POIRewardModal';
+import { useMemo } from 'react';
 
 export default function MapScreen() {
   const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON } =
     useExplorationStore();
   const { toggleTracking, isLoading } = useBackgroundLocation();
+  const { pois, recentlyDiscovered, loadPOIs, clearRecentPOI } = usePOIStore();
+
+  useEffect(() => {
+    loadPOIs();
+  }, [loadPOIs]);
 
   // Update the fog layer whenever the unlocked hexes change
   useEffect(() => {
@@ -23,6 +31,28 @@ export default function MapScreen() {
       console.warn('Exploration tracking toggle error:', err);
     }
   };
+
+  const undiscoveredPOIsGeoJSON = useMemo<GeoJSON.FeatureCollection>(() => {
+    return {
+      type: 'FeatureCollection',
+      features: pois.filter((p) => !p.discovered).map((p) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.longitude, p.latitude] },
+        properties: { id: p.id, name: p.name },
+      })),
+    };
+  }, [pois]);
+
+  const discoveredPOIsGeoJSON = useMemo<GeoJSON.FeatureCollection>(() => {
+    return {
+      type: 'FeatureCollection',
+      features: pois.filter((p) => p.discovered).map((p) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.longitude, p.latitude] },
+        properties: { id: p.id, name: p.name },
+      })),
+    };
+  }, [pois]);
 
   return (
     <View style={styles.container}>
@@ -67,6 +97,34 @@ export default function MapScreen() {
               />
             </MapLibreGL.ShapeSource>
           )}
+
+          {/* Layer 3: Discovered POIs */}
+          <MapLibreGL.ShapeSource id="discovered-pois-source" shape={discoveredPOIsGeoJSON}>
+            <MapLibreGL.CircleLayer
+              id="discovered-pois-layer"
+              style={{
+                circleRadius: 6,
+                circleColor: '#f2cc60',
+                circleStrokeWidth: 2,
+                circleStrokeColor: '#ffffff',
+              }}
+            />
+          </MapLibreGL.ShapeSource>
+
+          {/* Layer 4: Undiscovered POIs (Beacons) */}
+          <MapLibreGL.ShapeSource id="undiscovered-pois-source" shape={undiscoveredPOIsGeoJSON}>
+            <MapLibreGL.CircleLayer
+              id="undiscovered-pois-layer"
+              style={{
+                circleRadius: 8,
+                circleColor: '#58a6ff',
+                circleOpacity: 0.8,
+                circleStrokeWidth: 3,
+                circleStrokeColor: '#1f6feb',
+                circleStrokeOpacity: 0.6,
+              }}
+            />
+          </MapLibreGL.ShapeSource>
         </MapLibreGL.MapView>
       </View>
 
@@ -97,6 +155,8 @@ export default function MapScreen() {
           </Text>
         </Pressable>
       </View>
+
+      <POIRewardModal poi={recentlyDiscovered} onClose={clearRecentPOI} />
     </View>
   );
 }

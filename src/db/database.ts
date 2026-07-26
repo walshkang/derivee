@@ -27,6 +27,20 @@ export function initDatabase(name: string = DB_NAME): OPSQLiteConnection {
     ) WITHOUT ROWID;
   `);
 
+  // 3. Create pois table (Gamification Wave 5)
+  db.execute(`
+    CREATE TABLE IF NOT EXISTS pois (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      h3_index TEXT NOT NULL,
+      discovered INTEGER DEFAULT 0,
+      reward_type TEXT
+    ) WITHOUT ROWID;
+  `);
+
   dbInstance = db;
   return db;
 }
