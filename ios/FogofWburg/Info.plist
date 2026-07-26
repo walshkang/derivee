@@ -43,9 +43,20 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Allow Fog of Wburg to use your location in the background to uncover the map as you explore.</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>Allow Fog of Wburg to track your exploration even when the app is in the background.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Allow Fog of Wburg to track your exploration while using the app.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
+    </array>
+    <key>UIBackgroundModes</key>
+    <array>
+      <string>fetch</string>
+      <string>location</string>
     </array>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>

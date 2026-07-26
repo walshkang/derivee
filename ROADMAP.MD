@@ -18,7 +18,7 @@ This document is the single source of truth for all planned development waves.
 | **2** | **W2-H3** | **h3-js Core Logic & Grid Conversions** | **S** | ✅ Done |
 | **3** | **W3-MAP** | **MapLibre Engine & 3D Terrain Base** | **L** | ✅ Done |
 | **3** | **W3-FOG** | **50km Bounding Box & Inverted Polygon** | **L** | ✅ Done |
-| **4** | **W4-TRACK** | **expo-location Background Service & Batching** | **M** | Planned |
+| **4** | **W4-TRACK** | **expo-location Background Service & Batching** | **M** | ✅ Done |
 | **4** | **W4-DRIFT** | **Implied Speed Filter & Geometry Unioning** | **M** | Planned |
 | **5** | **W5-POI** | **Gamification & POI Integration** | **M** | Planned |
 | **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | Planned |
@@ -41,13 +41,6 @@ This document is the single source of truth for all planned development waves.
 ---
 
 ## Wave 4 — Background Location & Anti-Drift
-
-### Task Prompt: W4-TRACK — expo-location Background Service & Batching
-**Goal**: Set up battery-conscious background tracking.
-1. Request Foreground and Background location permissions via `expo-location`.
-2. Register a headless background task using `expo-task-manager`.
-3. Configure `startLocationUpdatesAsync` with `distanceInterval: 10`, `deferredUpdatesDistance: 50`, and `Location.ActivityType.Fitness`.
-4. Connect incoming background coordinates to the H3 buffer calculation and SQLite insertion pipeline.
 
 ### Task Prompt: W4-DRIFT — Implied Speed Filter & Geometry Unioning
 **Goal**: Prevent GPS drift from artificially unlocking areas and maintain 60fps.

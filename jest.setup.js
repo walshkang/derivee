@@ -81,3 +81,117 @@ jest.mock('@op-engineering/op-sqlite', () => {
     DB: jest.fn(),
   };
 });
+
+// Manual mock for expo-task-manager
+jest.mock('expo-task-manager', () => {
+  const tasks = new Map();
+
+  return {
+    defineTask: jest.fn((taskName, taskExecutor) => {
+      tasks.set(taskName, taskExecutor);
+    }),
+    isTaskDefined: jest.fn((taskName) => tasks.has(taskName)),
+    isTaskRegisteredAsync: jest.fn(async (taskName) => tasks.has(taskName)),
+    unregisterAllTasksAsync: jest.fn(async () => {
+      tasks.clear();
+    }),
+    _definedTasks: tasks,
+  };
+});
+
+// Manual mock for expo-location
+jest.mock('expo-location', () => {
+  let isTrackingStarted = false;
+
+  return {
+    Accuracy: {
+      Lowest: 1,
+      Low: 2,
+      Balanced: 3,
+      High: 4,
+      Highest: 5,
+      BestForNavigation: 6,
+    },
+    ActivityType: {
+      Other: 1,
+      AutomotiveNavigation: 2,
+      Fitness: 3,
+      OtherNavigation: 4,
+      Airborne: 5,
+    },
+    requestForegroundPermissionsAsync: jest.fn(async () => ({
+      status: 'granted',
+      granted: true,
+    })),
+    requestBackgroundPermissionsAsync: jest.fn(async () => ({
+      status: 'granted',
+      granted: true,
+    })),
+    getForegroundPermissionsAsync: jest.fn(async () => ({
+      status: 'granted',
+      granted: true,
+    })),
+    getBackgroundPermissionsAsync: jest.fn(async () => ({
+      status: 'granted',
+      granted: true,
+    })),
+    startLocationUpdatesAsync: jest.fn(async (taskName, options) => {
+      isTrackingStarted = true;
+    }),
+    stopLocationUpdatesAsync: jest.fn(async (taskName) => {
+      isTrackingStarted = false;
+    }),
+    hasStartedLocationUpdatesAsync: jest.fn(async (taskName) => {
+      return isTrackingStarted;
+    }),
+    _setIsTrackingStarted: (val) => {
+      isTrackingStarted = val;
+    },
+  };
+});
+
+// Manual mock for @maplibre/maplibre-react-native per AGENTS.md rules
+jest.mock('@maplibre/maplibre-react-native', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const MockMapView = (props: any) => React.createElement(View, { testID: 'map-placeholder', ...props }, props.children);
+  const MockCamera = () => null;
+  const MockUserLocation = () => null;
+  const MockShapeSource = (props: any) => React.createElement(View, props, props.children);
+  const MockFillLayer = () => null;
+  const MockRasterDemSource = (props: any) => React.createElement(View, props, props.children);
+  const MockTerrain = () => null;
+  const MockRasterSource = (props: any) => React.createElement(View, props, props.children);
+  const MockRasterLayer = () => null;
+
+  return {
+    __esModule: true,
+    default: {
+      MapView: MockMapView,
+      Camera: MockCamera,
+      UserLocation: MockUserLocation,
+      ShapeSource: MockShapeSource,
+      FillLayer: MockFillLayer,
+      RasterDemSource: MockRasterDemSource,
+      Terrain: MockTerrain,
+      RasterSource: MockRasterSource,
+      RasterLayer: MockRasterLayer,
+      setAccessToken: jest.fn(),
+      setWellKnownTileServer: jest.fn(),
+    },
+    MapView: MockMapView,
+    Camera: MockCamera,
+    UserLocation: MockUserLocation,
+    ShapeSource: MockShapeSource,
+    FillLayer: MockFillLayer,
+    RasterDemSource: MockRasterDemSource,
+    Terrain: MockTerrain,
+    RasterSource: MockRasterSource,
+    RasterLayer: MockRasterLayer,
+    setAccessToken: jest.fn(),
+    setWellKnownTileServer: jest.fn(),
+  };
+});
+
+

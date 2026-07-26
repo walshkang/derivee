@@ -5,7 +5,7 @@ export interface Location {
   longitude: number;
 }
 
-import type { Feature, Polygon, MultiPolygon } from '@turf/helpers';
+import type { Feature, Polygon, MultiPolygon } from 'geojson';
 import { generateFogGeoJSON } from '../utils/fogGeoJSON';
 
 export interface ExplorationState {

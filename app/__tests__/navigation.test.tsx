@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import SplashScreen from '../index';
 import MapScreen from '../(tabs)/map';
 import ArchiveScreen from '../(tabs)/archive';
@@ -48,23 +48,24 @@ describe('Wave 1 Navigation Shell & Screens (W1-NAV)', () => {
   });
 
   describe('MapScreen ("The Cartographer\'s Desk")', () => {
-    it('renders the reserved MapLibre placeholder viewport', () => {
+    it('renders the MapLibre viewport and top HUD', () => {
       const { getByTestId, getByText } = render(<MapScreen />);
 
       expect(getByTestId('map-placeholder')).toBeTruthy();
-      expect(getByText("The Cartographer's Desk")).toBeTruthy();
-      expect(getByText('[ MapLibre Viewport Reserved — Wave 3 ]')).toBeTruthy();
+      expect(getByText('FOG OF WBURG')).toBeTruthy();
+      expect(getByText('STANDBY')).toBeTruthy();
     });
 
-    it('toggles expedition state and updates store when action button is pressed', () => {
+    it('toggles expedition state when action button is pressed', async () => {
       const { getByText } = render(<MapScreen />);
       expect(useExplorationStore.getState().isExploring).toBe(false);
 
       const startButton = getByText('START EXPLORING');
-      fireEvent.press(startButton);
+      await act(async () => {
+        fireEvent.press(startButton);
+      });
 
       expect(useExplorationStore.getState().isExploring).toBe(true);
-      expect(useExplorationStore.getState().unlockedHexes).toContain('8b2a100d213fff');
       expect(getByText('STOP EXPEDITION')).toBeTruthy();
     });
   });

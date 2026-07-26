@@ -1,4 +1,4 @@
-import { Feature, Polygon, MultiPolygon } from '@turf/helpers';
+import type { Feature, Polygon, MultiPolygon } from 'geojson';
 import bboxPolygon from '@turf/bbox-polygon';
 import mask from '@turf/mask';
 import destination from '@turf/destination';

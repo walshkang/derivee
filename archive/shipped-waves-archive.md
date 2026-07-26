@@ -55,3 +55,14 @@ This archive contains detailed task prompts for completed development waves.
 2. Add a `ShapeSource` for the fog layer with `withSynchronousUpdate(true)` enabled.
 3. Periodically query unlocked hexes from `op-sqlite`, run `h3.cellsToMultiPolygon` in a background worker, and pass the resulting merged geometry as "inner rings" (holes) to the fog layer.
 4. Render vector boundaries (Layer 4 - context labels) on top of the fog.
+
+---
+
+## Wave 4 — Background Location & Anti-Drift
+
+### Task Prompt: W4-TRACK — expo-location Background Service & Batching
+**Goal**: Set up battery-conscious background tracking.
+1. Request Foreground and Background location permissions via `expo-location`.
+2. Register a headless background task using `expo-task-manager`.
+3. Configure `startLocationUpdatesAsync` with `distanceInterval: 10`, `deferredUpdatesDistance: 50`, and `Location.ActivityType.Fitness`.
+4. Connect incoming background coordinates to the H3 buffer calculation and SQLite insertion pipeline.

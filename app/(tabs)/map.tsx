@@ -2,10 +2,12 @@ import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useExplorationStore } from '@/store/useExplorationStore';
+import { useBackgroundLocation } from '@/hooks/useBackgroundLocation';
 
 export default function MapScreen() {
-  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, setIsExploring, setCurrentLocation, addUnlockedHexes, updateFogGeoJSON } =
+  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON } =
     useExplorationStore();
+  const { toggleTracking, isLoading } = useBackgroundLocation();
 
   // Update the fog layer whenever the unlocked hexes change
   useEffect(() => {
@@ -14,12 +16,11 @@ export default function MapScreen() {
     }
   }, [unlockedHexes, isExploring, currentLocation?.latitude, currentLocation?.longitude, updateFogGeoJSON]);
 
-  const handleToggleExploration = () => {
-    const nextState = !isExploring;
-    setIsExploring(nextState);
-    if (nextState) {
-      setCurrentLocation({ latitude: 40.7128, longitude: -73.956 });
-      addUnlockedHexes(['8b2a100d213fff']);
+  const handleToggleExploration = async () => {
+    try {
+      await toggleTracking();
+    } catch (err: any) {
+      console.warn('Exploration tracking toggle error:', err);
     }
   };
 

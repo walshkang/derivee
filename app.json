@@ -33,6 +33,16 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Fog of Wburg to use your location to uncover the map."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Fog of Wburg to use your location in the background to uncover the map as you explore.",
+          "locationAlwaysPermission": "Allow Fog of Wburg to track your exploration even when the app is in the background.",
+          "locationWhenInUsePermission": "Allow Fog of Wburg to track your exploration while using the app.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
+        }
       ]
     ]
   }
