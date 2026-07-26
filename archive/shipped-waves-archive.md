@@ -79,3 +79,15 @@ This archive contains detailed task prompts for completed development waves.
 2. Render undiscovered POIs as glowing beacons on the map, visible through the fog.
 3. Implement discovery logic: when the user's buffer radius intersects a POI coordinate, trigger a discovery event.
 4. Display a reward modal and convert the beacon into a permanent, unobtrusive pin.
+
+---
+
+## Wave 6 — Polish & Launch
+
+### Task Prompt: W6-POLISH — Performance & App Store Launch
+**Goal**: Finalize the experience for production.
+1. Conduct TestFlight beta testing to monitor real-world battery drain.
+2. Fine-tune 3D camera animations and UI transitions.
+3. Prepare App Store screenshots and offline-first privacy disclosures.
+4. Prepare for V1 release.
+

@@ -156,10 +156,11 @@ jest.mock('@maplibre/maplibre-react-native', () => {
   const { View } = require('react-native');
 
   const MockMapView = (props: any) => React.createElement(View, { testID: 'map-placeholder', ...props }, props.children);
-  const MockCamera = () => null;
+  const MockCamera = React.forwardRef((props: any, ref: any) => null);
   const MockUserLocation = () => null;
   const MockShapeSource = (props: any) => React.createElement(View, props, props.children);
   const MockFillLayer = () => null;
+  const MockCircleLayer = () => null;
   const MockRasterDemSource = (props: any) => React.createElement(View, props, props.children);
   const MockTerrain = () => null;
   const MockRasterSource = (props: any) => React.createElement(View, props, props.children);
@@ -173,6 +174,7 @@ jest.mock('@maplibre/maplibre-react-native', () => {
       UserLocation: MockUserLocation,
       ShapeSource: MockShapeSource,
       FillLayer: MockFillLayer,
+      CircleLayer: MockCircleLayer,
       RasterDemSource: MockRasterDemSource,
       Terrain: MockTerrain,
       RasterSource: MockRasterSource,
@@ -185,12 +187,32 @@ jest.mock('@maplibre/maplibre-react-native', () => {
     UserLocation: MockUserLocation,
     ShapeSource: MockShapeSource,
     FillLayer: MockFillLayer,
+    CircleLayer: MockCircleLayer,
     RasterDemSource: MockRasterDemSource,
     Terrain: MockTerrain,
     RasterSource: MockRasterSource,
     RasterLayer: MockRasterLayer,
     setAccessToken: jest.fn(),
     setWellKnownTileServer: jest.fn(),
+  };
+});
+
+// Manual mock for react-native-reanimated
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    __esModule: true,
+    default: {
+      View: (props: any) => React.createElement(View, props, props.children),
+      Text: (props: any) => React.createElement(View, props, props.children),
+    },
+    useSharedValue: (val: any) => ({ value: val }),
+    useAnimatedStyle: (fn: any) => fn() || {},
+    withTiming: (toValue: any) => toValue,
+    withSpring: (toValue: any) => toValue,
+    withSequence: (...args: any[]) => args[args.length - 1],
+    withDelay: (delay: any, animation: any) => animation,
   };
 });
 

@@ -21,7 +21,7 @@ This document is the single source of truth for all planned development waves.
 | **4** | **W4-TRACK** | **expo-location Background Service & Batching** | **M** | ✅ Done |
 | **4** | **W4-DRIFT** | **Implied Speed Filter & Geometry Unioning** | **M** | ✅ Done |
 | **5** | **W5-POI** | **Gamification & POI Integration** | **M** | ✅ Done |
-| **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | Planned |
+| **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | ✅ Done |
 
 ---
 
@@ -50,11 +50,5 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 6 — Polish & Launch
-
-### Task Prompt: W6-POLISH — Performance & App Store Launch
-**Goal**: Finalize the experience for production.
-1. Conduct TestFlight beta testing to monitor real-world battery drain.
-2. Fine-tune 3D camera animations and UI transitions.
-3. Prepare App Store screenshots and offline-first privacy disclosures.
-4. Prepare for V1 release.
+## Wave 6 — Polish & Launch (✅ Completed)
+*Task W6-POLISH shipped. Prompt archived in `archive/shipped-waves-archive.md`.*

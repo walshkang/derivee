@@ -6,6 +6,8 @@ export default function SplashScreen() {
   const router = useRouter();
   const fogAnim = useRef(new Animated.Value(0.4)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const burnAnim = useRef(new Animated.Value(1)).current;
+  const contentFadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     // Atmospheric fog breathing animation
@@ -50,6 +52,20 @@ export default function SplashScreen() {
   }, [fogAnim, pulseAnim]);
 
   const handleAwaken = () => {
+    // Trigger fog burn-away transition animation
+    Animated.parallel([
+      Animated.timing(burnAnim, {
+        toValue: 4,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentFadeAnim, {
+        toValue: 0,
+        duration: 450,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     router.replace('/(tabs)/map');
   };
 
@@ -61,12 +77,13 @@ export default function SplashScreen() {
           styles.fogBackground,
           {
             opacity: fogAnim,
+            transform: [{ scale: burnAnim }],
           },
         ]}
       />
 
       {/* Central Content */}
-      <View style={styles.content}>
+      <Animated.View style={[styles.content, { opacity: contentFadeAnim }]}>
         <Animated.View style={[styles.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
           <View style={styles.logoBadge}>
             <Text style={styles.logoIcon}>🌫️</Text>
@@ -93,7 +110,7 @@ export default function SplashScreen() {
         >
           <Text style={styles.awakenButtonText}>AWAKEN MAP</Text>
         </Pressable>
-      </View>
+      </Animated.View>
 
       <Text style={styles.footerText}>Offline-First • Continuous Native Generation</Text>
     </View>

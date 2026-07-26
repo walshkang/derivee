@@ -1,17 +1,19 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useExplorationStore } from '@/store/useExplorationStore';
 import { useBackgroundLocation } from '@/hooks/useBackgroundLocation';
 import { usePOIStore } from '@/store/usePOIStore';
 import { POIRewardModal } from '@/components/POIRewardModal';
-import { useMemo } from 'react';
 
 export default function MapScreen() {
   const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON } =
     useExplorationStore();
   const { toggleTracking, isLoading } = useBackgroundLocation();
   const { pois, recentlyDiscovered, loadPOIs, clearRecentPOI } = usePOIStore();
+
+  const cameraRef = useRef<MapLibreGL.Camera>(null);
+  const [is3DMode, setIs3DMode] = useState<boolean>(true);
 
   useEffect(() => {
     loadPOIs();
@@ -29,6 +31,20 @@ export default function MapScreen() {
       await toggleTracking();
     } catch (err: any) {
       console.warn('Exploration tracking toggle error:', err);
+    }
+  };
+
+  const handleTogglePerspective = () => {
+    setIs3DMode((prev) => !prev);
+  };
+
+  const handleRecenterCamera = () => {
+    if (currentLocation && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
+        zoomLevel: 16,
+        animationDuration: 1000,
+      });
     }
   };
 
@@ -76,8 +92,9 @@ export default function MapScreen() {
           attributionEnabled={false}
         >
           <MapLibreGL.Camera
+            ref={cameraRef}
             followUserLocation={isExploring}
-            followPitch={45}
+            followPitch={is3DMode ? 45 : 0}
             followZoomLevel={16}
           />
           <MapLibreGL.UserLocation visible={true} />
@@ -126,6 +143,26 @@ export default function MapScreen() {
             />
           </MapLibreGL.ShapeSource>
         </MapLibreGL.MapView>
+      </View>
+
+      {/* Floating Action Controls Stack */}
+      <View style={styles.fabControlsStack}>
+        <Pressable
+          style={styles.fabButton}
+          onPress={handleRecenterCamera}
+          accessibilityRole="button"
+          accessibilityLabel="Recenter location"
+        >
+          <Text style={styles.fabIcon}>🎯</Text>
+        </Pressable>
+        <Pressable
+          style={styles.fabButton}
+          onPress={handleTogglePerspective}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle 3D perspective"
+        >
+          <Text style={styles.fabText}>{is3DMode ? '3D' : '2D'}</Text>
+        </Pressable>
       </View>
 
       {/* Bottom HUD Actions & Overlay */}
@@ -309,5 +346,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 1.5,
+  },
+  fabControlsStack: {
+    position: 'absolute',
+    right: 16,
+    bottom: 140,
+    zIndex: 10,
+    gap: 10,
+  },
+  fabButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(22, 27, 34, 0.92)',
+    borderWidth: 1,
+    borderColor: '#30363d',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  fabIcon: {
+    fontSize: 18,
+  },
+  fabText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#58a6ff',
   },
 });
