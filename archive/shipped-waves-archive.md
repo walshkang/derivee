@@ -30,3 +30,10 @@ This archive contains detailed task prompts for completed development waves.
 2. Create the `explored_hexes` schema using `WITHOUT ROWID` and `h3_index` as the string primary key.
 3. Enable `PRAGMA journal_mode = WAL;` and `PRAGMA synchronous = NORMAL;`.
 4. Create helper functions for inserting hexes (`INSERT OR IGNORE`) and querying all unlocked hexes.
+
+### Task Prompt: W2-H3 — h3-js Core Logic & Grid Conversions
+**Goal**: Implement the spatial logic for calculating unlocked areas.
+1. Create a spatial utility file `utils/h3Utils.ts`.
+2. Implement a function to convert a GPS coordinate (lat/lng) to a Resolution 11 H3 index string.
+3. Implement a function to calculate a buffer (e.g., k-ring radius) around a given hex to simulate the discovery radius.
+4. Integrate with `op-sqlite` to write these newly discovered hexes to the local database.

@@ -15,7 +15,7 @@ This document is the single source of truth for all planned development waves.
 | **1** | **W1-INIT** | **Expo Scaffold & Zustand State** | **S** | ✅ Done |
 | **1** | **W1-NAV** | **Navigation Shell & Splash Screen** | **M** | ✅ Done |
 | **2** | **W2-DB** | **op-sqlite JSI Initialization & WAL Mode** | **M** | ✅ Done |
-| **2** | **W2-H3** | **h3-js Core Logic & Grid Conversions** | **S** | Planned |
+| **2** | **W2-H3** | **h3-js Core Logic & Grid Conversions** | **S** | ✅ Done |
 | **3** | **W3-MAP** | **MapLibre Engine & 3D Terrain Base** | **L** | Planned |
 | **3** | **W3-FOG** | **50km Bounding Box & Inverted Polygon** | **L** | Planned |
 | **4** | **W4-TRACK** | **expo-location Background Service & Batching** | **M** | Planned |
@@ -30,14 +30,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 2 — Core DB & Spatial Engine
-
-### Task Prompt: W2-H3 — h3-js Core Logic & Grid Conversions
-**Goal**: Implement the spatial logic for calculating unlocked areas.
-1. Create a spatial utility file `utils/h3Utils.ts`.
-2. Implement a function to convert a GPS coordinate (lat/lng) to a Resolution 11 H3 index string.
-3. Implement a function to calculate a buffer (e.g., k-ring radius) around a given hex to simulate the discovery radius.
-4. Integrate with `op-sqlite` to write these newly discovered hexes to the local database.
+## Wave 2 — Core DB & Spatial Engine (✅ Completed)
+*Tasks W2-DB & W2-H3 shipped. Prompts archived in `archive/shipped-waves-archive.md`.*
 
 ---
 
