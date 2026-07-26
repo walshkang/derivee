@@ -48,3 +48,10 @@ This archive contains detailed task prompts for completed development waves.
 2. Configure a Raster DEM Source and 3D terrain extrusion for the base layer.
 3. Add high-resolution satellite imagery as the primary visual reward beneath the fog.
 4. Ensure the camera follows the user's location with a tilted 3D perspective.
+
+### Task Prompt: W3-FOG — 50km Bounding Box & Inverted Polygon
+**Goal**: Implement the inverted polygon stack and punch holes in the fog.
+1. Generate a lightweight 50km x 50km GeoJSON bounding box (Layer 2 - The Fog) centered on the user.
+2. Add a `ShapeSource` for the fog layer with `withSynchronousUpdate(true)` enabled.
+3. Periodically query unlocked hexes from `op-sqlite`, run `h3.cellsToMultiPolygon` in a background worker, and pass the resulting merged geometry as "inner rings" (holes) to the fog layer.
+4. Render vector boundaries (Layer 4 - context labels) on top of the fog.

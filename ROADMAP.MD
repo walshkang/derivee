@@ -17,7 +17,7 @@ This document is the single source of truth for all planned development waves.
 | **2** | **W2-DB** | **op-sqlite JSI Initialization & WAL Mode** | **M** | ✅ Done |
 | **2** | **W2-H3** | **h3-js Core Logic & Grid Conversions** | **S** | ✅ Done |
 | **3** | **W3-MAP** | **MapLibre Engine & 3D Terrain Base** | **L** | ✅ Done |
-| **3** | **W3-FOG** | **50km Bounding Box & Inverted Polygon** | **L** | Planned |
+| **3** | **W3-FOG** | **50km Bounding Box & Inverted Polygon** | **L** | ✅ Done |
 | **4** | **W4-TRACK** | **expo-location Background Service & Batching** | **M** | Planned |
 | **4** | **W4-DRIFT** | **Implied Speed Filter & Geometry Unioning** | **M** | Planned |
 | **5** | **W5-POI** | **Gamification & POI Integration** | **M** | Planned |
@@ -35,14 +35,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 3 — The Fog Rendering Engine
-
-### Task Prompt: W3-FOG — 50km Bounding Box & Inverted Polygon
-**Goal**: Implement the inverted polygon stack and punch holes in the fog.
-1. Generate a lightweight 50km x 50km GeoJSON bounding box (Layer 2 - The Fog) centered on the user.
-2. Add a `ShapeSource` for the fog layer with `withSynchronousUpdate(true)` enabled.
-3. Periodically query unlocked hexes from `op-sqlite`, run `h3.cellsToMultiPolygon` in a background worker, and pass the resulting merged geometry as "inner rings" (holes) to the fog layer.
-4. Render vector boundaries (Layer 4 - context labels) on top of the fog.
+## Wave 3 — The Fog Rendering Engine (✅ Completed)
+*Tasks W3-MAP & W3-FOG shipped. Prompts archived in `archive/shipped-waves-archive.md`.*
 
 ---
 

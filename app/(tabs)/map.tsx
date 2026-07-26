@@ -1,11 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useExplorationStore } from '@/store/useExplorationStore';
 
 export default function MapScreen() {
-  const { isExploring, currentLocation, unlockedHexes, setIsExploring, setCurrentLocation, addUnlockedHexes } =
+  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, setIsExploring, setCurrentLocation, addUnlockedHexes, updateFogGeoJSON } =
     useExplorationStore();
+
+  // Update the fog layer whenever the unlocked hexes change
+  useEffect(() => {
+    if (isExploring && currentLocation) {
+      updateFogGeoJSON();
+    }
+  }, [unlockedHexes, isExploring, currentLocation?.latitude, currentLocation?.longitude, updateFogGeoJSON]);
 
   const handleToggleExploration = () => {
     const nextState = !isExploring;
@@ -43,6 +50,22 @@ export default function MapScreen() {
             followZoomLevel={16}
           />
           <MapLibreGL.UserLocation visible={true} />
+          
+          {/* Layer 2: The Fog (Inverted Polygon) */}
+          {fogGeoJSON && (
+            <MapLibreGL.ShapeSource
+              id="fog-source"
+              shape={fogGeoJSON}
+            >
+              <MapLibreGL.FillLayer
+                id="fog-layer"
+                style={{
+                  fillColor: '#000000',
+                  fillOpacity: 0.85,
+                }}
+              />
+            </MapLibreGL.ShapeSource>
+          )}
         </MapLibreGL.MapView>
       </View>
 

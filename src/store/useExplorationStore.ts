@@ -5,6 +5,9 @@ export interface Location {
   longitude: number;
 }
 
+import type { Feature, Polygon, MultiPolygon } from '@turf/helpers';
+import { generateFogGeoJSON } from '../utils/fogGeoJSON';
+
 export interface ExplorationState {
   isExploring: boolean;
   currentLocation: Location | null;
@@ -16,18 +19,25 @@ export interface ExplorationState {
    */
   unlockedHexes: string[];
 
+  /**
+   * The inverted GeoJSON polygon representing the fog.
+   */
+  fogGeoJSON: Feature<Polygon | MultiPolygon> | null;
+
   // Actions
   setIsExploring: (isExploring: boolean) => void;
   setCurrentLocation: (location: Location | null) => void;
   setUnlockedHexes: (hexes: string[]) => void;
   addUnlockedHexes: (hexes: string[]) => void;
+  updateFogGeoJSON: () => Promise<void>;
   resetExploration: () => void;
 }
 
-export const useExplorationStore = create<ExplorationState>((set) => ({
+export const useExplorationStore = create<ExplorationState>((set, get) => ({
   isExploring: false,
   currentLocation: null,
   unlockedHexes: [],
+  fogGeoJSON: null,
 
   setIsExploring: (isExploring: boolean) => set({ isExploring }),
 
@@ -48,10 +58,24 @@ export const useExplorationStore = create<ExplorationState>((set) => ({
     });
   },
 
+  updateFogGeoJSON: async () => {
+    const { currentLocation, unlockedHexes } = get();
+    if (!currentLocation) return;
+    
+    const geoJSON = await generateFogGeoJSON(
+      currentLocation.latitude,
+      currentLocation.longitude,
+      unlockedHexes
+    );
+    
+    set({ fogGeoJSON: geoJSON });
+  },
+
   resetExploration: () =>
     set({
       isExploring: false,
       currentLocation: null,
       unlockedHexes: [],
+      fogGeoJSON: null,
     }),
 }));
