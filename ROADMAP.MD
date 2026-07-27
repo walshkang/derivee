@@ -24,9 +24,11 @@ This document is the single source of truth for all planned development waves.
 | **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | ✅ Done |
 | **7** | **W7-AMBIENT** | **Vicinity Bubble & Ghost POI Logic** | **M** | ✅ Done |
 | **8** | **W8-TRANSIT** | **Live GTFS-RT Decoding & Transit Bottom-Sheet** | **L** | ✅ Done |
+| **8.1** | **W8.1-TRANSIT-REFACTOR** | **Dual-Format Transit Parser (JSON + PB) & API Keys** | **M** | Planned |
 | **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | Planned |
 | **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | Planned |
 | **11** | **W11-SPARKLINE** | **Standalone Transit App (Web/Spinoff)** | **L** | Planned |
+| **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA** | **L** | Planned |
 
 ---
 
@@ -70,13 +72,30 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
+## Wave 8.1 — Transit Parser Refactor (W8.1-TRANSIT-REFACTOR)
+
+* **The Goal:** Upgrade the Expo app's `transitService.ts` to handle fragmented data feeds, API keys, and dual-format parsing.
+* **Agent Directives:**
+  * **No UI Changes:** Focus exclusively on the data-fetching layer (`src/services/transitService.ts`).
+  * **Constants Mapping:** Create a constants file to map the fragmented MTA subway lines to their specific `api-endpoint.mta.info` URLs, rather than relying on a single global feed.
+  * **API Authentication:** Ensure the subway `fetch` requests pass the required `x-api-key` header using keys injected from `.env` (e.g., `EXPO_PUBLIC_MTA_API_KEY`), while bus requests use the `?key=` query parameter for both the MTA SIRI API and OneBusAway REST API.
+  * **Dual-Format Decoding:** Refactor the parser to dynamically handle both binary Protobufs (`protobufjs` for subways) and JSON (MTA SIRI API for real-time bus tracking, and OneBusAway REST API for static/discovery bus data).
+  * **Protobuf Extensions:** Include and load both the `gtfs-realtime-NYCT.proto` and `gtfs-realtime-service-status.proto` (Mercury) extensions alongside the standard GTFS-realtime proto. This is strictly required to decode MTA-specific `1001` tags:
+    * `NyctTripDescriptor` (for `direction`, `is_assigned`) and `NyctStopTimeUpdate` (for `actual_track`).
+    * `MercuryAlert` (for `alert_type`, `directionality`, `affected_stations`) and `MercuryEntitySelector` (for `sort_order` / priority).
+  * **Station-Level Alerts:** Update the parsing logic to correctly handle the MTA's `informed_entity` structure and the Mercury alert extensions (extracting directional impacts and sorting by severity).
+
+---
+
 ## Wave 9 — The Observer Backend (W9-OBSERVER)
 
 * **The Goal:** Build the "make it yourself, and make it well" persistent backend architecture for historical transit reliability.
 * **Agent Directives:**
-  * This task occurs *outside* the Expo app. The agent must build a standalone Go (Golang) persistent daemon hosted on a low-cost VPS to ingest raw GTFS-RT Protobuf feeds every 3 minutes.
+  * This task occurs *outside* the Expo app. The agent must build a standalone Go (Golang) persistent daemon hosted on a low-cost VPS.
+  * The daemon must poll both the fragmented **MTA GTFS-RT Protobuf feeds** (for subways) and the **MTA Bus Time SIRI API (JSON)** (for buses) every 3 minutes, acting as a unifier to normalize both real-time data streams.
+  * When parsing Service Alerts, the daemon must strictly adhere to the MTA's `informed_entity` format: iterating through separate station-level entities and applying `direction_id` filters.
   * Calculate rolling 7-day averages and reliability percentages to assemble the historical sparkline data in memory.
-  * Output a Zstandard-compressed SQLite delta database (`transit_delta.sqlite.zst`) and push it to Cloudflare R2 (CDN).
+  * Output a single, unified Zstandard-compressed SQLite delta database (`transit_delta.sqlite.zst`) and push it to Cloudflare R2 (CDN).
   * Update the Expo app to silently fetch and synchronously attach this SQLite delta file every morning via `@op-engineering/op-sqlite`.
 
 ---
@@ -96,5 +115,15 @@ This document is the single source of truth for all planned development waves.
 * **Agent Directives:**
   * Build a spinoff/standalone interface (web browser or lightweight companion app) dedicated purely to transit routing, reliability, and tracking.
   * Utilize the Go Observer's historical sparkline data to provide predictive "historical reliability" scores for routes.
-  * Implement user alerts/notifications for upcoming trains and buses (e.g., "10 min away").
-  * Support live navigation and future planned routes based on the fusion of live GTFS data and historical sparkline patterns.
+  * Support live navigation and future planned routes based on the fusion of live GTFS/SIRI data and historical sparkline patterns.
+  * Ensure the frontend parser is capable of handling both binary Protobufs (subways) and JSON (buses), and correctly displays direction-specific service alerts (using MTA's `direction_id` structure).
+
+---
+
+## Wave 12 — Multi-City Expansion: Boston (W12-BOSTON)
+
+* **The Goal:** Prove the scalability of the architecture by expanding transit coverage to the MBTA system.
+* **Agent Directives:**
+  * **W12-OBSERVER:** Refactor the Go daemon to support regional configuration profiles. It will poll the unified MBTA Protobuf endpoints (`TripUpdates.pb`, `Alerts.pb`, `VehiclePositions.pb`) alongside the NYC feeds, and normalize them into the Zstandard SQLite format.
+  * **W12-APP:** Implement automatic region detection in the Expo app based on the user's GPS bounding box (querying the Boston SQLite file if the user's H3 index falls within Massachusetts).
+  * **W12-UI:** Expand the Transit bottom-sheet to visually support MBTA-specific experimental fields, such as "Crowding / Occupancy" indicators and "Prediction Uncertainty" warnings.
