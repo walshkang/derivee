@@ -48,6 +48,25 @@ jest.mock('@op-engineering/op-sqlite', () => {
         };
       }
 
+      if (query.includes('SELECT * FROM pois')) {
+        return {
+          rows: {
+            _array: [
+              {
+                id: 'poi_1',
+                name: 'Domino Park',
+                description: 'A beautiful waterfront park built on the former Domino Sugar Refinery site.',
+                latitude: 40.7153,
+                longitude: -73.9678,
+                h3_index: '8b2a100d213fff',
+                discovered: 0,
+                reward_type: 'Silver Coin',
+              },
+            ],
+          },
+        };
+      }
+
       if (query.includes('DELETE FROM explored_hexes')) {
         store.clear();
         return { rows: { _array: [] } };

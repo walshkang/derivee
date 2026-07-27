@@ -91,3 +91,15 @@ This archive contains detailed task prompts for completed development waves.
 3. Prepare App Store screenshots and offline-first privacy disclosures.
 4. Prepare for V1 release.
 
+---
+
+## Wave 7 — The Ambient UI
+
+### Task Prompt: W7-AMBIENT — Vicinity Bubble & Ghost POI Logic
+**Goal**: Strip away the heavy gamified HUDs and implement the progressive disclosure engine.
+1. Implement the dynamic 200-meter "Vicinity Bubble" anchored to the user's live GPS ping.
+2. Configure MapLibre to only render crisp street names and unbranded transit nodes inside this active radius.
+3. Implement the "Ghost POI" lifecycle. Ensure that once an area is cleared, POI pins become invisible on the map.
+4. Build the Geospatial Point-in-Polygon (PiP) check so that when a user taps the screen, the app queries `@op-engineering/op-sqlite` to see if they are physically standing on a hidden POI before revealing the bottom-sheet.
+
+

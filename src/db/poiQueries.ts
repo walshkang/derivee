@@ -117,3 +117,55 @@ export function markPOIDiscovered(id: string): void {
   const db = getDb();
   db.execute('UPDATE pois SET discovered = 1 WHERE id = ?;', [id]);
 }
+
+/**
+ * Retrieves a POI located at a specific H3 cell index.
+ * AGENTS.md Directive: H3 index must strictly be a 15-character string.
+ *
+ * @param h3Index 15-character H3 hex string
+ * @returns POI object or null if not found
+ */
+export function getPOIByH3Index(h3Index: string): POI | null {
+  if (typeof h3Index !== 'string' || !h3Index || h3Index.length < 14) {
+    throw new Error(`Invalid H3 index string provided: "${h3Index}"`);
+  }
+
+  const db = getDb();
+  const result = db.execute('SELECT * FROM pois WHERE h3_index = ? LIMIT 1;', [h3Index]);
+
+  let rows: any[] = [];
+  if (result && result.rows) {
+    if (Array.isArray(result.rows)) {
+      rows = result.rows;
+    } else if (Array.isArray((result.rows as any)._array)) {
+      rows = (result.rows as any)._array;
+    } else if (typeof (result.rows as any).item === 'function') {
+      const len = (result.rows as any).length || 0;
+      for (let i = 0; i < len; i++) {
+        rows.push((result.rows as any).item(i));
+      }
+    }
+  }
+
+  if (rows.length === 0) return null;
+
+  const r = rows[0];
+  return {
+    ...r,
+    h3_index: String(r.h3_index), // Strict string cast assertion
+    discovered: Boolean(r.discovered),
+  } as POI;
+}
+
+/**
+ * Resolves a GPS coordinate to Resolution 11 H3 index string and queries the database for a matching POI.
+ *
+ * @param lat Latitude
+ * @param lng Longitude
+ * @returns POI object or null if not found
+ */
+export function getPOIAtLocation(lat: number, lng: number): POI | null {
+  const h3Index = coordToH3(lat, lng);
+  return getPOIByH3Index(h3Index);
+}
+

@@ -48,25 +48,24 @@ describe('Wave 1 Navigation Shell & Screens (W1-NAV)', () => {
   });
 
   describe('MapScreen ("The Cartographer\'s Desk")', () => {
-    it('renders the MapLibre viewport and top HUD', () => {
+    it('renders the MapLibre viewport and ambient status badge', () => {
       const { getByTestId, getByText } = render(<MapScreen />);
 
       expect(getByTestId('map-placeholder')).toBeTruthy();
-      expect(getByText('FOG OF WBURG')).toBeTruthy();
-      expect(getByText('STANDBY')).toBeTruthy();
+      expect(getByText('AMBIENT STANDBY')).toBeTruthy();
     });
 
     it('toggles expedition state when action button is pressed', async () => {
-      const { getByText } = render(<MapScreen />);
+      const { getByLabelText, getByText } = render(<MapScreen />);
       expect(useExplorationStore.getState().isExploring).toBe(false);
 
-      const startButton = getByText('START EXPLORING');
+      const startButton = getByLabelText('Start Expedition');
       await act(async () => {
         fireEvent.press(startButton);
       });
 
       expect(useExplorationStore.getState().isExploring).toBe(true);
-      expect(getByText('STOP EXPEDITION')).toBeTruthy();
+      expect(getByText('EXPEDITION ACTIVE')).toBeTruthy();
     });
   });
 

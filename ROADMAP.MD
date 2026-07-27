@@ -22,7 +22,7 @@ This document is the single source of truth for all planned development waves.
 | **4** | **W4-DRIFT** | **Implied Speed Filter & Geometry Unioning** | **M** | ✅ Done |
 | **5** | **W5-POI** | **Gamification & POI Integration** | **M** | ✅ Done |
 | **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | ✅ Done |
-| **7** | **W7-AMBIENT** | **Vicinity Bubble & Ghost POI Logic** | **M** | Planned |
+| **7** | **W7-AMBIENT** | **Vicinity Bubble & Ghost POI Logic** | **M** | ✅ Done |
 | **8** | **W8-TRANSIT** | **Live GTFS-RT Decoding & Transit Bottom-Sheet** | **L** | Planned |
 | **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | Planned |
 | **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | Planned |
@@ -60,14 +60,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 7 — The Ambient UI (W7-AMBIENT)
-
-* **The Goal:** Strip away the heavy gamified HUDs and implement the progressive disclosure engine.
-* **Agent Directives:**
-  * Implement the dynamic 200-meter "Vicinity Bubble" anchored to the user's live GPS ping.
-  * Configure MapLibre to only render crisp street names and unbranded transit nodes *inside* this active radius.
-  * Implement the "Ghost POI" lifecycle. Ensure that once an area is cleared, POI pins become invisible on the map.
-  * Build the Geospatial Point-in-Polygon (PiP) check so that when a user taps the screen, the app queries `@op-engineering/op-sqlite` to see if they are physically standing on a hidden POI before revealing the bottom-sheet.
+## Wave 7 — The Ambient UI (✅ Completed)
+*Task W7-AMBIENT shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
 
