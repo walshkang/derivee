@@ -96,7 +96,7 @@ Press `i` to open the iOS simulator, or build directly to a tethered iPhone (rec
 
 ## 📡 The Observer Daemon Operations Guide
 
-The Observer is a standalone persistent Go (Golang) daemon hosted on an Oracle Cloud VPS (`150.136.171.50`). It polls MTA GTFS-RT Protobuf feeds and MTA Bus Time SIRI endpoints every 3 minutes, processes historical arrival reliability, compresses a SQLite database with Zstandard (`transit_delta.sqlite.zst`), and uploads it to Cloudflare R2 (`fog-of-transit` bucket).
+The Observer is a standalone persistent Go (Golang) daemon hosted on an Oracle Cloud VPS (`150.136.171.50`). It polls MTA GTFS-RT Protobuf feeds for both Subways and Buses every 3 minutes. To avoid memory bloat, it securely maintains a localized SQLite database of the massive static GTFS schedules (`static_gtfs.sqlite`). The daemon processes historical arrival reliability against these static schedules, compresses the daily stats table into a SQLite database using Zstandard (`transit_delta.sqlite.zst`), and uploads it to Cloudflare R2 (`fog-of-transit` bucket).
 
 ### 1. Connecting to the VPS
 

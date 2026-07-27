@@ -27,7 +27,7 @@ This document is the single source of truth for all planned development waves.
 | **8.1** | **W8.1-TRANSIT-REFACTOR** | **Dual-Format Transit Parser (JSON + PB) & API Keys** | **M** | ✅ Done |
 | **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | ✅ Done |
 | **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | ✅ Done |
-| **11** | **W11-TIMETABLE** | **Standalone Transit App (Web/Spinoff) & Headway Matrix** | **L** | Planned |
+| **11** | **W11-TIMETABLE** | **Standalone Transit App (Web/Spinoff) & Headway Matrix** | **L** | ✅ Done |
 | **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA** | **L** | Planned |
 
 ---
@@ -87,15 +87,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 11 — Standalone Transit Navigation Expansion (W11-TIMETABLE)
-
-* **The Goal:** Leverage the historical data and live GTFS pipeline to build a lightweight, dedicated transit tracking and navigation app (potentially web-based).
-* **Agent Directives:**
-  * Build a spinoff/standalone interface (web browser or lightweight companion app) dedicated purely to transit routing, reliability, and tracking.
-  * Utilize the Go Observer's historical sparkline data to provide predictive "historical reliability" scores for routes.
-  * Implement a Headway Matrix / Historical Timetable view, where each hour is a row and minutes are columns (e.g., `12 | 03 12 30 45 59`), color-coded to denote early vs. late arrivals for any transit mode.
-  * Support live navigation and future planned routes based on the fusion of live GTFS/SIRI data and historical patterns.
-  * Ensure the frontend parser is capable of handling both binary Protobufs (subways) and JSON (buses), and correctly displays direction-specific service alerts (using MTA's `direction_id` structure).
+## Wave 11 — Standalone Transit Navigation Expansion (✅ Completed)
+*Task W11-TIMETABLE shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
 

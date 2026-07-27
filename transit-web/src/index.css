@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  /* Soft whites and light grays for default light mode */
+  --bg: #f8f9fa;
+  --bg-sheet: rgba(255, 255, 255, 0.85);
+  --text-main: #1a1a1a;
+  --text-muted: #6b7280;
+  --border: rgba(0, 0, 0, 0.1);
+  --accent: #007aff;
+  --accent-bg: rgba(0, 122, 255, 0.1);
+  
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--text-main);
+  background-color: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden; /* Prevent Safari rubber-banding on body */
+  /* Prevent text selection in UI elements */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#root {
+  width: 100vw;
+  height: 100dvh;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Glassmorphism utility for UltraThinMaterial */
+.glass {
+  background: var(--bg-sheet);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+}
+
+/* Headway Matrix specific variables */
+.headway-on-time { color: #10b981; background: rgba(16, 185, 129, 0.1); }
+.headway-delayed { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+.headway-severe { color: #ef4444; background: rgba(239, 68, 68, 0.1); }

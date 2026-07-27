@@ -149,3 +149,15 @@ This archive contains detailed task prompts for completed development waves.
 **Goal**: Solve the "cold start" problem for new users.
 1. Build the UI in the Settings/Archive screen to accept passive uploads from Apple HealthKit, Strava, or raw GPX/FIT files.
 2. Build the massive visual payoff: an animation that instantly vanishes huge swaths of the fog across the city once the historical data is processed into H3 hexes.
+
+---
+
+## Wave 11 — Standalone Transit Navigation Expansion
+
+### Task Prompt: W11-TIMETABLE — Standalone Transit App (Web/Spinoff) & Headway Matrix
+**Goal**: Leverage the historical data and live GTFS pipeline to build a lightweight, dedicated transit tracking and navigation app (potentially web-based).
+1. Build a spinoff/standalone interface (web browser or lightweight companion app) dedicated purely to transit routing, reliability, and tracking.
+2. Utilize the Go Observer's historical sparkline data to provide predictive "historical reliability" scores for routes.
+3. Implement a Headway Matrix / Historical Timetable view, where each hour is a row and minutes are columns (e.g., `12 | 03 12 30 45 59`), color-coded to denote early vs. late arrivals for any transit mode.
+4. Support live navigation and future planned routes based on the fusion of live GTFS/SIRI data and historical patterns.
+5. Ensure the frontend parser handles binary Protobufs for both subways and buses, and correctly displays direction-specific service alerts (using MTA's `direction_id` structure).

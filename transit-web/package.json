@@ -1,0 +1,34 @@
+{
+  "name": "transit-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@deck.gl/mapbox": "^9.3.7",
+    "@deck.gl/react": "^9.3.7",
+    "deck.gl": "^9.3.7",
+    "gtfs-realtime-bindings": "^1.1.1",
+    "maplibre-gl": "^4.7.1",
+    "protobufjs": "^8.7.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-map-gl": "^8.1.1",
+    "sql.js": "^1.14.1",
+    "vaul": "^1.1.2",
+    "vite-plugin-pwa": "^1.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "oxlint": "^1.71.0",
+    "vite": "^8.1.1"
+  }
+}

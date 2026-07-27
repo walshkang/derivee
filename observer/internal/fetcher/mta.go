@@ -13,7 +13,7 @@ import (
 const (
 	// Example MTA subway endpoint (no API key required)
 	SubwayURL = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs"
-	BusURL    = "http://bustime.mta.info/api/siri/vehicle-monitoring.json"
+	BusURL    = "https://gtfsrt.prod.obanyc.com/tripUpdates"
 )
 
 type TripUpdate struct {
@@ -50,8 +50,8 @@ func FetchSubwayGTFS() (*gtfs.FeedMessage, error) {
 	return feed, nil
 }
 
-// FetchBuses fetches the JSON Siri feed
-func FetchBuses() ([]byte, error) {
+// FetchBusGTFS fetches the protobuf feed for MTA Buses
+func FetchBusGTFS() (*gtfs.FeedMessage, error) {
 	apiKey := os.Getenv("MTA_BUS_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("MTA_BUS_API_KEY not set")
@@ -60,11 +60,22 @@ func FetchBuses() ([]byte, error) {
 	url := fmt.Sprintf("%s?key=%s", BusURL, apiKey)
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch buses: %w", err)
+		return nil, fmt.Errorf("failed to fetch bus GTFS: %w", err)
 	}
 	defer resp.Body.Close()
 
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read body: %w", err)
+	}
+
+	feed := &gtfs.FeedMessage{}
+	err = proto.Unmarshal(body, feed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal Bus GTFS: %w", err)
+	}
+
+	return feed, nil
 }
 
 // ParseTripUpdates parses the GTFS-RT feed for trip updates

@@ -1,0 +1,13 @@
+.transit-map-wrapper {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1; /* Below the UI overlay */
+}
+
+/* Ensure maplibre controls don't overlap with our segment control */
+.maplibregl-ctrl-top-right {
+  top: 60px !important; 
+}
