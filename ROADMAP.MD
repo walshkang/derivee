@@ -25,7 +25,7 @@ This document is the single source of truth for all planned development waves.
 | **7** | **W7-AMBIENT** | **Vicinity Bubble & Ghost POI Logic** | **M** | ✅ Done |
 | **8** | **W8-TRANSIT** | **Live GTFS-RT Decoding & Transit Bottom-Sheet** | **L** | ✅ Done |
 | **8.1** | **W8.1-TRANSIT-REFACTOR** | **Dual-Format Transit Parser (JSON + PB) & API Keys** | **M** | ✅ Done |
-| **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | Planned |
+| **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | ✅ Done |
 | **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | Planned |
 | **11** | **W11-SPARKLINE** | **Standalone Transit App (Web/Spinoff)** | **L** | Planned |
 | **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA** | **L** | Planned |
@@ -77,16 +77,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 9 — The Observer Backend (W9-OBSERVER)
-
-* **The Goal:** Build the "make it yourself, and make it well" persistent backend architecture for historical transit reliability.
-* **Agent Directives:**
-  * This task occurs *outside* the Expo app. The agent must build a standalone Go (Golang) persistent daemon hosted on a low-cost VPS.
-  * The daemon must poll both the fragmented **MTA GTFS-RT Protobuf feeds** (for subways) and the **MTA Bus Time SIRI API (JSON)** (for buses) every 3 minutes, acting as a unifier to normalize both real-time data streams.
-  * When parsing Service Alerts, the daemon must strictly adhere to the MTA's `informed_entity` format: iterating through separate station-level entities and applying `direction_id` filters.
-  * Calculate rolling 7-day averages and reliability percentages to assemble the historical sparkline data in memory.
-  * Output a single, unified Zstandard-compressed SQLite delta database (`transit_delta.sqlite.zst`) and push it to Cloudflare R2 (CDN).
-  * Update the Expo app to silently fetch and synchronously attach this SQLite delta file every morning via `@op-engineering/op-sqlite`.
+## Wave 9 — The Observer Backend (✅ Completed)
+*Task W9-OBSERVER shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
 

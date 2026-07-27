@@ -126,3 +126,17 @@ This archive contains detailed task prompts for completed development waves.
    * `NyctTripDescriptor` (for `direction`, `is_assigned`) and `NyctStopTimeUpdate` (for `actual_track`).
    * `MercuryAlert` (for `alert_type`, `directionality`, `affected_stations`) and `MercuryEntitySelector` (for `sort_order` / priority).
 6. **Station-Level Alerts:** Update the parsing logic to correctly handle the MTA's `informed_entity` structure and the Mercury alert extensions (extracting directional impacts and sorting by severity).
+
+---
+
+## Wave 9 — The Observer Backend
+
+### Task Prompt: W9-OBSERVER — Headless Observer Tool & CDN Handoff
+**Goal**: Build the "make it yourself, and make it well" persistent backend architecture for historical transit reliability.
+1. **Outside Expo**: This task occurs *outside* the Expo app. Build a standalone Go (Golang) persistent daemon hosted on a low-cost VPS.
+2. **Polling**: The daemon must poll both the fragmented **MTA GTFS-RT Protobuf feeds** (for subways) and the **MTA Bus Time SIRI API (JSON)** (for buses) every 3 minutes, acting as a unifier to normalize both real-time data streams.
+3. **Alerts & Directions**: When parsing Service Alerts, strictly adhere to the MTA's `informed_entity` format: iterating through separate station-level entities and applying `direction_id` filters.
+4. **Historical Processing**: Calculate rolling 7-day averages and reliability percentages to assemble the historical sparkline data in memory.
+5. **Ghost Trains**: Implement a strict Time-To-Live (TTL) garbage collector on the active_trips table. If a trip_id goes stale for > 10 minutes without registering an arrival, silently drop it.
+6. **CDN Handoff**: Output a single, unified Zstandard-compressed SQLite delta database (`transit_delta.sqlite.zst`) and push it to Cloudflare R2 (CDN).
+7. **Client Handoff**: Update the Expo app to silently fetch and synchronously attach this SQLite delta file every morning via `@op-engineering/op-sqlite`.

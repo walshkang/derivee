@@ -166,3 +166,18 @@ export function closeDatabase(): void {
     dbInstance = null;
   }
 }
+
+/**
+ * Attaches the downloaded historical transit sqlite database.
+ */
+export async function attachTransitDB(dbPath: string): Promise<void> {
+  const db = getDb();
+  try {
+    // ATTACH DATABASE command
+    db.execute(`ATTACH DATABASE '${dbPath}' AS transit_history;`);
+    console.log('[Database] Attached transit_history successfully.');
+  } catch (error) {
+    console.error('[Database] Failed to attach transit_history db:', error);
+    throw error;
+  }
+}
