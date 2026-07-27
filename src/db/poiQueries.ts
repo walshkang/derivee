@@ -10,6 +10,7 @@ export interface POI {
   h3_index: string;
   discovered: boolean;
   reward_type: string;
+  poi_type: 'historical' | 'transit_node';
 }
 
 const MOCK_POIS = [
@@ -20,6 +21,7 @@ const MOCK_POIS = [
     latitude: 40.7153,
     longitude: -73.9678,
     reward_type: 'Silver Coin',
+    poi_type: 'historical',
   },
   {
     id: 'poi_2',
@@ -28,6 +30,7 @@ const MOCK_POIS = [
     latitude: 40.7208,
     longitude: -73.9515,
     reward_type: 'Gold Coin',
+    poi_type: 'historical',
   },
   {
     id: 'poi_3',
@@ -36,6 +39,7 @@ const MOCK_POIS = [
     latitude: 40.7116,
     longitude: -73.9578,
     reward_type: 'Pizza Slice Badge',
+    poi_type: 'historical',
   },
   {
     id: 'poi_4',
@@ -44,6 +48,7 @@ const MOCK_POIS = [
     latitude: 40.7215,
     longitude: -73.9575,
     reward_type: 'Beer Pint Badge',
+    poi_type: 'historical',
   },
   {
     id: 'poi_5',
@@ -52,6 +57,16 @@ const MOCK_POIS = [
     latitude: 40.7212,
     longitude: -73.9616,
     reward_type: 'Sunset Badge',
+    poi_type: 'historical',
+  },
+  {
+    id: 'poi_6_transit',
+    name: 'Bedford Ave (L)',
+    description: 'L Train Subway Station',
+    latitude: 40.7173,
+    longitude: -73.9568,
+    reward_type: 'transit_node',
+    poi_type: 'transit_node',
   }
 ];
 
@@ -106,7 +121,8 @@ export function getAllPOIs(): POI[] {
 
   return rows.map(r => ({
     ...r,
-    discovered: Boolean(r.discovered)
+    discovered: Boolean(r.discovered),
+    poi_type: (r.poi_type || (r.reward_type === 'transit_node' ? 'transit_node' : 'historical')) as 'historical' | 'transit_node'
   })) as POI[];
 }
 
@@ -154,6 +170,7 @@ export function getPOIByH3Index(h3Index: string): POI | null {
     ...r,
     h3_index: String(r.h3_index), // Strict string cast assertion
     discovered: Boolean(r.discovered),
+    poi_type: (r.poi_type || (r.reward_type === 'transit_node' ? 'transit_node' : 'historical')) as 'historical' | 'transit_node'
   } as POI;
 }
 

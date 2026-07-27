@@ -103,3 +103,11 @@ This archive contains detailed task prompts for completed development waves.
 4. Build the Geospatial Point-in-Polygon (PiP) check so that when a user taps the screen, the app queries `@op-engineering/op-sqlite` to see if they are physically standing on a hidden POI before revealing the bottom-sheet.
 
 
+---
+
+## Wave 8 — Raw Transit Pipeline
+
+### Task Prompt: W8-TRANSIT — Live GTFS-RT Decoding & Transit Bottom-Sheet
+**Goal**: Build the on-device commuter tool without relying on third-party aggregators.
+1. Install `protobufjs` and `gtfs-realtime-bindings` to decode the transit authority's binary feeds natively on the JS thread.
+2. Build the cleanly formatted, Naver Maps-style bottom sheet displaying live countdowns (e.g., "3 min") and dynamic vector route previews tracing the vehicle's path.

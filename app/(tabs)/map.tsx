@@ -6,9 +6,11 @@ import { useExplorationStore } from '@/store/useExplorationStore';
 import { useBackgroundLocation } from '@/hooks/useBackgroundLocation';
 import { usePOIStore } from '@/store/usePOIStore';
 import { AmbientRevealBottomSheet } from '@/components/AmbientRevealBottomSheet';
+import { TransitBottomSheet } from '@/components/TransitBottomSheet';
 import { getPOIByH3Index, POI } from '@/db/poiQueries';
 import { coordToH3 } from '@/utils/h3Utils';
 import { isWithinVicinityBubble, generateVicinityBubbleGeoJSON } from '@/utils/geoUtils';
+import { useTransitStore } from '@/store/useTransitStore';
 
 export default function MapScreen() {
   const router = useRouter();
@@ -16,6 +18,9 @@ export default function MapScreen() {
     useExplorationStore();
   const { toggleTracking } = useBackgroundLocation();
   const { loadPOIs } = usePOIStore();
+  
+  // Transit store integration
+  const { selectedTransitNode, setSelectedTransitNode, routePreviewGeoJSON } = useTransitStore();
 
   const cameraRef = useRef<React.ElementRef<typeof MapLibreGL.Camera>>(null);
   const [is3DMode, setIs3DMode] = useState<boolean>(true);
@@ -66,11 +71,6 @@ export default function MapScreen() {
 
   /**
    * Geospatial Point-in-Polygon (PiP) & Proximity Check on Map Tap.
-   * Directives (AGENTS.md & design.md):
-   * 1. POIs in cleared hexes are invisible "Ghost POIs".
-   * 2. When user taps the map, calculate coordinate.
-   * 3. Ensure user is physically within the 200m Vicinity Bubble.
-   * 4. Query @op-engineering/op-sqlite synchronously to reveal the bottom sheet.
    */
   const handleMapPress = useCallback(
     (event: any) => {
@@ -110,10 +110,16 @@ export default function MapScreen() {
       // 4. Synchronous SQLite query for Ghost POI at tapped cell
       const matchedPOI = getPOIByH3Index(tappedHex);
       if (matchedPOI) {
-        setSelectedPOI(matchedPOI);
+        if (matchedPOI.poi_type === 'transit_node') {
+          setSelectedTransitNode(matchedPOI);
+          setSelectedPOI(null);
+        } else {
+          setSelectedPOI(matchedPOI);
+          setSelectedTransitNode(null);
+        }
       }
     },
-    [currentLocation, unlockedHexes]
+    [currentLocation, unlockedHexes, setSelectedTransitNode]
   );
 
   return (
@@ -190,6 +196,31 @@ export default function MapScreen() {
               />
             </MapLibreGL.ShapeSource>
           )}
+
+          {/* Layer 6: Dynamic Transit Route Preview (Global) */}
+          {routePreviewGeoJSON && (
+            <MapLibreGL.ShapeSource id="route-preview-source" shape={routePreviewGeoJSON}>
+              <MapLibreGL.LineLayer
+                id="route-preview-line"
+                filter={['==', 'isRouteTrace', true]}
+                style={{
+                  lineColor: '#ef4444',
+                  lineWidth: 4,
+                  lineOpacity: 0.8,
+                }}
+              />
+              <MapLibreGL.CircleLayer
+                id="route-preview-points"
+                filter={['!', ['has', 'isRouteTrace']]}
+                style={{
+                  circleColor: '#ef4444',
+                  circleRadius: 6,
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: '#ffffff',
+                }}
+              />
+            </MapLibreGL.ShapeSource>
+          )}
         </MapLibreGL.MapView>
       </View>
 
@@ -231,6 +262,11 @@ export default function MapScreen() {
       <AmbientRevealBottomSheet
         poi={selectedPOI}
         onClose={() => setSelectedPOI(null)}
+      />
+
+      <TransitBottomSheet
+        poi={selectedTransitNode}
+        onClose={() => setSelectedTransitNode(null)}
       />
     </View>
   );

@@ -23,7 +23,7 @@ This document is the single source of truth for all planned development waves.
 | **5** | **W5-POI** | **Gamification & POI Integration** | **M** | ✅ Done |
 | **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | ✅ Done |
 | **7** | **W7-AMBIENT** | **Vicinity Bubble & Ghost POI Logic** | **M** | ✅ Done |
-| **8** | **W8-TRANSIT** | **Live GTFS-RT Decoding & Transit Bottom-Sheet** | **L** | Planned |
+| **8** | **W8-TRANSIT** | **Live GTFS-RT Decoding & Transit Bottom-Sheet** | **L** | ✅ Done |
 | **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | Planned |
 | **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | Planned |
 | **11** | **W11-SPARKLINE** | **Standalone Transit App (Web/Spinoff)** | **L** | Planned |
@@ -65,12 +65,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 8 — Raw Transit Pipeline (W8-TRANSIT)
-
-* **The Goal:** Build the on-device commuter tool without relying on third-party aggregators.
-* **Agent Directives:**
-  * Install `protobufjs` and `gtfs-realtime-bindings` to decode the transit authority's binary feeds natively on the JS thread.
-  * Build the cleanly formatted, Naver Maps-style bottom sheet displaying live countdowns (e.g., "3 min") and dynamic vector route previews tracing the vehicle's path.
+## Wave 8 — Raw Transit Pipeline (✅ Completed)
+*Task W8-TRANSIT shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
 
