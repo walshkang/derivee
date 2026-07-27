@@ -227,14 +227,30 @@ jest.mock('react-native-reanimated', () => {
       Text: (props: any) => React.createElement(View, props, props.children),
     },
     useSharedValue: (val: any) => ({ value: val }),
+    useDerivedValue: (fn: any) => ({ value: fn() }),
     useAnimatedStyle: (fn: any) => fn() || {},
     withTiming: (toValue: any) => toValue,
     withSpring: (toValue: any) => toValue,
     withSequence: (...args: any[]) => args[args.length - 1],
     withDelay: (delay: any, animation: any) => animation,
+    runOnJS: (fn: any) => fn,
+    Easing: {
+      inOut: () => {},
+      ease: {},
+    },
   };
 });
 
 // Configure jest-image-snapshot
 const { toMatchImageSnapshot } = require('jest-image-snapshot');
 expect.extend({ toMatchImageSnapshot });
+
+jest.mock('@shopify/react-native-skia', () => ({
+  Canvas: 'Canvas',
+  Rect: 'Rect',
+  Circle: 'Circle',
+  Mask: 'Mask',
+  Group: 'Group',
+  RadialGradient: 'RadialGradient',
+  vec: jest.fn((x, y) => ({ x, y })),
+}));

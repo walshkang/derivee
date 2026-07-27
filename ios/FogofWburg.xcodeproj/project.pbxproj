@@ -10,11 +10,11 @@
 		13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB01A68108700A75B9A /* AppDelegate.mm */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
-		1762CC83F63D621D07ADF7C1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = EC481F435077AE31183D723D /* PrivacyInfo.xcprivacy */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
+		7E421DC7ACE7B5B1187D154E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 689527D4CAC94F1839ED6350 /* PrivacyInfo.xcprivacy */; };
+		828756580775483B92373AFB /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8F4E120A7D4F5691BBB2A5 /* noop-file.swift */; };
 		96905EF65AED1B983A6B3ABC /* libPods-FogofWburg.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 58EEBF8E8E6FB1BC6CAF49B5 /* libPods-FogofWburg.a */; };
 		B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */; };
-		BA25F36849834731A8C3FC28 /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75111620600B4ACB8338C8EA /* noop-file.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 /* End PBXBuildFile section */
 
@@ -25,14 +25,14 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = FogofWburg/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = FogofWburg/Info.plist; sourceTree = "<group>"; };
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = FogofWburg/main.m; sourceTree = "<group>"; };
-		36F0E1C3A394416B8FC24D92 /* FogofWburg-Bridging-Header.h */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.c.h; name = "FogofWburg-Bridging-Header.h"; path = "FogofWburg/FogofWburg-Bridging-Header.h"; sourceTree = "<group>"; };
 		58EEBF8E8E6FB1BC6CAF49B5 /* libPods-FogofWburg.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-FogofWburg.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		689527D4CAC94F1839ED6350 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = FogofWburg/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6C2E3173556A471DD304B334 /* Pods-FogofWburg.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-FogofWburg.debug.xcconfig"; path = "Target Support Files/Pods-FogofWburg/Pods-FogofWburg.debug.xcconfig"; sourceTree = "<group>"; };
-		75111620600B4ACB8338C8EA /* noop-file.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = "noop-file.swift"; path = "FogofWburg/noop-file.swift"; sourceTree = "<group>"; };
 		7A4D352CD337FB3A3BF06240 /* Pods-FogofWburg.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-FogofWburg.release.xcconfig"; path = "Target Support Files/Pods-FogofWburg/Pods-FogofWburg.release.xcconfig"; sourceTree = "<group>"; };
+		8FEA566F4FC84E9C83F891CC /* FogofWburg-Bridging-Header.h */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.c.h; name = "FogofWburg-Bridging-Header.h"; path = "FogofWburg/FogofWburg-Bridging-Header.h"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = FogofWburg/SplashScreen.storyboard; sourceTree = "<group>"; };
+		BA8F4E120A7D4F5691BBB2A5 /* noop-file.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = "noop-file.swift"; path = "FogofWburg/noop-file.swift"; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		EC481F435077AE31183D723D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = FogofWburg/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-FogofWburg/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -59,9 +59,9 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				13B07FB71A68108700A75B9A /* main.m */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				75111620600B4ACB8338C8EA /* noop-file.swift */,
-				36F0E1C3A394416B8FC24D92 /* FogofWburg-Bridging-Header.h */,
-				EC481F435077AE31183D723D /* PrivacyInfo.xcprivacy */,
+				BA8F4E120A7D4F5691BBB2A5 /* noop-file.swift */,
+				8FEA566F4FC84E9C83F891CC /* FogofWburg-Bridging-Header.h */,
+				689527D4CAC94F1839ED6350 /* PrivacyInfo.xcprivacy */,
 			);
 			name = FogofWburg;
 			sourceTree = "<group>";
@@ -147,14 +147,14 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "FogofWburg" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				F519C661D42063949E49C067 /* [Expo] Configure project */,
+				E499CF455B57EF9EFB106867 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				A8D276730C1A46119975D768 /* Remove signature files (Xcode workaround) */,
-				85FC25EAB08707DAD6D47711 /* [CP] Embed Pods Frameworks */,
+				236FBDB616B34F5F9FF41CE1 /* Remove signature files (Xcode workaround) */,
+				DE5CFADADC93F92F5783DCA1 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -162,7 +162,7 @@
 			);
 			name = FogofWburg;
 			packageProductDependencies = (
-				99610570E8EE5EC6330A1AF5 /* MapLibre */,
+				85696ACB7AEE4C4B3059CB08 /* MapLibre */,
 			);
 			productName = FogofWburg;
 			productReference = 13B07F961A680F5B00A75B9A /* FogofWburg.app */;
@@ -191,7 +191,7 @@
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
 			packageReferences = (
-				52891CBA8AE5D676BA0CC876 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
+				FE1D88000D9D4CDA23D02890 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
 			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
@@ -210,7 +210,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				1762CC83F63D621D07ADF7C1 /* PrivacyInfo.xcprivacy in Resources */,
+				7E421DC7ACE7B5B1187D154E /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -254,6 +254,20 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
+		236FBDB616B34F5F9FF41CE1 /* Remove signature files (Xcode workaround) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Remove signature files (Xcode workaround)";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\n          echo \"Remove signature files (Xcode workaround)\";\n          rm -rf \"$CONFIGURATION_BUILD_DIR/MapLibre.xcframework-ios.signature\";\n        ";
+		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -280,7 +294,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-FogofWburg/Pods-FogofWburg-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		85FC25EAB08707DAD6D47711 /* [CP] Embed Pods Frameworks */ = {
+		DE5CFADADC93F92F5783DCA1 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -298,21 +312,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-FogofWburg/Pods-FogofWburg-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		A8D276730C1A46119975D768 /* Remove signature files (Xcode workaround) */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "Remove signature files (Xcode workaround)";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\n          echo \"Remove signature files (Xcode workaround)\";\n          rm -rf \"$CONFIGURATION_BUILD_DIR/MapLibre.xcframework-ios.signature\";\n        ";
-		};
-		F519C661D42063949E49C067 /* [Expo] Configure project */ = {
+		E499CF455B57EF9EFB106867 /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -341,7 +341,7 @@
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
 				B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */,
-				BA25F36849834731A8C3FC28 /* noop-file.swift in Sources */,
+				828756580775483B92373AFB /* noop-file.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -557,7 +557,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		52891CBA8AE5D676BA0CC876 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+		FE1D88000D9D4CDA23D02890 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
 			requirement = {
@@ -568,9 +568,9 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		99610570E8EE5EC6330A1AF5 /* MapLibre */ = {
+		85696ACB7AEE4C4B3059CB08 /* MapLibre */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 52891CBA8AE5D676BA0CC876 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			package = FE1D88000D9D4CDA23D02890 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
 			productName = MapLibre;
 		};
 /* End XCSwiftPackageProductDependency section */

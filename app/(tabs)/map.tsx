@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { StyleSheet, Text, View, Pressable } from 'react-native';
+import { StyleSheet, Text, View, Pressable, useWindowDimensions } from 'react-native';
+import { Canvas, Rect, Circle, Mask, Group, RadialGradient, vec } from '@shopify/react-native-skia';
+import Animated, { useSharedValue, withTiming, Easing, useAnimatedStyle, runOnJS, useDerivedValue } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useExplorationStore } from '@/store/useExplorationStore';
@@ -14,7 +16,7 @@ import { useTransitStore } from '@/store/useTransitStore';
 
 export default function MapScreen() {
   const router = useRouter();
-  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON } =
+  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal } =
     useExplorationStore();
   const { toggleTracking } = useBackgroundLocation();
   const { loadPOIs } = usePOIStore();
@@ -25,6 +27,36 @@ export default function MapScreen() {
   const cameraRef = useRef<React.ElementRef<typeof MapLibreGL.Camera>>(null);
   const [is3DMode, setIs3DMode] = useState<boolean>(true);
   const [selectedPOI, setSelectedPOI] = useState<POI | null>(null);
+
+  // Wave 10: Morning Sun Reveal Animation Setup
+  const { width, height } = useWindowDimensions();
+  const center = useMemo(() => vec(width / 2, height / 2), [width, height]);
+  const maxRadius = useMemo(() => Math.max(width, height) * 1.5, [width, height]);
+  
+  const revealProgress = useSharedValue(0);
+
+  useEffect(() => {
+    if (isMacroRevealing) {
+      revealProgress.value = 0;
+      revealProgress.value = withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }, (finished) => {
+        if (finished) {
+          runOnJS(clearMacroReveal)();
+        }
+      });
+    } else {
+      revealProgress.value = 0;
+    }
+  }, [isMacroRevealing, clearMacroReveal, revealProgress]);
+
+  const circleRadius = useDerivedValue(() => {
+    return revealProgress.value * maxRadius;
+  });
+
+  const overlayStyle = useAnimatedStyle(() => {
+    return {
+      opacity: isMacroRevealing ? (revealProgress.value > 0.85 ? withTiming(0, {duration: 400}) : 1) : 0,
+    };
+  });
 
   useEffect(() => {
     loadPOIs();
@@ -268,6 +300,29 @@ export default function MapScreen() {
         poi={selectedTransitNode}
         onClose={() => setSelectedTransitNode(null)}
       />
+
+      {/* Wave 10: Skia Morning Sun Sweep Overlay */}
+      <Animated.View style={[StyleSheet.absoluteFillObject, overlayStyle, { zIndex: 100 }]} pointerEvents={isMacroRevealing ? 'auto' : 'none'}>
+        <Canvas style={StyleSheet.absoluteFillObject}>
+          <Mask
+            mode="luminance"
+            mask={
+              <Group>
+                <Rect x={0} y={0} width={width} height={height} color="white" />
+                <Circle c={center} r={circleRadius} color="black" />
+              </Group>
+            }
+          >
+            <Rect x={0} y={0} width={width} height={height}>
+              <RadialGradient
+                c={center}
+                r={maxRadius}
+                colors={['#fef08a', '#fbbf24', '#f59e0b', '#0f172a']}
+              />
+            </Rect>
+          </Mask>
+        </Canvas>
+      </Animated.View>
     </View>
   );
 }

@@ -140,3 +140,12 @@ This archive contains detailed task prompts for completed development waves.
 5. **Ghost Trains**: Implement a strict Time-To-Live (TTL) garbage collector on the active_trips table. If a trip_id goes stale for > 10 minutes without registering an arrival, silently drop it.
 6. **CDN Handoff**: Output a single, unified Zstandard-compressed SQLite delta database (`transit_delta.sqlite.zst`) and push it to Cloudflare R2 (CDN).
 7. **Client Handoff**: Update the Expo app to silently fetch and synchronously attach this SQLite delta file every morning via `@op-engineering/op-sqlite`.
+
+---
+
+## Wave 10 — The Historian Flow
+
+### Task Prompt: W10-HISTORIAN — GPX/HealthKit Import & Macro-Reveal Animation
+**Goal**: Solve the "cold start" problem for new users.
+1. Build the UI in the Settings/Archive screen to accept passive uploads from Apple HealthKit, Strava, or raw GPX/FIT files.
+2. Build the massive visual payoff: an animation that instantly vanishes huge swaths of the fog across the city once the historical data is processed into H3 hexes.

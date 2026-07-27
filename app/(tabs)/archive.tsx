@@ -2,10 +2,55 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Alert } from 'react-native';
 import { useExplorationStore } from '@/store/useExplorationStore';
 import { PRIVACY_STATEMENT, exportSpatialDataJSON } from '@/utils/privacyExporter';
+import * as DocumentPicker from 'expo-document-picker';
+import { useRouter } from 'expo-router';
+import { insertUnlockedHexes } from '@/db/database';
+import { parseGPXToH3 } from '@/utils/gpxParser';
 
 export default function ArchiveScreen() {
-  const { unlockedHexes, resetExploration } = useExplorationStore();
+  const { unlockedHexes, resetExploration, addUnlockedHexes, triggerMacroReveal } = useExplorationStore();
   const [exportedStatus, setExportedStatus] = useState<string | null>(null);
+  const router = useRouter();
+
+  const handleUploadGPX = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['*/*'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const fileUri = result.assets[0].uri;
+      const response = await fetch(fileUri);
+      const fileText = await response.text();
+
+      const newHexes = parseGPXToH3(fileText);
+      if (newHexes.length === 0) {
+        Alert.alert('No Data Found', 'Could not extract any valid coordinates from this file.');
+        return;
+      }
+
+      // Bulk insert into SQLite
+      insertUnlockedHexes(newHexes);
+      
+      // Update store
+      const actuallyAddedCount = addUnlockedHexes(newHexes);
+
+      // Trigger the macro reveal and switch tabs
+      if (actuallyAddedCount > 0) {
+        triggerMacroReveal(actuallyAddedCount);
+        router.replace('/(tabs)/map');
+      } else {
+        Alert.alert('Import Complete', 'All coordinates in this file were already explored!');
+      }
+    } catch (err: any) {
+      console.warn('GPX import error:', err);
+      Alert.alert('Import Failed', err.message || 'Failed to parse the GPX file.');
+    }
+  };
 
   const handleExportData = () => {
     const exportedJSON = exportSpatialDataJSON(unlockedHexes, unlockedHexes.length);
@@ -61,6 +106,27 @@ export default function ArchiveScreen() {
           <Text style={styles.poiEmptySub}>
             Walk into unexplored hexagons to unlock historic points of interest and POIs.
           </Text>
+        </View>
+      </View>
+
+      {/* The Historian Import (Wave 10) */}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionHeader}>The Historian Import</Text>
+        <Text style={styles.privacyBody}>
+          Import historical tracking data to instantly uncover vast regions of the map.
+        </Text>
+        
+        <Pressable style={styles.importButtonPrimary} onPress={handleUploadGPX}>
+          <Text style={styles.importButtonText}>UPLOAD GPX/FIT FILE</Text>
+        </Pressable>
+
+        <View style={styles.placeholderRow}>
+          <Pressable style={styles.importButtonSecondary} onPress={() => Alert.alert('Coming Soon', 'Apple HealthKit integration is planned for a future update.')}>
+            <Text style={styles.importButtonSecondaryText}>APPLE HEALTHKIT</Text>
+          </Pressable>
+          <Pressable style={styles.importButtonSecondary} onPress={() => Alert.alert('Coming Soon', 'Strava integration is planned for a future update.')}>
+            <Text style={styles.importButtonSecondaryText}>CONNECT STRAVA</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -248,5 +314,37 @@ const styles = StyleSheet.create({
     color: '#3fb950',
     textAlign: 'center',
     fontWeight: '600',
+  },
+  importButtonPrimary: {
+    backgroundColor: '#eab308', // Warm morning sun hue
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  importButtonText: {
+    color: '#000000',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  placeholderRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  importButtonSecondary: {
+    flex: 1,
+    backgroundColor: '#21262d',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#30363d',
+  },
+  importButtonSecondaryText: {
+    color: '#8b949e',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

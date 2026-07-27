@@ -24,6 +24,10 @@ export interface ExplorationState {
    */
   fogGeoJSON: Feature<Polygon | MultiPolygon> | null;
 
+  // Wave 10: Macro Reveal State
+  isMacroRevealing: boolean;
+  macroRevealCount: number;
+
   // Actions
   setIsExploring: (isExploring: boolean) => void;
   setCurrentLocation: (location: Location | null) => void;
@@ -31,6 +35,8 @@ export interface ExplorationState {
   addUnlockedHexes: (hexes: string[]) => number;
   updateFogGeoJSON: () => Promise<void>;
   resetExploration: () => void;
+  triggerMacroReveal: (count: number) => void;
+  clearMacroReveal: () => void;
 }
 
 export const useExplorationStore = create<ExplorationState>((set, get) => ({
@@ -38,6 +44,8 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   currentLocation: null,
   unlockedHexes: [],
   fogGeoJSON: null,
+  isMacroRevealing: false,
+  macroRevealCount: 0,
 
   setIsExploring: (isExploring: boolean) => set({ isExploring }),
 
@@ -81,5 +89,19 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
       currentLocation: null,
       unlockedHexes: [],
       fogGeoJSON: null,
+      isMacroRevealing: false,
+      macroRevealCount: 0,
+    }),
+
+  triggerMacroReveal: (count: number) =>
+    set({
+      isMacroRevealing: true,
+      macroRevealCount: count,
+    }),
+
+  clearMacroReveal: () =>
+    set({
+      isMacroRevealing: false,
+      macroRevealCount: 0,
     }),
 }));

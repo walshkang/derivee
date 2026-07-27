@@ -26,7 +26,7 @@ This document is the single source of truth for all planned development waves.
 | **8** | **W8-TRANSIT** | **Live GTFS-RT Decoding & Transit Bottom-Sheet** | **L** | ✅ Done |
 | **8.1** | **W8.1-TRANSIT-REFACTOR** | **Dual-Format Transit Parser (JSON + PB) & API Keys** | **M** | ✅ Done |
 | **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | ✅ Done |
-| **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | Planned |
+| **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | ✅ Done |
 | **11** | **W11-TIMETABLE** | **Standalone Transit App (Web/Spinoff) & Headway Matrix** | **L** | Planned |
 | **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA** | **L** | Planned |
 
@@ -82,12 +82,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 10 — The Historian Flow (W10-HISTORIAN)
-
-* **The Goal:** Solve the "cold start" problem for new users.
-* **Agent Directives:**
-  * Build the UI in the Settings/Archive screen to accept passive uploads from Apple HealthKit, Strava, or raw GPX/FIT files.
-  * Build the massive visual payoff: an animation that instantly vanishes huge swaths of the fog across the city once the historical data is processed into H3 hexes.
+## Wave 10 — The Historian Flow (✅ Completed)
+*Task W10-HISTORIAN shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
 

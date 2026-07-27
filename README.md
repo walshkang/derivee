@@ -94,6 +94,125 @@ Press `i` to open the iOS simulator, or build directly to a tethered iPhone (rec
 
 ---
 
+## 📡 The Observer Daemon Operations Guide
+
+The Observer is a standalone persistent Go (Golang) daemon hosted on an Oracle Cloud VPS (`150.136.171.50`). It polls MTA GTFS-RT Protobuf feeds and MTA Bus Time SIRI endpoints every 3 minutes, processes historical arrival reliability, compresses a SQLite database with Zstandard (`transit_delta.sqlite.zst`), and uploads it to Cloudflare R2 (`fog-of-transit` bucket).
+
+### 1. Connecting to the VPS
+
+Run in your local Mac terminal:
+```bash
+ssh -i "/Users/walsh.kang/Library/CloudStorage/GoogleDrive-wkang1281@gmail.com/My Drive/000. Notes/ssh-key-2026-07-27.key" ubuntu@150.136.171.50
+```
+
+---
+
+### 2. Checking Current Running Status
+
+Once connected to the VPS:
+
+* **Check if process is active:**
+  ```bash
+  ps aux | grep observer_daemon
+  # OR via systemd
+  sudo systemctl status observer
+  ```
+
+* **Check recent log activity:**
+  ```bash
+  tail -n 20 ~/observer/observer.log
+  ```
+
+* **Stream live ingestion logs:**
+  ```bash
+  tail -f ~/observer/observer.log
+  ```
+
+---
+
+### 3. First-Time Setup & Build Instructions
+
+If setting up on a clean/reset VPS or rebuilding after code updates:
+
+1. **Configure Swap Space (1GB)** *(prevents GCC/Go OOM crashes during CGO build)*:
+   ```bash
+   sudo fallocate -l 1G /swapfile
+   sudo chmod 600 /swapfile
+   sudo mkswap /swapfile
+   sudo swapon /swapfile
+   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+   ```
+
+2. **Install Build Dependencies for SQLite CGO**:
+   ```bash
+   sudo apt update && sudo apt install -y build-essential
+   ```
+
+3. **Navigate & Configure Environment**:
+   ```bash
+   cd ~/observer
+   cat << 'EOF' > .env
+   MTA_BUS_API_KEY=your_bus_api_key_here
+   AWS_ACCESS_KEY_ID=37d7e340802ca1d87f284a56e634e0d3
+   AWS_SECRET_ACCESS_KEY=9cf72ffebc4d4efcad7dc88b8966ce51969e9daaac4986a7aa37eb66be461f53
+   AWS_REGION=auto
+   R2_BUCKET_NAME=fog-of-transit
+   R2_ENDPOINT=https://8de9ca6847d3179692f9b59ff2b46b8d.r2.cloudflarestorage.com
+   EOF
+   ```
+
+4. **Tidy Dependencies & Build**:
+   ```bash
+   go mod tidy
+   go build -v -o observer_daemon ./cmd/observer
+   ```
+
+---
+
+### 4. Running & Auto-Restart Management
+
+* **Test Execution (Foreground)**:
+  ```bash
+  ./observer_daemon
+  ```
+
+* **Run in Background (Simple `nohup`)**:
+  ```bash
+  nohup ./observer_daemon > observer.log 2>&1 &
+  ```
+
+* **Production Auto-Start via Systemd (Recommended)**:
+  Create the service config:
+  ```bash
+  sudo tee /etc/systemd/system/observer.service > /dev/null << 'EOF'
+  [Unit]
+  Description=The Observer GTFS Daemon
+  After=network.target
+
+  [Service]
+  Type=simple
+  User=ubuntu
+  WorkingDirectory=/home/ubuntu/observer
+  ExecStart=/home/ubuntu/observer/observer_daemon
+  Restart=always
+  RestartSec=10
+  StandardOutput=file:/home/ubuntu/observer/observer.log
+  StandardError=file:/home/ubuntu/observer/observer.log
+
+  [Install]
+  WantedBy=multi-user.target
+  EOF
+  ```
+
+  Enable and start:
+  ```bash
+  sudo systemctl daemon-reload
+  sudo systemctl enable observer
+  sudo systemctl start observer
+  ```
+
+---
+
 ## 📜 License
 
 *Proprietary - Do not distribute without permission.*
