@@ -12,7 +12,7 @@ export default function MapScreen() {
   const { toggleTracking, isLoading } = useBackgroundLocation();
   const { pois, recentlyDiscovered, loadPOIs, clearRecentPOI } = usePOIStore();
 
-  const cameraRef = useRef<MapLibreGL.Camera>(null);
+  const cameraRef = useRef<React.ElementRef<typeof MapLibreGL.Camera>>(null);
   const [is3DMode, setIs3DMode] = useState<boolean>(true);
 
   useEffect(() => {
