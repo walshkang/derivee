@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { transitService, TransitArrival, TransitVehicle } from '@/services/transitService';
+import { transitService, TransitArrival, TransitVehicle, TransitAlert } from '@/services/transitService';
 import { POI } from '@/db/poiQueries';
 
 interface TransitState {
   selectedTransitNode: POI | null;
   arrivals: TransitArrival[];
   vehicles: TransitVehicle[];
+  alerts: TransitAlert[];
   routePreviewGeoJSON: GeoJSON.FeatureCollection | null;
   isLoading: boolean;
   error: string | null;
@@ -19,6 +20,7 @@ export const useTransitStore = create<TransitState>((set, get) => ({
   selectedTransitNode: null,
   arrivals: [],
   vehicles: [],
+  alerts: [],
   routePreviewGeoJSON: null,
   isLoading: false,
   error: null,
@@ -28,15 +30,15 @@ export const useTransitStore = create<TransitState>((set, get) => ({
     if (node) {
       get().fetchLiveTransitData();
     } else {
-      set({ arrivals: [], vehicles: [], routePreviewGeoJSON: null, error: null });
+      set({ arrivals: [], vehicles: [], alerts: [], routePreviewGeoJSON: null, error: null });
     }
   },
 
   fetchLiveTransitData: async () => {
     set({ isLoading: true, error: null });
     try {
-      const { arrivals, vehicles } = await transitService.fetchLiveFeed();
-      set({ arrivals, vehicles, isLoading: false });
+      const { arrivals, vehicles, alerts } = await transitService.fetchSubwayFeed('NUMBERED');
+      set({ arrivals, vehicles, alerts, isLoading: false });
       get().generateRoutePreview(vehicles);
     } catch (err: any) {
       set({ error: err.message, isLoading: false });

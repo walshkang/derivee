@@ -24,7 +24,7 @@ This document is the single source of truth for all planned development waves.
 | **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | ✅ Done |
 | **7** | **W7-AMBIENT** | **Vicinity Bubble & Ghost POI Logic** | **M** | ✅ Done |
 | **8** | **W8-TRANSIT** | **Live GTFS-RT Decoding & Transit Bottom-Sheet** | **L** | ✅ Done |
-| **8.1** | **W8.1-TRANSIT-REFACTOR** | **Dual-Format Transit Parser (JSON + PB) & API Keys** | **M** | Planned |
+| **8.1** | **W8.1-TRANSIT-REFACTOR** | **Dual-Format Transit Parser (JSON + PB) & API Keys** | **M** | ✅ Done |
 | **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | Planned |
 | **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | Planned |
 | **11** | **W11-SPARKLINE** | **Standalone Transit App (Web/Spinoff)** | **L** | Planned |
@@ -72,18 +72,8 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 8.1 — Transit Parser Refactor (W8.1-TRANSIT-REFACTOR)
-
-* **The Goal:** Upgrade the Expo app's `transitService.ts` to handle fragmented data feeds, API keys, and dual-format parsing.
-* **Agent Directives:**
-  * **No UI Changes:** Focus exclusively on the data-fetching layer (`src/services/transitService.ts`).
-  * **Constants Mapping:** Create a constants file to map the fragmented MTA subway lines to their specific `api-endpoint.mta.info` URLs, rather than relying on a single global feed.
-  * **API Authentication:** Ensure the subway `fetch` requests pass the required `x-api-key` header using keys injected from `.env` (e.g., `EXPO_PUBLIC_MTA_API_KEY`), while bus requests use the `?key=` query parameter for both the MTA SIRI API and OneBusAway REST API.
-  * **Dual-Format Decoding:** Refactor the parser to dynamically handle both binary Protobufs (`protobufjs` for subways) and JSON (MTA SIRI API for real-time bus tracking, and OneBusAway REST API for static/discovery bus data).
-  * **Protobuf Extensions:** Include and load both the `gtfs-realtime-NYCT.proto` and `gtfs-realtime-service-status.proto` (Mercury) extensions alongside the standard GTFS-realtime proto. This is strictly required to decode MTA-specific `1001` tags:
-    * `NyctTripDescriptor` (for `direction`, `is_assigned`) and `NyctStopTimeUpdate` (for `actual_track`).
-    * `MercuryAlert` (for `alert_type`, `directionality`, `affected_stations`) and `MercuryEntitySelector` (for `sort_order` / priority).
-  * **Station-Level Alerts:** Update the parsing logic to correctly handle the MTA's `informed_entity` structure and the Mercury alert extensions (extracting directional impacts and sorting by severity).
+## Wave 8.1 — Transit Parser Refactor (✅ Completed)
+*Task W8.1-TRANSIT-REFACTOR shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
 
