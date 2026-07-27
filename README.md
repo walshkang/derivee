@@ -1,74 +1,99 @@
-# 🌫️ Fog of Wburg
+# Fog of Wburg: The Ambient Explorer
 
-**Fog of Wburg** is an offline-first iOS (and eventual Apple Watch) application built entirely within the Expo Managed Workflow. It gamifies real-world exploration by applying a permanent "fog of war" mechanic to a real-world map, heavily inspired by games like *Civilization VI*.
+> A mindful, offline-first iOS application that transforms your daily commute and neighborhood walks into an ambient journey of discovery.
 
-This project utilizes an AI-first "vibe coding" approach, prioritizing nimble development without manual Xcode management.
-
----
-
-## 🗺️ Core Features
-
-* **Real-World Exploration:** The world starts shrouded in a dark, stylistic fog. Active physical movement dynamically burns away the fog to reveal high-resolution 3D terrain and satellite imagery. Once a hexagon is cleared, it is unlocked forever.
-* **Smart Unlocking (Buffer Radius):** Fog clearing is dictated by a buffer radius around the user's GPS coordinates. This allows users to clear city blocks, private residences, and buildings entirely from public sidewalks, preventing accidental trespassing.
-* **Gamified Waypoints:** Open-source Points of Interest (POIs) act as soft, glowing beacons in the fog to lure users to unexplored areas. Upon discovery, they trigger a reward modal and transform into unobtrusive pins embedded in the base layer.
-* **Privacy-First & Offline:** Unlocked regions are stored locally on the device using a high-performance SQLite database. There is no creepy 24/7 server tracking.
-* **Battery-Conscious Tracking:** Location tracking operates in the background via a Foreground Service only during an active "Expedition." By utilizing hardware-level distance intervals rather than time-based polling, the application naturally idles when the user is stationary.
+**Fog of Wburg** is a harness for real life. Inspired by the progressive disclosure of *Zelda: Breath of the Wild* and the utility of *Google Maps*, it gamifies real-world exploration using an H3-powered "fog of war." However, it abandons the aggressive completionism of traditional mapping games. Instead, it offers a calming, translucent environment that teases discovery and provides commuter-grade transit data *only* when you explicitly ask for it.
 
 ---
 
-## 🛠️ The Tech Stack (Expo CNG)
+## 🌫 Core Experience
 
-To achieve native-level performance and microsecond memory sharing without ejecting from Expo, this architecture strictly relies on the following stack:
+* **The Volumetric Fog:** Unexplored areas are covered by a soft, diffuse, translucent cloud layer. Underneath, major geographic arteries (coastlines, bridges, arterial roads) are faintly visible as nameless vectors, subconsciously luring you to explore.
+* **The Vicinity Bubble:** The app heavily utilizes progressive disclosure. Detailed geospatial data (street names, transit stops, bike docks) is only rendered within a dynamic ~200-meter physical radius of your live location.
+* **Pristine History:** When you pan the camera to view an area you cleared weeks ago, you see only clean, beautiful satellite terrain. The map gets out of your way.
+* **Ghost POIs:** Points of interest and transit nodes do not permanently clutter the map with pins. Once an area is cleared, they become invisible. They are only revealed if you are physically standing in that hex and tap your location to pull up a minimalist data sheet.
+* **The Archive (Soft Completionism):** While the main map abandons gamified HUDs, a dedicated profile screen tracks your macro-level progress (e.g., "Williamsburg: 14% Cleared") and houses a beautiful grid of your discovered Ghost POIs, satisfying the completionist itch without the anxiety.
 
-* **Framework:** Expo SDK 51+ (Continuous Native Generation).
-* **Map Engine:** `@maplibre/maplibre-react-native` (Bypasses proprietary Mapbox fees; supports JSI synchronous updates and 3D Raster DEM).
-* **Grid System:** `h3-js` (Uber's H3 spatial index, compiled via Emscripten for blazingly fast JS-thread execution). Target Resolution: 11.
-* **Persistence:** `@op-engineering/op-sqlite` (JSI-powered SQLite engine for synchronous, non-blocking read/writes).
-* **Location Services:** `expo-location` combined with `expo-task-manager`.
-* **State Management:** `zustand`.
+## 🚇 Commuter-Grade Transit (Raw GTFS)
 
----
+Fog of Wburg features a Naver Maps-style transit integration built on a strictly "make it yourself, and make it well" philosophy, bypassing third-party API limits.
 
-## 🏗️ Architecture & Rendering Pipeline
-
-Rendering tens of thousands of unlocked hexagons simultaneously requires strict memory management and bridge-bypass techniques.
-
-### Dynamic Regional Loading
-
-To prevent out-of-memory crashes, the app **never** generates a worldwide fog layer. Upon initialization, it generates a lightweight 50km x 50km GeoJSON bounding box centered on the user's current coordinate. If the user leaves this metropolitan boundary, the old box is dropped and a new one is generated.
-
-### The Inverted Polygon Stack
-
-Instead of rendering individual hexagonal tiles, the app punches transparent holes through the dark 50km fog layer. Map layers are stacked from bottom to top:
-
-1. **Layer 1 (The Reward):** High-resolution satellite imagery + 3D Terrain extrusion.
-2. **Layer 2 (The Blocker):** The 50km dark GeoJSON polygon (the Fog).
-3. **Layer 3 (The Holes):** The user's unlocked H3 hexagons, added as "inner rings" to punch holes in Layer 2.
-4. **Layer 4 (The Guide):** Vector boundaries (coastlines, streets, labels) rendered *above* the fog for navigational context.
-
-### Algorithmic Simplification & Bridge Bypass
-
-Map engines use the Earcut algorithm to triangulate polygons. Processing thousands of individual hexagonal holes degrades performance to $O(N^2)$.
-
-* **Geometry Worker:** Before updating the map, adjacent unlocked hexagons are periodically merged using `h3.cellsToMultiPolygon` to drastically reduce vertex counts.
-* **Synchronous Execution:** We enable `withSynchronousUpdate(true)` on the MapLibre `ShapeSource` to bypass the React Native asynchronous bridge and `JSON.stringify` serialization, sharing memory directly between the Hermes engine and C++.
+1. **Live Protocol Buffers:** Tapping a transit node in your Vicinity Bubble decodes the transit authority's binary GTFS-RT feeds on the fly, delivering crisp, real-time arrival countdowns and dynamic vector route previews.
+2. **The Observer Pipeline:** Historical reliability (average headways, arrival sparklines) is powered by a custom, standalone Observer tool. This headless pipeline crunches raw GTFS data 24/7, generates a highly compressed static file, and pushes it to a CDN.
+3. **Offline-First Sync:** The mobile app silently fetches this tiny static file every morning, allowing instantaneous, offline rendering of historical charts directly from a local SQLite database.
 
 ---
 
-## 💾 Local Persistence Strategy
+## 🛠 Tech Stack & Architecture
 
-The application executes high-frequency spatial lookups continuously while the user moves. The `@op-engineering/op-sqlite` database is configured for raw speed:
+Built with an AI-driven "vibe coding" approach, relying strictly on Expo Prebuild (Continuous Native Generation) to completely eliminate manual Xcode management.
 
-* **Data Type Strictness:** H3 indexes are 64-bit integers that exceed standard JavaScript memory limits. They are strictly stored and passed as 15-character hexadecimal strings.
-* **Write-Ahead Logging (WAL):** Enabled via `PRAGMA journal_mode = WAL;` to allow concurrent background tracking writes and UI-thread reads without database locking.
-* **Clustered Indexing:** The primary table utilizes the `WITHOUT ROWID` declaration, forcing SQLite to use the H3 index string directly as the B-Tree index. This guarantees $O(\log N)$ or near $O(1)$ lookup speeds and reduces device footprint by 30%.
+* **Framework:** React Native + Expo (Managed Workflow)
+* **Map Engine:** `@rnmapbox/maps` (MapLibre vector tiles, 3D terrain, custom raster layers)
+* **Spatial Indexing:** Uber's H3 Grid System via `h3-js` (Resolution 11)
+* **Local Database:** `@op-engineering/op-sqlite` (Blazing fast C++ synchronous SQLite for instant spatial querying)
+* **Location Services:** `expo-location` (Foreground/Background distance-interval tracking)
+* **Transit Decoding:** `protobufjs` + `gtfs-realtime-bindings`
+
+**Technical Highlights:**
+* **Synchronous Rendering:** Utilizes MapLibre's JSI bindings (`withSynchronousUpdate`) and background geometry unioning (`h3.cellsToMultiPolygon`) to bypass the React Native bridge, rendering tens of thousands of hexagonal holes at 60fps.
+* **Battery & Drift Optimization:** CPU remains asleep until physical movement occurs via hardware-level distance intervals (`deferredUpdatesDistance`). An implied speed filter (< 12 m/s) aggressively discards urban canyon GPS multipath noise.
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+* Node.js (v18+)
+* Yarn or npm
+* Expo CLI (`npm install -g expo-cli`)
+* Ruby / Cocoapods (for iOS Prebuilds)
+* MapTiler or Mapbox API Key (for base tiles)
+
+### Installation
+
+1. **Clone the repository:**
+```bash
+git clone https://github.com/your-username/fog-of-wburg.git
+cd fog-of-wburg
+```
+
+2. **Install dependencies:**
+```bash
+yarn install
+```
+
+3. **Configure Environment:**
+Create a `.env` file in the root directory and add your MapLibre-compatible tile provider key:
+```env
+EXPO_PUBLIC_MAP_API_KEY=your_api_key_here
+```
+
+4. **Run Expo Prebuild (Crucial step for native modules):**
+```bash
+npx expo prebuild --clean
+```
+
+5. **Start the Metro Bundler:**
+```bash
+npx expo start
+```
+
+6. **Run on Device/Simulator:**
+Press `i` to open the iOS simulator, or build directly to a tethered iPhone (recommended for accurate background GPS and MapLibre testing).
 
 ---
 
-## 🔋 Battery Optimization & Drift Mitigation
+## 📁 Repository Structure (Upcoming)
 
-Background location tracking is meticulously configured to preserve user battery and comply with iOS App Store guidelines:
+* `/app` - The Expo React Native mobile application.
+* `/components` - UI overlays, the Vicinity Bubble elements, bottom-sheets.
+* `/core` - The H3 engine, location tracking hooks, MapLibre layer stack.
+* `/db` - SQLite schema, queries, and spatial point-in-polygon checks.
+* `/observer` - The standalone headless tool for GTFS-RT ingestion and historical sparkline generation (Go/Node/Python).
+* `/docs` - Architecture blueprints, design language specs, and feature roadmaps.
 
-* **Distance over Time:** `distanceInterval` is set to 10 meters. The CPU remains asleep until physical movement occurs.
-* **Hardware Batching:** `deferredUpdatesDistance` is set to 50 meters, holding coordinates in the GPS chip's silicon memory and waking the primary CPU only once per batch.
-* **Implied Speed Filter (Drift Gate):** To prevent urban canyon GPS multipath errors from artificially unlocking city blocks, all coordinates pass through a velocity gate. Any jump yielding an implied speed of $> 12 \text{ m/s}$ is immediately discarded as multipath noise.
+---
+
+## 📜 License
+
+*Proprietary - Do not distribute without permission.*

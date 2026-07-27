@@ -19,6 +19,7 @@ Do not deviate from these specific packages. They have been selected to bypass a
 | `expo-location` | `^17.0.0+` | Interfaces with iOS CoreLocation for foreground/background tracking. |
 | `expo-task-manager` | `^11.0.0+` | Registers headless background execution tasks. |
 | `zustand` | `^4.5.0+` | Lightweight, non-blocking UI state management. |
+| `protobufjs` & `gtfs-realtime-bindings` | `latest` | On-the-fly decoding of binary GTFS-RT transit feeds. |
 
 ---
 
@@ -41,11 +42,12 @@ The application state flows in a strict, non-blocking sequence to prevent backgr
 Rendering tens of thousands of individual hexagons will cause catastrophic frame drops. The app must utilize an **Inverted Polygon** approach combined with **Dynamic Regional Loading**.
 
 * **Dynamic Regional Loading:** Never generate a worldwide fog polygon. On initialization, generate a 50km x 50km GeoJSON bounding box centered on the user's current GPS coordinate.
-* **Layer Stacking:** Sandwich the fog between the environment and the context labels.
-* **Layer 1 (Bottom):** RasterDEMSource (3D Terrain) + Satellite Imagery.
-* **Layer 2 (The Fog):** The 50km dark GeoJSON polygon.
-* **Layer 3 (The Holes):** The user's unlocked H3 hexagons, added as "inner rings" to Layer 2 to punch transparent holes.
-* **Layer 4 (Top):** Vector context (coastlines, neighborhood labels, streets).
+* **Layer Stacking:** Sandwich the fog between the base environment and the dynamic vicinity labels.
+* **Layer 1 (The Base):** RasterDEMSource (3D Terrain) + High-resolution Satellite Imagery.
+* **Layer 2 (The Sub-Context):** Faint vectors of major geographic arteries (coastlines, bridges) with zero text labels.
+* **Layer 3 (The Cloud Layer):** The 50km soft, translucent, blurred GeoJSON polygon.
+* **Layer 4 (The Holes):** The user's unlocked H3 hexagons, added as "inner rings" to Layer 3 to punch transparent holes.
+* **Layer 5 (The Vicinity Bubble):** Detailed geospatial data (street names, transit nodes, Ghost POIs) rendered strictly within a dynamic 200m radius of the user's live location.
 
 
 * **Algorithmic Simplification:** Never pass thousands of isolated hexagonal holes to MapLibre. Map engines use the Earcut algorithm to triangulate polygons. Processing thousands of individual holes degrades performance to `$O(N^2)$`. You must periodically merge adjacent hexagons into larger, continuous shapes using `h3.cellsToMultiPolygon` before updating the map.
@@ -91,3 +93,13 @@ Configure `expo-location` with the following parameters:
 
 **The Implied Speed Filter:**
 To prevent GPS multipath errors (urban canyon drift) from artificially unlocking city blocks while the user is stationary indoors, all incoming background coordinates must pass a velocity gate. Calculate the speed between sequential points. If $\Delta d / \Delta t > 12 \text{ m/s}$, the coordinate must be discarded as multipath noise.
+
+---
+
+## 6. The Vicinity Bubble & Transit Pipeline
+
+To support the "ambient explorer" progressive disclosure model, detailed mapping information is decoupled from the global map state and bound strictly to the user's physical presence.
+
+* **Spatial Querying (200m Radius):** Detailed vector layers (street labels, transit nodes, Ghost POIs) are masked by a dynamic 200m radius around the live GPS coordinate. When the user pans away from their location, these elements are suppressed to maintain a pristine map.
+* **GTFS-RT Decoding:** Transit nodes act as "Ghost POIs". Upon interaction, the app fetches binary Protocol Buffer payloads directly from the transit authority and decodes them on-thread using `protobufjs` to extract real-time arrival countdowns without relying on third-party API aggregators.
+* **Historical Sync:** The app silently fetches a highly compressed, statically generated JSON/SQLite file containing historical reliability sparklines. This allows instantaneous, offline rendering of transit performance metrics.

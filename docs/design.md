@@ -1,216 +1,99 @@
-# design.md - Fog of Wburg
+# `design.md`: Fog of Wburg
 
-## 1. Product Vision & Brand Identity
+## 1. Core Philosophy: The Ambient Explorer
 
-**The Core Loop:** Fog of Wburg is an iOS application (and eventual Apple Watch app) designed to encourage real-world exploration by applying a permanent "fog of war" mechanic to a physical map. The concept operates as a hybrid of a fitness tracker and a location-based game—essentially "Strava meets Civilization VI".
+"Fog of Wburg" is not a traditional, heavy cartography app, nor is it an aggressive completionist game. It is a mindful **harness for real life**. The core objective is informative discovery.
 
-**Aesthetic Direction:**
-
-* 
-**Vibe:** The visual language should evoke real-life cartography and board games like Catan or Civilization VI.
-
-
-* 
-**Base Map:** High-resolution satellite and terrain imagery should be used to ground the experience in reality.
-
-
-* 
-**3D Elements:** Explored areas should reveal simple 3D isometric buildings beneath the fog to provide geographic context.
-
-
-* 
-**The Fog:** Unexplored areas are shrouded in a dark, atmospheric, semi-transparent stylistic fog.
-
-
-* **Macro-Map View:** When a user zooms all the way out, individual 10-meter hexes dissolve into aggregated, glowing regional polygons to showcase broader geographic coverage.
+Inspired by *Zelda: Breath of the Wild* and the minimalism of modern *Google Maps*, the app relies heavily on **progressive disclosure**. Information is only offered when physically relevant or explicitly asked for. The UI gets out of the way, encouraging the user to look up at the real world.
 
 ---
 
-## 2. Core User Flows & Screens
+## 2. Visual Identity
 
-### Screen 0: The Awakening (Startup / Splash Screen)
+The aesthetic abandons dark, rigid, parchment-style mapping in favor of a fluid, airy, and native modern mobile experience.
 
-**Visuals:**
-
-* A minimalist, atmospheric opening where the screen is entirely covered in the dark fog layer.
-* The "Fog of Wburg" logo sits dead center.
-* **Animation:** The fog fluidly "burns away" from the center outward, seamlessly transitioning the user directly into the map.
-
-**Under the Hood:**
-
-* Prompts for Location Permissions on the very first launch.
-
-
-* Generates the localized 50km x 50km GeoJSON fog bounding box so it is ready to render immediately.
-
-
-
-### Screen 1: The Cartographer's Desk (Main Home Screen)
-
-**Visuals:**
-
-* A full-screen map interface.
-
-
-* Unexplored areas are covered by the dark fog layer.
-
-
-* Fully explored areas are highly saturated, showcasing 3D buildings and satellite terrain.
-
-
-
-**Actions & Controls:**
-
-* A prominent, large primary action button labeled "Start Exploring".
-
-
-* An icon to center the camera on the user's current location.
-
-
-* A toggle menu to switch map layers.
-
-
-
-### Screen 2: Active Expedition (Live Tracking HUD)
-
-**Visuals:**
-
-* The map is actively locked and centered on the user's location indicator.
-
-
-* As the user physically moves, the fog dynamically "burns away" or lifts in a buffer radius around them.
-
-
-
-**Metrics & Controls:**
-
-* A translucent overlay positioned at the top or bottom of the screen.
-
-
-* Real-time statistics displayed on the overlay: Time Elapsed, Distance Traveled, and New Hexes Unlocked.
-
-
-* Control buttons to Pause or Stop the active exploration.
-
-
-
-### Screen 3: Discovery Modal (Waypoint Unlocked)
-
-**Visuals:**
-
-* A gamified pop-up that momentarily interrupts the HUD when a user walks into a Point of Interest (POI) hexagon.
-
-
-* A rewarding, celebratory aesthetic featuring a stylized badge or icon.
-
-
-
-**Content & Actions:**
-
-* Header text reading: "You Discovered: [POI Name]".
-
-
-* A brief fun fact or historic detail about the location.
-
-
-* Buttons to "Dismiss", "Read More", or "Save to Favorites".
-
-
-
-### Screen 4: The Archive (Profile & Stats)
-
-**Visuals:**
-
-* A clean dashboard displaying the user's overall exploration progress.
-
-
-
-**Content & Actions:**
-
-* Micro-Level Metrics (Zoomed In): Neighborhood completion metrics (e.g., "Williamsburg: 14% Uncovered") and total hex count.
-
-
-* Macro-Level Metrics (Zoomed Out): Dynamically shifts to global stats (e.g., "Cities Visited: 12", "Countries Explored: 3").
-* A scrollable list or gallery of previously Discovered POIs.
-
-
-
-### Screen 5: The Cartographer's Tools (Settings & Customization)
-
-**Visuals:**
-
-* A clean configuration menu accessed via a gear icon.
-
-**Content & Actions:**
-
-* **HUD Customization:** Toggles to check/uncheck metrics on the active overlay.
-* **Waypoint Behavior:** Toggles to control "Auto-Trigger Modal" vs. "Quiet Discovery" banners.
-* **Map Preferences:** Sliders to adjust fog opacity or toggle 3D buildings to save battery.
-* 
-**Integrations:** Controls to manage Apple HealthKit, Strava, and data exports.
-
-
-
-### Screen 6: Feature Unlocked (The Local Scanner)
-
-**Visuals:**
-
-* A celebratory interstitial screen that pops up after completing a set number of expeditions.
-
-**Content & Actions:**
-
-* Body text explaining the user can now see live transit options like subways and bike share availability in their immediate vicinity.
-
-
-* Transit icons subtle pulse within the live GPS buffer radius on the map.
+* **Theme:** Light Mode default. The app should feel like a clear morning.
+* **Color Palette:** Soft whites, light grays, and diffuse frosted-glass translucency (utilizing native OS blurring like Expo's `UltraThinMaterial`).
+* **Typography:** Clean, modern geometric sans-serif (e.g., *SF Pro* on iOS, *Inter* on Android). Fonts are used strictly for high-legibility data visualization, never for heavy UI framing.
+* **UI Layout:** The map *is* the UI. Buttons and stats float gently over the map, utilizing high negative space. Elements remain practically invisible until needed.
 
 ---
 
-## 3. Specialized User Flows
+## 3. Map Layers & The "Cloud" Mechanic
 
-### Flow 1: The Historian (Data Import Journey)
+The "fog of war" is no longer a punishing blackout; it is a volumetric, teasing element that sparks curiosity.
 
-**User Experience:**
+### The Layer Stack (Bottom to Top)
 
-* Accessed via the Settings screen, allowing a user to passively upload historical activity from another fitness app or a GPX/FIT file.
-
-
-* Displays a loading state reading "Consulting the archives..." while calculating the H3 grid system.
-* **The Payoff:** The user is returned to the map where a massive, satisfying animation plays as huge swaths of fog instantly vanish across their city.
+1. **The Base:** High-resolution satellite imagery (with future support for 3D `RasterDEMSource` terrain extrusion).
+2. **The Sub-Context (The Tease):** Faint vectors of major geographic arteries—coastlines, bridges, and primary arterial roads. Rendered with low opacity and **zero text labels**. This provides a subconscious lure to explore.
+3. **The Cloud Layer (The Fog):** A worldwide or regional mask rendered as a soft, translucent layer with a high blur radius, feeling diffuse and 3D.
+4. **The Holes (The Cleared Path):** Unlocked H3 hexes punch through the Cloud Layer, revealing the pristine Base and Sub-Context below.
 
 ---
 
-## 4. The Waypoint Lifecycle (Gamification)
+## 4. The Vicinity Bubble (Dynamic Context)
 
-Points of Interest (POIs) such as historic restaurants, museums, and landmarks follow a strict three-phase visual lifecycle based on the user's exploration state.
+To ensure the map never becomes a cluttered utility clone, detailed geospatial data only exists precisely where the user is physically standing.
 
-**Phase 1: The Lure (In Fog)**
+* **The Active Radius:** A tight physical radius (e.g., 200 meters) anchored to the user's live GPS ping.
+* **Progressive Disclosure:** Inside this bubble, crisp vector data appears: street names, unbranded geometric nodes for transit stops, and bike-share racks.
+* **Pristine History:** When the user pans the camera away from their live location to view an area cleared weeks ago, they see only clean satellite terrain. Heavy map data is strictly localized to the user's current physical presence.
 
-* 
-**Visual Treatment:** A soft, glowing, anonymous beacon rendering directly above the dark fog layer.
+---
 
+## 5. Interaction Model: Ghost POIs
 
-* 
-**User Experience:** Provides a distinct micro-goal and visual target in an unexplored zone. No name is shown to preserve the mystery.
+We do not use permanent map pins for Points of Interest (POIs) or historical landmarks, preserving a pristine visual state.
 
+* **The Lure:** Inside the fog, an unexplored POI may emit a soft, diffuse glow, providing a nameless target.
+* **The Ghost (Cleared State):** Once a hex is unlocked, the POI becomes completely invisible.
+* **The Reveal:** If a user is physically standing inside that cleared hex and intentionally taps their location, a clean bottom-sheet modal slides up, revealing the location's history or utility.
 
+---
 
-**Phase 2: The Unlocking (Triggered)**
+## 6. Transit Integration (The Naver Maps Approach)
 
-* 
-**Visual Treatment:** The fog permanently burns away as the user's GPS buffer radius intersects the hexagon containing the POI.
+Transit nodes (subway entrances, bus stops) are integrated as Ghost POIs. When a user taps a minimalist transit node inside their Vicinity Bubble, the app pulls from raw GTFS feeds to provide an elite, commuter-grade tool.
 
+### The Transit Bottom-Sheet
 
-* 
-**User Experience:** Triggers the gamified Discovery Modal to present the fun fact and unlocked benefits.
+* **Live Arrivals:** Crisp, bold typography displaying real-time countdowns (e.g., "3 min", "8 min") decoded directly from the transit authority's GTFS-RT Protocol Buffers.
+* **Route Previews:** A dynamic, colored vector line traces the vehicle's upcoming path onto the map for instant spatial context.
+* **Service Alerts:** Subtle, highly visible text warnings for reroutes or delays.
+* **Historical Reliability (Sparklines):** A small, elegant sparkline chart or text summary showing average headway and historical arrival reliability over the past 7 days (powered by a custom, standalone GTFS aggregator tool that generates lightweight static nightly builds).
 
+---
 
+## 7. Core User Flows & Screens
 
-**Phase 3: The Archive (Cleared)**
+Because "The map *is* the UI", we eliminate heavy HUDs, intrusive gamified modals, and session-based "Start/Stop" buttons. The app is designed to open instantly to ambient utility.
 
-* 
-**Visual Treatment:** The beacon permanently transforms into a subtle, faint pin embedded seamlessly into the base map layer.
+### Screen 0: The Dissolve (Splash Screen)
+* **Visuals:** The app opens to a completely frosted, blurred screen (representing the Cloud layer). 
+* **Animation:** The frost fluidly dissolves or "wipes" away, centering smoothly onto the user's live physical location and their crisp Vicinity Bubble.
 
+### Screen 1: The Ambient View (Main Map)
+* **Visuals:** Full-screen edge-to-edge map. No heavy headers or footers. The frosted Cloud layer covers everything outside the user's 200m Vicinity Bubble (and any previously cleared history).
+* **Controls:** 
+  * A floating, minimalist "Locate Me" FAB (Floating Action Button).
+  * A subtle, floating Profile/Archive icon (top corner).
+  * A subtle Settings icon.
+* **Absence of HUD:** No aggressive "Distance Traveled" or "Time Elapsed" widgets covering the screen. It is just you and the geography. 
 
-* 
-**User Experience:** Unobtrusive design ensures the pin does not clutter the cleared satellite map. Users can tap the pin to review the location's lore at any time.
+### Screen 2: The Reveal (Bottom Sheet)
+* **Trigger:** The user taps their current location when standing on a Ghost POI or Transit Node.
+* **Visuals:** A clean, native iOS/Android bottom-sheet slides up over the bottom third of the map with a frosted glass backdrop (`UltraThinMaterial`).
+* **Content:** Real-time transit countdowns (Naver Maps style) or historical lore about the unlocked Ghost POI.
+* **Interaction:** Swiping down instantly dismisses it, returning the user to the pristine map. No clunky "Dismiss" buttons required.
+
+### Screen 3: The Archive (Profile & Memory)
+* **Trigger:** Tapping the Profile icon.
+* **Visuals:** A full-screen modal with a soft, translucent frosted background.
+* **Content:** 
+  * **Macro-Level Metrics:** Total "Area Uncovered" (measured in square kilometers or hex count) alongside a satisfying **Percentage Complete** for their current neighborhood or city (e.g., "Williamsburg: 14% Cleared"). This retains the addictive completionist hook while still feeling premium.
+  * **The Collection:** A clean, chronological list or masonry grid of discovered Ghost POIs.
+
+### Screen 4: Preferences (Settings)
+* **Visuals:** Clean, native list UI.
+* **Content:** Toggles for the Transit Layer, Apple HealthKit/Fitness sync, Background Location permissions, and perhaps a slider to adjust the opacity of the "Cloud" layer.
