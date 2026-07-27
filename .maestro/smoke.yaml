@@ -1,0 +1,5 @@
+appId: com.fogofwburg.app
+---
+- launchApp
+- assertVisible: "Fog of Wburg"
+- takeScreenshot: screenshots/home_screen
