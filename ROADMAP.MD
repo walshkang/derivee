@@ -22,6 +22,11 @@ This document is the single source of truth for all planned development waves.
 | **4** | **W4-DRIFT** | **Implied Speed Filter & Geometry Unioning** | **M** | ✅ Done |
 | **5** | **W5-POI** | **Gamification & POI Integration** | **M** | ✅ Done |
 | **6** | **W6-POLISH** | **Performance & App Store Launch** | **S** | ✅ Done |
+| **7** | **W7-AMBIENT** | **Vicinity Bubble & Ghost POI Logic** | **M** | Planned |
+| **8** | **W8-TRANSIT** | **Live GTFS-RT Decoding & Transit Bottom-Sheet** | **L** | Planned |
+| **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | Planned |
+| **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | Planned |
+| **11** | **W11-SPARKLINE** | **Standalone Transit App (Web/Spinoff)** | **L** | Planned |
 
 ---
 
@@ -52,3 +57,54 @@ This document is the single source of truth for all planned development waves.
 
 ## Wave 6 — Polish & Launch (✅ Completed)
 *Task W6-POLISH shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
+
+---
+
+## Wave 7 — The Ambient UI (W7-AMBIENT)
+
+* **The Goal:** Strip away the heavy gamified HUDs and implement the progressive disclosure engine.
+* **Agent Directives:**
+  * Implement the dynamic 200-meter "Vicinity Bubble" anchored to the user's live GPS ping.
+  * Configure MapLibre to only render crisp street names and unbranded transit nodes *inside* this active radius.
+  * Implement the "Ghost POI" lifecycle. Ensure that once an area is cleared, POI pins become invisible on the map.
+  * Build the Geospatial Point-in-Polygon (PiP) check so that when a user taps the screen, the app queries `@op-engineering/op-sqlite` to see if they are physically standing on a hidden POI before revealing the bottom-sheet.
+
+---
+
+## Wave 8 — Raw Transit Pipeline (W8-TRANSIT)
+
+* **The Goal:** Build the on-device commuter tool without relying on third-party aggregators.
+* **Agent Directives:**
+  * Install `protobufjs` and `gtfs-realtime-bindings` to decode the transit authority's binary feeds natively on the JS thread.
+  * Build the cleanly formatted, Naver Maps-style bottom sheet displaying live countdowns (e.g., "3 min") and dynamic vector route previews tracing the vehicle's path.
+
+---
+
+## Wave 9 — The Observer Backend (W9-OBSERVER)
+
+* **The Goal:** Build the "make it yourself, and make it well" persistent backend architecture for historical transit reliability.
+* **Agent Directives:**
+  * This task occurs *outside* the Expo app. The agent must build a standalone Go (Golang) persistent daemon hosted on a low-cost VPS to ingest raw GTFS-RT Protobuf feeds every 3 minutes.
+  * Calculate rolling 7-day averages and reliability percentages to assemble the historical sparkline data in memory.
+  * Output a Zstandard-compressed SQLite delta database (`transit_delta.sqlite.zst`) and push it to Cloudflare R2 (CDN).
+  * Update the Expo app to silently fetch and synchronously attach this SQLite delta file every morning via `@op-engineering/op-sqlite`.
+
+---
+
+## Wave 10 — The Historian Flow (W10-HISTORIAN)
+
+* **The Goal:** Solve the "cold start" problem for new users.
+* **Agent Directives:**
+  * Build the UI in the Settings/Archive screen to accept passive uploads from Apple HealthKit, Strava, or raw GPX/FIT files.
+  * Build the massive visual payoff: an animation that instantly vanishes huge swaths of the fog across the city once the historical data is processed into H3 hexes.
+
+---
+
+## Wave 11 — Standalone Transit Navigation Expansion (W11-SPARKLINE)
+
+* **The Goal:** Leverage the historical sparkline data and live GTFS pipeline to build a lightweight, dedicated transit tracking and navigation app (potentially web-based).
+* **Agent Directives:**
+  * Build a spinoff/standalone interface (web browser or lightweight companion app) dedicated purely to transit routing, reliability, and tracking.
+  * Utilize the Go Observer's historical sparkline data to provide predictive "historical reliability" scores for routes.
+  * Implement user alerts/notifications for upcoming trains and buses (e.g., "10 min away").
+  * Support live navigation and future planned routes based on the fusion of live GTFS data and historical sparkline patterns.

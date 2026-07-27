@@ -19,8 +19,8 @@
 Fog of Wburg features a Naver Maps-style transit integration built on a strictly "make it yourself, and make it well" philosophy, bypassing third-party API limits.
 
 1. **Live Protocol Buffers:** Tapping a transit node in your Vicinity Bubble decodes the transit authority's binary GTFS-RT feeds on the fly, delivering crisp, real-time arrival countdowns and dynamic vector route previews.
-2. **The Observer Pipeline:** Historical reliability (average headways, arrival sparklines) is powered by a custom, standalone Observer tool. This headless pipeline crunches raw GTFS data 24/7, generates a highly compressed static file, and pushes it to a CDN.
-3. **Offline-First Sync:** The mobile app silently fetches this tiny static file every morning, allowing instantaneous, offline rendering of historical charts directly from a local SQLite database.
+2. **The Observer Pipeline:** Historical reliability (average headways, arrival sparklines) is powered by a custom, standalone Go (Golang) daemon hosted on a lightweight VPS. This persistent pipeline crunches raw GTFS data 24/7, generates a Zstandard-compressed SQLite delta database (`.sqlite.zst`), and pushes it to Cloudflare R2.
+3. **Offline-First Sync:** The mobile app silently fetches this compressed SQLite file every morning, allowing instantaneous, offline rendering of historical charts directly from native memory using `@op-engineering/op-sqlite`'s `ATTACH DATABASE` JSI driver.
 
 ---
 
@@ -89,7 +89,7 @@ Press `i` to open the iOS simulator, or build directly to a tethered iPhone (rec
 * `/components` - UI overlays, the Vicinity Bubble elements, bottom-sheets.
 * `/core` - The H3 engine, location tracking hooks, MapLibre layer stack.
 * `/db` - SQLite schema, queries, and spatial point-in-polygon checks.
-* `/observer` - The standalone headless tool for GTFS-RT ingestion and historical sparkline generation (Go/Node/Python).
+* `/observer` - The standalone Go (Golang) persistent daemon for GTFS-RT ingestion and historical sparkline generation.
 * `/docs` - Architecture blueprints, design language specs, and feature roadmaps.
 
 ---

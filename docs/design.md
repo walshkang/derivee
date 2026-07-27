@@ -61,7 +61,7 @@ Transit nodes (subway entrances, bus stops) are integrated as Ghost POIs. When a
 * **Live Arrivals:** Crisp, bold typography displaying real-time countdowns (e.g., "3 min", "8 min") decoded directly from the transit authority's GTFS-RT Protocol Buffers.
 * **Route Previews:** A dynamic, colored vector line traces the vehicle's upcoming path onto the map for instant spatial context.
 * **Service Alerts:** Subtle, highly visible text warnings for reroutes or delays.
-* **Historical Reliability (Sparklines):** A small, elegant sparkline chart or text summary showing average headway and historical arrival reliability over the past 7 days (powered by a custom, standalone GTFS aggregator tool that generates lightweight static nightly builds).
+* **Historical Reliability (Sparklines):** A small, elegant sparkline chart or text summary showing average headway and historical arrival reliability over the past 7 days (powered by The Observer: a custom Go daemon that generates lightweight Zstandard-compressed SQLite nightly builds).
 
 ---
 
