@@ -14,10 +14,12 @@ import { coordToH3 } from '@/utils/h3Utils';
 import { isWithinVicinityBubble, generateVicinityBubbleGeoJSON } from '@/utils/geoUtils';
 import { useTransitStore } from '@/store/useTransitStore';
 import { ContextualStatPill } from '@/components/ContextualStatPill';
+import { AnimatedUserLocation } from '@/components/AnimatedUserLocation';
+import * as h3 from 'h3-js';
 
 export default function MapScreen() {
   const router = useRouter();
-  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal, selectedHistoricalRoute, setSelectedHistoricalRoute, refreshCurrentNeighborhoodStat, loadUnlockedHexes } =
+  const { isExploring, currentLocation, activeBufferHexes, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal, selectedHistoricalRoute, setSelectedHistoricalRoute, refreshCurrentNeighborhoodStat, loadUnlockedHexes } =
     useExplorationStore();
   const { startTracking } = useBackgroundLocation();
   const { loadPOIs } = usePOIStore();
@@ -28,6 +30,7 @@ export default function MapScreen() {
   const cameraRef = useRef<React.ElementRef<typeof MapLibreGL.Camera>>(null);
   const [is3DMode, setIs3DMode] = useState<boolean>(false);
   const [selectedPOI, setSelectedPOI] = useState<POI | null>(null);
+  const [isCameraTracking, setIsCameraTracking] = useState<boolean>(true);
 
   // Wave 10: Morning Sun Reveal Animation Setup
   const { width, height } = useWindowDimensions();
@@ -83,13 +86,44 @@ export default function MapScreen() {
     return generateVicinityBubbleGeoJSON(currentLocation.latitude, currentLocation.longitude, 200);
   }, [currentLocation?.latitude, currentLocation?.longitude]);
 
+  // Ephemeral GeoJSON FeatureCollection for Layer 2 Glow
+  const ephemeralGeoJSON = useMemo(() => {
+    if (activeBufferHexes.length === 0) return null;
+    return {
+      type: 'FeatureCollection' as const,
+      features: activeBufferHexes.map(hex => ({
+        type: 'Feature' as const,
+        id: hex,
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [h3.cellToBoundary(hex, true)],
+        },
+        properties: {},
+      })),
+    };
+  }, [activeBufferHexes]);
 
+  // Stale-While-Revalidate Trigger for Ephemeral Glow
+  const [glowOpacity, setGlowOpacity] = useState(0);
+  const prevBufferRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    const newHexes = activeBufferHexes.filter(h => !prevBufferRef.current.includes(h));
+    if (newHexes.length > 0) {
+      setGlowOpacity(0.8);
+      setTimeout(() => {
+        setGlowOpacity(0.0);
+      }, 50);
+    }
+    prevBufferRef.current = activeBufferHexes;
+  }, [activeBufferHexes]);
 
   const handleTogglePerspective = () => {
     setIs3DMode((prev) => !prev);
   };
 
   const handleRecenterCamera = () => {
+    setIsCameraTracking(true);
     if (currentLocation && cameraRef.current) {
       cameraRef.current.setCamera({
         centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
@@ -168,22 +202,45 @@ export default function MapScreen() {
           logoEnabled={false}
           attributionEnabled={false}
           onPress={handleMapPress}
+          onRegionWillChange={(e) => {
+            if (e.properties.isUserInteraction) {
+              setIsCameraTracking(false);
+            }
+          }}
         >
           <MapLibreGL.Camera
             ref={cameraRef}
+            centerCoordinate={currentLocation && isCameraTracking ? [currentLocation.longitude, currentLocation.latitude] : undefined}
+            animationMode="moveTo"
+            animationDuration={1000}
             defaultSettings={{
-              centerCoordinate: currentLocation
-                ? [currentLocation.longitude, currentLocation.latitude]
-                : [-73.9599, 40.7180], // Williamsburg fallback
+              centerCoordinate: [-73.9599, 40.7180], // Williamsburg fallback
               zoomLevel: 15.5,
               pitch: 0,
             }}
-            followUserLocation={true}
-            followPitch={0}
-            followZoomLevel={15.5}
             minZoomLevel={10}
           />
-          <MapLibreGL.UserLocation visible={true} />
+          <AnimatedUserLocation location={currentLocation} />
+
+          {/* Layer 2: Ephemeral Tile Reveal Glow */}
+          {ephemeralGeoJSON && (
+            <MapLibreGL.ShapeSource
+              id="ephemeral-source"
+              shape={ephemeralGeoJSON}
+            >
+              <MapLibreGL.FillLayer
+                id="ephemeral-glow-layer"
+                style={{
+                  fillColor: '#FFBF00',
+                  fillOpacity: glowOpacity,
+                  fillOpacityTransition: {
+                    duration: 1500,
+                    delay: 0,
+                  } as any,
+                }}
+              />
+            </MapLibreGL.ShapeSource>
+          )}
 
           {/* Layer 3 & 4: Soft Translucent Cloud Fog Mask with Unlocked Hex Holes */}
           {fogGeoJSON && (
