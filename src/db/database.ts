@@ -323,19 +323,28 @@ export async function attachNeighborhoodDB(): Promise<void> {
   const db = getDb();
   try {
     const dbPath = FileSystem.documentDirectory + 'neighborhood.sqlite';
-    const fileInfo = await FileSystem.getInfoAsync(dbPath);
+    let fileInfo = await FileSystem.getInfoAsync(dbPath);
+    
+    // If it exists but is suspiciously small (e.g. failed bundle from before), delete it
+    if (fileInfo.exists && fileInfo.size && fileInfo.size < 1000) {
+       await FileSystem.deleteAsync(dbPath);
+       fileInfo = await FileSystem.getInfoAsync(dbPath);
+    }
+
     if (!fileInfo.exists) {
        console.log('[Database] Copying neighborhood DB from bundle to documents...');
-       // In Expo Managed workflow, assets are packaged automatically if required.
-       // However, we may need to download the asset URI if it's not a local file.
        const asset = Asset.fromModule(require('../../assets/neighborhood.sqlite'));
+       await asset.downloadAsync();
        if (asset.localUri) {
           await FileSystem.copyAsync({ from: asset.localUri, to: dbPath });
        } else {
           await FileSystem.downloadAsync(asset.uri, dbPath);
        }
     }
-    db.execute(`ATTACH DATABASE '${dbPath}' AS neighborhood_db;`);
+    
+    // op-sqlite requires a POSIX path, not a file:// URI
+    const posixDbPath = dbPath.replace('file://', '');
+    db.execute(`ATTACH DATABASE '${posixDbPath}' AS neighborhood_db;`);
     console.log('[Database] Attached neighborhood_db successfully.');
   } catch (error) {
     console.error('[Database] Failed to attach neighborhood_db:', error);
