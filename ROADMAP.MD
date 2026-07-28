@@ -29,6 +29,8 @@ This document is the single source of truth for all planned development waves.
 | **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | ✅ Done |
 | **11** | **W11-TIMETABLE** | **Standalone Transit App (Web/Spinoff) & Headway Matrix** | **L** | ✅ Done |
 | **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA** | **L** | Planned |
+| **13** | **W13-FOG-TIERS** | **3-Tier Fog State & Reference Counting** | **M** | Planned |
+| **13** | **W13-FOG-STYLE** | **MapLibre Dual-Layer & Temporal Interpolation** | **S** | Planned |
 
 ---
 
@@ -99,3 +101,12 @@ This document is the single source of truth for all planned development waves.
   * **W12-OBSERVER:** Refactor the Go daemon to support regional configuration profiles. It will poll the unified MBTA Protobuf endpoints (`TripUpdates.pb`, `Alerts.pb`, `VehiclePositions.pb`) alongside the NYC feeds, and normalize them into the Zstandard SQLite format.
   * **W12-APP:** Implement automatic region detection in the Expo app based on the user's GPS bounding box (querying the Boston SQLite file if the user's H3 index falls within Massachusetts).
   * **W12-UI:** Expand the Transit bottom-sheet to visually support MBTA-specific experimental fields, such as "Crowding / Occupancy" indicators and "Prediction Uncertainty" warnings.
+
+---
+
+## Wave 13 — Advanced MapLibre Rendering & Fog Enhancements (W13-FOG)
+
+* **The Goal:** Implement the optimized 3-Tier Fog of War system using native MapLibre capabilities and Positional Delta processing.
+* **Agent Directives:**
+  * **W13-FOG-TIERS:** Update the SQLite database schema to support active sight reference counting and adapt the state machine to track Unexplored, Explored, and Visible tiers natively. Implement positional delta processing to minimize geometry worker calls.
+  * **W13-FOG-STYLE:** Restructure the MapLibre layers to utilize the dual-raster desaturation technique (Layer 1: Explored Base desaturated, Layer 2: Visible Base color). Add `fill-opacity-transition: { duration: 300 }` to the fog layer for organic temporal dissolve.

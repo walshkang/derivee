@@ -30,10 +30,11 @@ The application state flows in a strict, non-blocking sequence to prevent backgr
 1. **Hardware:** iOS CoreLocation batches GPS coordinates (every 50 meters).
 2. **Background Task:** `expo-location` receives the batch, filters out GPS drift, and calculates implied speed.
 3. **Spatial Engine:** `h3-js` converts valid coordinates to Resolution 11 H3 hexes and calculates the buffer radius.
-4. **Persistence:** `@op-engineering/op-sqlite` executes a synchronous `$O(\log N)$` check. New hexes are inserted via `INSERT OR IGNORE`.
-5. **Geometry Worker:** Adjacent unlocked hexes are periodically merged using `h3.cellsToMultiPolygon` to reduce vertex count.
-6. **Bridge Bypass:** The simplified GeoJSON is passed to `@maplibre/maplibre-react-native` via shared JSI memory (`withSynchronousUpdate(true)`).
-7. **Render:** MapLibre Native's `earcut.hpp` tessellates the geometry, punching transparent holes through the fog layer to reveal 3D satellite imagery beneath.
+4. **Persistence:** `@op-engineering/op-sqlite` executes a synchronous `$O(\log N)$` check. New hexes are inserted via `INSERT OR IGNORE`. The state tracks both permanent `explored_hexes` and transient active sight reference counts.
+5. **Delta Processing & Caching:** A local JS memory cache of previously visible H3 indexes is maintained.
+6. **Geometry Worker:** Only when the hex delta is non-empty, adjacent unlocked/visible hexes are merged using `h3.cellsToMultiPolygon` to reduce vertex count.
+7. **Bridge Bypass:** The simplified GeoJSON is passed to `@maplibre/maplibre-react-native` via shared JSI memory (`withSynchronousUpdate(true)`).
+8. **Render:** MapLibre Native's `earcut.hpp` tessellates the geometry, punching transparent holes through the fog layer to reveal the 3-tier (desaturated/full-color) environment beneath.
 
 ---
 
@@ -42,12 +43,14 @@ The application state flows in a strict, non-blocking sequence to prevent backgr
 Rendering tens of thousands of individual hexagons will cause catastrophic frame drops. The app must utilize an **Inverted Polygon** approach combined with **Dynamic Regional Loading**.
 
 * **Dynamic Regional Loading:** Never generate a worldwide fog polygon. On initialization, generate a 50km x 50km GeoJSON bounding box centered on the user's current GPS coordinate.
-* **Layer Stacking:** Sandwich the fog between the base environment and the dynamic vicinity labels.
-* **Layer 1 (The Base):** RasterDEMSource (3D Terrain) + High-resolution Satellite Imagery.
-* **Layer 2 (The Sub-Context):** Faint vectors of major geographic arteries (coastlines, bridges) with zero text labels.
-* **Layer 3 (The Cloud Layer):** The 50km soft, translucent, blurred GeoJSON polygon.
-* **Layer 4 (The Holes):** The user's unlocked H3 hexagons, added as "inner rings" to Layer 3 to punch transparent holes.
-* **Layer 5 (The Vicinity Bubble):** Detailed geospatial data (street names, transit nodes, Ghost POIs) rendered strictly within a dynamic 200m radius of the user's live location.
+* **Temporal Interpolation:** Configure MapLibre `fill-opacity-transition: { duration: 300 }` on the fog mask layer for smooth, organic fog dissolve rather than instant pop-in.
+* **Layer Stacking (The 3-Tier Visibility Model):** Achieve desaturation natively without custom C++ shaders by sandwiching dual raster layers under the fog.
+  * **Layer 1 (The Explored Base):** `RasterLayer` rendering satellite imagery permanently dimmed (`rasterSaturation: -1.0`, reduced brightness). This represents areas the user has previously explored.
+  * **Layer 2 (The Visible Base):** Full-color satellite `RasterLayer` identical to Layer 1, but masked strictly by the user's active line-of-sight polygon.
+  * **Layer 3 (The Sub-Context):** Faint vectors of major geographic arteries (coastlines, bridges) with zero text labels.
+  * **Layer 4 (The Cloud Layer):** The 50km soft, translucent, blurred GeoJSON polygon (pitch black for strictly Unexplored).
+  * **Layer 5 (The Holes):** The user's unlocked H3 hexagons (both Explored and Visible states), added as "inner rings" to Layer 4 to punch transparent holes into the Cloud Layer.
+  * **Layer 6 (The Vicinity Bubble):** Detailed geospatial data (street names, transit nodes, Ghost POIs) rendered strictly within a dynamic 200m radius of the user's live location.
 
 
 * **Algorithmic Simplification:** Never pass thousands of isolated hexagonal holes to MapLibre. Map engines use the Earcut algorithm to triangulate polygons. Processing thousands of individual holes degrades performance to `$O(N^2)$`. You must periodically merge adjacent hexagons into larger, continuous shapes using `h3.cellsToMultiPolygon` before updating the map.
@@ -71,6 +74,12 @@ PRAGMA synchronous = NORMAL;
 CREATE TABLE explored_hexes (
     h3_index TEXT PRIMARY KEY,
     discovered_at INTEGER NOT NULL
+) WITHOUT ROWID;
+
+-- Used for the 3-Tier active visibility tracking (reference counting)
+CREATE TABLE active_visibility (
+    h3_index TEXT PRIMARY KEY,
+    reference_count INTEGER NOT NULL
 ) WITHOUT ROWID;
 
 ```

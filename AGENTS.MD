@@ -23,15 +23,16 @@
 * **Memory Protection**: **Never** attempt to generate a single GeoJSON polygon covering the entire Earth to act as the fog.
 * **Rule**: Always generate a localized 50km x 50km bounding box centered on the user's current GPS coordinate upon initialization.
 
-### 2. The 5-Layer Stack
+### 2. The 6-Layer Stack (3-Tier Visibility)
 
-When configuring `@maplibre/maplibre-react-native`, you must strictly adhere to this exact Z-index stacking order:
+When configuring `@maplibre/maplibre-react-native`, you must strictly adhere to this exact Z-index stacking order to achieve desaturation natively:
 
-* **Layer 1 (The Base)**: High-resolution satellite imagery / `RasterDEMSource`.
-* **Layer 2 (The Sub-Context)**: Faint vectors (major arteries/coastlines) with zero text labels.
-* **Layer 3 (The Cloud Layer)**: The 50km bounding box rendered as a soft, translucent polygon with a high blur radius.
-* **Layer 4 (The Holes)**: Unlocked H3 hexes configured as inner rings to punch through Layer 3.
-* **Layer 5 (The Vicinity Bubble)**: The active 200m radius rendering street names and Ghost POIs.
+* **Layer 1 (The Explored Base)**: `RasterLayer` rendering satellite imagery permanently dimmed (`rasterSaturation: -1.0`, reduced brightness).
+* **Layer 2 (The Visible Base)**: Full-color satellite `RasterLayer` identical to Layer 1, but masked strictly by the user's active line-of-sight polygon.
+* **Layer 3 (The Sub-Context)**: Faint vectors (major arteries/coastlines) with zero text labels.
+* **Layer 4 (The Cloud Layer)**: The 50km bounding box rendered as a soft, translucent polygon with a high blur radius and `fill-opacity-transition: { duration: 300 }`.
+* **Layer 5 (The Holes)**: Unlocked H3 hexes (both Explored and Visible) configured as inner rings to punch through Layer 4.
+* **Layer 6 (The Vicinity Bubble)**: The active 200m radius rendering street names and Ghost POIs.
 
 ### 3. Vicinity Bubble & PiP Checks
 
@@ -41,6 +42,7 @@ When configuring `@maplibre/maplibre-react-native`, you must strictly adhere to 
 ### 4. Bridge Congestion Prevention & Unioning
 
 * **JSI Updates**: **Always** enable `withSynchronousUpdate(true)` on the `ShapeSource` to bypass JSON stringification penalties over the React Native bridge.
+* **Positional Delta Processing**: Maintain a local memory cache of visible H3 indexes. Only recalculate multi-polygons when the hex delta is non-empty.
 * **Geometry Worker**: Never push raw arrays of un-merged H3 holes. Periodic workers must execute `h3.cellsToMultiPolygon` to dissolve internal vertices for MapLibre's `earcut.hpp` triangulator.
 
 ---

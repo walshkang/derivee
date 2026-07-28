@@ -21,14 +21,15 @@ The aesthetic abandons dark, rigid, parchment-style mapping in favor of a fluid,
 
 ## 3. Map Layers & The "Cloud" Mechanic
 
-The "fog of war" is no longer a punishing blackout; it is a volumetric, teasing element that sparks curiosity.
+The "fog of war" is no longer a punishing binary blackout; it utilizes a volumetric, 3-Tier visibility model (Unexplored, Explored, Visible) that sparks curiosity while maintaining a pristine map.
 
 ### The Layer Stack (Bottom to Top)
 
-1. **The Base:** High-resolution satellite imagery (with future support for 3D `RasterDEMSource` terrain extrusion).
-2. **The Sub-Context (The Tease):** Faint vectors of major geographic arteries—coastlines, bridges, and primary arterial roads. Rendered with low opacity and **zero text labels**. This provides a subconscious lure to explore.
-3. **The Cloud Layer (The Fog):** A worldwide or regional mask rendered as a soft, translucent layer with a high blur radius, feeling diffuse and 3D.
-4. **The Holes (The Cleared Path):** Unlocked H3 hexes punch through the Cloud Layer, revealing the pristine Base and Sub-Context below.
+1. **The Explored Base:** High-resolution satellite imagery permanently desaturated (grayscale) and dimmed. This layer represents areas the user has previously cleared but is not currently occupying.
+2. **The Visible Base:** Full-color, vibrant satellite imagery, revealed strictly inside the user's active, reference-counted line of sight.
+3. **The Sub-Context (The Tease):** Faint vectors of major geographic arteries—coastlines, bridges, and primary arterial roads. Rendered with low opacity and **zero text labels**. This provides a subconscious lure to explore.
+4. **The Cloud Layer (The Fog):** A regional mask (pitch black where Unexplored) rendered as a soft, translucent layer with a high blur radius, feeling diffuse and 3D.
+5. **The Holes (The Cleared Path):** Unlocked H3 hexes (both Explored and Visible) punch through the Cloud Layer, revealing the pristine bases and sub-context below. MapLibre's `fill-opacity-transition` ensures new holes dissolve smoothly over 300ms rather than instantly popping into view.
 
 ---
 
