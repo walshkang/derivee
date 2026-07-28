@@ -43,6 +43,7 @@ export interface ExplorationState {
 
   // Wave 14: Contextual Stats
   sessionUnlockedCount: number;
+  sessionDistanceMeters: number;
   currentNeighborhoodStat: NeighborhoodStat | null;
 
   // Actions
@@ -51,6 +52,7 @@ export interface ExplorationState {
   setUnlockedHexes: (hexes: string[]) => void;
   setVisibleHexes: (hexes: string[]) => void;
   addUnlockedHexes: (hexes: string[]) => number;
+  incrementSessionDistance: (distanceMeters: number) => void;
   updateFogGeoJSON: () => Promise<void>;
   resetExploration: () => void;
   triggerMacroReveal: (count: number) => void;
@@ -70,6 +72,7 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   macroRevealCount: 0,
   selectedHistoricalRoute: null,
   sessionUnlockedCount: 0,
+  sessionDistanceMeters: 0,
   currentNeighborhoodStat: null,
 
   setIsExploring: (isExploring: boolean) => set({ isExploring }),
@@ -101,6 +104,10 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
       };
     });
     return addedCount;
+  },
+
+  incrementSessionDistance: (distanceMeters: number) => {
+    set((state) => ({ sessionDistanceMeters: state.sessionDistanceMeters + distanceMeters }));
   },
 
   updateFogGeoJSON: async () => {
@@ -141,6 +148,8 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
       lastProcessedHexesHash: '',
       isMacroRevealing: false,
       macroRevealCount: 0,
+      sessionUnlockedCount: 0,
+      sessionDistanceMeters: 0,
     }),
 
   triggerMacroReveal: (count: number) =>

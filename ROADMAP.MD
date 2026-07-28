@@ -35,6 +35,7 @@ This document is the single source of truth for all planned development waves.
 | **13** | **W13-AMBIENT-TRACKING** | **Ambient Tracking & Start Button Removal** | **S** | ✅ Done |
 | **14** | **W14-DATA-NEIGHBORHOODS** | **Neighborhood Denominators & Water Subtraction** | **M** | ✅ Done |
 | **14** | **W14-UI-STATS** | **Progression Stats UI: Contextual Pill & Archive Screen** | **M** | ✅ Done |
+| **15** | **W15-DYNAMIC-ISLAND** | **Dynamic Island Support for Stat Bar** | **S** | Planned |
 
 ---
 
@@ -118,5 +119,14 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 14 — Progression Stats & Neighborhood Denominators (✅ Completed)
-*Tasks W14-DATA-NEIGHBORHOODS & W14-UI-STATS shipped. Prompts archived in `archive/shipped-waves-archive.md`.*
+## Wave 14 — Progression Stats & Neighborhood Denominators (In Progress / Active Focus)
+*Tasks W14-DATA-NEIGHBORHOODS & W14-UI-STATS implemented; currently debugging native Stats page interactions.*
+* **W14-DATA-NEIGHBORHOODS**: Integrated static `neighborhood.sqlite` DB generated via GIS water-subtraction scripts (`scripts/generate_neighborhood_db.py`).
+* **W14-UI-STATS**: Shipped floating high-contrast light-mode `ContextualStatPill` (`src/components/ContextualStatPill.tsx`) and full Statistics & History Screen (`app/stats.tsx`).
+* ⚠️ **Active Focus**: Investigating OP-SQLite database connection state and touch interaction flow on `app/stats.tsx`.
+
+---
+
+## Wave 15 — System Integrations [Planned]
+
+* **W15-DYNAMIC-ISLAND**: Add Dynamic Island / Live Activities support for the contextual stat bar so progression is visible outside the app.

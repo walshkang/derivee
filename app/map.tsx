@@ -99,9 +99,6 @@ export default function MapScreen() {
     }
   };
 
-  const handleNavigateArchive = () => {
-    router.push('/(tabs)/archive');
-  };
 
   /**
    * Geospatial Point-in-Polygon (PiP) & Proximity Check on Map Tap.
@@ -160,36 +157,7 @@ export default function MapScreen() {
     <View style={styles.container}>
       {/* Top Floating Ambient Navigation Bar */}
       <ContextualStatPill />
-      {/* Top Floating Navigation Bar */}
-      <View style={styles.topNavigationBar}>
-        <Pressable
-          style={({ pressed }) => [styles.navButton, pressed && styles.navButtonPressed]}
-          onPress={handleNavigateArchive}
-          accessibilityRole="button"
-          accessibilityLabel="Open History"
-        >
-          <Text style={styles.navButtonText}>History</Text>
-        </Pressable>
 
-        {selectedHistoricalRoute ? (
-          <Pressable
-            style={({ pressed }) => [styles.navButton, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }, pressed && styles.navButtonPressed]}
-            onPress={() => setSelectedHistoricalRoute(null)}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.navButtonText, { color: '#ef4444' }]}>Clear Route</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            style={({ pressed }) => [styles.navButton, pressed && styles.navButtonPressed]}
-            onPress={() => router.push('/settings')}
-            accessibilityRole="button"
-            accessibilityLabel="Open Settings"
-          >
-            <Text style={styles.navButtonText}>Settings</Text>
-          </Pressable>
-        )}
-      </View>
 
       {/* MapLibre Engine Viewport — Edge-to-Edge Map */}
       <View style={StyleSheet.absoluteFillObject}>
@@ -288,9 +256,9 @@ export default function MapScreen() {
         </MapLibreGL.MapView>
       </View>
 
-      {/* Floating Action Controls Stack */}
-      {/* Floating Action Controls Stack */}
-      <View style={styles.fabControlsStack}>
+      {/* Floating Action Controls Stack (Right) */}
+      <View style={styles.fabControlsStackRight}>
+
         <Pressable
           style={({ pressed }) => [styles.fabButton, pressed && styles.fabButtonPressed]}
           onPress={handleRecenterCamera}
@@ -300,6 +268,28 @@ export default function MapScreen() {
           {/* Traditional navigation target icon */}
           <Text style={styles.fabIcon}>⌖</Text>
         </Pressable>
+      </View>
+
+      {/* Floating Action Controls Stack (Left) */}
+      <View style={styles.fabControlsStackLeft}>
+        {selectedHistoricalRoute ? (
+          <Pressable
+            style={({ pressed }) => [styles.fabPillButton, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }, pressed && styles.fabButtonPressed]}
+            onPress={() => setSelectedHistoricalRoute(null)}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.fabPillButtonText, { color: '#ef4444' }]}>Clear Route</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.fabPillButton, pressed && styles.fabButtonPressed]}
+            onPress={() => router.push('/settings')}
+            accessibilityRole="button"
+            accessibilityLabel="Open Settings"
+          >
+            <Text style={styles.fabPillButtonText}>Settings</Text>
+          </Pressable>
+        )}
       </View>
 
 
@@ -346,21 +336,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-  topNavigationBar: {
+  fabControlsStackRight: {
     position: 'absolute',
-    top: 56,
-    left: 16,
     right: 16,
+    bottom: 40,
     zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
   },
-  navButton: {
+  fabControlsStackLeft: {
+    position: 'absolute',
+    left: 16,
+    bottom: 40,
+    zIndex: 10,
+    gap: 12,
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
+  },
+  fabPillButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(226, 232, 240, 0.8)',
     shadowColor: '#000',
@@ -368,23 +364,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
   },
-  navButtonPressed: {
-    backgroundColor: '#f1f5f9',
-    transform: [{ scale: 0.96 }],
-  },
-  navButtonText: {
+  fabPillButtonText: {
     fontSize: 14,
     fontWeight: '700',
     color: '#0f172a',
     letterSpacing: 0.5,
-  },
-  fabControlsStack: {
-    position: 'absolute',
-    right: 16,
-    bottom: 40,
-    zIndex: 10,
-    gap: 12,
   },
   fabButton: {
     width: 48,

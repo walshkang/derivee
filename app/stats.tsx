@@ -1,28 +1,46 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, Alert, TouchableOpacity } from 'react-native';
 import { useExplorationStore } from '@/store/useExplorationStore';
 import { PRIVACY_STATEMENT, exportSpatialDataJSON } from '@/utils/privacyExporter';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
-import { insertUnlockedHexes, insertTrackingSession, getAllTrackingSessions, TrackingSession, getNeighborhoodCompletion, NeighborhoodStat } from '@/db/database';
+import { insertUnlockedHexes, insertTrackingSession, getAllTrackingSessions, TrackingSession, getNeighborhoodCompletion, NeighborhoodStat, getAllCityHexes } from '@/db/database';
 import { parseGPX, parseFIT } from '@/utils/workoutParser';
+import { generateExploredHexesGeoJSON } from '@/utils/exploredGeoJSON';
+import MapLibreGL from '@maplibre/maplibre-react-native';
 
 export default function ArchiveScreen() {
   const { unlockedHexes, resetExploration, addUnlockedHexes, triggerMacroReveal, setSelectedHistoricalRoute } = useExplorationStore();
   const [exportedStatus, setExportedStatus] = useState<string | null>(null);
   const [sessions, setSessions] = useState<TrackingSession[]>([]);
   const [neighborhoodStats, setNeighborhoodStats] = useState<NeighborhoodStat[]>([]);
+  const [cityHexes, setCityHexes] = useState<string[]>([]);
+  const [isNYCExpanded, setIsNYCExpanded] = useState(false);
   const router = useRouter();
+
+  const exploredNYCGeoJSON = React.useMemo(() => {
+    return generateExploredHexesGeoJSON(unlockedHexes);
+  }, [unlockedHexes]);
+
+  const cityOutlineGeoJSON = React.useMemo(() => {
+    return generateExploredHexesGeoJSON(cityHexes);
+  }, [cityHexes]);
 
   useEffect(() => {
     loadSessions();
   }, []);
 
   const loadSessions = () => {
-    const data = getAllTrackingSessions();
-    setSessions(data);
-    const stats = getNeighborhoodCompletion();
-    setNeighborhoodStats(stats);
+    try {
+      const data = getAllTrackingSessions();
+      setSessions(data || []);
+      const stats = getNeighborhoodCompletion();
+      setNeighborhoodStats(stats || []);
+      const allHexes = getAllCityHexes();
+      setCityHexes(allHexes || []);
+    } catch (e) {
+      console.warn('Failed to load tracking sessions or stats:', e);
+    }
   };
 
   const handleUploadFile = async () => {
@@ -82,7 +100,7 @@ export default function ArchiveScreen() {
       // Trigger the macro reveal and switch tabs
       if (actuallyAddedCount > 0) {
         triggerMacroReveal(actuallyAddedCount);
-        router.replace('/(tabs)/map');
+        router.replace('/map');
       } else {
         Alert.alert('Import Complete', 'All coordinates in this file were already explored!');
       }
@@ -124,7 +142,7 @@ export default function ArchiveScreen() {
 
   const cityTotalHexes = neighborhoodStats.reduce((acc, curr) => acc + curr.total_hexes, 0);
   const cityExploredHexes = neighborhoodStats.reduce((acc, curr) => acc + curr.explored_hexes, 0);
-  const cityCompletion = cityTotalHexes > 0 ? ((cityExploredHexes / cityTotalHexes) * 100).toFixed(1) : '0.0';
+  const cityCompletion = cityTotalHexes > 0 ? ((cityExploredHexes / cityTotalHexes) * 100).toFixed(2) : '0.00';
 
   const sortedNeighborhoods = [...neighborhoodStats]
     .filter(n => n.explored_hexes > 0)
@@ -135,11 +153,30 @@ export default function ArchiveScreen() {
     });
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <Text style={styles.headerTitle}>THE ARCHIVE</Text>
-      <Text style={styles.headerSubtitle}>Exploration Records & Discoveries</Text>
-
-      {/* Summary Cards */}
+    <View style={styles.container}>
+      {/* Header with Back Button */}
+      <View style={styles.headerBar}>
+        <TouchableOpacity 
+          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }} 
+          style={styles.backButton}
+          activeOpacity={0.6}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/map');
+            }
+          }}
+        >
+          <Text style={styles.backButtonText}>{'‹ Back'}</Text>
+        </TouchableOpacity>
+        <View style={styles.headerTitles}>
+          <Text style={styles.headerTitle}>STATISTICS</Text>
+          <Text style={styles.headerSubtitle}>Exploration Records & Discoveries</Text>
+        </View>
+      </View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.contentContainer}>
+        {/* Summary Cards */}
       <View style={styles.gridContainer}>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>{unlockedHexes.length}</Text>
@@ -152,22 +189,112 @@ export default function ArchiveScreen() {
         </View>
       </View>
 
-      {/* Neighborhood Leaderboard */}
-      {sortedNeighborhoods.length > 0 && (
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionHeader}>Neighborhood Leaderboard</Text>
-          {sortedNeighborhoods.map((n, index) => {
-            const pct = n.total_hexes > 0 ? ((n.explored_hexes / n.total_hexes) * 100).toFixed(1) : '0.0';
-            return (
-              <View key={n.id} style={styles.leaderboardItem}>
-                <Text style={styles.leaderboardRank}>{index + 1}</Text>
-                <Text style={styles.leaderboardName}>{n.name}</Text>
-                <Text style={styles.leaderboardPct}>{pct}%</Text>
-              </View>
-            );
-          })}
+      {/* Cities Section */}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionHeader}>Cities</Text>
+        
+        {/* NYC Card */}
+        <View style={styles.cityCard}>
+          
+          <View style={styles.minimapContainer} pointerEvents="none">
+            <MapLibreGL.MapView
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+              mapStyle={`https://api.maptiler.com/maps/streets-v2/style.json?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`}
+              logoEnabled={false}
+              attributionEnabled={false}
+              scrollEnabled={false}
+              pitchEnabled={false}
+              rotateEnabled={false}
+              zoomEnabled={false}
+            >
+              <MapLibreGL.Camera
+                defaultSettings={{
+                  centerCoordinate: [-73.9599, 40.7180], // NYC center
+                  zoomLevel: 9.5,
+                }}
+              />
+
+              {cityOutlineGeoJSON && cityOutlineGeoJSON.geometry && (cityOutlineGeoJSON.geometry.coordinates?.length ?? 0) > 0 && (
+                <MapLibreGL.ShapeSource id="nyc-outline-source" shape={cityOutlineGeoJSON}>
+                  <MapLibreGL.FillLayer
+                    id="nyc-outline-fill"
+                    style={{
+                      fillColor: '#1e293b', // Dark slate shadow
+                      fillOpacity: 0.5,
+                    }}
+                  />
+                  <MapLibreGL.LineLayer
+                    id="nyc-outline-line"
+                    style={{
+                      lineColor: '#334155',
+                      lineWidth: 1,
+                      lineOpacity: 0.5,
+                    }}
+                  />
+                </MapLibreGL.ShapeSource>
+              )}
+
+              {exploredNYCGeoJSON && exploredNYCGeoJSON.geometry && (exploredNYCGeoJSON.geometry.coordinates?.length ?? 0) > 0 && (
+                <MapLibreGL.ShapeSource id="nyc-explored-source" shape={exploredNYCGeoJSON}>
+                  <MapLibreGL.FillLayer
+                    id="nyc-explored-fill"
+                    style={{
+                      fillColor: '#fbbf24', // Illuminated yellow
+                      fillOpacity: 0.8,
+                    }}
+                  />
+                  <MapLibreGL.LineLayer
+                    id="nyc-explored-line"
+                    style={{
+                      lineColor: '#f59e0b',
+                      lineWidth: 1,
+                    }}
+                  />
+                </MapLibreGL.ShapeSource>
+              )}
+            </MapLibreGL.MapView>
+          </View>
+
+          <TouchableOpacity 
+            style={styles.cityHeader}
+            activeOpacity={0.7}
+            onPress={() => setIsNYCExpanded(!isNYCExpanded)}
+          >
+            <View>
+              <Text style={styles.cityName}>New York City</Text>
+              <Text style={styles.cityProgress}>{cityCompletion}% Complete</Text>
+            </View>
+            <Text style={styles.expandIcon}>{isNYCExpanded ? '▼' : '▶'}</Text>
+          </TouchableOpacity>
+
+
+          {/* Neighborhood Leaderboard Dropdown */}
+          {isNYCExpanded && (
+            <View style={styles.neighborhoodList}>
+              <Text style={styles.neighborhoodHeader}>Neighborhoods</Text>
+              
+              {sortedNeighborhoods.length === 0 ? (
+                <View style={styles.poiEmptyState}>
+                  <Text style={styles.poiEmptyTitle}>No Neighborhoods Explored</Text>
+                  <Text style={styles.poiEmptySub}>Walk around to unlock your first NYC neighborhood.</Text>
+                </View>
+              ) : (
+                sortedNeighborhoods.map((n, index) => {
+                  const pct = n.total_hexes > 0 ? ((n.explored_hexes / n.total_hexes) * 100).toFixed(2) : '0.00';
+                  return (
+                    <View key={n.id} style={styles.leaderboardItem}>
+                      <Text style={styles.leaderboardRank}>{index + 1}</Text>
+                      <Text style={styles.leaderboardName}>{n.name}</Text>
+                      <Text style={styles.leaderboardPct}>{pct}%</Text>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
         </View>
-      )}
+      </View>
 
       {/* The Historian Import (Wave 10) */}
       <View style={styles.sectionCard}>
@@ -176,17 +303,17 @@ export default function ArchiveScreen() {
           Import historical tracking data to instantly uncover vast regions of the map.
         </Text>
         
-        <Pressable style={styles.importButtonPrimary} onPress={handleUploadFile}>
+        <TouchableOpacity style={styles.importButtonPrimary} activeOpacity={0.8} onPress={handleUploadFile}>
           <Text style={styles.importButtonText}>UPLOAD GPX/FIT FILE</Text>
-        </Pressable>
+        </TouchableOpacity>
 
         <View style={styles.placeholderRow}>
-          <Pressable style={styles.importButtonSecondary} onPress={() => Alert.alert('Coming Soon', 'Apple HealthKit integration is planned for a future update.')}>
+          <TouchableOpacity style={styles.importButtonSecondary} activeOpacity={0.7} onPress={() => Alert.alert('Coming Soon', 'Apple HealthKit integration is planned for a future update.')}>
             <Text style={styles.importButtonSecondaryText}>APPLE HEALTHKIT</Text>
-          </Pressable>
-          <Pressable style={styles.importButtonSecondary} onPress={() => Alert.alert('Coming Soon', 'Strava integration is planned for a future update.')}>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.importButtonSecondary} activeOpacity={0.7} onPress={() => Alert.alert('Coming Soon', 'Strava integration is planned for a future update.')}>
             <Text style={styles.importButtonSecondaryText}>CONNECT STRAVA</Text>
-          </Pressable>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -195,15 +322,16 @@ export default function ArchiveScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionHeader}>Past Workouts</Text>
           {sessions.map((session) => (
-            <Pressable 
+            <TouchableOpacity 
               key={session.id} 
               style={styles.sessionItem}
+              activeOpacity={0.7}
               onPress={() => {
                 if (session.route_geojson) {
                   try {
                     const feature = JSON.parse(session.route_geojson);
                     setSelectedHistoricalRoute(feature);
-                    router.replace('/(tabs)/map');
+                    router.replace('/map');
                   } catch (e) {
                     console.error("Invalid GeoJSON in session");
                   }
@@ -230,7 +358,7 @@ export default function ArchiveScreen() {
                   <Text style={styles.sessionMetricLabel}>Hexes</Text>
                 </View>
               </View>
-            </Pressable>
+            </TouchableOpacity>
           ))}
         </View>
       )}
@@ -243,19 +371,20 @@ export default function ArchiveScreen() {
         </View>
         <Text style={styles.privacyBody}>{PRIVACY_STATEMENT}</Text>
         
-        <Pressable style={styles.exportButton} onPress={handleExportData}>
+        <TouchableOpacity style={styles.exportButton} activeOpacity={0.8} onPress={handleExportData}>
           <Text style={styles.exportButtonText}>EXPORT SPATIAL LOG (JSON)</Text>
-        </Pressable>
+        </TouchableOpacity>
         {exportedStatus && (
           <Text style={styles.exportStatusText}>{exportedStatus}</Text>
         )}
       </View>
 
       {/* Actions */}
-      <Pressable style={styles.resetButton} onPress={resetExploration}>
+      <TouchableOpacity style={styles.resetButton} activeOpacity={0.7} onPress={resetExploration}>
         <Text style={styles.resetButtonText}>RESET EXPLORATION DATA</Text>
-      </Pressable>
-    </ScrollView>
+      </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -264,9 +393,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    zIndex: 100,
+    elevation: 10,
+  },
+  backButton: {
+    paddingRight: 16,
+    paddingVertical: 8,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  headerTitles: {
+    flex: 1,
+  },
   contentContainer: {
     padding: 20,
-    paddingTop: 64,
     paddingBottom: 40,
   },
   headerTitle: {
@@ -278,7 +430,6 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 14,
     color: '#64748b',
-    marginBottom: 24,
   },
   gridContainer: {
     flexDirection: 'row',
@@ -518,5 +669,51 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: '#0284c7',
+  },
+  cityCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  cityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  cityName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  cityProgress: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  expandIcon: {
+    fontSize: 16,
+    color: '#94a3b8',
+  },
+  minimapContainer: {
+    height: 180,
+    width: '100%',
+    backgroundColor: '#0f172a',
+  },
+  neighborhoodList: {
+    padding: 16,
+    backgroundColor: '#ffffff',
+  },
+  neighborhoodHeader: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748b',
+    marginBottom: 8,
   },
 });

@@ -2,7 +2,7 @@ import * as TaskManager from 'expo-task-manager';
 import type { LocationObject } from 'expo-location';
 import { processAndStoreLocationHexes } from '../utils/h3Utils';
 import { useExplorationStore } from '../store/useExplorationStore';
-import { filterLocationsBySpeed } from '../utils/speedFilter';
+import { filterLocationsBySpeed, calculateHaversineDistance } from '../utils/speedFilter';
 
 /**
  * Task identifier for background location updates in expo-task-manager.
@@ -54,11 +54,26 @@ export function handleBackgroundLocationUpdate(locations: LocationObject[]): str
     locations,
     lastAcceptedLocation
   );
-  lastAcceptedLocation = updatedLast;
 
   if (validLocations.length === 0) {
     return [];
   }
+
+  let addedDistance = 0;
+  let previousLoc = lastAcceptedLocation;
+  for (const loc of validLocations) {
+    if (previousLoc && loc.coords && previousLoc.coords) {
+      addedDistance += calculateHaversineDistance(
+        previousLoc.coords.latitude,
+        previousLoc.coords.longitude,
+        loc.coords.latitude,
+        loc.coords.longitude
+      );
+    }
+    previousLoc = loc;
+  }
+
+  lastAcceptedLocation = updatedLast;
 
   const allUnlockedHexes: string[] = [];
   let totalNewHexCount = 0;
@@ -97,6 +112,9 @@ export function handleBackgroundLocationUpdate(locations: LocationObject[]): str
   // Only trigger expensive h3.cellsToMultiPolygon / updateFogGeoJSON when NEW hexes were actually unlocked.
   // Avoids CPU congestion and JS bridge rendering stalls when stationary or pacing in unlocked hexes.
   const store = useExplorationStore.getState();
+  if (addedDistance > 0) {
+    store.incrementSessionDistance(addedDistance);
+  }
   if (store.currentLocation && totalNewHexCount > 0) {
     store.updateFogGeoJSON().catch((err) => {
       console.warn('Failed updating fog GeoJSON in background task handler:', err);

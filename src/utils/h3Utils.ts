@@ -1,6 +1,5 @@
 import * as h3 from 'h3-js';
 import { insertUnlockedHexes } from '../db/database';
-import { useExplorationStore } from '../store/useExplorationStore';
 
 /**
  * Default H3 resolution for Fog of Wburg.
@@ -125,6 +124,7 @@ export function processAndStoreLocationHexes(
   const dbInsertedCount = insertUnlockedHexes(bufferHexes);
 
   // Update Zustand store
+  const { useExplorationStore } = require('../store/useExplorationStore');
   const store = useExplorationStore.getState();
   store.setCurrentLocation({ latitude: lat, longitude: lng });
   const storeAddedCount = store.addUnlockedHexes(bufferHexes);

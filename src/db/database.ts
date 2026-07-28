@@ -80,10 +80,16 @@ export function initDatabase(name: string = DB_NAME): OPSQLiteConnection {
  * Automatically initializes the database if not already open.
  */
 export function getDb(): OPSQLiteConnection {
-  if (!dbInstance) {
-    return initDatabase();
+  if (dbInstance) {
+    try {
+      dbInstance.execute('PRAGMA user_version;');
+      return dbInstance;
+    } catch (e) {
+      console.warn('[Database] Active dbInstance handle is closed or lost. Re-initializing...', e);
+      dbInstance = null;
+    }
   }
-  return dbInstance;
+  return initDatabase();
 }
 
 /**
@@ -300,19 +306,24 @@ export function insertTrackingSession(session: TrackingSession): void {
 }
 
 export function getAllTrackingSessions(): TrackingSession[] {
-  const db = getDb();
-  const result = db.execute('SELECT * FROM tracking_sessions ORDER BY started_at DESC;');
-  
-  let rows: TrackingSession[] = [];
-  if (result && result.rows) {
-    if (Array.isArray(result.rows)) rows = result.rows as TrackingSession[];
-    else if (Array.isArray(result.rows._array)) rows = result.rows._array as TrackingSession[];
-    else if (typeof result.rows.item === 'function') {
-      const len = result.rows.length || 0;
-      for (let i = 0; i < len; i++) rows.push(result.rows.item(i));
+  try {
+    const db = getDb();
+    const result = db.execute('SELECT * FROM tracking_sessions ORDER BY started_at DESC;');
+    
+    let rows: TrackingSession[] = [];
+    if (result && result.rows) {
+      if (Array.isArray(result.rows)) rows = result.rows as TrackingSession[];
+      else if (Array.isArray(result.rows._array)) rows = result.rows._array as TrackingSession[];
+      else if (typeof result.rows.item === 'function') {
+        const len = result.rows.length || 0;
+        for (let i = 0; i < len; i++) rows.push(result.rows.item(i));
+      }
     }
+    return rows;
+  } catch (error) {
+    console.error('[Database] Failed to get tracking sessions:', error);
+    return [];
   }
-  return rows;
 }
 
 /**
@@ -344,8 +355,33 @@ export async function attachNeighborhoodDB(): Promise<void> {
     
     // op-sqlite requires a POSIX path, not a file:// URI
     const posixDbPath = dbPath.replace('file://', '');
-    db.execute(`ATTACH DATABASE '${posixDbPath}' AS neighborhood_db;`);
-    console.log('[Database] Attached neighborhood_db successfully.');
+    
+    // Check if it's already attached
+    const dbsResult = db.execute('PRAGMA database_list;');
+    let isAlreadyAttached = false;
+    if (dbsResult && dbsResult.rows) {
+      let rows: any[] = [];
+      if (Array.isArray(dbsResult.rows)) rows = dbsResult.rows;
+      else if (Array.isArray(dbsResult.rows._array)) rows = dbsResult.rows._array;
+      else if (typeof dbsResult.rows.item === 'function') {
+        const len = dbsResult.rows.length || 0;
+        for (let i = 0; i < len; i++) rows.push(dbsResult.rows.item(i));
+      }
+      
+      for (const row of rows) {
+        if (row.name === 'neighborhood_db') {
+          isAlreadyAttached = true;
+          break;
+        }
+      }
+    }
+
+    if (!isAlreadyAttached) {
+      db.execute(`ATTACH DATABASE '${posixDbPath}' AS neighborhood_db;`);
+      console.log('[Database] Attached neighborhood_db successfully.');
+    } else {
+      console.log('[Database] neighborhood_db is already attached. Skipping attach.');
+    }
   } catch (error) {
     console.error('[Database] Failed to attach neighborhood_db:', error);
   }
@@ -432,5 +468,35 @@ export function getCurrentNeighborhoodStat(h3Index: string): NeighborhoodStat | 
     console.warn('[Database] Failed to get current neighborhood stat:', error);
   }
   return null;
+}
+
+/**
+ * Retrieves all hexes for the entire city (all neighborhoods) for the minimap outline.
+ */
+export function getAllCityHexes(): string[] {
+  const db = getDb();
+  
+  try {
+    const result = db.execute(`
+      SELECT h3_index FROM neighborhood_db.neighborhood_hexes;
+    `);
+
+    let rows: Array<{ h3_index: string }> = [];
+    if (result && result.rows) {
+      if (Array.isArray(result.rows)) rows = result.rows;
+      else if (Array.isArray(result.rows._array)) rows = result.rows._array;
+      else if (typeof result.rows.item === 'function') {
+        const len = result.rows.length || 0;
+        for (let i = 0; i < len; i++) rows.push(result.rows.item(i));
+      }
+    }
+
+    return rows
+      .map((r) => r.h3_index)
+      .filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
+  } catch (error) {
+    console.error('[Database] Failed to get city hexes:', error);
+    return [];
+  }
 }
 
