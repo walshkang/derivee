@@ -18,7 +18,7 @@ export default function MapScreen() {
   const router = useRouter();
   const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal } =
     useExplorationStore();
-  const { toggleTracking } = useBackgroundLocation();
+  const { startTracking } = useBackgroundLocation();
   const { loadPOIs } = usePOIStore();
   
   // Transit store integration
@@ -62,6 +62,11 @@ export default function MapScreen() {
     loadPOIs();
   }, [loadPOIs]);
 
+  useEffect(() => {
+    // Ambient Tracking: Automatically start tracking when map mounts
+    startTracking().catch((err) => console.warn('Failed to start ambient tracking:', err));
+  }, [startTracking]);
+
   // Update the fog GeoJSON layer whenever location or unlocked hexes change
   useEffect(() => {
     if (currentLocation) {
@@ -75,13 +80,7 @@ export default function MapScreen() {
     return generateVicinityBubbleGeoJSON(currentLocation.latitude, currentLocation.longitude, 200);
   }, [currentLocation?.latitude, currentLocation?.longitude]);
 
-  const handleToggleExploration = async () => {
-    try {
-      await toggleTracking();
-    } catch (err: any) {
-      console.warn('Exploration tracking toggle error:', err);
-    }
-  };
+
 
   const handleTogglePerspective = () => {
     setIs3DMode((prev) => !prev);
@@ -197,7 +196,7 @@ export default function MapScreen() {
               zoomLevel: 14,
               pitch: is3DMode ? 60 : 0,
             }}
-            followUserLocation={isExploring}
+            followUserLocation={true}
             followPitch={is3DMode ? 60 : 0}
             followZoomLevel={16}
             minZoomLevel={12}
@@ -312,23 +311,7 @@ export default function MapScreen() {
         </Pressable>
       </View>
 
-      {/* Prominent Pill-Shaped Start Tracking Button */}
-      <View style={styles.bottomPillContainer}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.trackingPill,
-            isExploring ? styles.trackingPillActive : styles.trackingPillInactive,
-            pressed && styles.trackingPillPressed,
-          ]}
-          onPress={handleToggleExploration}
-          accessibilityRole="button"
-          accessibilityLabel={isExploring ? 'Stop Tracking' : 'Start Tracking'}
-        >
-          <Text style={styles.trackingPillText}>
-            {isExploring ? 'Stop Tracking' : 'Start Tracking'}
-          </Text>
-        </Pressable>
-      </View>
+
 
       {/* Screen 2: The Reveal (Ghost POI Progressive Disclosure Bottom Sheet) */}
       <AmbientRevealBottomSheet
@@ -439,40 +422,5 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0284c7',
   },
-  bottomPillContainer: {
-    position: 'absolute',
-    bottom: 48,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  trackingPill: {
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 30,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  trackingPillInactive: {
-    backgroundColor: '#0ea5e9',
-    borderColor: '#38bdf8',
-  },
-  trackingPillActive: {
-    backgroundColor: '#ef4444',
-    borderColor: '#f87171',
-  },
-  trackingPillPressed: {
-    transform: [{ scale: 0.96 }],
-  },
-  trackingPillText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
+
 });

@@ -5,7 +5,7 @@
 
 * **Theme:** Light Mode default. Soft whites and light grays.
 * **Typography:** OS Native (SF Pro on iOS, Inter on Android). Used strictly for clear labels and data visualization, not decoration.
-* **Actionable UI:** No ambiguous navigation. Icons must be paired with explicit text (e.g., a pill button that explicitly reads "Start Tracking").
+* **Actionable UI:** No ambiguous navigation. Icons must be paired with explicit text.
 
 ## 2. The 3-Tier Fog Visibility Logic
 The map utilizes a 3-tier state to separate where the user is, where they have been, and what is left to discover. Unlocked H3 hexes (Resolution 11) feature a subtle border outline to define the progression grid.
@@ -39,12 +39,12 @@ A transient loading screen to establish the app's visual identity before transit
 
 ### Screen 1: Main Map
 The primary interface for viewing progress and recording new geospatial data.
-* **UI Elements:** Edge-to-edge MapLibre map. A prominent pill-shaped floating button at the bottom reading "Start Tracking". Top-bar text buttons for "History" (top-left) and "Settings" (top-right).
+* **UI Elements:** Edge-to-edge MapLibre map. Top-bar text buttons for "History" (top-left) and "Settings" (top-right).
 * **Definition of Done:**
     * MapTiler base layer renders successfully.
     * The 3-tier fog logic correctly masks the map based on the user's SQLite database of unlocked hexes.
     * Subtle hex outlines render exclusively inside Explored and Active zones.
-    * Tapping "Start Tracking" initiates background GPS polling, toggles the button text to "Stop Tracking", and actively unlocks new hexes in real-time.
+    * Tracking begins silently and ambiently in the background upon opening the map, automatically uncovering new hexes.
 
 ### Screen 2: Transit Details (Bottom Sheet)
 A utility view that appears only when interacting with a transit pin.

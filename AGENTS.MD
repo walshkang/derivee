@@ -11,6 +11,7 @@
 ## 🎨 UI & Ambient Explorer Constraints
 
 * **Progressive Disclosure strictly enforced**: The map is the UI. **Never** build heavy, persistent HUDs (like constant "Distance Traveled" widgets overlaying the screen).
+* **Ambient Tracking**: The app uses an always-on, ambient tracking model. Never build manual 'Start/Stop Tracking' UI elements. Tracking should begin silently in the background on open.
 * **Aesthetics**: Default to Light Mode. Use soft whites, light grays, and Apple's native `UltraThinMaterial` (via Expo blur) for UI elements. Avoid serif fonts; strictly use modern geometric sans-serif.
 * **Ghost POIs**: **Never** implement permanent map pins or markers for Points of Interest or Transit nodes. They must be completely invisible in cleared hexes.
 

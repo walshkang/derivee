@@ -90,7 +90,7 @@ CREATE TABLE active_visibility (
 
 ## 5. Background Location & Energy Economics
 
-Continuous background tracking will drain the battery and result in App Store rejection if configured incorrectly. Time-based polling is strictly prohibited. The architecture relies on OS-level distance filtering to allow the CPU to sleep when the user is stationary.
+Continuous background tracking will drain the battery and result in App Store rejection if configured incorrectly. Time-based polling is strictly prohibited. The app uses an **ambient tracking model**, automatically requesting permissions and tracking silently upon launch. The architecture relies on OS-level distance filtering to allow the CPU to sleep when the user is stationary.
 
 Configure `expo-location` with the following parameters:
 

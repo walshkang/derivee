@@ -32,6 +32,7 @@ This document is the single source of truth for all planned development waves.
 | **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA (Post-MVP)** | **L** | Planned |
 | **13** | **W13-FOG-TIERS** | **3-Tier Fog State & Reference Counting (Post-MVP)** | **M** | ✅ Done |
 | **13** | **W13-FOG-STYLE** | **MapLibre Dual-Layer & Temporal Interpolation (Post-MVP)** | **S** | ✅ Done |
+| **13** | **W13-AMBIENT-TRACKING** | **Ambient Tracking & Start Button Removal** | **S** | ✅ Done |
 
 ---
 
