@@ -4,27 +4,16 @@ import { useExplorationStore } from '@/store/useExplorationStore';
 import { PRIVACY_STATEMENT, exportSpatialDataJSON } from '@/utils/privacyExporter';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
-import { insertUnlockedHexes, insertTrackingSession, getAllTrackingSessions, TrackingSession, getNeighborhoodCompletion, NeighborhoodStat, getAllCityHexes } from '@/db/database';
+import { insertUnlockedHexes, insertTrackingSession, getAllTrackingSessions, TrackingSession, getNeighborhoodCompletion, NeighborhoodStat } from '@/db/database';
 import { parseGPX, parseFIT } from '@/utils/workoutParser';
-import { generateExploredHexesGeoJSON } from '@/utils/exploredGeoJSON';
-import MapLibreGL from '@maplibre/maplibre-react-native';
 
 export default function ArchiveScreen() {
   const { unlockedHexes, resetExploration, addUnlockedHexes, triggerMacroReveal, setSelectedHistoricalRoute } = useExplorationStore();
   const [exportedStatus, setExportedStatus] = useState<string | null>(null);
   const [sessions, setSessions] = useState<TrackingSession[]>([]);
   const [neighborhoodStats, setNeighborhoodStats] = useState<NeighborhoodStat[]>([]);
-  const [cityHexes, setCityHexes] = useState<string[]>([]);
   const [isNYCExpanded, setIsNYCExpanded] = useState(false);
   const router = useRouter();
-
-  const exploredNYCGeoJSON = React.useMemo(() => {
-    return generateExploredHexesGeoJSON(unlockedHexes);
-  }, [unlockedHexes]);
-
-  const cityOutlineGeoJSON = React.useMemo(() => {
-    return generateExploredHexesGeoJSON(cityHexes);
-  }, [cityHexes]);
 
   useEffect(() => {
     loadSessions();
@@ -36,8 +25,6 @@ export default function ArchiveScreen() {
       setSessions(data || []);
       const stats = getNeighborhoodCompletion();
       setNeighborhoodStats(stats || []);
-      const allHexes = getAllCityHexes();
-      setCityHexes(allHexes || []);
     } catch (e) {
       console.warn('Failed to load tracking sessions or stats:', e);
     }
@@ -195,67 +182,6 @@ export default function ArchiveScreen() {
         
         {/* NYC Card */}
         <View style={styles.cityCard}>
-          
-          <View style={styles.minimapContainer}>
-            <MapLibreGL.MapView
-              style={StyleSheet.absoluteFillObject}
-              mapStyle={`https://api.maptiler.com/maps/streets-v2/style.json?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`}
-              logoEnabled={false}
-              attributionEnabled={false}
-              scrollEnabled={false}
-              pitchEnabled={false}
-              rotateEnabled={false}
-              zoomEnabled={false}
-            >
-              <MapLibreGL.Camera
-                defaultSettings={{
-                  centerCoordinate: [-73.9599, 40.7180], // NYC center
-                  zoomLevel: 9.5,
-                }}
-              />
-
-              {cityOutlineGeoJSON && cityOutlineGeoJSON.geometry && (cityOutlineGeoJSON.geometry.coordinates?.length ?? 0) > 0 && (
-                <MapLibreGL.ShapeSource id="nyc-outline-source" shape={cityOutlineGeoJSON}>
-                  <MapLibreGL.FillLayer
-                    id="nyc-outline-fill"
-                    style={{
-                      fillColor: '#1e293b', // Dark slate shadow
-                      fillOpacity: 0.5,
-                    }}
-                  />
-                  <MapLibreGL.LineLayer
-                    id="nyc-outline-line"
-                    style={{
-                      lineColor: '#334155',
-                      lineWidth: 1,
-                      lineOpacity: 0.5,
-                    }}
-                  />
-                </MapLibreGL.ShapeSource>
-              )}
-
-              {exploredNYCGeoJSON && exploredNYCGeoJSON.geometry && (exploredNYCGeoJSON.geometry.coordinates?.length ?? 0) > 0 && (
-                <MapLibreGL.ShapeSource id="nyc-explored-source" shape={exploredNYCGeoJSON}>
-                  <MapLibreGL.FillLayer
-                    id="nyc-explored-fill"
-                    style={{
-                      fillColor: '#fbbf24', // Illuminated yellow
-                      fillOpacity: 0.8,
-                    }}
-                  />
-                  <MapLibreGL.LineLayer
-                    id="nyc-explored-line"
-                    style={{
-                      lineColor: '#f59e0b',
-                      lineWidth: 1,
-                    }}
-                  />
-                </MapLibreGL.ShapeSource>
-              )}
-            </MapLibreGL.MapView>
-            {/* The Invisible Touch Shield: intercepts native touch events so they bubble up to the ScrollView */}
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'transparent' }]} pointerEvents="box-only" />
-          </View>
 
           <TouchableOpacity 
             style={styles.cityHeader}
@@ -702,11 +628,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#94a3b8',
   },
-  minimapContainer: {
-    height: 180,
-    width: '100%',
-    backgroundColor: '#0f172a',
-  },
+
   neighborhoodList: {
     padding: 16,
     backgroundColor: '#ffffff',
