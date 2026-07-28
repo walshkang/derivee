@@ -1,18 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Alert } from 'react-native';
 import { useExplorationStore } from '@/store/useExplorationStore';
 import { PRIVACY_STATEMENT, exportSpatialDataJSON } from '@/utils/privacyExporter';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
-import { insertUnlockedHexes } from '@/db/database';
-import { parseGPXToH3 } from '@/utils/gpxParser';
+import { insertUnlockedHexes, insertTrackingSession, getAllTrackingSessions, TrackingSession } from '@/db/database';
+import { parseGPX, parseFIT } from '@/utils/workoutParser';
 
 export default function ArchiveScreen() {
-  const { unlockedHexes, resetExploration, addUnlockedHexes, triggerMacroReveal } = useExplorationStore();
+  const { unlockedHexes, resetExploration, addUnlockedHexes, triggerMacroReveal, setSelectedHistoricalRoute } = useExplorationStore();
   const [exportedStatus, setExportedStatus] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<TrackingSession[]>([]);
   const router = useRouter();
 
-  const handleUploadGPX = async () => {
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const loadSessions = () => {
+    const data = getAllTrackingSessions();
+    setSessions(data);
+  };
+
+  const handleUploadFile = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['*/*'],
@@ -24,20 +34,47 @@ export default function ArchiveScreen() {
       }
 
       const fileUri = result.assets[0].uri;
+      const fileName = result.assets[0].name.toLowerCase();
+      
       const response = await fetch(fileUri);
-      const fileText = await response.text();
+      
+      let parsedData;
+      if (fileName.endsWith('.fit')) {
+        const arrayBuffer = await response.arrayBuffer();
+        parsedData = await parseFIT(arrayBuffer);
+      } else if (fileName.endsWith('.gpx')) {
+        const text = await response.text();
+        parsedData = await parseGPX(text);
+      } else {
+        Alert.alert('Unsupported File', 'Please upload a .gpx or .fit file.');
+        return;
+      }
 
-      const newHexes = parseGPXToH3(fileText);
-      if (newHexes.length === 0) {
+      if (parsedData.hexes.length === 0) {
         Alert.alert('No Data Found', 'Could not extract any valid coordinates from this file.');
         return;
       }
 
       // Bulk insert into SQLite
-      insertUnlockedHexes(newHexes);
+      insertUnlockedHexes(parsedData.hexes);
+      
+      // Save session history
+      const sessionId = `session_${Date.now()}`;
+      insertTrackingSession({
+        id: sessionId,
+        name: fileName,
+        started_at: parsedData.startedAt,
+        hex_count: parsedData.hexes.length,
+        distance_meters: parsedData.distanceMeters,
+        duration_seconds: parsedData.durationSeconds,
+        route_geojson: parsedData.routeGeoJSON,
+      });
+
+      // Refresh list
+      loadSessions();
       
       // Update store
-      const actuallyAddedCount = addUnlockedHexes(newHexes);
+      const actuallyAddedCount = addUnlockedHexes(parsedData.hexes);
 
       // Trigger the macro reveal and switch tabs
       if (actuallyAddedCount > 0) {
@@ -47,8 +84,8 @@ export default function ArchiveScreen() {
         Alert.alert('Import Complete', 'All coordinates in this file were already explored!');
       }
     } catch (err: any) {
-      console.warn('GPX import error:', err);
-      Alert.alert('Import Failed', err.message || 'Failed to parse the GPX file.');
+      console.warn('Import error:', err);
+      Alert.alert('Import Failed', err.message || 'Failed to parse the file.');
     }
   };
 
@@ -59,6 +96,27 @@ export default function ArchiveScreen() {
       'Spatial Data Exported',
       `Exported ${unlockedHexes.length} spatial records in JSON format.\n\nOffline-First Guarantee: 0 bytes sent off-device.`
     );
+  };
+
+  const formatDistance = (meters: number) => {
+    return (meters / 1000).toFixed(2) + ' km';
+  };
+
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const h = Math.floor(m / 60);
+    if (h > 0) {
+      return `${h}h ${m % 60}m`;
+    }
+    return `${m}m`;
+  };
+
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
   return (
@@ -81,34 +139,6 @@ export default function ArchiveScreen() {
         </View>
       </View>
 
-      {/* Micro Metrics Section */}
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionHeader}>Williamsburg Progress</Text>
-        <View style={styles.progressBarBg}>
-          <View
-            style={[
-              styles.progressBarFill,
-              { width: `${Math.min(unlockedHexes.length * 10, 100)}%` },
-            ]}
-          />
-        </View>
-        <Text style={styles.progressText}>
-          {unlockedHexes.length > 0 ? `${unlockedHexes.length * 2}% Uncovered` : '0% Uncovered'}
-        </Text>
-      </View>
-
-      {/* POI Discovery Gallery Placeholder */}
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionHeader}>Discovered Waypoints</Text>
-        <View style={styles.poiEmptyState}>
-          <Text style={styles.poiIcon}>🏛️</Text>
-          <Text style={styles.poiEmptyTitle}>No Waypoints Unlocked</Text>
-          <Text style={styles.poiEmptySub}>
-            Walk into unexplored hexagons to unlock historic points of interest and POIs.
-          </Text>
-        </View>
-      </View>
-
       {/* The Historian Import (Wave 10) */}
       <View style={styles.sectionCard}>
         <Text style={styles.sectionHeader}>The Historian Import</Text>
@@ -116,7 +146,7 @@ export default function ArchiveScreen() {
           Import historical tracking data to instantly uncover vast regions of the map.
         </Text>
         
-        <Pressable style={styles.importButtonPrimary} onPress={handleUploadGPX}>
+        <Pressable style={styles.importButtonPrimary} onPress={handleUploadFile}>
           <Text style={styles.importButtonText}>UPLOAD GPX/FIT FILE</Text>
         </Pressable>
 
@@ -129,6 +159,51 @@ export default function ArchiveScreen() {
           </Pressable>
         </View>
       </View>
+
+      {/* Workout History List */}
+      {sessions.length > 0 && (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeader}>Past Workouts</Text>
+          {sessions.map((session) => (
+            <Pressable 
+              key={session.id} 
+              style={styles.sessionItem}
+              onPress={() => {
+                if (session.route_geojson) {
+                  try {
+                    const feature = JSON.parse(session.route_geojson);
+                    setSelectedHistoricalRoute(feature);
+                    router.replace('/(tabs)/map');
+                  } catch (e) {
+                    console.error("Invalid GeoJSON in session");
+                  }
+                } else {
+                  Alert.alert('No Route Data', 'This session does not contain route data to display.');
+                }
+              }}
+            >
+              <View style={styles.sessionHeaderRow}>
+                <Text style={styles.sessionDate}>{formatDate(session.started_at)}</Text>
+                <Text style={styles.sessionName} numberOfLines={1}>{session.name}</Text>
+              </View>
+              <View style={styles.sessionMetricsRow}>
+                <View style={styles.sessionMetric}>
+                  <Text style={styles.sessionMetricValue}>{formatDistance(session.distance_meters)}</Text>
+                  <Text style={styles.sessionMetricLabel}>Distance</Text>
+                </View>
+                <View style={styles.sessionMetric}>
+                  <Text style={styles.sessionMetricValue}>{formatDuration(session.duration_seconds)}</Text>
+                  <Text style={styles.sessionMetricLabel}>Time</Text>
+                </View>
+                <View style={styles.sessionMetric}>
+                  <Text style={styles.sessionMetricValue}>{session.hex_count}</Text>
+                  <Text style={styles.sessionMetricLabel}>Hexes</Text>
+                </View>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       {/* Offline-First Privacy & Data Sovereignty Card */}
       <View style={styles.privacyCard}>
@@ -346,5 +421,48 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  sessionItem: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  sessionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sessionDate: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  sessionName: {
+    fontSize: 12,
+    color: '#94a3b8',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 10,
+  },
+  sessionMetricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sessionMetric: {
+    flex: 1,
+  },
+  sessionMetricValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 2,
+  },
+  sessionMetricLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '600',
   },
 });

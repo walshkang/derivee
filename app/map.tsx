@@ -16,7 +16,7 @@ import { useTransitStore } from '@/store/useTransitStore';
 
 export default function MapScreen() {
   const router = useRouter();
-  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal } =
+  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal, selectedHistoricalRoute, setSelectedHistoricalRoute } =
     useExplorationStore();
   const { startTracking } = useBackgroundLocation();
   const { loadPOIs } = usePOIStore();
@@ -25,7 +25,7 @@ export default function MapScreen() {
   const { selectedTransitNode, setSelectedTransitNode, routePreviewGeoJSON } = useTransitStore();
 
   const cameraRef = useRef<React.ElementRef<typeof MapLibreGL.Camera>>(null);
-  const [is3DMode, setIs3DMode] = useState<boolean>(true);
+  const [is3DMode, setIs3DMode] = useState<boolean>(false);
   const [selectedPOI, setSelectedPOI] = useState<POI | null>(null);
 
   // Wave 10: Morning Sun Reveal Animation Setup
@@ -90,8 +90,8 @@ export default function MapScreen() {
     if (currentLocation && cameraRef.current) {
       cameraRef.current.setCamera({
         centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
-        zoomLevel: 14,
-        pitch: is3DMode ? 60 : 0,
+        zoomLevel: 15.5,
+        pitch: 0,
         animationDuration: 800,
       });
     }
@@ -168,14 +168,24 @@ export default function MapScreen() {
           <Text style={styles.navButtonText}>History</Text>
         </Pressable>
 
-        <Pressable
-          style={({ pressed }) => [styles.navButton, pressed && styles.navButtonPressed]}
-          onPress={() => router.push('/settings')}
-          accessibilityRole="button"
-          accessibilityLabel="Open Settings"
-        >
-          <Text style={styles.navButtonText}>Settings</Text>
-        </Pressable>
+        {selectedHistoricalRoute ? (
+          <Pressable
+            style={({ pressed }) => [styles.navButton, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }, pressed && styles.navButtonPressed]}
+            onPress={() => setSelectedHistoricalRoute(null)}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.navButtonText, { color: '#ef4444' }]}>Clear Route</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.navButton, pressed && styles.navButtonPressed]}
+            onPress={() => router.push('/settings')}
+            accessibilityRole="button"
+            accessibilityLabel="Open Settings"
+          >
+            <Text style={styles.navButtonText}>Settings</Text>
+          </Pressable>
+        )}
       </View>
 
       {/* MapLibre Engine Viewport — Edge-to-Edge Map */}
@@ -193,31 +203,15 @@ export default function MapScreen() {
               centerCoordinate: currentLocation
                 ? [currentLocation.longitude, currentLocation.latitude]
                 : [-73.9599, 40.7180], // Williamsburg fallback
-              zoomLevel: 14,
-              pitch: is3DMode ? 60 : 0,
+              zoomLevel: 15.5,
+              pitch: 0,
             }}
             followUserLocation={true}
-            followPitch={is3DMode ? 60 : 0}
-            followZoomLevel={16}
-            minZoomLevel={12}
+            followPitch={0}
+            followZoomLevel={15.5}
+            minZoomLevel={10}
           />
           <MapLibreGL.UserLocation visible={true} />
-
-          {/* Layer 1 & 2: Explored Base (Desaturated Raster) */}
-          <MapLibreGL.RasterSource
-            id="satellite-base"
-            tileUrlTemplates={[`https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`]}
-            tileSize={512}
-          >
-            <MapLibreGL.RasterLayer
-              id="satellite-layer-dimmed"
-              belowLayerID="fog-layer-3d"
-              style={{
-                rasterSaturation: -1.0,
-                rasterOpacity: 0.6,
-              }}
-            />
-          </MapLibreGL.RasterSource>
 
           {/* Layer 3 & 4: Soft Translucent Cloud Fog Mask with Unlocked Hex Holes */}
           {fogGeoJSON && (
@@ -226,14 +220,12 @@ export default function MapScreen() {
               shape={fogGeoJSON}
               {...({ withSynchronousUpdate: true } as any)}
             >
-              {/* W13-FOG-3D: Volumetric Extrusion Fog */}
-              <MapLibreGL.FillExtrusionLayer
-                id="fog-layer-3d"
+              {/* W13-FOG-2D: Flat Fog Mask */}
+              <MapLibreGL.FillLayer
+                id="fog-layer"
                 style={{
-                  fillExtrusionColor: '#0f172a',
-                  fillExtrusionOpacity: 0.8,
-                  fillExtrusionHeight: 5000, // Extruded to cover 3D buildings
-                  fillExtrusionOpacityTransition: { duration: 300, delay: 0 },
+                  fillColor: '#0f172a',
+                  fillOpacity: 0.9,
                 }}
               />
               {/* Subtle Hex Outlines for Unlocked Hexes */}
@@ -248,23 +240,19 @@ export default function MapScreen() {
             </MapLibreGL.ShapeSource>
           )}
 
-          {/* Layer 5: Active 200m Vicinity Bubble Radius */}
-          {vicinityBubbleGeoJSON && (
-            <MapLibreGL.ShapeSource id="vicinity-bubble-source" shape={vicinityBubbleGeoJSON}>
-              <MapLibreGL.FillLayer
-                id="vicinity-bubble-fill"
-                style={{
-                  fillColor: '#388bfd',
-                  fillOpacity: 0.08,
-                }}
-              />
+
+
+          {/* Historical Route Highlight */}
+          {selectedHistoricalRoute && (
+            <MapLibreGL.ShapeSource id="historical-route-source" shape={selectedHistoricalRoute}>
               <MapLibreGL.LineLayer
-                id="vicinity-bubble-line"
+                id="historical-route-line"
                 style={{
-                  lineColor: '#58a6ff',
-                  lineWidth: 1.5,
-                  lineDasharray: [2, 2],
-                  lineOpacity: 0.6,
+                  lineColor: '#fbbf24', // Warm sun hue contrasting but fitting
+                  lineWidth: 6,
+                  lineOpacity: 0.9,
+                  lineJoin: 'round',
+                  lineCap: 'round',
                 }}
               />
             </MapLibreGL.ShapeSource>

@@ -49,6 +49,19 @@ export function initDatabase(name: string = DB_NAME): OPSQLiteConnection {
     ) WITHOUT ROWID;
   `);
 
+  // 4. Create tracking_sessions table for Screen 3
+  db.execute(`
+    CREATE TABLE IF NOT EXISTS tracking_sessions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      hex_count INTEGER NOT NULL,
+      distance_meters REAL NOT NULL,
+      duration_seconds INTEGER NOT NULL,
+      route_geojson TEXT
+    ) WITHOUT ROWID;
+  `);
+
   dbInstance = db;
   return db;
 }
@@ -249,3 +262,46 @@ export function getVisibleHexes(): string[] {
     .filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
 }
 
+export interface TrackingSession {
+  id: string;
+  name: string;
+  started_at: number;
+  hex_count: number;
+  distance_meters: number;
+  duration_seconds: number;
+  route_geojson?: string;
+}
+
+export function insertTrackingSession(session: TrackingSession): void {
+  const db = getDb();
+  db.execute(
+    `INSERT OR REPLACE INTO tracking_sessions 
+    (id, name, started_at, hex_count, distance_meters, duration_seconds, route_geojson) 
+    VALUES (?, ?, ?, ?, ?, ?, ?);`,
+    [
+      session.id,
+      session.name,
+      session.started_at,
+      session.hex_count,
+      session.distance_meters,
+      session.duration_seconds,
+      session.route_geojson || null,
+    ]
+  );
+}
+
+export function getAllTrackingSessions(): TrackingSession[] {
+  const db = getDb();
+  const result = db.execute('SELECT * FROM tracking_sessions ORDER BY started_at DESC;');
+  
+  let rows: TrackingSession[] = [];
+  if (result && result.rows) {
+    if (Array.isArray(result.rows)) rows = result.rows as TrackingSession[];
+    else if (Array.isArray(result.rows._array)) rows = result.rows._array as TrackingSession[];
+    else if (typeof result.rows.item === 'function') {
+      const len = result.rows.length || 0;
+      for (let i = 0; i < len; i++) rows.push(result.rows.item(i));
+    }
+  }
+  return rows;
+}

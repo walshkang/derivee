@@ -5,7 +5,7 @@ export interface Location {
   longitude: number;
 }
 
-import type { Feature, Polygon, MultiPolygon } from 'geojson';
+import type { Feature, Polygon, MultiPolygon, LineString } from 'geojson';
 import { generateFogGeoJSON } from '../utils/fogGeoJSON';
 
 export interface ExplorationState {
@@ -36,6 +36,9 @@ export interface ExplorationState {
   isMacroRevealing: boolean;
   macroRevealCount: number;
 
+  // Screen 3: Historical Route Highlight
+  selectedHistoricalRoute: Feature<LineString> | null;
+
   // Actions
   setIsExploring: (isExploring: boolean) => void;
   setCurrentLocation: (location: Location | null) => void;
@@ -46,6 +49,7 @@ export interface ExplorationState {
   resetExploration: () => void;
   triggerMacroReveal: (count: number) => void;
   clearMacroReveal: () => void;
+  setSelectedHistoricalRoute: (route: Feature<LineString> | null) => void;
 }
 
 export const useExplorationStore = create<ExplorationState>((set, get) => ({
@@ -57,6 +61,7 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   lastProcessedHexesHash: '',
   isMacroRevealing: false,
   macroRevealCount: 0,
+  selectedHistoricalRoute: null,
 
   setIsExploring: (isExploring: boolean) => set({ isExploring }),
 
@@ -137,4 +142,7 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
       isMacroRevealing: false,
       macroRevealCount: 0,
     }),
+    
+  setSelectedHistoricalRoute: (route: Feature<LineString> | null) =>
+    set({ selectedHistoricalRoute: route }),
 }));
