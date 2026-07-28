@@ -90,7 +90,7 @@ CREATE TABLE active_visibility (
 
 ## 5. Background Location & Energy Economics
 
-Continuous background tracking will drain the battery and result in App Store rejection if configured incorrectly. Time-based polling is strictly prohibited. The app uses an **ambient tracking model**, automatically requesting permissions and tracking silently upon launch. The architecture relies on OS-level distance filtering to allow the CPU to sleep when the user is stationary.
+Continuous background tracking will drain the battery and result in App Store rejection if configured incorrectly. Time-based polling is strictly prohibited. The app uses an **ambient tracking model**, automatically requesting permissions and tracking silently upon launch. The explicit goal is for the app to track user progress on the map at all times, even when the screen is off or the app is in the background, without ever requiring the user to press a 'record' button. The architecture relies on OS-level distance filtering to allow the CPU to sleep when the user is stationary.
 
 Configure `expo-location` with the following parameters:
 

@@ -182,3 +182,24 @@ This archive contains detailed task prompts for completed development waves.
 * **Agent Directives:**
   * **Wave 14-DATA (Data Layer):** Update the SQLite schema to include a `neighborhood_stats` table. Write a script to populate it with total hex counts per neighborhood. **Crucially**, use Turf.js or Shapely (Python) to perform a Boolean Subtraction of water multipolygons from the neighborhood bounds *before* running the H3 polyfill algorithm, ensuring open water is excluded but bridges are preserved in the total denominator.
   * **Wave 14-UI (UI Layer):** Build the floating Contextual Stat Pill on the Main Map (progressive disclosure) and the comprehensive Archive list screen, hooking them up to the new SQLite queries and Zustand session state. Do not mix UI work with Data work in a single session.
+
+---
+
+## Wave 14.5 — The Delta-Buffer Architecture
+
+### Task Prompt: W14.5-DB-MIGRATE — SQLite Cache Table & Splash Screen Gate
+**Goal:** Introduce the `geojson_cache` table to `@op-engineering/op-sqlite` and implement the Splash Screen Migration Gate in `app/_layout.tsx` to handle legacy user data backfilling behind the splash screen.
+1. Add `geojson_cache` schema with `WITHOUT ROWID` and string primary key `key` to `src/db/database.ts`.
+2. Implement schema migrations (`runMigrations`) checking `PRAGMA user_version` and setting `PRAGMA user_version = 1`.
+3. Build cache CRUD helpers (`getGeoJSONCache`, `setGeoJSONCache`, `clearGeoJSONCache`) and legacy backfill helper `backfillLegacyGeoJSONCache()`.
+4. Update `app/_layout.tsx` with `SplashScreen.preventAutoHideAsync()` and `SplashScreen.hideAsync()` in a fail-safe `finally` block.
+
+### Task Prompt: W14.5-RENDER — MapLibre Native Array Concatenation
+**Goal:** Completely strip `@turf/mask` from `fogGeoJSON.ts` and configure the GeoJSON generator to natively concatenate the 50x50km bounding box ring and all interior hex holes into a single array for native MapLibre earcut triangulation.
+1. Remove `@turf/mask` and `@turf/bbox-polygon` from `src/utils/fogGeoJSON.ts` and `package.json`.
+2. Construct the 50x50km bounding box linear ring (`bboxRing`) directly.
+3. Extract and flatten all linear rings returned by `h3.cellsToMultiPolygon(unlockedHexes, true)` into an `innerRings` array.
+4. Return a single GeoJSON `Feature<Polygon>` with `coordinates: [bboxRing, ...innerRings]` so MapLibre's native C++ earcut triangulator handles GPU hole clipping natively.
+5. Create unit tests in `src/utils/__tests__/fogGeoJSON.test.ts` verifying polygon structure and H3 string type enforcement.
+
+

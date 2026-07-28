@@ -175,7 +175,7 @@ export default function ArchiveScreen() {
           <Text style={styles.headerSubtitle}>Exploration Records & Discoveries</Text>
         </View>
       </View>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.contentContainer}>
+      <ScrollView style={{ flex: 1, zIndex: 1 }} contentContainerStyle={styles.contentContainer}>
         {/* Summary Cards */}
       <View style={styles.gridContainer}>
         <View style={styles.statCard}>
@@ -196,7 +196,7 @@ export default function ArchiveScreen() {
         {/* NYC Card */}
         <View style={styles.cityCard}>
           
-          <View style={styles.minimapContainer} pointerEvents="none">
+          <View style={styles.minimapContainer}>
             <MapLibreGL.MapView
               style={StyleSheet.absoluteFillObject}
               mapStyle={`https://api.maptiler.com/maps/streets-v2/style.json?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`}
@@ -253,6 +253,8 @@ export default function ArchiveScreen() {
                 </MapLibreGL.ShapeSource>
               )}
             </MapLibreGL.MapView>
+            {/* The Invisible Touch Shield: intercepts native touch events so they bubble up to the ScrollView */}
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'transparent' }]} pointerEvents="box-only" />
           </View>
 
           <TouchableOpacity 

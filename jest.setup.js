@@ -4,7 +4,9 @@ jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper');
 // Manual mock for @op-engineering/op-sqlite per AGENTS.md rules
 jest.mock('@op-engineering/op-sqlite', () => {
   const store = new Map();
+  const geojsonCacheStore = new Map();
   const executedQueries = [];
+  let userVersion = 0;
 
   const mockDb = {
     execute: jest.fn((query, params) => {
@@ -18,18 +20,63 @@ jest.mock('@op-engineering/op-sqlite', () => {
         return { rows: { _array: [{ synchronous: 1 }] } };
       }
 
+      if (query.includes('PRAGMA user_version =')) {
+        const match = query.match(/PRAGMA user_version\s*=\s*(\d+)/i);
+        if (match) {
+          userVersion = parseInt(match[1], 10);
+        }
+        return { rows: { _array: [] } };
+      }
+
+      if (query.includes('PRAGMA user_version')) {
+        return { rows: { _array: [{ user_version: userVersion, 'user_version': userVersion }] } };
+      }
+
       if (query.includes('CREATE TABLE')) {
         return { rows: { _array: [] } };
       }
 
+      if (query.includes('INSERT OR REPLACE INTO geojson_cache')) {
+        if (params && params.length >= 4) {
+          const [key, geojsonData, updatedAt, hexCount] = params;
+          geojsonCacheStore.set(key, {
+            key,
+            geojson_data: geojsonData,
+            updated_at: Number(updatedAt),
+            hex_count: Number(hexCount),
+          });
+        }
+        return { rows: { _array: [] } };
+      }
+
+      if (query.includes('SELECT key, geojson_data, updated_at, hex_count FROM geojson_cache')) {
+        if (params && params.length >= 1) {
+          const key = params[0];
+          const entry = geojsonCacheStore.get(key);
+          return { rows: { _array: entry ? [entry] : [] } };
+        }
+        return { rows: { _array: Array.from(geojsonCacheStore.values()) } };
+      }
+
+      if (query.includes('DELETE FROM geojson_cache')) {
+        if (params && params.length >= 1) {
+          geojsonCacheStore.delete(params[0]);
+        } else {
+          geojsonCacheStore.clear();
+        }
+        return { rows: { _array: [] } };
+      }
+
       if (query.includes('INSERT OR IGNORE')) {
+        let rowsAffected = 0;
         if (params && params.length >= 2) {
           const [h3Index, discoveredAt] = params;
           if (typeof h3Index === 'string' && !store.has(h3Index)) {
             store.set(h3Index, { h3_index: h3Index, discovered_at: Number(discoveredAt) });
+            rowsAffected = 1;
           }
         }
-        return { rows: { _array: [] } };
+        return { rowsAffected, rows: { _array: [] } };
       }
 
       if (query.includes('SELECT h3_index FROM explored_hexes')) {
@@ -84,14 +131,19 @@ jest.mock('@op-engineering/op-sqlite', () => {
 
     close: jest.fn(() => {
       store.clear();
+      geojsonCacheStore.clear();
+      userVersion = 0;
     }),
 
     // Test utilities exposed on mock
     _store: store,
+    _geojsonCacheStore: geojsonCacheStore,
     _executedQueries: executedQueries,
     _reset: () => {
       store.clear();
+      geojsonCacheStore.clear();
       executedQueries.length = 0;
+      userVersion = 0;
     },
   };
 
@@ -100,6 +152,12 @@ jest.mock('@op-engineering/op-sqlite', () => {
     DB: jest.fn(),
   };
 });
+
+// Manual mock for expo-splash-screen
+jest.mock('expo-splash-screen', () => ({
+  preventAutoHideAsync: jest.fn(async () => true),
+  hideAsync: jest.fn(async () => true),
+}));
 
 // Manual mock for expo-task-manager
 jest.mock('expo-task-manager', () => {
@@ -254,3 +312,22 @@ jest.mock('@shopify/react-native-skia', () => ({
   RadialGradient: 'RadialGradient',
   vec: jest.fn((x, y) => ({ x, y })),
 }));
+
+// Manual mock for expo-modules-core requireNativeModule
+jest.mock('expo-modules-core', () => {
+  const original = jest.requireActual('expo-modules-core');
+  return {
+    ...original,
+    requireNativeModule: jest.fn((name) => {
+      if (name === 'ExpoBackgroundAssertion') {
+        return {
+          beginBackgroundTask: jest.fn((name) => 1),
+          endBackgroundTask: jest.fn((taskId) => {}),
+        };
+      }
+      return original.requireNativeModule?.(name) ?? {};
+    }),
+  };
+});
+
+

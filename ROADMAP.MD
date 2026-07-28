@@ -35,6 +35,10 @@ This document is the single source of truth for all planned development waves.
 | **13** | **W13-AMBIENT-TRACKING** | **Ambient Tracking & Start Button Removal** | **S** | ✅ Done |
 | **14** | **W14-DATA-NEIGHBORHOODS** | **Neighborhood Denominators & Water Subtraction** | **M** | ✅ Done |
 | **14** | **W14-UI-STATS** | **Progression Stats UI: Contextual Pill & Archive Screen** | **M** | ✅ Done |
+| **14.5** | **W14.5-BACKGROUND** | **Local Expo Module for iOS Background Assertions** | **S** | ✅ Done |
+| **14.5** | **W14.5-DB-MIGRATE** | **SQLite geojson_cache & Splash Screen Gate** | **M** | ✅ Done |
+| **14.5** | **W14.5-STORE** | **AppState Delta-Buffer & Zustand Refactor** | **M** | ✅ Done |
+| **14.5** | **W14.5-RENDER** | **MapLibre Native Array Concatenation (Remove Turf)** | **M** | ✅ Done |
 | **15** | **W15-DYNAMIC-ISLAND** | **Dynamic Island Support for Stat Bar** | **S** | Planned |
 
 ---
@@ -124,6 +128,16 @@ This document is the single source of truth for all planned development waves.
 * **W14-DATA-NEIGHBORHOODS**: Integrated static `neighborhood.sqlite` DB generated via GIS water-subtraction scripts (`scripts/generate_neighborhood_db.py`).
 * **W14-UI-STATS**: Shipped floating high-contrast light-mode `ContextualStatPill` (`src/components/ContextualStatPill.tsx`) and full Statistics & History Screen (`app/stats.tsx`).
 * ⚠️ **Active Focus**: Investigating OP-SQLite database connection state and touch interaction flow on `app/stats.tsx`.
+
+---
+
+## Wave 14.5 — The Delta-Buffer Architecture (Active Focus)
+*A massive architectural refactor to guarantee buttery smooth 60fps rendering for power users exceeding 10,000 unlocked hexes, utilizing native MapLibre topologies and deferred background calculations.*
+
+* **W14.5-BACKGROUND** (✅ Completed): Local Swift bindings for `beginBackgroundTask` / `endBackgroundTask` iOS Watchdog assertion.
+* **W14.5-DB-MIGRATE** (✅ Completed): Introduce the `geojson_cache` table to `@op-engineering/op-sqlite` and Splash Screen Migration Gate in `app/_layout.tsx`.
+* **W14.5-STORE** (✅ Completed): Refactor `useExplorationStore` to manage `historicalHexes` vs `activeBufferHexes`. Hook into the React Native `AppState` to execute `commitActiveBuffer()` when the user locks their phone, leveraging the W14.5-BACKGROUND task assertion.
+* **W14.5-RENDER** (✅ Completed): Completely strip `@turf/mask` from `fogGeoJSON.ts`. Configure the GeoJSON generator to natively concatenate the exterior bounding box and all interior hex holes into a single massive array that MapLibre earcut can consume efficiently.
 
 ---
 

@@ -6,6 +6,11 @@ import {
   getExploredHexCount,
   clearExploredHexes,
   closeDatabase,
+  getGeoJSONCache,
+  setGeoJSONCache,
+  clearGeoJSONCache,
+  backfillLegacyGeoJSONCache,
+  runMigrations,
 } from '../database';
 import { open } from '@op-engineering/op-sqlite';
 
@@ -39,12 +44,64 @@ describe('Local Persistence Layer (op-sqlite JSI)', () => {
       expect(tableCreationQuery).toBeDefined();
       expect(tableCreationQuery).toContain('WITHOUT ROWID');
       expect(tableCreationQuery).toContain('h3_index TEXT PRIMARY KEY');
+
+      // W14.5-DB-MIGRATE: Assert geojson_cache table creation with WITHOUT ROWID
+      const geojsonTableQuery = executedQueries.find((q) => q.includes('CREATE TABLE IF NOT EXISTS geojson_cache'));
+      expect(geojsonTableQuery).toBeDefined();
+      expect(geojsonTableQuery).toContain('WITHOUT ROWID');
+      expect(geojsonTableQuery).toContain('key TEXT PRIMARY KEY');
     });
 
     it('returns the existing database instance on subsequent calls to getDb', () => {
       const db1 = initDatabase('test_fog.db');
       const db2 = getDb();
       expect(db1).toBe(db2);
+    });
+  });
+
+  describe('W14.5-DB-MIGRATE: GeoJSON Cache & Migrations', () => {
+    it('executes schema migration and updates PRAGMA user_version', () => {
+      const db = initDatabase('test_fog.db');
+      runMigrations(db);
+
+      const mockDb = (open as jest.Mock)();
+      const executedQueries: string[] = mockDb._executedQueries;
+      expect(executedQueries.some((q) => q.includes('PRAGMA user_version = 1;'))).toBe(true);
+    });
+
+    it('stores, retrieves, and clears GeoJSON cache entries', () => {
+      initDatabase('test_fog.db');
+      const testKey = 'historical_fog';
+      const testData = JSON.stringify({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [] } });
+
+      setGeoJSONCache(testKey, testData, 42);
+
+      const cached = getGeoJSONCache(testKey);
+      expect(cached).not.toBeNull();
+      expect(cached?.key).toBe(testKey);
+      expect(cached?.geojson_data).toBe(testData);
+      expect(cached?.hex_count).toBe(42);
+
+      clearGeoJSONCache(testKey);
+      expect(getGeoJSONCache(testKey)).toBeNull();
+    });
+
+    it('backfills legacy explored hexes into geojson_cache behind splash gate', async () => {
+      initDatabase('test_fog.db');
+      const h3 = require('h3-js');
+      const validHex1 = h3.latLngToCell(40.7128, -73.966, 11);
+      const validHex2 = h3.latLngToCell(40.7130, -73.965, 11);
+      insertUnlockedHexes([validHex1, validHex2]);
+
+      expect(getGeoJSONCache('historical_fog')).toBeNull();
+
+      const backfilled = await backfillLegacyGeoJSONCache();
+      expect(backfilled).toBe(true);
+
+      const cached = getGeoJSONCache('historical_fog');
+      expect(cached).not.toBeNull();
+      expect(cached?.hex_count).toBe(2);
+      expect(cached?.geojson_data).toContain('MultiPolygon');
     });
   });
 
@@ -99,15 +156,17 @@ describe('Local Persistence Layer (op-sqlite JSI)', () => {
       expect(typeof unlocked[0]).toBe('string');
     });
 
-    it('clears all explored hexes when clearExploredHexes is called', () => {
+    it('clears all explored hexes and geojson cache when clearExploredHexes is called', () => {
       initDatabase('test_fog.db');
       insertUnlockedHexes(['8b2a100d213fff', '8b2a100d217fff']);
+      setGeoJSONCache('historical_fog', '{}', 2);
       expect(getExploredHexCount()).toBe(2);
 
       clearExploredHexes();
 
       expect(getExploredHexCount()).toBe(0);
       expect(getAllUnlockedHexes()).toEqual([]);
+      expect(getGeoJSONCache('historical_fog')).toBeNull();
     });
 
     it('handles empty batch insertion gracefully without throwing errors', () => {

@@ -7,14 +7,26 @@ export interface Location {
 
 import type { Feature, Polygon, MultiPolygon, LineString } from 'geojson';
 import { generateFogGeoJSON } from '../utils/fogGeoJSON';
-import { NeighborhoodStat, getCurrentNeighborhoodStat, getAllUnlockedHexes, clearExploredHexes } from '../db/database';
+import { NeighborhoodStat, getCurrentNeighborhoodStat, getAllUnlockedHexes, insertUnlockedHexes, clearExploredHexes } from '../db/database';
 import { coordToH3 } from '../utils/h3Utils';
+import { withBackgroundTask } from '../../modules/expo-background-assertion';
 
 export interface ExplorationState {
   isExploring: boolean;
   currentLocation: Location | null;
+
   /**
-   * Unlocked H3 hexagon indices.
+   * Hexagons loaded from disk / database (committed history).
+   */
+  historicalHexes: string[];
+
+  /**
+   * Hexagons unlocked during active movement in current session (uncommitted buffer).
+   */
+  activeBufferHexes: string[];
+
+  /**
+   * Combined unlocked H3 hexagon indices (historicalHexes + activeBufferHexes).
    * STRICT ENFORCEMENT (AGENTS.md):
    * H3 indices must strictly be stored and passed as 15-character hexadecimal strings (e.g. "8b2a100d213fff").
    * Never convert them to JS numbers to avoid 64-bit integer truncation beyond Number.MAX_SAFE_INTEGER.
@@ -53,6 +65,7 @@ export interface ExplorationState {
   setUnlockedHexes: (hexes: string[]) => void;
   setVisibleHexes: (hexes: string[]) => void;
   addUnlockedHexes: (hexes: string[]) => number;
+  commitActiveBuffer: () => Promise<number>;
   incrementSessionDistance: (distanceMeters: number) => void;
   updateFogGeoJSON: () => Promise<void>;
   resetExploration: () => void;
@@ -65,6 +78,8 @@ export interface ExplorationState {
 export const useExplorationStore = create<ExplorationState>((set, get) => ({
   isExploring: false,
   currentLocation: null,
+  historicalHexes: [],
+  activeBufferHexes: [],
   unlockedHexes: [],
   visibleHexes: [],
   fogGeoJSON: null,
@@ -83,8 +98,12 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   loadUnlockedHexes: () => {
     try {
       const hexes = getAllUnlockedHexes();
-      const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string');
-      set({ unlockedHexes: validHexes });
+      const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
+      set({
+        historicalHexes: validHexes,
+        activeBufferHexes: [],
+        unlockedHexes: validHexes,
+      });
     } catch (e) {
       console.warn('Failed to load unlocked hexes from database:', e);
     }
@@ -92,29 +111,73 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
 
   setUnlockedHexes: (hexes: string[]) => {
     // Sanity check to guarantee string types (AGENTS.md guardrail)
-    const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string');
-    set({ unlockedHexes: validHexes });
+    const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
+    set({
+      historicalHexes: validHexes,
+      activeBufferHexes: [],
+      unlockedHexes: validHexes,
+    });
   },
 
   setVisibleHexes: (hexes: string[]) => {
-    const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string');
+    const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
     set({ visibleHexes: validHexes });
   },
 
   addUnlockedHexes: (newHexes: string[]) => {
-    const validHexes = newHexes.filter((hex): hex is string => typeof hex === 'string');
+    const validHexes = newHexes.filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
     let addedCount = 0;
     set((state) => {
-      const existingSet = new Set(state.unlockedHexes);
+      const existingSet = new Set([...state.historicalHexes, ...state.activeBufferHexes]);
       const initialSize = existingSet.size;
-      validHexes.forEach((h) => existingSet.add(h));
+      const bufferSet = new Set(state.activeBufferHexes);
+
+      validHexes.forEach((h) => {
+        if (!existingSet.has(h)) {
+          existingSet.add(h);
+          bufferSet.add(h);
+        }
+      });
+
       addedCount = existingSet.size - initialSize;
-      return { 
-        unlockedHexes: Array.from(existingSet),
-        sessionUnlockedCount: state.sessionUnlockedCount + addedCount
+      const updatedBufferHexes = Array.from(bufferSet);
+      const updatedUnlockedHexes = Array.from(existingSet);
+
+      return {
+        activeBufferHexes: updatedBufferHexes,
+        unlockedHexes: updatedUnlockedHexes,
+        sessionUnlockedCount: state.sessionUnlockedCount + addedCount,
       };
     });
     return addedCount;
+  },
+
+  commitActiveBuffer: async (): Promise<number> => {
+    const { activeBufferHexes } = get();
+    if (!activeBufferHexes || activeBufferHexes.length === 0) {
+      return 0;
+    }
+
+    const hexesToCommit = [...activeBufferHexes];
+    return withBackgroundTask('commitActiveBuffer', async () => {
+      try {
+        const inserted = insertUnlockedHexes(hexesToCommit);
+        set((state) => {
+          const mergedHistorical = Array.from(new Set([...state.historicalHexes, ...hexesToCommit]));
+          const remainingBuffer = state.activeBufferHexes.filter((h) => !hexesToCommit.includes(h));
+          const combinedUnlocked = Array.from(new Set([...mergedHistorical, ...remainingBuffer]));
+          return {
+            historicalHexes: mergedHistorical,
+            activeBufferHexes: remainingBuffer,
+            unlockedHexes: combinedUnlocked,
+          };
+        });
+        return inserted;
+      } catch (e) {
+        console.warn('Failed to commit active buffer hexes to database:', e);
+        return 0;
+      }
+    });
   },
 
   incrementSessionDistance: (distanceMeters: number) => {
@@ -124,28 +187,28 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   updateFogGeoJSON: async () => {
     const { currentLocation, unlockedHexes, visibleHexes, lastProcessedHexesHash } = get();
     if (!currentLocation) return;
-    
+
     // W13-FOG: Positional Delta Processing
     // Merge unlocked and visible hexes
     const allActiveHexes = Array.from(new Set([...unlockedHexes, ...visibleHexes]));
-    
+
     // Create a fast hash/string to check if the set of hexes has changed
     const currentHash = allActiveHexes.sort().join('');
-    
+
     if (currentHash === lastProcessedHexesHash && lastProcessedHexesHash !== '') {
       // Delta is empty; skip expensive h3.cellsToMultiPolygon worker call
       return;
     }
-    
+
     const geoJSON = await generateFogGeoJSON(
       currentLocation.latitude,
       currentLocation.longitude,
       allActiveHexes
     );
-    
-    set({ 
+
+    set({
       fogGeoJSON: geoJSON,
-      lastProcessedHexesHash: currentHash
+      lastProcessedHexesHash: currentHash,
     });
   },
 
@@ -158,6 +221,8 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
     set({
       isExploring: false,
       currentLocation: null,
+      historicalHexes: [],
+      activeBufferHexes: [],
       unlockedHexes: [],
       visibleHexes: [],
       fogGeoJSON: null,
@@ -180,7 +245,7 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
       isMacroRevealing: false,
       macroRevealCount: 0,
     }),
-    
+
   setSelectedHistoricalRoute: (route: Feature<LineString> | null) =>
     set({ selectedHistoricalRoute: route }),
 
@@ -192,3 +257,4 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
     set({ currentNeighborhoodStat: stat });
   },
 }));
+

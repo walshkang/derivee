@@ -1,0 +1,17 @@
+{
+  "name": "expo-background-assertion",
+  "platforms": [
+    "ios",
+    "android"
+  ],
+  "ios": {
+    "modules": [
+      "ExpoBackgroundAssertionModule"
+    ]
+  },
+  "android": {
+    "modules": [
+      "expo.modules.backgroundassertion.ExpoBackgroundAssertionModule"
+    ]
+  }
+}

@@ -13,9 +13,50 @@ export interface NeighborhoodStat {
   explored_hexes: number;
 }
 
+export interface GeoJSONCacheEntry {
+  key: string;
+  geojson_data: string;
+  updated_at: number;
+  hex_count: number;
+}
+
+/**
+ * Runs database migrations based on PRAGMA user_version.
+ */
+export function runMigrations(db: OPSQLiteConnection): void {
+  try {
+    const res = db.execute('PRAGMA user_version;');
+    let currentVersion = 0;
+    if (res && res.rows) {
+      let row: any = null;
+      if (Array.isArray(res.rows) && res.rows.length > 0) row = res.rows[0];
+      else if (Array.isArray(res.rows._array) && res.rows._array.length > 0) row = res.rows._array[0];
+      else if (typeof res.rows.item === 'function' && res.rows.length > 0) row = res.rows.item(0);
+      if (row) {
+        currentVersion = row.user_version ?? row['user_version'] ?? 0;
+      }
+    }
+
+    if (currentVersion < 1) {
+      db.execute(`
+        CREATE TABLE IF NOT EXISTS geojson_cache (
+          key TEXT PRIMARY KEY,
+          geojson_data TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
+          hex_count INTEGER NOT NULL DEFAULT 0
+        ) WITHOUT ROWID;
+      `);
+      db.execute('PRAGMA user_version = 1;');
+      console.log('[Database] Migrated database schema to version 1.');
+    }
+  } catch (error) {
+    console.error('[Database] Failed to execute schema migrations:', error);
+  }
+}
+
 /**
  * Initializes the op-sqlite local database.
- * Sets WAL journal mode, synchronous NORMAL, and creates explored_hexes table WITHOUT ROWID.
+ * Sets WAL journal mode, synchronous NORMAL, and creates tables WITHOUT ROWID.
  */
 export function initDatabase(name: string = DB_NAME): OPSQLiteConnection {
   if (dbInstance) {
@@ -70,6 +111,19 @@ export function initDatabase(name: string = DB_NAME): OPSQLiteConnection {
       route_geojson TEXT
     ) WITHOUT ROWID;
   `);
+
+  // W14.5: Create geojson_cache table WITHOUT ROWID
+  db.execute(`
+    CREATE TABLE IF NOT EXISTS geojson_cache (
+      key TEXT PRIMARY KEY,
+      geojson_data TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      hex_count INTEGER NOT NULL DEFAULT 0
+    ) WITHOUT ROWID;
+  `);
+
+  // Execute version migrations
+  runMigrations(db);
 
   dbInstance = db;
   return db;
@@ -192,12 +246,129 @@ export function getExploredHexCount(): number {
 }
 
 /**
- * Clears all explored hexes and active visibility records from the local SQLite database.
+ * Clears all explored hexes, active visibility records, and geojson_cache from the local SQLite database.
  */
 export function clearExploredHexes(): void {
   const db = getDb();
   db.execute('DELETE FROM explored_hexes;');
   db.execute('DELETE FROM active_visibility;');
+  db.execute('DELETE FROM geojson_cache;');
+}
+
+/**
+ * Retrieves a GeoJSON cache entry by key.
+ */
+export function getGeoJSONCache(key: string): GeoJSONCacheEntry | null {
+  try {
+    const db = getDb();
+    const result = db.execute('SELECT key, geojson_data, updated_at, hex_count FROM geojson_cache WHERE key = ?;', [key]);
+    if (result && result.rows) {
+      let row: any = null;
+      if (Array.isArray(result.rows) && result.rows.length > 0) row = result.rows[0];
+      else if (Array.isArray(result.rows._array) && result.rows._array.length > 0) row = result.rows._array[0];
+      else if (typeof result.rows.item === 'function' && result.rows.length > 0) row = result.rows.item(0);
+
+      if (row) {
+        return {
+          key: row.key,
+          geojson_data: row.geojson_data,
+          updated_at: typeof row.updated_at === 'number' ? row.updated_at : parseInt(row.updated_at, 10),
+          hex_count: typeof row.hex_count === 'number' ? row.hex_count : parseInt(row.hex_count, 10),
+        };
+      }
+    }
+  } catch (error) {
+    console.error('[Database] Failed to get GeoJSON cache for key:', key, error);
+  }
+  return null;
+}
+
+/**
+ * Stores or updates a GeoJSON cache entry.
+ */
+export function setGeoJSONCache(key: string, geojsonData: string, hexCount: number, timestamp: number = Date.now()): void {
+  try {
+    const db = getDb();
+    db.execute(
+      `INSERT OR REPLACE INTO geojson_cache (key, geojson_data, updated_at, hex_count)
+       VALUES (?, ?, ?, ?);`,
+      [key, geojsonData, timestamp, hexCount]
+    );
+  } catch (error) {
+    console.error('[Database] Failed to set GeoJSON cache for key:', key, error);
+  }
+}
+
+/**
+ * Clears GeoJSON cache entries. If key is provided, clears only that entry; otherwise clears all entries.
+ */
+export function clearGeoJSONCache(key?: string): void {
+  try {
+    const db = getDb();
+    if (key) {
+      db.execute('DELETE FROM geojson_cache WHERE key = ?;', [key]);
+    } else {
+      db.execute('DELETE FROM geojson_cache;');
+    }
+  } catch (error) {
+    console.error('[Database] Failed to clear GeoJSON cache:', error);
+  }
+}
+
+/**
+ * Splash screen migration gate helper: Backfills geojson_cache for legacy users with explored hexes.
+ * Returns true if backfill occurred or cache was already populated.
+ */
+export async function backfillLegacyGeoJSONCache(): Promise<boolean> {
+  try {
+    const existingCache = getGeoJSONCache('historical_fog');
+    if (existingCache) {
+      return true; // Already populated
+    }
+
+    const hexes = getAllUnlockedHexes();
+    if (hexes.length === 0) {
+      return true; // No legacy hexes to backfill
+    }
+
+    // Convert legacy explored hexes into cached MultiPolygon feature payload
+    const h3 = require('h3-js');
+    const validHexes = hexes.filter((hex) => {
+      try {
+        return typeof hex === 'string' && h3.isValidCell(hex);
+      } catch {
+        return false;
+      }
+    });
+
+    if (validHexes.length === 0) {
+      return true;
+    }
+
+    let holesCoordinates: number[][][][];
+    try {
+      holesCoordinates = h3.cellsToMultiPolygon(validHexes, true);
+    } catch (e) {
+      console.error('[Database] Error converting legacy hexes to MultiPolygon:', e);
+      return false;
+    }
+
+    const payload = JSON.stringify({
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: holesCoordinates,
+      },
+    });
+
+    setGeoJSONCache('historical_fog', payload, validHexes.length);
+    console.log(`[Database] Backfilled legacy geojson_cache with ${validHexes.length} hexes.`);
+    return true;
+  } catch (error) {
+    console.error('[Database] Failed to backfill legacy GeoJSON cache:', error);
+    return false;
+  }
 }
 
 /**

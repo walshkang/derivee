@@ -1,6 +1,4 @@
-import type { Feature, Polygon, MultiPolygon } from 'geojson';
-import bboxPolygon from '@turf/bbox-polygon';
-import mask from '@turf/mask';
+import type { Feature, Polygon } from 'geojson';
 import destination from '@turf/destination';
 import * as h3 from 'h3-js';
 
@@ -12,19 +10,24 @@ const BBOX_HALF_WIDTH_KM = 25;
  * The fog is a 50x50km dark bounding box centered on the user,
  * with the user's unlocked H3 hexes punched out as transparent holes.
  *
+ * Rather than using @turf/mask (which performs expensive spatial boolean ops on JS thread),
+ * this natively concatenates the 50x50km bounding box outer ring with all interior hex hole rings
+ * into a single GeoJSON Polygon feature. MapLibre's native C++ earcut triangulator natively
+ * cuts out all inner rings from the outer bounding box.
+ *
  * @param latitude Current latitude
  * @param longitude Current longitude
  * @param unlockedHexes Array of 15-character H3 hex strings
- * @returns A GeoJSON Feature (Polygon or MultiPolygon) representing the fog layer
+ * @returns A GeoJSON Feature<Polygon> representing the fog layer
  */
 export async function generateFogGeoJSON(
   latitude: number,
   longitude: number,
   unlockedHexes: string[]
-): Promise<Feature<Polygon | MultiPolygon>> {
+): Promise<Feature<Polygon>> {
   return new Promise((resolve) => {
     // We wrap this in a Promise and setTimeout to allow the JS thread to yield
-    // before running the CPU-intensive h3 and turf operations.
+    // before running the CPU-intensive h3 operations.
     setTimeout(() => {
       const center = [longitude, latitude];
 
@@ -34,57 +37,69 @@ export async function generateFogGeoJSON(
       const ptSouth = destination(center, BBOX_HALF_WIDTH_KM, 180, { units: 'kilometers' });
       const ptWest = destination(center, BBOX_HALF_WIDTH_KM, -90, { units: 'kilometers' });
 
-      // bbox is [minX, minY, maxX, maxY] which corresponds to [westLng, southLat, eastLng, northLat]
+      // bbox coordinate boundaries: [westLng, southLat, eastLng, northLat]
       const minX = ptWest.geometry.coordinates[0];
       const minY = ptSouth.geometry.coordinates[1];
       const maxX = ptEast.geometry.coordinates[0];
       const maxY = ptNorth.geometry.coordinates[1];
-      
-      const fogBbox = bboxPolygon([minX, minY, maxX, maxY]);
 
-      if (unlockedHexes.length === 0) {
-        resolve(fogBbox);
+      // Outer linear ring of the bounding box (closed loop: NW -> NE -> SE -> SW -> NW)
+      const bboxRing: number[][] = [
+        [minX, maxY],
+        [maxX, maxY],
+        [maxX, minY],
+        [minX, minY],
+        [minX, maxY],
+      ];
+
+      const makeBboxFeature = (): Feature<Polygon> => ({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'Polygon',
+          coordinates: [bboxRing],
+        },
+      });
+
+      if (!unlockedHexes || unlockedHexes.length === 0) {
+        resolve(makeBboxFeature());
         return;
       }
 
-      // 2. Convert unlocked H3 hexes into a merged GeoJSON MultiPolygon coordinates array
+      // 2. Convert unlocked H3 hexes into merged GeoJSON MultiPolygon linear rings
       // h3.cellsToMultiPolygon(hexes, true) returns coordinates in [lng, lat] GeoJSON format.
+      // Output structure: Array<PolygonCoordinates> where each PolygonCoordinates is Array<LinearRingCoordinates>.
       let holesCoordinates: number[][][][];
       try {
         holesCoordinates = h3.cellsToMultiPolygon(unlockedHexes, true);
       } catch (e) {
         console.error('Error generating multipolygon from hexes:', e);
-        resolve(fogBbox); // Fallback to full fog
+        resolve(makeBboxFeature());
         return;
       }
 
-      // 3. Create a GeoJSON Polygon for the holes to mask out
-      // Turf mask requires a Polygon or MultiPolygon feature for the inner holes.
-      // h3.cellsToMultiPolygon returns an Array<PolygonCoordinates>, where each PolygonCoordinates is Array<LinearRingCoordinates>.
-      
-      let maskResult: Feature<Polygon | MultiPolygon>;
-      
-      if (holesCoordinates.length > 0) {
-         try {
-           const holesFeature: Feature<MultiPolygon> = {
-              type: 'Feature',
-              properties: {},
-              geometry: {
-                type: 'MultiPolygon',
-                coordinates: holesCoordinates,
-              }
-           };
-           // 4. Subtract the holes from the bounding box
-           maskResult = mask(holesFeature, fogBbox) as Feature<Polygon | MultiPolygon>;
-         } catch (e) {
-           console.error('Error masking fog polygon:', e);
-           maskResult = fogBbox; // Fallback to full fog if mask fails
-         }
-      } else {
-        maskResult = fogBbox;
+      // 3. Flatten linear rings across all polygon clusters into inner rings (holes)
+      const innerRings: number[][][] = [];
+      if (holesCoordinates && holesCoordinates.length > 0) {
+        for (const polygon of holesCoordinates) {
+          for (const ring of polygon) {
+            if (ring && ring.length > 0) {
+              innerRings.push(ring);
+            }
+          }
+        }
       }
-      
-      resolve(maskResult);
+
+      // 4. Return single Polygon feature with bbox outer boundary [0] and hex hole inner rings [1..N]
+      resolve({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'Polygon',
+          coordinates: [bboxRing, ...innerRings],
+        },
+      });
     }, 0);
   });
 }
+

@@ -96,7 +96,48 @@ describe('useExplorationStore', () => {
     const resetState = useExplorationStore.getState();
     expect(resetState.isExploring).toBe(false);
     expect(resetState.currentLocation).toBeNull();
+    expect(resetState.historicalHexes).toEqual([]);
+    expect(resetState.activeBufferHexes).toEqual([]);
     expect(resetState.unlockedHexes).toEqual([]);
     expect(getAllUnlockedHexes()).toEqual([]);
+  });
+
+  it('W14.5-STORE: should manage historicalHexes vs activeBufferHexes independently until committed', async () => {
+    // 1. Initial disk hexes
+    insertUnlockedHexes(['8b2a100d213fff']);
+    useExplorationStore.getState().loadUnlockedHexes();
+
+    expect(useExplorationStore.getState().historicalHexes).toEqual(['8b2a100d213fff']);
+    expect(useExplorationStore.getState().activeBufferHexes).toEqual([]);
+    expect(useExplorationStore.getState().unlockedHexes).toEqual(['8b2a100d213fff']);
+
+    // 2. Discover new hexes during active movement
+    useExplorationStore.getState().addUnlockedHexes(['8b2a100d213ffe', '8b2a100d213ffd']);
+
+    const afterAdd = useExplorationStore.getState();
+    expect(afterAdd.historicalHexes).toEqual(['8b2a100d213fff']);
+    expect(afterAdd.activeBufferHexes).toEqual(['8b2a100d213ffe', '8b2a100d213ffd']);
+    expect(afterAdd.unlockedHexes).toEqual(['8b2a100d213fff', '8b2a100d213ffe', '8b2a100d213ffd']);
+
+    // Database still only has initial disk hex
+    expect(getAllUnlockedHexes()).toEqual(['8b2a100d213fff']);
+
+    // 3. Commit active buffer hexes to disk
+    const committedCount = await useExplorationStore.getState().commitActiveBuffer();
+    expect(committedCount).toBe(2);
+
+    const afterCommit = useExplorationStore.getState();
+    expect(afterCommit.activeBufferHexes).toEqual([]);
+    expect(afterCommit.historicalHexes).toEqual(['8b2a100d213fff', '8b2a100d213ffe', '8b2a100d213ffd']);
+    expect(afterCommit.unlockedHexes).toEqual(['8b2a100d213fff', '8b2a100d213ffe', '8b2a100d213ffd']);
+
+    // Database now contains all committed hexes
+    expect(getAllUnlockedHexes()).toEqual(['8b2a100d213fff', '8b2a100d213ffe', '8b2a100d213ffd']);
+  });
+
+  it('W14.5-STORE: commitActiveBuffer should return 0 if buffer is empty', async () => {
+    const store = useExplorationStore.getState();
+    const result = await store.commitActiveBuffer();
+    expect(result).toBe(0);
   });
 });

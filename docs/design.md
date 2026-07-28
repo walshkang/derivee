@@ -54,7 +54,7 @@ To maintain the pristine, map-first aesthetic, exploration stats are NOT display
     * MapTiler base layer renders successfully.
     * The 3-tier fog logic correctly masks the map based on the user's SQLite database of unlocked hexes.
     * Subtle hex outlines render exclusively inside Explored and Active zones.
-    * Tracking begins silently and ambiently in the background upon opening the map, automatically uncovering new hexes.
+    * Tracking begins silently and ambiently upon app launch and continues tracking progress on the map at all times, even when the screen is off or the app is in the background. There is no manual 'record' or 'start' button.
     * The stat pill uses `@react-native-community/blur` for a native iOS frosted glass background.
     * Typography is small, native (SF Pro), and highly legible.
     * The pill queries the local SQLite `neighborhood_stats` table to calculate the percentage `(cleared_hexes_in_poly / total_hexes_in_poly) * 100`.
