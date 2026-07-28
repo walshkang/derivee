@@ -33,6 +33,8 @@ This document is the single source of truth for all planned development waves.
 | **13** | **W13-FOG-TIERS** | **3-Tier Fog State & Reference Counting (Post-MVP)** | **M** | ✅ Done |
 | **13** | **W13-FOG-STYLE** | **MapLibre Dual-Layer & Temporal Interpolation (Post-MVP)** | **S** | ✅ Done |
 | **13** | **W13-AMBIENT-TRACKING** | **Ambient Tracking & Start Button Removal** | **S** | ✅ Done |
+| **14** | **W14-DATA-NEIGHBORHOODS** | **Neighborhood Denominators & Water Subtraction** | **M** | ✅ Done |
+| **14** | **W14-UI-STATS** | **Progression Stats UI: Contextual Pill & Archive Screen** | **M** | ✅ Done |
 
 ---
 
@@ -113,3 +115,8 @@ This document is the single source of truth for all planned development waves.
 
 ## Wave 13 — Advanced MapLibre Rendering & Fog Enhancements (✅ Completed)
 *Tasks W13-FOG-TIERS & W13-FOG-STYLE shipped. Prompts archived in `archive/shipped-waves-archive.md`.*
+
+---
+
+## Wave 14 — Progression Stats & Neighborhood Denominators (✅ Completed)
+*Tasks W14-DATA-NEIGHBORHOODS & W14-UI-STATS shipped. Prompts archived in `archive/shipped-waves-archive.md`.*

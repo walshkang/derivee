@@ -15,7 +15,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.fogofwburg.app",
       "infoPlist": {
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
     "android": {
@@ -46,7 +48,8 @@
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }

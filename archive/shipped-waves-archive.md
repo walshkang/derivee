@@ -172,3 +172,13 @@ This archive contains detailed task prompts for completed development waves.
 2. Adapt the state machine to track Unexplored, Explored, and Visible tiers natively, implementing positional delta processing to minimize geometry worker calls.
 3. Restructure the MapLibre layers to utilize the dual-raster desaturation technique (Layer 1: Explored Base desaturated, Layer 2: Visible Base color). Add `fill-opacity-transition: { duration: 300 }` to the fog layer for organic temporal dissolve.
 4. Re-enable 3D buildings and configure the fog as a 3D volumetric extrusion block to correctly obscure buildings within the unexplored zones.
+
+---
+
+## Wave 14 — Progression Stats & Neighborhood Denominators (W14)
+
+### Task Prompt: W14-DATA-NEIGHBORHOODS & W14-UI-STATS
+**Goal:** Bridge the gap between ambient discovery and gamified progression by adding lightweight stats (neighborhood completion percentage).
+* **Agent Directives:**
+  * **Wave 14-DATA (Data Layer):** Update the SQLite schema to include a `neighborhood_stats` table. Write a script to populate it with total hex counts per neighborhood. **Crucially**, use Turf.js or Shapely (Python) to perform a Boolean Subtraction of water multipolygons from the neighborhood bounds *before* running the H3 polyfill algorithm, ensuring open water is excluded but bridges are preserved in the total denominator.
+  * **Wave 14-UI (UI Layer):** Build the floating Contextual Stat Pill on the Main Map (progressive disclosure) and the comprehensive Archive list screen, hooking them up to the new SQLite queries and Zustand session state. Do not mix UI work with Data work in a single session.

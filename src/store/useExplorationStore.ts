@@ -7,6 +7,8 @@ export interface Location {
 
 import type { Feature, Polygon, MultiPolygon, LineString } from 'geojson';
 import { generateFogGeoJSON } from '../utils/fogGeoJSON';
+import { NeighborhoodStat, getCurrentNeighborhoodStat } from '../db/database';
+import { coordToH3 } from '../utils/h3Utils';
 
 export interface ExplorationState {
   isExploring: boolean;
@@ -39,6 +41,10 @@ export interface ExplorationState {
   // Screen 3: Historical Route Highlight
   selectedHistoricalRoute: Feature<LineString> | null;
 
+  // Wave 14: Contextual Stats
+  sessionUnlockedCount: number;
+  currentNeighborhoodStat: NeighborhoodStat | null;
+
   // Actions
   setIsExploring: (isExploring: boolean) => void;
   setCurrentLocation: (location: Location | null) => void;
@@ -50,6 +56,7 @@ export interface ExplorationState {
   triggerMacroReveal: (count: number) => void;
   clearMacroReveal: () => void;
   setSelectedHistoricalRoute: (route: Feature<LineString> | null) => void;
+  refreshCurrentNeighborhoodStat: () => void;
 }
 
 export const useExplorationStore = create<ExplorationState>((set, get) => ({
@@ -62,6 +69,8 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   isMacroRevealing: false,
   macroRevealCount: 0,
   selectedHistoricalRoute: null,
+  sessionUnlockedCount: 0,
+  currentNeighborhoodStat: null,
 
   setIsExploring: (isExploring: boolean) => set({ isExploring }),
 
@@ -86,7 +95,10 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
       const initialSize = existingSet.size;
       validHexes.forEach((h) => existingSet.add(h));
       addedCount = existingSet.size - initialSize;
-      return { unlockedHexes: Array.from(existingSet) };
+      return { 
+        unlockedHexes: Array.from(existingSet),
+        sessionUnlockedCount: state.sessionUnlockedCount + addedCount
+      };
     });
     return addedCount;
   },
@@ -145,4 +157,12 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
     
   setSelectedHistoricalRoute: (route: Feature<LineString> | null) =>
     set({ selectedHistoricalRoute: route }),
+
+  refreshCurrentNeighborhoodStat: () => {
+    const { currentLocation } = get();
+    if (!currentLocation) return;
+    const h3Index = coordToH3(currentLocation.latitude, currentLocation.longitude);
+    const stat = getCurrentNeighborhoodStat(h3Index);
+    set({ currentNeighborhoodStat: stat });
+  },
 }));

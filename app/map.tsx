@@ -13,10 +13,11 @@ import { getPOIByH3Index, POI } from '@/db/poiQueries';
 import { coordToH3 } from '@/utils/h3Utils';
 import { isWithinVicinityBubble, generateVicinityBubbleGeoJSON } from '@/utils/geoUtils';
 import { useTransitStore } from '@/store/useTransitStore';
+import { ContextualStatPill } from '@/components/ContextualStatPill';
 
 export default function MapScreen() {
   const router = useRouter();
-  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal, selectedHistoricalRoute, setSelectedHistoricalRoute } =
+  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal, selectedHistoricalRoute, setSelectedHistoricalRoute, refreshCurrentNeighborhoodStat } =
     useExplorationStore();
   const { startTracking } = useBackgroundLocation();
   const { loadPOIs } = usePOIStore();
@@ -71,8 +72,9 @@ export default function MapScreen() {
   useEffect(() => {
     if (currentLocation) {
       updateFogGeoJSON();
+      refreshCurrentNeighborhoodStat();
     }
-  }, [unlockedHexes, currentLocation?.latitude, currentLocation?.longitude, updateFogGeoJSON]);
+  }, [unlockedHexes, currentLocation?.latitude, currentLocation?.longitude, updateFogGeoJSON, refreshCurrentNeighborhoodStat]);
 
   // Layer 5: Dynamic 200m Vicinity Bubble GeoJSON Feature
   const vicinityBubbleGeoJSON = useMemo(() => {
@@ -157,6 +159,7 @@ export default function MapScreen() {
   return (
     <View style={styles.container}>
       {/* Top Floating Ambient Navigation Bar */}
+      <ContextualStatPill />
       {/* Top Floating Navigation Bar */}
       <View style={styles.topNavigationBar}>
         <Pressable

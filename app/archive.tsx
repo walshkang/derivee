@@ -4,13 +4,14 @@ import { useExplorationStore } from '@/store/useExplorationStore';
 import { PRIVACY_STATEMENT, exportSpatialDataJSON } from '@/utils/privacyExporter';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
-import { insertUnlockedHexes, insertTrackingSession, getAllTrackingSessions, TrackingSession } from '@/db/database';
+import { insertUnlockedHexes, insertTrackingSession, getAllTrackingSessions, TrackingSession, getNeighborhoodCompletion, NeighborhoodStat } from '@/db/database';
 import { parseGPX, parseFIT } from '@/utils/workoutParser';
 
 export default function ArchiveScreen() {
   const { unlockedHexes, resetExploration, addUnlockedHexes, triggerMacroReveal, setSelectedHistoricalRoute } = useExplorationStore();
   const [exportedStatus, setExportedStatus] = useState<string | null>(null);
   const [sessions, setSessions] = useState<TrackingSession[]>([]);
+  const [neighborhoodStats, setNeighborhoodStats] = useState<NeighborhoodStat[]>([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -20,6 +21,8 @@ export default function ArchiveScreen() {
   const loadSessions = () => {
     const data = getAllTrackingSessions();
     setSessions(data);
+    const stats = getNeighborhoodCompletion();
+    setNeighborhoodStats(stats);
   };
 
   const handleUploadFile = async () => {
@@ -119,6 +122,18 @@ export default function ArchiveScreen() {
     });
   };
 
+  const cityTotalHexes = neighborhoodStats.reduce((acc, curr) => acc + curr.total_hexes, 0);
+  const cityExploredHexes = neighborhoodStats.reduce((acc, curr) => acc + curr.explored_hexes, 0);
+  const cityCompletion = cityTotalHexes > 0 ? ((cityExploredHexes / cityTotalHexes) * 100).toFixed(1) : '0.0';
+
+  const sortedNeighborhoods = [...neighborhoodStats]
+    .filter(n => n.explored_hexes > 0)
+    .sort((a, b) => {
+      const aPct = a.total_hexes > 0 ? (a.explored_hexes / a.total_hexes) : 0;
+      const bPct = b.total_hexes > 0 ? (b.explored_hexes / b.total_hexes) : 0;
+      return bPct - aPct;
+    });
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <Text style={styles.headerTitle}>THE ARCHIVE</Text>
@@ -132,12 +147,27 @@ export default function ArchiveScreen() {
         </View>
 
         <View style={styles.statCard}>
-          <Text style={styles.statNumber}>
-            {unlockedHexes.length > 0 ? '1' : '0'}
-          </Text>
-          <Text style={styles.statLabel}>Active Zones</Text>
+          <Text style={styles.statNumber}>{cityCompletion}%</Text>
+          <Text style={styles.statLabel}>City-Wide Complete</Text>
         </View>
       </View>
+
+      {/* Neighborhood Leaderboard */}
+      {sortedNeighborhoods.length > 0 && (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeader}>Neighborhood Leaderboard</Text>
+          {sortedNeighborhoods.map((n, index) => {
+            const pct = n.total_hexes > 0 ? ((n.explored_hexes / n.total_hexes) * 100).toFixed(1) : '0.0';
+            return (
+              <View key={n.id} style={styles.leaderboardItem}>
+                <Text style={styles.leaderboardRank}>{index + 1}</Text>
+                <Text style={styles.leaderboardName}>{n.name}</Text>
+                <Text style={styles.leaderboardPct}>{pct}%</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       {/* The Historian Import (Wave 10) */}
       <View style={styles.sectionCard}>
@@ -464,5 +494,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748b',
     fontWeight: '600',
+  },
+  leaderboardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e2e8f0',
+  },
+  leaderboardRank: {
+    width: 24,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  leaderboardName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  leaderboardPct: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0284c7',
   },
 });

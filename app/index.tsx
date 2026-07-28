@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { useExplorationStore } from '@/store/useExplorationStore';
+import { attachNeighborhoodDB } from '@/db/database';
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -70,8 +71,16 @@ export default function SplashScreen() {
         console.warn('Failed to get location on splash screen:', e);
       }
     };
+    
+    const dbInit = async () => {
+      try {
+        await attachNeighborhoodDB();
+      } catch (e) {
+        console.warn('Failed to attach neighborhood db:', e);
+      }
+    };
 
-    Promise.all([splashDelay, locationFetch()]).then(() => {
+    Promise.all([splashDelay, locationFetch(), dbInit()]).then(() => {
       if (!isMounted) return;
       Animated.parallel([
         Animated.timing(burnAnim, {

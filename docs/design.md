@@ -40,11 +40,25 @@ A transient loading screen to establish the app's visual identity before transit
 ### Screen 1: Main Map
 The primary interface for viewing progress and recording new geospatial data.
 * **UI Elements:** Edge-to-edge MapLibre map. Top-bar text buttons for "History" (top-left) and "Settings" (top-right).
-* **Definition of Done:**
+
+**UI Element: The Contextual Stat Pill (Progressive Disclosure)**
+To maintain the pristine, map-first aesthetic, exploration stats are NOT displayed in a permanent, heavy dashboard. Instead, they utilize a lightweight, floating "pill" overlaid on the map.
+
+* **Location:** Top-center of the map, floating over the fog (styled with a frosted glass/blur effect).
+* **Behavior:** The pill is dynamic and context-aware based on the user's current GPS location.
+* **Content States:**
+  * *Idle / Explored Area:* When stationary or moving through already-cleared territory, it shows macro progress. (e.g., "📍 Williamsburg • 14% Explored").
+  * *Active Discovery:* When the user enters unexplored fog and begins clearing new hexes, the pill smoothly transitions to highlight real-time momentum. (e.g., "🔥 42 New Hexes Unlocked Today"). Because tracking is always ambiently on, this state triggers automatically upon new hex discovery.
+
+* **Definition of Done (Screen 1 & Stat Pill):**
     * MapTiler base layer renders successfully.
     * The 3-tier fog logic correctly masks the map based on the user's SQLite database of unlocked hexes.
     * Subtle hex outlines render exclusively inside Explored and Active zones.
     * Tracking begins silently and ambiently in the background upon opening the map, automatically uncovering new hexes.
+    * The stat pill uses `@react-native-community/blur` for a native iOS frosted glass background.
+    * Typography is small, native (SF Pro), and highly legible.
+    * The pill queries the local SQLite `neighborhood_stats` table to calculate the percentage `(cleared_hexes_in_poly / total_hexes_in_poly) * 100`.
+    * The stat updates performantly without locking the UI thread (debounced or updated via a React `useTransition`).
 
 ### Screen 2: Transit Details (Bottom Sheet)
 A utility view that appears only when interacting with a transit pin.
@@ -54,16 +68,22 @@ A utility view that appears only when interacting with a transit pin.
     * Real-time GTFS countdowns (e.g., "3 min", "8 min") populate accurately for the selected stop.
     * The sheet can be dismissed by swiping down or tapping the map outside the modal.
 
-### Screen 3: History & Uploads
-A straightforward list of past activity and the interface for importing historical `.gpx` and `.fit` files locally.
-* **UI Elements:** A full-screen list view. A prominent "Upload Previous Workouts" button at the top. Top-level stats showing total hexes cleared. A chronological list of past tracking sessions and uploaded routes.
+### Screen 3: The Archive (Macro-Stats & History)
+This screen is the dedicated space for heavy metrics. Since the user actively navigated here, we can drop the "progressive disclosure" rules and show them their complete geographic dominance.
+
+* **UI Elements:**
+  * **The City-Wide Matrix:** A clean, horizontal scroll of cards or a grid showing top-level city completion (e.g., "New York City: 4.2% Complete").
+  * **Neighborhood Leaderboard:** A vertical, native list breaking down the user's progress by neighborhood, sorted by highest completion percentage. (e.g., "1. Williamsburg - 42%", "2. Greenpoint - 18%").
+  * **Session History:** A chronological list of past tracking sessions and uploaded `.gpx` routes, showing the specific number of hexes unlocked per session.
+  * A prominent "Upload Previous Workouts" button at the top (or accessible via this view).
+
 * **Definition of Done:**
-    * Displays a summarized metric of total area/hexes unlocked.
-    * Allows the user to select local files via `expo-document-picker`.
-    * **Processing Constraints (Crucial for JS Thread):** Uses `fast-xml-parser` (for GPX) or a lightweight FIT decoder to parse files locally. The parsing loop *must* be chunked (e.g., using `setTimeout` or `requestAnimationFrame` every 1,000 points) to prevent UI freezing. Coordinate arrays must be downsampled (e.g., checking >10m deltas) before passing to `h3-js`.
-    * Deduped hex arrays are saved using bulk/batch SQLite inserts.
+    * Queries the local SQLite database grouping unlocked H3 hexes by their assigned neighborhood boundaries.
+    * Uses standard iOS native list UI (avoid heavy custom graphs; rely on clean typography and simple native progress bars).
+    * Tapping a specific neighborhood pans the background map to that neighborhood's coordinates.
+    * Allows the user to select local `.gpx` or `.fit` files via `expo-document-picker`.
+    * **Processing Constraints:** Uses `fast-xml-parser` (for GPX) or a lightweight FIT decoder. Parsing must be chunked to prevent UI freezing, coordinate arrays downsampled (>10m deltas), and deduped hexes saved via bulk SQLite inserts.
     * Processing an upload successfully updates the main map's Explored fog state.
-    * Tapping a past session list item highlights that specific route path on the map.
 
 ### Screen 4: Settings
 Standard application preferences and account management.
@@ -71,3 +91,15 @@ Standard application preferences and account management.
 * **Definition of Done:**
     * Includes functional toggles for Background Location permissions and Push Notifications.
     * Includes a destructive button to clear local cache/data or reset the map/SQLite database entirely.
+
+## 5. The "Backend" (Data Layer) Work - Progression Stats
+
+To support the progression stats shown in the Contextual Stat Pill and The Archive, the local database must be updated:
+
+1. **The Denominator Problem:** Right now, the app only knows what you *have* explored. To calculate a percentage, it needs to know the total size of the container.
+2. **Neighborhood Lookup:** You will need to seed your local SQLite database with a static lookup table (e.g., `neighborhood_stats`). It could map a neighborhood name ("Williamsburg") to its bounding polygon or simply to its total H3 Resolution 11 hex count (e.g., "Williamsburg = 14,200 total hexes").
+3. **Current Session:** This is entirely front-end/local state. Your Zustand store just needs to track `sessionUnlockedHexes` and compare it against the current neighborhood's total.
+4. **The Denominator Masking Logic (Landmass & Bridges Only):** To ensure the "Total Hexes" denominator is actually achievable by a pedestrian or cyclist, the static generation script must strictly exclude open water.
+    * **The Operation:** Before generating the H3 hexes for a neighborhood, the script must take the neighborhood's bounding polygon and perform a boolean geographic subtraction using standard OSM (OpenStreetMap) or Natural Earth water polygons. `(Neighborhood_Polygon) MINUS (Water_Polygons) = Walkable_Polygon`.
+    * **The Bridge Exception:** Bridges (e.g., Williamsburg Bridge, pedestrian overpasses) are physically suspended over water but are valid exploration zones. The script must ensure that known pedestrian/cycling bridge geometries are re-added or preserved in the `Walkable_Polygon` before the H3 polyfill operation calculates the final hex count.
+    * **The Output:** The final integer saved to `neighborhood_stats.total_hexes` must represent only landmass and bridge hexes.
