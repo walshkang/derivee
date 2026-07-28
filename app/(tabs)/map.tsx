@@ -177,7 +177,7 @@ export default function MapScreen() {
       <View style={StyleSheet.absoluteFillObject}>
         <MapLibreGL.MapView
           style={StyleSheet.absoluteFillObject}
-          mapStyle={`https://api.maptiler.com/maps/satellite/style.json?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`}
+          mapStyle={`https://api.maptiler.com/maps/streets-v2/style.json?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`}
           logoEnabled={false}
           attributionEnabled={false}
           onPress={handleMapPress}
@@ -190,6 +190,20 @@ export default function MapScreen() {
           />
           <MapLibreGL.UserLocation visible={true} />
 
+          {/* Layer 2.5: 3D Buildings from MapTiler Base */}
+          <MapLibreGL.FillExtrusionLayer
+            id="3d-buildings"
+            sourceID="maptiler_planet"
+            sourceLayerID="building"
+            minZoomLevel={15}
+            style={{
+              fillExtrusionColor: '#e2e8f0',
+              fillExtrusionHeight: ['get', 'render_height'],
+              fillExtrusionBase: ['get', 'render_min_height'],
+              fillExtrusionOpacity: 0.6,
+            }}
+          />
+
           {/* Layer 3 & Layer 4: Soft Translucent Cloud Fog Mask with Unlocked Hex Holes */}
           {fogGeoJSON && (
             <MapLibreGL.ShapeSource
@@ -200,8 +214,8 @@ export default function MapScreen() {
               <MapLibreGL.FillLayer
                 id="fog-layer"
                 style={{
-                  fillColor: '#0b0f19',
-                  fillOpacity: 0.82,
+                  fillColor: '#94a3b8',
+                  fillOpacity: 0.90,
                 }}
               />
             </MapLibreGL.ShapeSource>
@@ -330,7 +344,7 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#090d16',
+    backgroundColor: '#f8fafc',
   },
   topAmbientBar: {
     position: 'absolute',
