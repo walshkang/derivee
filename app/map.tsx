@@ -91,7 +91,8 @@ export default function MapScreen() {
     if (currentLocation && cameraRef.current) {
       cameraRef.current.setCamera({
         centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
-        zoomLevel: 16,
+        zoomLevel: 14,
+        pitch: is3DMode ? 60 : 0,
         animationDuration: 800,
       });
     }
@@ -157,19 +158,24 @@ export default function MapScreen() {
   return (
     <View style={styles.container}>
       {/* Top Floating Ambient Navigation Bar */}
-      <View style={styles.topAmbientBar}>
-        <View style={styles.ambientStatusBadge}>
-          <View style={[styles.statusDot, isExploring ? styles.statusDotActive : styles.statusDotInactive]} />
-          <Text style={styles.statusText}>{isExploring ? 'EXPEDITION ACTIVE' : 'AMBIENT STANDBY'}</Text>
-        </View>
-
+      {/* Top Floating Navigation Bar */}
+      <View style={styles.topNavigationBar}>
         <Pressable
-          style={({ pressed }) => [styles.archiveButton, pressed && styles.archiveButtonPressed]}
+          style={({ pressed }) => [styles.navButton, pressed && styles.navButtonPressed]}
           onPress={handleNavigateArchive}
           accessibilityRole="button"
-          accessibilityLabel="Open Archive"
+          accessibilityLabel="Open History"
         >
-          <Text style={styles.archiveButtonText}>ARCHIVE 🏛️</Text>
+          <Text style={styles.navButtonText}>History</Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [styles.navButton, pressed && styles.navButtonPressed]}
+          onPress={() => router.push('/settings')}
+          accessibilityRole="button"
+          accessibilityLabel="Open Settings"
+        >
+          <Text style={styles.navButtonText}>Settings</Text>
         </Pressable>
       </View>
 
@@ -184,38 +190,60 @@ export default function MapScreen() {
         >
           <MapLibreGL.Camera
             ref={cameraRef}
+            defaultSettings={{
+              centerCoordinate: currentLocation
+                ? [currentLocation.longitude, currentLocation.latitude]
+                : [-73.9599, 40.7180], // Williamsburg fallback
+              zoomLevel: 14,
+              pitch: is3DMode ? 60 : 0,
+            }}
             followUserLocation={isExploring}
-            followPitch={is3DMode ? 45 : 0}
+            followPitch={is3DMode ? 60 : 0}
             followZoomLevel={16}
+            minZoomLevel={12}
           />
           <MapLibreGL.UserLocation visible={true} />
 
-          {/* Layer 2.5: 3D Buildings from MapTiler Base */}
-          <MapLibreGL.FillExtrusionLayer
-            id="3d-buildings"
-            sourceID="maptiler_planet"
-            sourceLayerID="building"
-            minZoomLevel={15}
-            style={{
-              fillExtrusionColor: '#e2e8f0',
-              fillExtrusionHeight: ['get', 'render_height'],
-              fillExtrusionBase: ['get', 'render_min_height'],
-              fillExtrusionOpacity: 0.6,
-            }}
-          />
+          {/* Layer 1 & 2: Explored Base (Desaturated Raster) */}
+          <MapLibreGL.RasterSource
+            id="satellite-base"
+            tileUrlTemplates={[`https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`]}
+            tileSize={512}
+          >
+            <MapLibreGL.RasterLayer
+              id="satellite-layer-dimmed"
+              belowLayerID="fog-layer-3d"
+              style={{
+                rasterSaturation: -1.0,
+                rasterOpacity: 0.6,
+              }}
+            />
+          </MapLibreGL.RasterSource>
 
-          {/* Layer 3 & Layer 4: Soft Translucent Cloud Fog Mask with Unlocked Hex Holes */}
+          {/* Layer 3 & 4: Soft Translucent Cloud Fog Mask with Unlocked Hex Holes */}
           {fogGeoJSON && (
             <MapLibreGL.ShapeSource
               id="fog-source"
               shape={fogGeoJSON}
               {...({ withSynchronousUpdate: true } as any)}
             >
-              <MapLibreGL.FillLayer
-                id="fog-layer"
+              {/* W13-FOG-3D: Volumetric Extrusion Fog */}
+              <MapLibreGL.FillExtrusionLayer
+                id="fog-layer-3d"
                 style={{
-                  fillColor: '#94a3b8',
-                  fillOpacity: 0.90,
+                  fillExtrusionColor: '#0f172a',
+                  fillExtrusionOpacity: 0.8,
+                  fillExtrusionHeight: 5000, // Extruded to cover 3D buildings
+                  fillExtrusionOpacityTransition: { duration: 300, delay: 0 },
+                }}
+              />
+              {/* Subtle Hex Outlines for Unlocked Hexes */}
+              <MapLibreGL.LineLayer
+                id="fog-hex-outlines"
+                style={{
+                  lineColor: '#64748b',
+                  lineWidth: 2,
+                  lineOpacity: 0.6,
                 }}
               />
             </MapLibreGL.ShapeSource>
@@ -271,6 +299,7 @@ export default function MapScreen() {
       </View>
 
       {/* Floating Action Controls Stack */}
+      {/* Floating Action Controls Stack */}
       <View style={styles.fabControlsStack}>
         <Pressable
           style={({ pressed }) => [styles.fabButton, pressed && styles.fabButtonPressed]}
@@ -278,29 +307,26 @@ export default function MapScreen() {
           accessibilityRole="button"
           accessibilityLabel="Recenter location"
         >
-          <Text style={styles.fabIcon}>🎯</Text>
+          {/* Traditional navigation target icon */}
+          <Text style={styles.fabIcon}>⌖</Text>
         </Pressable>
+      </View>
 
-        <Pressable
-          style={({ pressed }) => [styles.fabButton, pressed && styles.fabButtonPressed]}
-          onPress={handleTogglePerspective}
-          accessibilityRole="button"
-          accessibilityLabel="Toggle 3D perspective"
-        >
-          <Text style={styles.fabText}>{is3DMode ? '3D' : '2D'}</Text>
-        </Pressable>
-
+      {/* Prominent Pill-Shaped Start Tracking Button */}
+      <View style={styles.bottomPillContainer}>
         <Pressable
           style={({ pressed }) => [
-            styles.expeditionFab,
-            isExploring ? styles.expeditionFabActive : styles.expeditionFabInactive,
-            pressed && styles.fabButtonPressed,
+            styles.trackingPill,
+            isExploring ? styles.trackingPillActive : styles.trackingPillInactive,
+            pressed && styles.trackingPillPressed,
           ]}
           onPress={handleToggleExploration}
           accessibilityRole="button"
-          accessibilityLabel={isExploring ? 'Stop Expedition' : 'Start Expedition'}
+          accessibilityLabel={isExploring ? 'Stop Tracking' : 'Start Tracking'}
         >
-          <Text style={styles.expeditionFabIcon}>{isExploring ? '🛑' : '🛰️'}</Text>
+          <Text style={styles.trackingPillText}>
+            {isExploring ? 'Stop Tracking' : 'Start Tracking'}
+          </Text>
         </Pressable>
       </View>
 
@@ -346,7 +372,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-  topAmbientBar: {
+  topNavigationBar: {
     position: 'absolute',
     top: 56,
     left: 16,
@@ -356,12 +382,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  ambientStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  navButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(226, 232, 240, 0.8)',
@@ -371,45 +395,14 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  statusDotActive: {
-    backgroundColor: '#10b981',
-  },
-  statusDotInactive: {
-    backgroundColor: '#94a3b8',
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: 0.8,
-  },
-  archiveButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.8)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  archiveButtonPressed: {
+  navButtonPressed: {
     backgroundColor: '#f1f5f9',
     transform: [{ scale: 0.96 }],
   },
-  archiveButtonText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0284c7',
+  navButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
     letterSpacing: 0.5,
   },
   fabControlsStack: {
@@ -446,12 +439,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0284c7',
   },
-  expeditionFab: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+  bottomPillContainer: {
+    position: 'absolute',
+    bottom: 48,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    justifyContent: 'center',
+    zIndex: 10,
+  },
+  trackingPill: {
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 30,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -459,15 +458,21 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
-  expeditionFabInactive: {
-    backgroundColor: '#0284c7',
+  trackingPillInactive: {
+    backgroundColor: '#0ea5e9',
     borderColor: '#38bdf8',
   },
-  expeditionFabActive: {
+  trackingPillActive: {
     backgroundColor: '#ef4444',
     borderColor: '#f87171',
   },
-  expeditionFabIcon: {
-    fontSize: 22,
+  trackingPillPressed: {
+    transform: [{ scale: 0.96 }],
+  },
+  trackingPillText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
 });

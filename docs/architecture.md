@@ -44,9 +44,9 @@ Rendering tens of thousands of individual hexagons will cause catastrophic frame
 
 * **Dynamic Regional Loading:** Never generate a worldwide fog polygon. On initialization, generate a 50km x 50km GeoJSON bounding box centered on the user's current GPS coordinate.
 * **Temporal Interpolation:** Configure MapLibre `fill-opacity-transition: { duration: 300 }` on the fog mask layer for smooth, organic fog dissolve rather than instant pop-in.
-* **Layer Stacking (The 3-Tier Visibility Model):** Achieve desaturation natively without custom C++ shaders by sandwiching dual raster layers under the fog.
-  * **Layer 1 (The Explored Base):** `RasterLayer` rendering satellite imagery permanently dimmed (`rasterSaturation: -1.0`, reduced brightness). This represents areas the user has previously explored.
-  * **Layer 2 (The Visible Base):** Full-color satellite `RasterLayer` identical to Layer 1, but masked strictly by the user's active line-of-sight polygon.
+* **Layer Stacking (The 3-Tier Visibility Model):** Achieve the desired aesthetics using standard MapTiler layers beneath the fog mask.
+  * **Layer 1 (The Explored Base):** The base MapTiler `streets-v2` vector style. This represents areas the user has previously explored, revealed by holes in the fog layer.
+  * **Layer 2 (The Visible Base):** (Deprecated in MVP) Future support for dynamic active area highlighting.
   * **Layer 3 (The Sub-Context):** Faint vectors of major geographic arteries (coastlines, bridges) with zero text labels.
   * **Layer 4 (The Cloud Layer):** The 50km soft, translucent, blurred GeoJSON polygon (pitch black for strictly Unexplored).
   * **Layer 5 (The Holes):** The user's unlocked H3 hexagons (both Explored and Visible states), added as "inner rings" to Layer 4 to punch transparent holes into the Cloud Layer.

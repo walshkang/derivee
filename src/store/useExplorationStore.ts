@@ -20,9 +20,17 @@ export interface ExplorationState {
   unlockedHexes: string[];
 
   /**
+   * The actively visible hexes based on the user's current 200m vicinity bubble.
+   */
+  visibleHexes: string[];
+
+  /**
    * The inverted GeoJSON polygon representing the fog.
    */
   fogGeoJSON: Feature<Polygon | MultiPolygon> | null;
+
+  // W13-FOG: Positional Delta tracking
+  lastProcessedHexesHash: string;
 
   // Wave 10: Macro Reveal State
   isMacroRevealing: boolean;
@@ -32,6 +40,7 @@ export interface ExplorationState {
   setIsExploring: (isExploring: boolean) => void;
   setCurrentLocation: (location: Location | null) => void;
   setUnlockedHexes: (hexes: string[]) => void;
+  setVisibleHexes: (hexes: string[]) => void;
   addUnlockedHexes: (hexes: string[]) => number;
   updateFogGeoJSON: () => Promise<void>;
   resetExploration: () => void;
@@ -43,7 +52,9 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   isExploring: false,
   currentLocation: null,
   unlockedHexes: [],
+  visibleHexes: [],
   fogGeoJSON: null,
+  lastProcessedHexesHash: '',
   isMacroRevealing: false,
   macroRevealCount: 0,
 
@@ -55,6 +66,11 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
     // Sanity check to guarantee string types (AGENTS.md guardrail)
     const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string');
     set({ unlockedHexes: validHexes });
+  },
+
+  setVisibleHexes: (hexes: string[]) => {
+    const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string');
+    set({ visibleHexes: validHexes });
   },
 
   addUnlockedHexes: (newHexes: string[]) => {
@@ -71,16 +87,31 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   },
 
   updateFogGeoJSON: async () => {
-    const { currentLocation, unlockedHexes } = get();
+    const { currentLocation, unlockedHexes, visibleHexes, lastProcessedHexesHash } = get();
     if (!currentLocation) return;
+    
+    // W13-FOG: Positional Delta Processing
+    // Merge unlocked and visible hexes
+    const allActiveHexes = Array.from(new Set([...unlockedHexes, ...visibleHexes]));
+    
+    // Create a fast hash/string to check if the set of hexes has changed
+    const currentHash = allActiveHexes.sort().join('');
+    
+    if (currentHash === lastProcessedHexesHash && lastProcessedHexesHash !== '') {
+      // Delta is empty; skip expensive h3.cellsToMultiPolygon worker call
+      return;
+    }
     
     const geoJSON = await generateFogGeoJSON(
       currentLocation.latitude,
       currentLocation.longitude,
-      unlockedHexes
+      allActiveHexes
     );
     
-    set({ fogGeoJSON: geoJSON });
+    set({ 
+      fogGeoJSON: geoJSON,
+      lastProcessedHexesHash: currentHash
+    });
   },
 
   resetExploration: () =>
@@ -88,7 +119,9 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
       isExploring: false,
       currentLocation: null,
       unlockedHexes: [],
+      visibleHexes: [],
       fogGeoJSON: null,
+      lastProcessedHexesHash: '',
       isMacroRevealing: false,
       macroRevealCount: 0,
     }),

@@ -27,6 +27,14 @@ export function initDatabase(name: string = DB_NAME): OPSQLiteConnection {
     ) WITHOUT ROWID;
   `);
 
+  // W13-FOG: Create active_visibility table for reference counting
+  db.execute(`
+    CREATE TABLE IF NOT EXISTS active_visibility (
+      h3_index TEXT PRIMARY KEY,
+      reference_count INTEGER NOT NULL
+    ) WITHOUT ROWID;
+  `);
+
   // 3. Create pois table (Gamification Wave 5)
   db.execute(`
     CREATE TABLE IF NOT EXISTS pois (
@@ -181,3 +189,63 @@ export async function attachTransitDB(dbPath: string): Promise<void> {
     throw error;
   }
 }
+
+/**
+ * Updates the active visibility reference count for a set of hexes.
+ */
+export function updateActiveVisibility(hexes: string[], increment: number): void {
+  const db = getDb();
+  const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
+
+  if (validHexes.length === 0) return;
+
+  if (typeof db.transaction === 'function') {
+    db.transaction(async (tx: Transaction) => {
+      for (const hex of validHexes) {
+        tx.execute(
+          `INSERT INTO active_visibility (h3_index, reference_count) 
+           VALUES (?, ?) 
+           ON CONFLICT(h3_index) 
+           DO UPDATE SET reference_count = reference_count + ?;`,
+          [hex, increment, increment]
+        );
+      }
+      // Cleanup any that reached 0
+      tx.execute('DELETE FROM active_visibility WHERE reference_count <= 0;');
+    });
+  } else {
+    for (const hex of validHexes) {
+      db.execute(
+        `INSERT INTO active_visibility (h3_index, reference_count) 
+         VALUES (?, ?) 
+         ON CONFLICT(h3_index) 
+         DO UPDATE SET reference_count = reference_count + ?;`,
+        [hex, increment, increment]
+      );
+    }
+    db.execute('DELETE FROM active_visibility WHERE reference_count <= 0;');
+  }
+}
+
+/**
+ * Retrieves all currently visible H3 index strings (reference_count > 0).
+ */
+export function getVisibleHexes(): string[] {
+  const db = getDb();
+  const result = db.execute('SELECT h3_index FROM active_visibility WHERE reference_count > 0;');
+
+  let rows: Array<{ h3_index: string }> = [];
+  if (result && result.rows) {
+    if (Array.isArray(result.rows)) rows = result.rows;
+    else if (Array.isArray(result.rows._array)) rows = result.rows._array;
+    else if (typeof result.rows.item === 'function') {
+      const len = result.rows.length || 0;
+      for (let i = 0; i < len; i++) rows.push(result.rows.item(i));
+    }
+  }
+
+  return rows
+    .map((r) => r.h3_index)
+    .filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
+}
+

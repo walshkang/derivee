@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, Pressable, Animated } from 'react-native';
+import { StyleSheet, Text, View, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
+import { useExplorationStore } from '@/store/useExplorationStore';
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -8,6 +10,7 @@ export default function SplashScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const burnAnim = useRef(new Animated.Value(1)).current;
   const contentFadeAnim = useRef(new Animated.Value(1)).current;
+  const setCurrentLocation = useExplorationStore(state => state.setCurrentLocation);
 
   useEffect(() => {
     // Atmospheric fog breathing animation
@@ -45,29 +48,53 @@ export default function SplashScreen() {
     fogLoop.start();
     pulseLoop.start();
 
+    let isMounted = true;
+
+    const splashDelay = new Promise(resolve => setTimeout(resolve, 2000));
+    
+    const locationFetch = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          if (isMounted) {
+            setCurrentLocation({
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to get location on splash screen:', e);
+      }
+    };
+
+    Promise.all([splashDelay, locationFetch()]).then(() => {
+      if (!isMounted) return;
+      Animated.parallel([
+        Animated.timing(burnAnim, {
+          toValue: 4,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentFadeAnim, {
+          toValue: 0,
+          duration: 450,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        router.replace('/map');
+      });
+    });
+
     return () => {
+      isMounted = false;
       fogLoop.stop();
       pulseLoop.stop();
     };
-  }, [fogAnim, pulseAnim]);
-
-  const handleAwaken = () => {
-    // Trigger fog burn-away transition animation
-    Animated.parallel([
-      Animated.timing(burnAnim, {
-        toValue: 4,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentFadeAnim, {
-        toValue: 0,
-        duration: 450,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    router.replace('/(tabs)/map');
-  };
+  }, [fogAnim, pulseAnim, burnAnim, contentFadeAnim, setCurrentLocation, router]);
 
   return (
     <View style={styles.container}>
@@ -90,7 +117,7 @@ export default function SplashScreen() {
           </View>
         </Animated.View>
 
-        <Text style={styles.title}>FOG OF WBURG</Text>
+        <Text style={styles.title}>Fog of Williamsburg</Text>
         <Text style={styles.subtitle}>The Cartographer's Awakening</Text>
 
         <View style={styles.divider} />
@@ -98,18 +125,6 @@ export default function SplashScreen() {
         <Text style={styles.tagline}>
           Uncover the physical world hexagon by hexagon.
         </Text>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.awakenButton,
-            pressed && styles.awakenButtonPressed,
-          ]}
-          onPress={handleAwaken}
-          accessibilityRole="button"
-          accessibilityLabel="Awaken map"
-        >
-          <Text style={styles.awakenButtonText}>AWAKEN MAP</Text>
-        </Pressable>
       </Animated.View>
 
       <Text style={styles.footerText}>Offline-First • Continuous Native Generation</Text>
@@ -187,30 +202,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 36,
-  },
-  awakenButton: {
-    width: '100%',
-    backgroundColor: '#0f172a',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1e293b',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  awakenButtonPressed: {
-    backgroundColor: '#1e293b',
-    transform: [{ scale: 0.98 }],
-  },
-  awakenButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 2,
   },
   footerText: {
     position: 'absolute',

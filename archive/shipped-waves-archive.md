@@ -161,3 +161,14 @@ This archive contains detailed task prompts for completed development waves.
 3. Implement a Headway Matrix / Historical Timetable view, where each hour is a row and minutes are columns (e.g., `12 | 03 12 30 45 59`), color-coded to denote early vs. late arrivals for any transit mode.
 4. Support live navigation and future planned routes based on the fusion of live GTFS/SIRI data and historical patterns.
 5. Ensure the frontend parser handles binary Protobufs for both subways and buses, and correctly displays direction-specific service alerts (using MTA's `direction_id` structure).
+
+---
+
+## Wave 13 — Advanced MapLibre Rendering & Fog Enhancements (W13-FOG)
+
+### Task Prompt: W13-FOG — 3-Tier Fog State & MapLibre Dual-Layer
+**Goal:** Implement the optimized 3-Tier Fog of War system using native MapLibre capabilities and Positional Delta processing.
+1. Update the SQLite database schema to support active sight reference counting (`active_visibility` table).
+2. Adapt the state machine to track Unexplored, Explored, and Visible tiers natively, implementing positional delta processing to minimize geometry worker calls.
+3. Restructure the MapLibre layers to utilize the dual-raster desaturation technique (Layer 1: Explored Base desaturated, Layer 2: Visible Base color). Add `fill-opacity-transition: { duration: 300 }` to the fog layer for organic temporal dissolve.
+4. Re-enable 3D buildings and configure the fog as a 3D volumetric extrusion block to correctly obscure buildings within the unexplored zones.

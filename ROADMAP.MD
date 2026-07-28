@@ -30,8 +30,8 @@ This document is the single source of truth for all planned development waves.
 | **11** | **W11-TIMETABLE** | **Standalone Transit App (Web/Spinoff) & Headway Matrix** | **L** | ✅ Done |
 | **11.5** | **W11.5-MVP-POLISH** | **Light Mode UI Refactor & MVP Launch** | **S** | ✅ Done |
 | **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA (Post-MVP)** | **L** | Planned |
-| **13** | **W13-FOG-TIERS** | **3-Tier Fog State & Reference Counting (Post-MVP)** | **M** | Planned |
-| **13** | **W13-FOG-STYLE** | **MapLibre Dual-Layer & Temporal Interpolation (Post-MVP)** | **S** | Planned |
+| **13** | **W13-FOG-TIERS** | **3-Tier Fog State & Reference Counting (Post-MVP)** | **M** | ✅ Done |
+| **13** | **W13-FOG-STYLE** | **MapLibre Dual-Layer & Temporal Interpolation (Post-MVP)** | **S** | ✅ Done |
 
 ---
 
@@ -110,9 +110,5 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 13 — Advanced MapLibre Rendering & Fog Enhancements (W13-FOG) [Post-MVP]
-
-* **The Goal:** Implement the optimized 3-Tier Fog of War system using native MapLibre capabilities and Positional Delta processing.
-* **Agent Directives:**
-  * **W13-FOG-TIERS:** Update the SQLite database schema to support active sight reference counting and adapt the state machine to track Unexplored, Explored, and Visible tiers natively. Implement positional delta processing to minimize geometry worker calls.
-  * **W13-FOG-STYLE:** Restructure the MapLibre layers to utilize the dual-raster desaturation technique (Layer 1: Explored Base desaturated, Layer 2: Visible Base color). Add `fill-opacity-transition: { duration: 300 }` to the fog layer for organic temporal dissolve.
+## Wave 13 — Advanced MapLibre Rendering & Fog Enhancements (✅ Completed)
+*Tasks W13-FOG-TIERS & W13-FOG-STYLE shipped. Prompts archived in `archive/shipped-waves-archive.md`.*

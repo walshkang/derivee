@@ -11,8 +11,8 @@
 The map utilizes a 3-tier state to separate where the user is, where they have been, and what is left to discover. Unlocked H3 hexes (Resolution 11) feature a subtle border outline to define the progression grid.
 
 1.  **Hidden (Unexplored):** A high-blur, translucent dark mask covering the map. No base map details or pins are visible beneath it.
-2.  **Explored (Visible but Inactive):** Areas previously cleared but not currently occupied. The map renders in desaturated (grayscale) satellite imagery. H3 hexes display a slight, semi-transparent outline.
-3.  **Active (Exposed / Current Vicinity):** The immediate 200m radius around the live GPS location during a tracking session. The map renders in full-color, vibrant satellite imagery. Hex outlines remain visible.
+2.  **Explored (Visible but Inactive):** Areas previously cleared but not currently occupied. The map renders using the base MapTiler `streets-v2` style. H3 hexes display a slight, semi-transparent outline.
+3.  **Active (Exposed / Current Vicinity):** The immediate 200m radius around the live GPS location during a tracking session. The map renders using the base MapTiler `streets-v2` style, unmasked. Hex outlines remain visible.
 
 ## 3. Zoom Reveal & Pin Logic
 We trust MapTiler to handle standard map geography (streets, travel direction, parks). Our custom data overlay is strictly limited to Transit.
@@ -29,6 +29,13 @@ We trust MapTiler to handle standard map geography (streets, travel direction, p
 
 ## 4. Screen Framework & Definitions of Done (DoD)
 The app uses a standard, intentional session model. Screens have literal names and explicit purposes.
+
+### Screen 0: Splash / Loading Screen
+A transient loading screen to establish the app's visual identity before transitioning to the map.
+* **UI Elements:** An atmospheric fog background animation, a subtle pulsing logo, and the title 'Fog of Williamsburg'. No interactive buttons.
+* **Definition of Done:**
+    * Automatically transitions to the Main Map after a short delay (e.g. 2 seconds).
+    * Handles any necessary initial data loading or permission checks transparently.
 
 ### Screen 1: Main Map
 The primary interface for viewing progress and recording new geospatial data.
