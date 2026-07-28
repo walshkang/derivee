@@ -202,4 +202,8 @@ This archive contains detailed task prompts for completed development waves.
 4. Return a single GeoJSON `Feature<Polygon>` with `coordinates: [bboxRing, ...innerRings]` so MapLibre's native C++ earcut triangulator handles GPU hole clipping natively.
 5. Create unit tests in `src/utils/__tests__/fogGeoJSON.test.ts` verifying polygon structure and H3 string type enforcement.
 
-
+### Task Prompt: W14.6-BATTERY-HOTFIX — Battery & Bridge Optimization Hotfix
+**Goal:** A targeted optimization pass to fix critical battery drain and bridge congestion regressions introduced during ambient tracking configuration.
+1. **Objective 1 (Foreground Polling):** In `src/services/locationService.ts`, locate the `watchPositionAsync` foreground fallback and completely remove `timeInterval: 3000`. Time-based polling is strictly forbidden.
+2. **Objective 2 (Background Sync):** In `src/services/locationTask.ts`, ensure that `handleBackgroundLocationUpdate` actually updates `useExplorationStore.getState().setCurrentLocation(...)` using the most recent valid coordinate before it attempts to trigger `store.updateFogGeoJSON()`.
+3. **Objective 3 (Bridge Congestion):** Rip out the custom JS-driven `AnimatedUserLocation` component. Its use of Reanimated `withTiming` to pump `FeatureCollection` JSON over the React Native bridge at 60fps violates the core architecture rules. Replace it in `app/map.tsx` with MapLibre's native `<MapLibreGL.UserLocation visible={true} />` component to achieve zero-bridge-traffic rendering.

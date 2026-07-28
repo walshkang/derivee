@@ -115,6 +115,17 @@ export function handleBackgroundLocationUpdate(locations: LocationObject[]): str
   if (addedDistance > 0) {
     store.incrementSessionDistance(addedDistance);
   }
+
+  if (validLocations.length > 0) {
+    const lastValidLoc = validLocations[validLocations.length - 1];
+    if (lastValidLoc.coords) {
+      store.setCurrentLocation({
+        latitude: lastValidLoc.coords.latitude,
+        longitude: lastValidLoc.coords.longitude,
+      });
+    }
+  }
+
   if (store.currentLocation && totalNewHexCount > 0) {
     store.updateFogGeoJSON().catch((err) => {
       console.warn('Failed updating fog GeoJSON in background task handler:', err);

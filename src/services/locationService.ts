@@ -82,7 +82,6 @@ export async function startBackgroundTracking(): Promise<boolean> {
         {
           accuracy: Location.Accuracy.Balanced,
           distanceInterval: 10,
-          timeInterval: 3000,
         },
         (location) => {
           handleBackgroundLocationUpdate([location]);

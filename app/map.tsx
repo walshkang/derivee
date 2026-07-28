@@ -14,7 +14,6 @@ import { coordToH3 } from '@/utils/h3Utils';
 import { isWithinVicinityBubble, generateVicinityBubbleGeoJSON } from '@/utils/geoUtils';
 import { useTransitStore } from '@/store/useTransitStore';
 import { ContextualStatPill } from '@/components/ContextualStatPill';
-import { AnimatedUserLocation } from '@/components/AnimatedUserLocation';
 import * as h3 from 'h3-js';
 
 export default function MapScreen() {
@@ -220,7 +219,7 @@ export default function MapScreen() {
             }}
             minZoomLevel={10}
           />
-          <AnimatedUserLocation location={currentLocation} />
+          <MapLibreGL.UserLocation visible={true} />
 
           {/* Layer 2: Ephemeral Tile Reveal Glow */}
           {ephemeralGeoJSON && (
