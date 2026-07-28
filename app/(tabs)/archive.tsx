@@ -157,7 +157,7 @@ export default function ArchiveScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0d1117',
+    backgroundColor: '#f8fafc',
   },
   contentContainer: {
     padding: 20,
@@ -167,12 +167,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#ffffff',
+    color: '#0f172a',
     letterSpacing: 2,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#8b949e',
+    color: '#64748b',
     marginBottom: 24,
   },
   gridContainer: {
@@ -182,54 +182,54 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#161b22',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#30363d',
+    borderColor: '#e2e8f0',
   },
   statNumber: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#58a6ff',
+    color: '#0284c7',
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: '#8b949e',
+    color: '#64748b',
     fontWeight: '600',
   },
   sectionCard: {
-    backgroundColor: '#161b22',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#30363d',
+    borderColor: '#e2e8f0',
     marginBottom: 20,
   },
   sectionHeader: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#0f172a',
     marginBottom: 12,
   },
   progressBarBg: {
     height: 10,
-    backgroundColor: '#0d1117',
+    backgroundColor: '#f1f5f9',
     borderRadius: 5,
     overflow: 'hidden',
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#30363d',
+    borderColor: '#e2e8f0',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#3fb950',
+    backgroundColor: '#10b981',
     borderRadius: 5,
   },
   progressText: {
     fontSize: 13,
-    color: '#8b949e',
+    color: '#64748b',
     fontWeight: '600',
   },
   poiEmptyState: {
@@ -243,37 +243,37 @@ const styles = StyleSheet.create({
   poiEmptyTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#c9d1d9',
+    color: '#334155',
     marginBottom: 4,
   },
   poiEmptySub: {
     fontSize: 13,
-    color: '#8b949e',
+    color: '#64748b',
     textAlign: 'center',
     maxWidth: 240,
     lineHeight: 18,
   },
   resetButton: {
-    backgroundColor: '#21262d',
+    backgroundColor: '#fef2f2',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#30363d',
+    borderColor: '#fecaca',
     marginTop: 8,
   },
   resetButtonText: {
-    color: '#f85149',
+    color: '#ef4444',
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: 1,
   },
   privacyCard: {
-    backgroundColor: '#161b22',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#30363d',
+    borderColor: '#e2e8f0',
     marginBottom: 20,
   },
   privacyHeaderRow: {
@@ -288,16 +288,16 @@ const styles = StyleSheet.create({
   privacyTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#58a6ff',
+    color: '#0284c7',
   },
   privacyBody: {
     fontSize: 13,
-    color: '#8b949e',
+    color: '#64748b',
     lineHeight: 19,
     marginBottom: 14,
   },
   exportButton: {
-    backgroundColor: '#1f6feb',
+    backgroundColor: '#0f172a',
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
@@ -311,12 +311,12 @@ const styles = StyleSheet.create({
   exportStatusText: {
     marginTop: 8,
     fontSize: 12,
-    color: '#3fb950',
+    color: '#10b981',
     textAlign: 'center',
     fontWeight: '600',
   },
   importButtonPrimary: {
-    backgroundColor: '#eab308', // Warm morning sun hue
+    backgroundColor: '#fbbf24', // Warm morning sun hue
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
@@ -334,15 +334,15 @@ const styles = StyleSheet.create({
   },
   importButtonSecondary: {
     flex: 1,
-    backgroundColor: '#21262d',
+    backgroundColor: '#f8fafc',
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#30363d',
+    borderColor: '#e2e8f0',
   },
   importButtonSecondaryText: {
-    color: '#8b949e',
+    color: '#475569',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,

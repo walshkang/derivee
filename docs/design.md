@@ -1,100 +1,66 @@
-# `design.md`: Fog of Wburg
+# design.md: Fog of Wburg
 
-## 1. Core Philosophy: The Ambient Explorer
+## 1. Core Philosophy & Visual Identity
+"Fog of Wburg" is a location-based fog-of-war tracker and transit utility. It relies on standard MapTiler data for base cartography, focusing custom UI purely on fog mechanics, workout tracking, and transit information. The UI is literal, actionable, and strictly utilizes native OS paradigms.
 
-"Fog of Wburg" is not a traditional, heavy cartography app, nor is it an aggressive completionist game. It is a mindful **harness for real life**. The core objective is informative discovery.
+* **Theme:** Light Mode default. Soft whites and light grays.
+* **Typography:** OS Native (SF Pro on iOS, Inter on Android). Used strictly for clear labels and data visualization, not decoration.
+* **Actionable UI:** No ambiguous navigation. Icons must be paired with explicit text (e.g., a pill button that explicitly reads "Start Tracking").
 
-Inspired by *Zelda: Breath of the Wild* and the minimalism of modern *Google Maps*, the app relies heavily on **progressive disclosure**. Information is only offered when physically relevant or explicitly asked for. The UI gets out of the way, encouraging the user to look up at the real world.
+## 2. The 3-Tier Fog Visibility Logic
+The map utilizes a 3-tier state to separate where the user is, where they have been, and what is left to discover. Unlocked H3 hexes (Resolution 11) feature a subtle border outline to define the progression grid.
 
----
+1.  **Hidden (Unexplored):** A high-blur, translucent dark mask covering the map. No base map details or pins are visible beneath it.
+2.  **Explored (Visible but Inactive):** Areas previously cleared but not currently occupied. The map renders in desaturated (grayscale) satellite imagery. H3 hexes display a slight, semi-transparent outline.
+3.  **Active (Exposed / Current Vicinity):** The immediate 200m radius around the live GPS location during a tracking session. The map renders in full-color, vibrant satellite imagery. Hex outlines remain visible.
 
-## 2. Visual Identity
+## 3. Zoom Reveal & Pin Logic
+We trust MapTiler to handle standard map geography (streets, travel direction, parks). Our custom data overlay is strictly limited to Transit.
 
-The aesthetic abandons dark, rigid, parchment-style mapping in favor of a fluid, airy, and native modern mobile experience.
+* **Allowed Custom Pins:** Subway Entrances and Bus Stops.
 
-* **Theme:** Light Mode default. The app should feel like a clear morning.
-* **Color Palette:** Soft whites, light grays, and diffuse frosted-glass translucency (utilizing native OS blurring like Expo's `UltraThinMaterial`).
-* **Typography:** Clean, modern geometric sans-serif (e.g., *SF Pro* on iOS, *Inter* on Android). Fonts are used strictly for high-legibility data visualization, never for heavy UI framing.
-* **UI Layout:** The map *is* the UI. Buttons and stats float gently over the map, utilizing high negative space. Elements remain practically invisible until needed.
+### Zoom Level Framework
+| Zoom Level | Map Focus | Visible Elements |
+| :--- | :--- | :--- |
+| **0 – 11** | City / Region | Fog layer dominates. Base map geography is visible. No pins or heavy text. |
+| **12 – 14** | Neighborhood | Unlocked hex outlines appear. Major arterial roads and neighborhood names render via MapTiler. |
+| **15 – 16** | Street Level | MapTiler street names and travel directions fade in. Subway pins become visible in Active and Explored zones. |
+| **17+** | Granular Detail | Bus stop pins fade in. Building footprints and exact street geometries are fully visible in exposed areas. |
 
----
+## 4. Screen Framework & Definitions of Done (DoD)
+The app uses a standard, intentional session model. Screens have literal names and explicit purposes.
 
-## 3. Map Layers & The "Cloud" Mechanic
+### Screen 1: Main Map
+The primary interface for viewing progress and recording new geospatial data.
+* **UI Elements:** Edge-to-edge MapLibre map. A prominent pill-shaped floating button at the bottom reading "Start Tracking". Top-bar text buttons for "History" (top-left) and "Settings" (top-right).
+* **Definition of Done:**
+    * MapTiler base layer renders successfully.
+    * The 3-tier fog logic correctly masks the map based on the user's SQLite database of unlocked hexes.
+    * Subtle hex outlines render exclusively inside Explored and Active zones.
+    * Tapping "Start Tracking" initiates background GPS polling, toggles the button text to "Stop Tracking", and actively unlocks new hexes in real-time.
 
-The "fog of war" is no longer a punishing binary blackout; it utilizes a volumetric, 3-Tier visibility model (Unexplored, Explored, Visible) that sparks curiosity while maintaining a pristine map.
+### Screen 2: Transit Details (Bottom Sheet)
+A utility view that appears only when interacting with a transit pin.
+* **UI Elements:** A native bottom sheet sliding up over the map (utilizing standard native blurring). Displays the station/stop name and a list of upcoming departures.
+* **Definition of Done:**
+    * Sheet triggers instantly upon tapping a Subway or Bus pin.
+    * Real-time GTFS countdowns (e.g., "3 min", "8 min") populate accurately for the selected stop.
+    * The sheet can be dismissed by swiping down or tapping the map outside the modal.
 
-### The Layer Stack (Bottom to Top)
+### Screen 3: History & Uploads
+A straightforward list of past activity and the interface for importing historical `.gpx` and `.fit` files locally.
+* **UI Elements:** A full-screen list view. A prominent "Upload Previous Workouts" button at the top. Top-level stats showing total hexes cleared. A chronological list of past tracking sessions and uploaded routes.
+* **Definition of Done:**
+    * Displays a summarized metric of total area/hexes unlocked.
+    * Allows the user to select local files via `expo-document-picker`.
+    * **Processing Constraints (Crucial for JS Thread):** Uses `fast-xml-parser` (for GPX) or a lightweight FIT decoder to parse files locally. The parsing loop *must* be chunked (e.g., using `setTimeout` or `requestAnimationFrame` every 1,000 points) to prevent UI freezing. Coordinate arrays must be downsampled (e.g., checking >10m deltas) before passing to `h3-js`.
+    * Deduped hex arrays are saved using bulk/batch SQLite inserts.
+    * Processing an upload successfully updates the main map's Explored fog state.
+    * Tapping a past session list item highlights that specific route path on the map.
 
-1. **The Explored Base:** High-resolution satellite imagery permanently desaturated (grayscale) and dimmed. This layer represents areas the user has previously cleared but is not currently occupying.
-2. **The Visible Base:** Full-color, vibrant satellite imagery, revealed strictly inside the user's active, reference-counted line of sight.
-3. **The Sub-Context (The Tease):** Faint vectors of major geographic arteries—coastlines, bridges, and primary arterial roads. Rendered with low opacity and **zero text labels**. This provides a subconscious lure to explore.
-4. **The Cloud Layer (The Fog):** A regional mask (pitch black where Unexplored) rendered as a soft, translucent layer with a high blur radius, feeling diffuse and 3D.
-5. **The Holes (The Cleared Path):** Unlocked H3 hexes (both Explored and Visible) punch through the Cloud Layer, revealing the pristine bases and sub-context below. MapLibre's `fill-opacity-transition` ensures new holes dissolve smoothly over 300ms rather than instantly popping into view.
-
----
-
-## 4. The Vicinity Bubble (Dynamic Context)
-
-To ensure the map never becomes a cluttered utility clone, detailed geospatial data only exists precisely where the user is physically standing.
-
-* **The Active Radius:** A tight physical radius (e.g., 200 meters) anchored to the user's live GPS ping.
-* **Progressive Disclosure:** Inside this bubble, crisp vector data appears: street names, unbranded geometric nodes for transit stops, and bike-share racks.
-* **Pristine History:** When the user pans the camera away from their live location to view an area cleared weeks ago, they see only clean satellite terrain. Heavy map data is strictly localized to the user's current physical presence.
-
----
-
-## 5. Interaction Model: Ghost POIs
-
-We do not use permanent map pins for Points of Interest (POIs) or historical landmarks, preserving a pristine visual state.
-
-* **The Lure:** Inside the fog, an unexplored POI may emit a soft, diffuse glow, providing a nameless target.
-* **The Ghost (Cleared State):** Once a hex is unlocked, the POI becomes completely invisible.
-* **The Reveal:** If a user is physically standing inside that cleared hex and intentionally taps their location, a clean bottom-sheet modal slides up, revealing the location's history or utility.
-
----
-
-## 6. Transit Integration (The Naver Maps Approach)
-
-Transit nodes (subway entrances, bus stops) are integrated as Ghost POIs. When a user taps a minimalist transit node inside their Vicinity Bubble, the app pulls from raw GTFS feeds to provide an elite, commuter-grade tool.
-
-### The Transit Bottom-Sheet
-
-* **Live Arrivals:** Crisp, bold typography displaying real-time countdowns (e.g., "3 min", "8 min") decoded directly from the transit authority's GTFS-RT Protocol Buffers.
-* **Route Previews:** A dynamic, colored vector line traces the vehicle's upcoming path onto the map for instant spatial context.
-* **Service Alerts:** Subtle, highly visible text warnings for reroutes or delays.
-* **Historical Reliability (Sparklines):** A small, elegant sparkline chart or text summary showing average headway and historical arrival reliability over the past 7 days (powered by The Observer: a custom Go daemon that generates lightweight Zstandard-compressed SQLite nightly builds).
-
----
-
-## 7. Core User Flows & Screens
-
-Because "The map *is* the UI", we eliminate heavy HUDs, intrusive gamified modals, and session-based "Start/Stop" buttons. The app is designed to open instantly to ambient utility.
-
-### Screen 0: The Dissolve (Splash Screen)
-* **Visuals:** The app opens to a completely frosted, blurred screen (representing the Cloud layer). 
-* **Animation:** The frost fluidly dissolves or "wipes" away, centering smoothly onto the user's live physical location and their crisp Vicinity Bubble.
-
-### Screen 1: The Ambient View (Main Map)
-* **Visuals:** Full-screen edge-to-edge map. No heavy headers or footers. The frosted Cloud layer covers everything outside the user's 200m Vicinity Bubble (and any previously cleared history).
-* **Controls:** 
-  * A floating, minimalist "Locate Me" FAB (Floating Action Button).
-  * A subtle, floating Profile/Archive icon (top corner).
-  * A subtle Settings icon.
-* **Absence of HUD:** No aggressive "Distance Traveled" or "Time Elapsed" widgets covering the screen. It is just you and the geography. 
-
-### Screen 2: The Reveal (Bottom Sheet)
-* **Trigger:** The user taps their current location when standing on a Ghost POI or Transit Node.
-* **Visuals:** A clean, native iOS/Android bottom-sheet slides up over the bottom third of the map with a frosted glass backdrop (`UltraThinMaterial`).
-* **Content:** Real-time transit countdowns (Naver Maps style) or historical lore about the unlocked Ghost POI.
-* **Interaction:** Swiping down instantly dismisses it, returning the user to the pristine map. No clunky "Dismiss" buttons required.
-
-### Screen 3: The Archive (Profile & Memory)
-* **Trigger:** Tapping the Profile icon.
-* **Visuals:** A full-screen modal with a soft, translucent frosted background.
-* **Content:** 
-  * **Macro-Level Metrics:** Total "Area Uncovered" (measured in square kilometers or hex count) alongside a satisfying **Percentage Complete** for their current neighborhood or city (e.g., "Williamsburg: 14% Cleared"). This retains the addictive completionist hook while still feeling premium.
-  * **The Collection:** A clean, chronological list or masonry grid of discovered Ghost POIs.
-
-### Screen 4: Preferences (Settings)
-* **Visuals:** Clean, native list UI.
-* **Content:** Toggles for the Transit Layer, Apple HealthKit/Fitness sync, Background Location permissions, and perhaps a slider to adjust the opacity of the "Cloud" layer.
+### Screen 4: Settings
+Standard application preferences and account management.
+* **UI Elements:** A standard native list grouping toggles and permissions.
+* **Definition of Done:**
+    * Includes functional toggles for Background Location permissions and Push Notifications.
+    * Includes a destructive button to clear local cache/data or reset the map/SQLite database entirely.

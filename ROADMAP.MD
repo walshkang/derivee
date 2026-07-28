@@ -28,9 +28,10 @@ This document is the single source of truth for all planned development waves.
 | **9** | **W9-OBSERVER** | **Headless Observer Tool & CDN Handoff** | **M** | ✅ Done |
 | **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | ✅ Done |
 | **11** | **W11-TIMETABLE** | **Standalone Transit App (Web/Spinoff) & Headway Matrix** | **L** | ✅ Done |
-| **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA** | **L** | Planned |
-| **13** | **W13-FOG-TIERS** | **3-Tier Fog State & Reference Counting** | **M** | Planned |
-| **13** | **W13-FOG-STYLE** | **MapLibre Dual-Layer & Temporal Interpolation** | **S** | Planned |
+| **11.5** | **W11.5-MVP-POLISH** | **Light Mode UI Refactor & MVP Launch** | **S** | ✅ Done |
+| **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA (Post-MVP)** | **L** | Planned |
+| **13** | **W13-FOG-TIERS** | **3-Tier Fog State & Reference Counting (Post-MVP)** | **M** | Planned |
+| **13** | **W13-FOG-STYLE** | **MapLibre Dual-Layer & Temporal Interpolation (Post-MVP)** | **S** | Planned |
 
 ---
 
@@ -94,7 +95,12 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 12 — Multi-City Expansion: Boston (W12-BOSTON)
+## Wave 11.5 — MVP Launch & UI Polish (✅ Completed)
+*Task W11.5-MVP-POLISH shipped. UI converted to Light Mode default.*
+
+---
+
+## Wave 12 — Multi-City Expansion: Boston (W12-BOSTON) [Post-MVP]
 
 * **The Goal:** Prove the scalability of the architecture by expanding transit coverage to the MBTA system.
 * **Agent Directives:**
@@ -104,7 +110,7 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 13 — Advanced MapLibre Rendering & Fog Enhancements (W13-FOG)
+## Wave 13 — Advanced MapLibre Rendering & Fog Enhancements (W13-FOG) [Post-MVP]
 
 * **The Goal:** Implement the optimized 3-Tier Fog of War system using native MapLibre capabilities and Positional Delta processing.
 * **Agent Directives:**
