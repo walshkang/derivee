@@ -4,6 +4,7 @@ import {
   insertUnlockedHexes,
   getAllUnlockedHexes,
   getExploredHexCount,
+  clearExploredHexes,
   closeDatabase,
 } from '../database';
 import { open } from '@op-engineering/op-sqlite';
@@ -96,6 +97,17 @@ describe('Local Persistence Layer (op-sqlite JSI)', () => {
       expect(unlocked).toHaveLength(1);
       expect(unlocked[0]).toBe('8b2a100d213fff');
       expect(typeof unlocked[0]).toBe('string');
+    });
+
+    it('clears all explored hexes when clearExploredHexes is called', () => {
+      initDatabase('test_fog.db');
+      insertUnlockedHexes(['8b2a100d213fff', '8b2a100d217fff']);
+      expect(getExploredHexCount()).toBe(2);
+
+      clearExploredHexes();
+
+      expect(getExploredHexCount()).toBe(0);
+      expect(getAllUnlockedHexes()).toEqual([]);
     });
 
     it('handles empty batch insertion gracefully without throwing errors', () => {

@@ -75,6 +75,7 @@ export default function SplashScreen() {
     const dbInit = async () => {
       try {
         await attachNeighborhoodDB();
+        useExplorationStore.getState().loadUnlockedHexes();
       } catch (e) {
         console.warn('Failed to attach neighborhood db:', e);
       }

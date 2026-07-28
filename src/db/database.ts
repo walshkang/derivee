@@ -192,6 +192,15 @@ export function getExploredHexCount(): number {
 }
 
 /**
+ * Clears all explored hexes and active visibility records from the local SQLite database.
+ */
+export function clearExploredHexes(): void {
+  const db = getDb();
+  db.execute('DELETE FROM explored_hexes;');
+  db.execute('DELETE FROM active_visibility;');
+}
+
+/**
  * Closes the active database connection and resets the singleton instance.
  */
 export function closeDatabase(): void {

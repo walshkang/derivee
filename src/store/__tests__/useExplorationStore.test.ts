@@ -1,4 +1,5 @@
 import { useExplorationStore } from '../useExplorationStore';
+import { insertUnlockedHexes, getAllUnlockedHexes } from '../../db/database';
 
 describe('useExplorationStore', () => {
   beforeEach(() => {
@@ -10,6 +11,19 @@ describe('useExplorationStore', () => {
     expect(state.isExploring).toBe(false);
     expect(state.currentLocation).toBeNull();
     expect(state.unlockedHexes).toEqual([]);
+  });
+
+  it('should load unlocked hexes from SQLite database into store state using loadUnlockedHexes()', () => {
+    const persistedHexes = ['8b2a100d213fff', '8b2a100d213ffe'];
+    insertUnlockedHexes(persistedHexes);
+
+    // Initial state before load
+    expect(useExplorationStore.getState().unlockedHexes).toEqual([]);
+
+    // Hydrate store from DB
+    useExplorationStore.getState().loadUnlockedHexes();
+
+    expect(useExplorationStore.getState().unlockedHexes).toEqual(persistedHexes);
   });
 
   it('should toggle isExploring state', () => {
@@ -70,7 +84,8 @@ describe('useExplorationStore', () => {
     });
   });
 
-  it('should reset store state', () => {
+  it('should reset store state and clear SQLite hexes', () => {
+    insertUnlockedHexes(['8b2a100d213fff']);
     const store = useExplorationStore.getState();
     store.setIsExploring(true);
     store.setCurrentLocation({ latitude: 40.7128, longitude: -73.956 });
@@ -82,5 +97,6 @@ describe('useExplorationStore', () => {
     expect(resetState.isExploring).toBe(false);
     expect(resetState.currentLocation).toBeNull();
     expect(resetState.unlockedHexes).toEqual([]);
+    expect(getAllUnlockedHexes()).toEqual([]);
   });
 });

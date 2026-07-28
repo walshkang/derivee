@@ -7,7 +7,7 @@ export interface Location {
 
 import type { Feature, Polygon, MultiPolygon, LineString } from 'geojson';
 import { generateFogGeoJSON } from '../utils/fogGeoJSON';
-import { NeighborhoodStat, getCurrentNeighborhoodStat } from '../db/database';
+import { NeighborhoodStat, getCurrentNeighborhoodStat, getAllUnlockedHexes, clearExploredHexes } from '../db/database';
 import { coordToH3 } from '../utils/h3Utils';
 
 export interface ExplorationState {
@@ -49,6 +49,7 @@ export interface ExplorationState {
   // Actions
   setIsExploring: (isExploring: boolean) => void;
   setCurrentLocation: (location: Location | null) => void;
+  loadUnlockedHexes: () => void;
   setUnlockedHexes: (hexes: string[]) => void;
   setVisibleHexes: (hexes: string[]) => void;
   addUnlockedHexes: (hexes: string[]) => number;
@@ -78,6 +79,16 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   setIsExploring: (isExploring: boolean) => set({ isExploring }),
 
   setCurrentLocation: (location: Location | null) => set({ currentLocation: location }),
+
+  loadUnlockedHexes: () => {
+    try {
+      const hexes = getAllUnlockedHexes();
+      const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string');
+      set({ unlockedHexes: validHexes });
+    } catch (e) {
+      console.warn('Failed to load unlocked hexes from database:', e);
+    }
+  },
 
   setUnlockedHexes: (hexes: string[]) => {
     // Sanity check to guarantee string types (AGENTS.md guardrail)
@@ -138,7 +149,12 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
     });
   },
 
-  resetExploration: () =>
+  resetExploration: () => {
+    try {
+      clearExploredHexes();
+    } catch (e) {
+      console.warn('Failed to clear database on reset:', e);
+    }
     set({
       isExploring: false,
       currentLocation: null,
@@ -150,7 +166,8 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
       macroRevealCount: 0,
       sessionUnlockedCount: 0,
       sessionDistanceMeters: 0,
-    }),
+    });
+  },
 
   triggerMacroReveal: (count: number) =>
     set({

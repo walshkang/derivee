@@ -17,7 +17,7 @@ import { ContextualStatPill } from '@/components/ContextualStatPill';
 
 export default function MapScreen() {
   const router = useRouter();
-  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal, selectedHistoricalRoute, setSelectedHistoricalRoute, refreshCurrentNeighborhoodStat } =
+  const { isExploring, currentLocation, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal, selectedHistoricalRoute, setSelectedHistoricalRoute, refreshCurrentNeighborhoodStat, loadUnlockedHexes } =
     useExplorationStore();
   const { startTracking } = useBackgroundLocation();
   const { loadPOIs } = usePOIStore();
@@ -60,8 +60,9 @@ export default function MapScreen() {
   });
 
   useEffect(() => {
+    loadUnlockedHexes();
     loadPOIs();
-  }, [loadPOIs]);
+  }, [loadUnlockedHexes, loadPOIs]);
 
   useEffect(() => {
     // Ambient Tracking: Automatically start tracking when map mounts

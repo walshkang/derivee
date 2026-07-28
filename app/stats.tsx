@@ -199,7 +199,6 @@ export default function ArchiveScreen() {
           <View style={styles.minimapContainer} pointerEvents="none">
             <MapLibreGL.MapView
               style={StyleSheet.absoluteFillObject}
-              pointerEvents="none"
               mapStyle={`https://api.maptiler.com/maps/streets-v2/style.json?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`}
               logoEnabled={false}
               attributionEnabled={false}

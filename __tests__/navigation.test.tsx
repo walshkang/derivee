@@ -1,8 +1,8 @@
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import SplashScreen from '../app/index';
-import MapScreen from '../app/(tabs)/map';
-import ArchiveScreen from '../app/(tabs)/archive';
+import MapScreen from '../app/map';
+import ArchiveScreen from '../app/stats';
 import { useExplorationStore } from '@/store/useExplorationStore';
 
 // Mock expo-router
