@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Alert, TouchableOpacity, InteractionManager } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
 import { useExplorationStore } from '@/store/useExplorationStore';
 import { PRIVACY_STATEMENT, exportSpatialDataJSON } from '@/utils/privacyExporter';
 import * as DocumentPicker from 'expo-document-picker';
@@ -25,32 +24,17 @@ export default function ArchiveScreen() {
   const [sessions, setSessions] = useState<TrackingSession[]>([]);
   const [neighborhoodStats, setNeighborhoodStats] = useState<NeighborhoodStat[]>([]);
   const [isNYCExpanded, setIsNYCExpanded] = useState(false);
-  const [deferredNeighborhoods, setDeferredNeighborhoods] = useState<NeighborhoodStat[]>([]);
   const router = useRouter();
 
-  useEffect(() => {
-    let interactionHandle: { cancel: () => void } | null = null;
-    
-    if (isNYCExpanded) {
-      interactionHandle = InteractionManager.runAfterInteractions(() => {
-        const sorted = [...neighborhoodStats]
-          .filter(n => n.explored_hexes > 0)
-          .sort((a, b) => {
-            const aPct = a.total_hexes > 0 ? (a.explored_hexes / a.total_hexes) : 0;
-            const bPct = b.total_hexes > 0 ? (b.explored_hexes / b.total_hexes) : 0;
-            return bPct - aPct;
-          });
-        setDeferredNeighborhoods(sorted);
+  const sortedNeighborhoods = React.useMemo(() => {
+    if (!isNYCExpanded) return [];
+    return [...neighborhoodStats]
+      .filter(n => n.explored_hexes > 0)
+      .sort((a, b) => {
+        const aPct = a.total_hexes > 0 ? (a.explored_hexes / a.total_hexes) : 0;
+        const bPct = b.total_hexes > 0 ? (b.explored_hexes / b.total_hexes) : 0;
+        return bPct - aPct;
       });
-    } else {
-      setDeferredNeighborhoods([]);
-    }
-    
-    return () => {
-      if (interactionHandle) {
-        interactionHandle.cancel();
-      }
-    };
   }, [isNYCExpanded, neighborhoodStats]);
 
   useEffect(() => {
@@ -229,26 +213,24 @@ export default function ArchiveScreen() {
 
 
           {/* Neighborhood Leaderboard Dropdown */}
-          <View style={[styles.neighborhoodList, { display: isNYCExpanded ? 'flex' : 'none' }]}>
-            <Text style={styles.neighborhoodHeader}>Neighborhoods</Text>
-            
-            {!hasAnyNeighborhoods ? (
-              <View style={styles.poiEmptyState}>
-                <Text style={styles.poiEmptyTitle}>No Neighborhoods Explored</Text>
-                <Text style={styles.poiEmptySub}>Walk around to unlock your first NYC neighborhood.</Text>
-              </View>
-            ) : (
-              <View style={{ height: 400, width: '100%' }}>
-                <FlashList
-                  data={deferredNeighborhoods}
-                  renderItem={({ item, index }) => <NeighborhoodItem item={item as NeighborhoodStat} index={index} />}
-                  estimatedItemSize={48}
-                  nestedScrollEnabled={true}
-                  keyExtractor={(item) => (item as NeighborhoodStat).id}
-                />
-              </View>
-            )}
-          </View>
+          {isNYCExpanded && (
+            <View style={styles.neighborhoodList}>
+              <Text style={styles.neighborhoodHeader}>Neighborhoods</Text>
+              
+              {!hasAnyNeighborhoods ? (
+                <View style={styles.poiEmptyState}>
+                  <Text style={styles.poiEmptyTitle}>No Neighborhoods Explored</Text>
+                  <Text style={styles.poiEmptySub}>Walk around to unlock your first NYC neighborhood.</Text>
+                </View>
+              ) : (
+                <View style={{ width: '100%', paddingBottom: 10 }}>
+                  {sortedNeighborhoods.map((item, index) => (
+                    <NeighborhoodItem key={item.id} item={item} index={index} />
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </View>
 

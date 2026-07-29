@@ -12,6 +12,7 @@ import { TransitBottomSheet } from '@/components/TransitBottomSheet';
 import { getPOIByH3Index, POI } from '@/db/poiQueries';
 import { coordToH3 } from '@/utils/h3Utils';
 import { isWithinVicinityBubble, generateVicinityBubbleGeoJSON } from '@/utils/geoUtils';
+import { generateFogGeoJSON } from '@/utils/fogGeoJSON';
 import { useTransitStore } from '@/store/useTransitStore';
 import { ContextualStatPill } from '@/components/ContextualStatPill';
 import * as h3 from 'h3-js';
@@ -30,6 +31,7 @@ export default function MapScreen() {
   const [is3DMode, setIs3DMode] = useState<boolean>(false);
   const [selectedPOI, setSelectedPOI] = useState<POI | null>(null);
   const [isCameraTracking, setIsCameraTracking] = useState<boolean>(true);
+  const [initialCenter, setInitialCenter] = useState<{lat: number, lng: number} | null>(null);
 
   // Wave 10: Morning Sun Reveal Animation Setup
   const { width, height } = useWindowDimensions();
@@ -84,6 +86,19 @@ export default function MapScreen() {
     return generateVicinityBubbleGeoJSON(currentLocation.latitude, currentLocation.longitude, 200);
   }, [currentLocation?.latitude, currentLocation?.longitude]);
 
+  // Capture initial center for the 50km fog box
+  useEffect(() => {
+    if (currentLocation && !initialCenter) {
+      setInitialCenter({ lat: currentLocation.latitude, lng: currentLocation.longitude });
+    }
+  }, [currentLocation, initialCenter]);
+
+  // Generate the Fog geojson on JS thread
+  const fogGeoJSON = useMemo(() => {
+    if (!initialCenter) return null;
+    return generateFogGeoJSON(initialCenter.lat, initialCenter.lng, unlockedHexes);
+  }, [initialCenter, unlockedHexes]);
+
   // Ephemeral GeoJSON FeatureCollection for Layer 2 Glow
   const ephemeralGeoJSON = useMemo(() => {
     if (activeBufferHexes.length === 0) return null;
@@ -122,14 +137,6 @@ export default function MapScreen() {
 
   const handleRecenterCamera = () => {
     setIsCameraTracking(true);
-    if (currentLocation && cameraRef.current) {
-      cameraRef.current.setCamera({
-        centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
-        zoomLevel: 15.5,
-        pitch: 0,
-        animationDuration: 800,
-      });
-    }
   };
 
 
@@ -208,7 +215,13 @@ export default function MapScreen() {
         >
           <MapLibreGL.Camera
             ref={cameraRef}
-            centerCoordinate={currentLocation && isCameraTracking ? [currentLocation.longitude, currentLocation.latitude] : undefined}
+            followUserLocation={isCameraTracking}
+            followUserMode="normal"
+            onUserTrackingModeChange={(e) => {
+              if (!e.nativeEvent.payload.followUserLocation && isCameraTracking) {
+                setIsCameraTracking(false);
+              }
+            }}
             animationMode="moveTo"
             animationDuration={1000}
             defaultSettings={{
@@ -240,43 +253,31 @@ export default function MapScreen() {
             </MapLibreGL.ShapeSource>
           )}
 
-          {/* Layer 3 & 4: Soft Translucent Cloud Fog Mask with Unlocked Hex Holes (Vector Tiles) */}
-          <MapLibreGL.VectorSource
-            id="fog-source"
-            url="mbtiles://fog-grid.mbtiles" // Fallback: pmtiles://https://fog-of-wburg-cdn.r2.dev/fog-grid.pmtiles
-          >
-            {/* W13-FOG-2D: Flat Fog Mask */}
-            <MapLibreGL.FillLayer
-              id="fog-layer"
-              sourceLayerID="h3_base_grid"
-              style={{
-                fillColor: '#0f172a',
-                fillOpacity: [
-                  'match',
-                  ['get', 'id'],
-                  unlockedHexes.length > 0 ? unlockedHexes : ['none'],
-                  0.0,
-                  0.9
-                ],
-              }}
-            />
-            {/* Subtle Hex Outlines for Unlocked Hexes */}
-            <MapLibreGL.LineLayer
-              id="fog-hex-outlines"
-              sourceLayerID="h3_base_grid"
-              style={{
-                lineColor: '#64748b',
-                lineWidth: 2,
-                lineOpacity: [
-                  'match',
-                  ['get', 'id'],
-                  unlockedHexes.length > 0 ? unlockedHexes : ['none'],
-                  0.6,
-                  0.0
-                ],
-              }}
-            />
-          </MapLibreGL.VectorSource>
+          {/* Layer 3 & 4: Soft Translucent Cloud Fog Mask with Unlocked Hex Holes */}
+          {fogGeoJSON && (
+            <MapLibreGL.ShapeSource
+              id="fog-source"
+              shape={fogGeoJSON}
+            >
+              {/* W13-FOG-2D: Flat Fog Mask */}
+              <MapLibreGL.FillLayer
+                id="fog-layer"
+                style={{
+                  fillColor: '#0b0f19',
+                  fillOpacity: 0.85,
+                }}
+              />
+              {/* Subtle Hex Outlines for Unlocked Hexes */}
+              <MapLibreGL.LineLayer
+                id="fog-hex-outlines"
+                style={{
+                  lineColor: '#64748b',
+                  lineWidth: 2,
+                  lineOpacity: 0.6,
+                }}
+              />
+            </MapLibreGL.ShapeSource>
+          )}
 
 
 
