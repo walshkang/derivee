@@ -45,6 +45,7 @@ When configuring `@maplibre/maplibre-react-native`, you must strictly adhere to 
 * **JSI Updates**: **Always** enable `withSynchronousUpdate(true)` on the `ShapeSource` to bypass JSON stringification penalties over the React Native bridge.
 * **Positional Delta Processing**: Maintain a local memory cache of visible H3 indexes. Only recalculate multi-polygons when the hex delta is non-empty.
 * **Geometry Worker**: Never push raw arrays of un-merged H3 holes. Periodic workers must execute `h3.cellsToMultiPolygon` to dissolve internal vertices for MapLibre's `earcut.hpp` triangulator.
+* **UI Thread Protection**: **Never** execute heavy geometry generation (like looping over 10,000+ hexes to build GeoJSON) on the main JS thread during React renders (e.g., inside `useMemo` on secondary screens like Stats). Stringifying massive GeoJSON payloads over the React Native bridge blocks the thread and freezes all UI interactions. Secondary screens should use lightweight representations or pre-computed summaries rather than full-city geometries.
 
 ---
 
