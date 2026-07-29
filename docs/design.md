@@ -1,105 +1,373 @@
-# design.md: Fog of Wburg
+# design.md — Fog of Wburg: UI Blueprint & Screen Specification
+
+This document is the **single authoritative reference** for all visual design, screen hierarchy, interaction patterns, and UI acceptance criteria. If a screen, component, or animation is not defined here, an agent **must not** invent it.
+
+For backend data flows, native bridging, and library constraints, see [architecture.md](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/docs/architecture.md).
+
+---
 
 ## 1. Core Philosophy & Visual Identity
-"Fog of Wburg" is a location-based fog-of-war tracker and transit utility. It relies on standard MapTiler data for base cartography, focusing custom UI purely on fog mechanics, workout tracking, and transit information. The UI is literal, actionable, and strictly utilizes native OS paradigms.
 
-* **Theme:** Light Mode default. Soft whites and light grays.
-* **Typography:** OS Native (SF Pro on iOS, Inter on Android). Used strictly for clear labels and data visualization, not decoration.
-* **Actionable UI:** No ambiguous navigation. Icons must be paired with explicit text.
+"Fog of Wburg" is an ambient, location-based fog-of-war explorer and transit utility. The map **is** the UI. All overlays, sheets, and controls exist only to serve the map — never to obscure or compete with it.
+
+* **Theme:** Light Mode default. Soft whites (`#FAFAFA`), warm grays (`#E8E8E8`), and Apple's native `UltraThinMaterial` blur for floating elements.
+* **Typography:** OS Native only — SF Pro (iOS), Inter (Android). Used strictly for clear data labels and list content. **No serif fonts. No decorative type.**
+* **Iconography:** Geometric, high negative-space SVG glyphs. No text inside icons. No branded teardrop pins.
+* **Interaction Model:** All touchable surfaces use `react-native-gesture-handler` exclusively (never standard React Native `Touchable*` components) to guarantee seamless coexistence with MapLibre pan/pinch gestures and `@gorhom/bottom-sheet` sheet gestures.
+
+---
 
 ## 2. The 3-Tier Fog Visibility Logic
-The map utilizes a 3-tier state to separate where the user is, where they have been, and what is left to discover. Unlocked H3 hexes (Resolution 11) feature a subtle border outline to define the progression grid.
 
-1.  **Hidden (Unexplored):** A high-blur, translucent dark mask covering the map. No base map details or pins are visible beneath it.
-2.  **Explored (Visible but Inactive):** Areas previously cleared but not currently occupied. The map renders using the base MapTiler `streets-v2` style. H3 hexes display a slight, semi-transparent outline.
-3.  **Active (Exposed / Current Vicinity):** The immediate 200m radius around the live GPS location during a tracking session. The map renders using the base MapTiler `streets-v2` style, unmasked. Hex outlines remain visible.
+The map uses a 3-tier state to separate where the user **is**, where they **have been**, and what remains **hidden**. Unlocked H3 hexes (Resolution 11) feature a subtle border outline to define the progression grid.
 
-## 3. Zoom Reveal & Pin Logic
-We trust MapTiler to handle standard map geography (streets, travel direction, parks). Our custom data overlay is strictly limited to Transit.
+| Tier | Name | Visual Treatment |
+|:---|:---|:---|
+| **Hidden** | Unexplored | A high-blur, translucent dark mask (`fill-opacity-transition: { duration: 300 }`). No base map details, pins, or labels visible beneath. |
+| **Explored** | Cleared but Inactive | Base MapTiler `streets-v2` style rendered through a permanently dimmed raster layer (`rasterSaturation: -1.0`). H3 hex outlines display as faint, semi-transparent borders. **No POI markers or labels.** |
+| **Active** | Current Vicinity (200m) | Full-color, unmasked satellite/street rendering within a 200m radius of the user's live GPS position. Street names, building footprints, and Ghost POI nodes render here and **only** here. |
 
-* **Allowed Custom Pins:** Subway Entrances and Bus Stops.
+> **Strict Rule:** If a map element (pin, label, text, POI) is outside the 200m Active Vicinity Bubble, it **must** be hidden. No exceptions.
 
-### Zoom Level Framework
-| Zoom Level | Map Focus | Visible Elements |
-| :--- | :--- | :--- |
-| **0 – 11** | City / Region | Fog layer dominates. Base map geography is visible. No pins or heavy text. |
-| **12 – 14** | Neighborhood | Unlocked hex outlines appear. Major arterial roads and neighborhood names render via MapTiler. |
-| **15 – 16** | Street Level | MapTiler street names and travel directions fade in. Subway pins become visible in Active and Explored zones. |
-| **17+** | Granular Detail | Bus stop pins fade in. Building footprints and exact street geometries are fully visible in exposed areas. |
+### 2.1 Zoom Level Framework
 
-## 4. Screen Framework & Definitions of Done (DoD)
-The app uses a standard, intentional session model. Screens have literal names and explicit purposes.
+Standard cartographic data (streets, parks, travel direction) is handled entirely by MapTiler. Custom data overlays are **strictly limited** to Transit nodes (Subway Entrances and Bus Stops).
 
-### Screen 0: Splash / Loading Screen
-A transient loading screen to establish the app's visual identity before transitioning to the map.
-* **UI Elements:** An atmospheric fog background animation, a subtle pulsing logo, and the title 'Fog of Williamsburg'. No interactive buttons.
-* **Definition of Done:**
-    * Automatically transitions to the Main Map after a short delay (e.g. 2 seconds).
-    * Handles any necessary initial data loading or permission checks transparently.
+| Zoom Level | Map Focus | Visible Custom Elements |
+|:---|:---|:---|
+| **0–11** | City / Region | Fog layer dominates. Base map geography visible. No custom pins or text. |
+| **12–14** | Neighborhood | Unlocked hex outlines appear. Major arterial roads and neighborhood names render via MapTiler. |
+| **15–16** | Street Level | MapTiler street names and travel directions fade in. Subway Ghost POI nodes become visible within Active and Explored zones. |
+| **17+** | Granular Detail | Bus stop Ghost POI nodes fade in. Building footprints and exact street geometries fully visible in exposed areas. |
 
-### Screen 1: Main Map
-The primary interface for viewing progress and recording new geospatial data.
-* **UI Elements:** Edge-to-edge MapLibre map. Top-bar text buttons for "History" (top-left) and "Settings" (top-right).
+### 2.2 The 6-Layer Rendering Stack
 
-**UI Element: The Contextual Stat Pill (Progressive Disclosure)**
-To maintain the pristine, map-first aesthetic, exploration stats are NOT displayed in a permanent, heavy dashboard. Instead, they utilize a lightweight, floating "pill" overlaid on the map.
+The MapLibre layer stack **must** follow this exact Z-index order. See [architecture.md §8](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/docs/architecture.md) for implementation specifics.
 
-* **Location:** Top-center of the map, floating over the fog (styled with a frosted glass/blur effect).
-* **Behavior:** The pill is dynamic and context-aware based on the user's current GPS location.
-* **Content States:**
-  * *Idle / Explored Area:* When stationary or moving through already-cleared territory, it shows macro progress. (e.g., "📍 Williamsburg • 14% Explored").
-  * *Active Discovery:* When the user enters unexplored fog and begins clearing new hexes, the pill smoothly transitions to highlight real-time momentum. (e.g., "🔥 42 New Hexes Unlocked Today"). Because tracking is always ambiently on, this state triggers automatically upon new hex discovery.
+| Z-Index | Layer Name | Purpose |
+|:---|:---|:---|
+| 1 | The Explored Base | `RasterLayer` — satellite imagery permanently dimmed (`rasterSaturation: -1.0`, reduced brightness). |
+| 2 | The Visible Base | Full-color satellite `RasterLayer`, masked strictly by the user's active line-of-sight polygon. |
+| 3 | The Sub-Context | Faint vectors (major arteries, coastlines) with zero text labels. |
+| 4 | The Cloud Layer | The 50km bounding box fog polygon. Soft, translucent, high blur radius. `fill-opacity-transition: { duration: 300 }`. |
+| 5 | The Holes (DDS) | Unlocked H3 hexes (Explored + Active) filtered via MapLibre `['match']` expression on `fill-opacity`. |
+| 6 | The Vicinity Bubble | Active 200m radius rendering street names, transit nodes, and Ghost POI geometry. |
 
-* **Definition of Done (Screen 1 & Stat Pill):**
-    * MapTiler base layer renders successfully.
-    * The 3-tier fog logic correctly masks the map based on the user's SQLite database of unlocked hexes.
-    * Subtle hex outlines render exclusively inside Explored and Active zones.
-    * Tracking begins silently and ambiently upon app launch and continues tracking progress on the map at all times, even when the screen is off or the app is in the background. There is no manual 'record' or 'start' button.
-    * The stat pill uses `@react-native-community/blur` for a native iOS frosted glass background.
-    * Typography is small, native (SF Pro), and highly legible.
-    * The pill queries the local SQLite `neighborhood_stats` table to calculate the percentage `(cleared_hexes_in_poly / total_hexes_in_poly) * 100`.
-    * The stat updates performantly without locking the UI thread (debounced or updated via a React `useTransition`).
+---
 
-### Screen 2: Transit Details (Bottom Sheet)
-A utility view that appears only when interacting with a transit pin.
-* **UI Elements:** A native bottom sheet sliding up over the map (utilizing standard native blurring). Displays the station/stop name and a list of upcoming departures.
-* **Definition of Done:**
-    * Sheet triggers instantly upon tapping a Subway or Bus pin.
-    * Real-time GTFS countdowns (e.g., "3 min", "8 min") populate accurately for the selected stop.
-    * The sheet can be dismissed by swiping down or tapping the map outside the modal.
+## 3. App Screen Hierarchy & Flows
 
-### Screen 3: The Archive (Macro-Stats & History)
-This screen is the dedicated space for heavy metrics. Since the user actively navigated here, we can drop the "progressive disclosure" rules and show them their complete geographic dominance.
+The app has exactly **five** screens. If a screen is not enumerated below, the agent **must not** build it.
 
-* **UI Elements:**
-  * **The City-Wide Matrix:** A clean, horizontal scroll of cards or a grid showing top-level city completion (e.g., "New York City: 4.2% Complete").
-  * **Neighborhood Leaderboard:** A vertical, native list breaking down the user's progress by neighborhood, sorted by highest completion percentage. (e.g., "1. Williamsburg - 42%", "2. Greenpoint - 18%").
-  * **Session History:** A chronological list of past tracking sessions and uploaded `.gpx` routes, showing the specific number of hexes unlocked per session.
-  * A prominent "Upload Previous Workouts" button at the top (or accessible via this view).
+```
+┌──────────────────────────────────────────────────────────┐
+│  Screen 0: Onboarding Gate  (first launch only)          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  Hydration check → download tiles + transit delta  │  │
+│  └──────────────────┬─────────────────────────────────┘  │
+│                     │ fade out                           │
+│  ┌──────────────────▼─────────────────────────────────┐  │
+│  │  Screen 1: Ambient Map  (the core loop)            │  │
+│  │  ┌─────────────┐     ┌──────────────┐              │  │
+│  │  │ Recenter FAB│     │ Profile FAB  │──┐           │  │
+│  │  └─────────────┘     └──────────────┘  │           │  │
+│  │                                        │           │  │
+│  │  [ tap Ghost POI ] ──► Screen 2        │           │  │
+│  └────────────────────────────────────────┼───────────┘  │
+│                                           │              │
+│  ┌────────────────────────────────────────▼───────────┐  │
+│  │  Screen 3: The Archive  (Stats & GPX Upload)       │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  Screen 4: Settings  (permissions & data reset)    │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  Screen 2: Transit Reveal  (bottom sheet overlay)        │
+└──────────────────────────────────────────────────────────┘
+```
 
-* **Definition of Done:**
-    * Queries the local SQLite database grouping unlocked H3 hexes by their assigned neighborhood boundaries.
-    * Uses standard iOS native list UI (avoid heavy custom graphs; rely on clean typography and simple native progress bars).
-    * Tapping a specific neighborhood pans the background map to that neighborhood's coordinates.
-    * Allows the user to select local `.gpx` or `.fit` files via `expo-document-picker`.
-    * **Processing Constraints:** Uses `fast-xml-parser` (for GPX) or a lightweight FIT decoder. Parsing must be chunked to prevent UI freezing, coordinate arrays downsampled (>10m deltas), and deduped hexes saved via bulk SQLite inserts.
-    * Processing an upload successfully updates the main map's Explored fog state.
+---
+
+### Screen 0: The Onboarding Gate (First Launch Only)
+
+**Trigger:** User opens the app for the very first time.
+
+**State Logic:** On launch, query the local `@op-engineering/op-sqlite` database for the hydration completion flag (a row in a `meta` table). Do **not** use AsyncStorage or any async storage wrapper (per `architecture.md` library constraints).
+
+**UI Elements:**
+* A full-screen, branded loading lock screen with an atmospheric fog background animation and a subtle pulsing logo.
+* A translucent progress indicator showing download state.
+* **No interactive buttons.** No map is mounted.
+
+**Actions:**
+1. If offline: display a single-line prompt asking the user to connect to the network. Poll for connectivity; resume automatically when restored.
+2. If online: silently download the MapLibre offline tile region (50km radius centered on device location) and the `transit_delta.sqlite.zst` file from Cloudflare R2.
+3. On completion: write the hydration flag to `meta` table.
+
+**Transition:** Once hydration is complete, the lock screen fades out over 400ms, revealing Screen 1.
+
+**Definition of Done:**
+- [ ] Hydration flag is stored in op-sqlite, not AsyncStorage.
+- [ ] Offline tile region downloads successfully for the 50km bounding box.
+- [ ] Transit delta file decompresses and attaches to the local database.
+- [ ] No map is rendered until hydration is verified complete.
+- [ ] Subsequent launches skip this screen entirely (direct to Screen 1).
+
+---
+
+### Screen 1: The Ambient Map (The Core Loop)
+
+**Trigger:** Default state after onboarding. This is where the user spends 95% of their time.
+
+**UI Elements:**
+* **Edge-to-edge MapLibre map.** No tab bars, no navigation headers, no persistent HUDs.
+* **The Fog Layer:** Dark, volumetric masking polygon (see §2 3-Tier logic).
+* **The User Marker:** A native-feeling, smoothly interpolating blue pulsing dot. Must use MapLibre's built-in user location layer with custom styling — not a React component overlaid on the map.
+* **Ghost POI Nodes:** Transit beacons visible **only** within the 200m Active Vicinity Bubble. Rendered as unbranded, glowing geometric nodes (dots, diamonds) — never as traditional teardrop map pins or icons with text labels.
+* **Floating Action Buttons (FABs):** Two minimalist, translucent circular buttons floating over the map:
+  * **Recenter FAB** (bottom-right): Re-centers the camera on the user's current GPS position with a smooth 300ms ease animation.
+  * **Profile FAB** (top-right): Navigates to Screen 3 (The Archive). Styled with `UltraThinMaterial` blur and a subtle shadow.
+
+**Ambient Tracking:** Tracking begins silently and automatically via the native Swift `CLLocationManager` (Nitro `HybridTracker` module) the moment Screen 1 mounts. There is **no** manual "Start/Stop Tracking" button. The app is always tracking.
+
+**Interactions:**
+* **Tap Ghost POI:** Triggers a geospatial Point-in-Polygon (PiP) check. If the user is within physical proximity (200m), query `@op-engineering/op-sqlite` synchronously and open Screen 2 (Transit Reveal bottom sheet).
+* **Tap Recenter FAB:** Smooth camera animation to user location.
+* **Tap Profile FAB:** Navigate to Screen 3.
+* **Long-press map:** Reserved for future use. No action.
+
+**Definition of Done:**
+- [ ] MapTiler base layer renders at 60fps.
+- [ ] The 3-tier fog logic correctly masks the map based on the SQLite database of unlocked hexes.
+- [ ] Hex outlines render exclusively inside Explored and Active zones.
+- [ ] Tracking begins ambiently on mount — no start button exists anywhere.
+- [ ] Ghost POI nodes appear only within the 200m Vicinity Bubble.
+- [ ] Ghost POI nodes are geometric shapes (dots/diamonds), not teardrop pins, with zero text labels.
+- [ ] FABs use `@react-native-community/blur` for native iOS frosted glass styling.
+- [ ] FABs use `react-native-gesture-handler` for touch handling (not `TouchableOpacity`).
+- [ ] PiP check on tap correctly gates transit sheet opening to physical proximity.
+
+---
+
+### Screen 2: The Transit Reveal (Bottom Sheet)
+
+**Trigger:** User taps a Subway or Bus Ghost POI node within their 200m Vicinity Bubble.
+
+**UI Elements:**
+* A native iOS-style bottom sheet (via `@gorhom/bottom-sheet`) slides up over the map.
+* **Station/Stop Name:** Large, bold SF Pro heading.
+* **Real-Time Arrivals:** GTFS-RT countdown list (e.g., "L train → Manhattan — 3 min", "8 min").
+* **Historical Reliability Sparkline:** A compact 7-day sparkline chart showing headway reliability, queried locally from the SQLite transit delta database in < 12ms.
+
+**Map Interaction (Ephemeral Route Line):**
+When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top** of the MapLibre layer stack, tracing the entire transit route across the map — cutting visually through the fog. This line:
+* Uses a vibrant, semi-transparent stroke matching the transit line's official color (e.g., MTA L train gray).
+* Animates in with a 200ms fade.
+* Is **immediately unmounted** when the sheet is dismissed — no persistent route artifacts.
+
+**Dismissal:**
+* Swiping the sheet down.
+* Tapping the map outside the sheet.
+* Both actions instantly unmount the ephemeral route line, snapping the map back to the localized 200m view.
+
+**Definition of Done:**
+- [ ] Sheet triggers instantly upon tapping a Subway or Bus Ghost POI node (only when within 200m proximity).
+- [ ] Real-time GTFS-RT countdowns populate accurately for the selected stop.
+- [ ] Historical sparkline renders from local SQLite data in < 12ms.
+- [ ] Ephemeral route `LineLayer` injects on open and unmounts on dismiss with no stale artifacts.
+- [ ] Sheet is dismissible via swipe-down and map tap.
+- [ ] `@gorhom/bottom-sheet` is used (not a custom modal or React Native `Modal`).
+
+---
+
+### Screen 3: The Archive (Stats & GPX Upload)
+
+**Trigger:** User taps the Profile FAB on the Ambient Map.
+
+**UI Elements:**
+A clean, native list view using `@shopify/flash-list` for guaranteed 60fps scrolling.
+
+* **Macro Metrics Header:**
+  * Total hexes unlocked (absolute count).
+  * Overall city exploration percentage.
+  * A simple, native horizontal progress bar (not a heavy custom chart).
+
+* **Neighborhood Leaderboard:**
+  * A vertical list of neighborhoods (e.g., Williamsburg, Greenpoint) sorted by completion percentage, highest first.
+  * Each row shows: neighborhood name, completion percentage, and a lightweight inline progress bar.
+  * Percentage calculated as `(cleared_hexes_in_poly / total_hexes_in_poly) * 100` — where `total_hexes_in_poly` excludes water polygons and preserves bridge hexes (see §5).
+  * Tapping a neighborhood pans the background map (Screen 1) to that neighborhood's centroid coordinates.
+
+* **GPX/FIT Upload:**
+  * A prominent "Upload Previous Workouts" button.
+  * Triggers `expo-document-picker` for local `.gpx` or `.fit` file selection.
+  * Processing: `fast-xml-parser` (GPX) or lightweight FIT decoder. Parsing is chunked to prevent UI freezing, coordinate arrays downsampled (>10m deltas), and deduped hexes saved via bulk SQLite inserts.
+  * On successful processing, the fog state on Screen 1 updates immediately.
+
+**Thread Yielding Rule:** The `@shopify/flash-list` **must not** begin populating data until the screen's entry animation completes. Use `InteractionManager.runAfterInteractions()` to yield the JS thread during the transition, preventing frame drops.
+
+**Definition of Done:**
+- [ ] Queries the local SQLite database, grouping unlocked H3 hexes by neighborhood boundaries.
+- [ ] Uses `@shopify/flash-list` (not `FlatList`) for the neighborhood list.
+- [ ] Thread yields during entry animation via `InteractionManager`.
+- [ ] Tapping a neighborhood pans Screen 1's map camera to that neighborhood.
+- [ ] GPX/FIT upload processes chunked, does not freeze the UI.
+- [ ] Upload results correctly update the fog state on Screen 1.
+- [ ] Uses native iOS list styling — clean typography, simple progress bars. No heavy custom charts.
+
+---
 
 ### Screen 4: Settings
-Standard application preferences and account management.
-* **UI Elements:** A standard native list grouping toggles and permissions.
-* **Definition of Done:**
-    * Includes functional toggles for Background Location permissions and Push Notifications.
-    * Includes a destructive button to clear local cache/data or reset the map/SQLite database entirely.
 
-## 5. The "Backend" (Data Layer) Work - Progression Stats
+**Trigger:** Accessible from Screen 3 (Archive) via a gear icon or list item.
 
-To support the progression stats shown in the Contextual Stat Pill and The Archive, the local database must be updated:
+**UI Elements:**
+A standard native grouped list of toggles and actions.
 
-1. **The Denominator Problem:** Right now, the app only knows what you *have* explored. To calculate a percentage, it needs to know the total size of the container.
-2. **Neighborhood Lookup:** You will need to seed your local SQLite database with a static lookup table (e.g., `neighborhood_stats`). It could map a neighborhood name ("Williamsburg") to its bounding polygon or simply to its total H3 Resolution 11 hex count (e.g., "Williamsburg = 14,200 total hexes").
-3. **Current Session:** This is entirely front-end/local state. Your Zustand store just needs to track `sessionUnlockedHexes` and compare it against the current neighborhood's total.
-4. **The Denominator Masking Logic (Landmass & Bridges Only):** To ensure the "Total Hexes" denominator is actually achievable by a pedestrian or cyclist, the static generation script must strictly exclude open water.
-    * **The Operation:** Before generating the H3 hexes for a neighborhood, the script must take the neighborhood's bounding polygon and perform a boolean geographic subtraction using standard OSM (OpenStreetMap) or Natural Earth water polygons. `(Neighborhood_Polygon) MINUS (Water_Polygons) = Walkable_Polygon`.
-    * **The Bridge Exception:** Bridges (e.g., Williamsburg Bridge, pedestrian overpasses) are physically suspended over water but are valid exploration zones. The script must ensure that known pedestrian/cycling bridge geometries are re-added or preserved in the `Walkable_Polygon` before the H3 polyfill operation calculates the final hex count.
-    * **The Output:** The final integer saved to `neighborhood_stats.total_hexes` must represent only landmass and bridge hexes.
+* **Background Location Toggle:** Controls the native Swift `CLLocationManager` via the Nitro `startTracking()` / `stopTracking()` interface. Shows the current permission state.
+* **Push Notification Toggle:** Standard notification permission control.
+* **Data Management:**
+  * "Clear Local Cache" — purges cached tiles and transit data (re-triggers Onboarding Gate on next launch).
+  * "Reset Exploration Data" — destructive action with a confirmation dialog. Drops all unlocked hexes from SQLite and resets the in-memory `Set`.
+
+**Definition of Done:**
+- [ ] Background Location toggle correctly invokes Nitro `startTracking()` / `stopTracking()`.
+- [ ] Destructive "Reset" action requires explicit user confirmation before executing.
+- [ ] Clearing cache correctly re-triggers the Onboarding Gate flow.
+- [ ] All toggles use `react-native-gesture-handler` for touch handling.
+
+---
+
+## 4. Ghost POI Lifecycle
+
+Ghost POIs are the primary discovery mechanic. They follow a strict 3-phase lifecycle:
+
+### Phase 1 — The Lure (Hidden Territory)
+
+* **Visibility:** Rendered as soft, anonymous beacons hovering **above** the dark fog layer — visible to the user through the fog as faint, pulsing glows.
+* **Information:** Zero. No text labels, no icons, no identification. Pure ambient intrigue.
+* **Purpose:** Signal to the user that something exists in unexplored territory, encouraging physical movement.
+
+### Phase 2 — The Unlocking (Active Vicinity)
+
+* **Trigger:** The user's GPS buffer physically intersects the hex containing the Ghost POI, placing it within the 200m Active Vicinity Bubble.
+* **Visual Transition:** The faint beacon resolves into a crisp geometric node (dot for bus stops, diamond for subway entrances) with a subtle "reveal" scale animation (0→1 over 200ms, ease-out).
+* **Interaction:** Tappable. Triggers the Transit Reveal bottom sheet (Screen 2).
+* **Discovery Modal:** On first encounter with a previously unseen POI, a lightweight toast notification slides in from the top with contextual data (station name, fun fact). Auto-dismisses after 3 seconds.
+
+### Phase 3 — The Archive (Explored Territory)
+
+* **Visibility:** Once the user leaves the Active Vicinity, the node **fades to near-invisibility**. It does **not** render as a permanent, traditional map pin.
+* **Constraint (from AGENTS.MD):** Ghost POIs in Explored (non-Active) hexes must be **completely invisible at zoom levels ≤ 16**. At zoom 17+, they may render as ultra-faint, desaturated geometric marks (opacity ≤ 0.15) to preserve the clean, fog-dominant aesthetic.
+* **Interaction:** Not tappable when outside the Active Vicinity. The PiP proximity check gates all interactions.
+
+---
+
+## 5. Component Interaction & Animation Rules
+
+All animations must feel native, organic, and performant. No cheap web-style transitions (no `ease-in-out` on opacity alone, no jarring `translateY` snaps).
+
+### 5.1 The GPX Reveal Animation
+
+When a user uploads a heavy GPX file containing hundreds of new hexes, the bridge recalculation must be visually masked behind a satisfying reveal animation.
+
+* **Feel:** Like morning fog burning off the coast — smooth, warm, directional dissolve.
+* **Execution:** A sweeping radial wipe or dissolve mask animating outward from the user's current position across the newly unlocked hexes, running at 60fps on the UI thread.
+* **Duration:** 1.5–2.5 seconds depending on the geographic spread of the upload.
+* **Implementation:** Use MapLibre's native `fill-opacity-transition` with a staggered delay per hex cluster (sorted by distance from the user's position). The fog literally "melts away" from the user outward.
+
+> [!NOTE]
+> **Design Aspiration — Skia Enhancement:** For a more dramatic volumetric sunburst effect, `@shopify/react-native-skia` could be introduced to render a custom shader-based dissolve mask. This library is **not currently in the locked stack** (see [architecture.md §2](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
+
+### 5.2 Bottom Sheet Transitions
+
+* **Entry:** `@gorhom/bottom-sheet` spring animation with `damping: 50`, `stiffness: 500`. No bounce.
+* **Exit:** Smooth deceleration swipe-to-dismiss. Route line unmounts at the exact frame the sheet reaches its dismissed position.
+* **Backdrop:** Dim the map slightly (`opacity: 0.3` dark overlay) when the sheet is at its expanded snap point, creating focus hierarchy.
+
+### 5.3 FAB Interactions
+
+* **Idle State:** Semi-transparent (`opacity: 0.7`), blurred background via `UltraThinMaterial`.
+* **Press State:** Instant haptic feedback (`impactLight`). Scale down to `0.92` over 100ms, then spring back.
+* **Active State (Recenter):** When the map is already centered on the user, the Recenter FAB shows a filled variant. When the user pans away, it transitions to an outlined variant over 200ms.
+
+### 5.4 User Location Marker
+
+* **Rendering:** MapLibre's native user location layer. Not a React component.
+* **Pulse:** Concentric ring animation radiating outward at 1.5-second intervals, fading from `opacity: 0.4` → `0`.
+* **Heading Indicator:** A subtle directional cone when the device compass is active.
+
+### 5.5 Hex Unlock Animation
+
+When a new hex is discovered in real-time (via Nitro callback during active use):
+* The hex's fog region transitions from opaque → transparent using MapLibre's `fill-opacity-transition: { duration: 300 }`.
+* A soft glow ring (single pulse) emanates from the user's position, confirming the unlock.
+* **No sound effects. No confetti. No modal popups.** The reveal is ambient and organic.
+
+---
+
+## 6. Dynamic Island & Live Activities (Deferred — Wave 15)
+
+Progression stats must eventually be accessible **outside** the app while the user walks with their phone locked.
+
+* **Delivery:** A native Swift module pushes exploration progress to the iOS Dynamic Island and Lock Screen Live Activities (e.g., "🔥 5 hexes unlocked this walk").
+* **Update Frequency:** Batched — update the Live Activity only when a new hex cluster (≥ 3 hexes) is unlocked, not on every individual hex. This prevents excessive UI refreshes.
+* **Scope:** This is explicitly deferred to **Wave 15** (see [ROADMAP.MD](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/ROADMAP.MD)). Agents **must not** implement this until Wave 15 is active.
+
+---
+
+## 7. Strict UI/UX Guardrails
+
+These rules are **non-negotiable**. Violating any guardrail constitutes a failed implementation.
+
+| # | Rule | Rationale |
+|:---|:---|:---|
+| G1 | **No Clutter:** Any map element outside the 200m Vicinity Bubble must be hidden. | Progressive disclosure. The map is the UI. |
+| G2 | **No Text on Map Nodes:** POI icons are geometric shapes with high negative space. Zero text or lettering inside icons. | Visual noise reduction. |
+| G3 | **No Permanent POI Pins:** Ghost POIs in Explored territory must be invisible at zoom ≤ 16 and near-invisible (opacity ≤ 0.15) at zoom 17+. | Per AGENTS.MD: "Never implement permanent map pins for POIs." |
+| G4 | **No Manual Tracking Controls:** No "Start/Stop Tracking" buttons. Tracking is ambient and automatic. | Per AGENTS.MD: "Never build manual Start/Stop Tracking UI elements." |
+| G5 | **No Heavy Persistent HUDs:** No persistent dashboard widgets, distance counters, or speed readouts overlaying the map. | Per AGENTS.MD: "Never build heavy, persistent HUDs." |
+| G6 | **Native Gesture Handling Only:** All touchable elements use `react-native-gesture-handler`. No standard React Native `TouchableOpacity` or `Pressable`. | Prevents gesture conflicts with MapLibre and bottom sheets. |
+| G7 | **Thread Yielding for Lists:** Complex lists (Neighborhood Stats, Session History) must yield the thread during entry animations via `InteractionManager.runAfterInteractions()`. | Prevents frame drops during screen transitions. |
+| G8 | **No Serif Fonts:** Strictly modern geometric sans-serif (SF Pro / Inter). | Design system consistency. |
+| G9 | **Light Mode Default:** Soft whites, light grays. No dark mode until explicitly scoped and designed. | Visual identity constraint. |
+| G10 | **Screen Enumeration is Exhaustive:** Screens 0–4 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. | Prevents scope creep and hallucinated features. |
+
+---
+
+## 8. The "Backend" (Data Layer) — Progression Stats
+
+To support exploration percentages in Screen 3 (The Archive) and any future contextual displays, the local database must maintain:
+
+### 8.1 The Denominator Problem
+
+The app knows what the user **has** explored but needs to know the **total size** of each container to calculate a percentage.
+
+### 8.2 Neighborhood Lookup Table
+
+A static `neighborhood_stats` table seeded into the local SQLite database maps each neighborhood to its total explorable hex count.
+
+```sql
+CREATE TABLE neighborhood_stats (
+    neighborhood_name TEXT PRIMARY KEY,
+    total_hexes INTEGER NOT NULL,
+    centroid_lat REAL NOT NULL,
+    centroid_lng REAL NOT NULL
+) WITHOUT ROWID;
+```
+
+### 8.3 The Denominator Masking Logic (Landmass & Bridges Only)
+
+The `total_hexes` value must represent **only physically walkable/cyclable territory:**
+
+1. **Water Subtraction:** Before generating H3 hexes for a neighborhood, the static generation script performs a boolean geographic subtraction: `(Neighborhood_Polygon) MINUS (Water_Polygons) = Walkable_Polygon` using OSM or Natural Earth water data.
+2. **Bridge Preservation:** Pedestrian/cycling bridges (Williamsburg Bridge, pedestrian overpasses) are physically suspended over water but are valid exploration zones. Known bridge geometries are re-added to the `Walkable_Polygon` before the H3 polyfill calculates the final hex count.
+3. **Output:** The integer saved to `neighborhood_stats.total_hexes` represents only landmass and bridge hexes.
+
+### 8.4 Current Progress Calculation
+
+This is entirely front-end/local state:
+* The Zustand store tracks the continuous delta of newly unlocked hexes (sourced from Nitro real-time callbacks or AppState hydration reads).
+* Progress percentage is computed as: `(cleared_hexes_in_neighborhood / total_hexes_in_neighborhood) * 100`.
+* The $O(1)$ In-Memory Set Gate (see [architecture.md §7.3](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/docs/architecture.md)) ensures this comparison is instantaneous.

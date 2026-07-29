@@ -324,3 +324,98 @@ This archive contains detailed task prompts for completed development waves.
 * **W11.7-UI-MATRIX**: Build Headway Matrix (Timetable) UI — Deferred, unrelated to Sleepy Hermes.
 * **W12-BOSTON**: Multi-City Expansion: MBTA — Post-MVP, deferred.
 * **W15-DYNAMIC-ISLAND**: Dynamic Island Support — Deferred until Sleepy Hermes stabilizes.
+
+---
+
+## Wave A — Database Configuration & Dual-Thread Concurrency
+
+### Task Prompt: WA-DB-CONCURRENCY
+**Goal**: Establish the foundational shared persistence layer for the Sleepy Hermes architecture. Configure the SQLite database for **dual-thread concurrent access** — one connection from the Swift C-API (background writes) and one from `@op-engineering/op-sqlite` JSI (foreground reads) — targeting the exact same physical `.db` file.
+
+### Implementation Specifications
+
+#### 1. Database File Path Resolution
+The Swift background service must resolve the database path identically to how `@op-engineering/op-sqlite` computes it. `op-sqlite` on iOS places the DB in the Application Support directory.
+To align exactly with `@op-engineering/op-sqlite`'s default path for `fog_of_wburg.db`, Swift should resolve it via:
+
+```swift
+let fileManager = FileManager.default
+guard let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+try? fileManager.createDirectory(at: appSupportURL, withIntermediateDirectories: true, attributes: nil)
+let dbURL = appSupportURL.appendingPathComponent("fog_of_wburg.db")
+let dbPath = dbURL.path
+```
+
+#### 2. Connection Flags (`sqlite3_open_v2`)
+The Swift connection must open the database with read/write access, create it if missing, and enable full mutex for thread safety.
+
+```swift
+var db: OpaquePointer?
+let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+if sqlite3_open_v2(dbPath, &db, flags, nil) != SQLITE_OK { sqlite3_close(db); db = nil }
+```
+
+#### 3. PRAGMA Sequence
+Immediately upon opening the connection in Swift:
+```swift
+sqlite3_exec(db, "PRAGMA journal_mode = WAL;", nil, nil, nil)
+sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
+```
+
+#### 4. Prepared Statement Lifecycle
+**Compilation:**
+```swift
+let insertQuery = "INSERT OR IGNORE INTO explored_hexes (h3_index, discovered_at) VALUES (?, ?);"
+var insertStmt: OpaquePointer?
+if sqlite3_prepare_v2(db, insertQuery, -1, &insertStmt, nil) != SQLITE_OK { /* Error */ }
+```
+**Execution:**
+```swift
+sqlite3_bind_text(insertStmt, 1, h3HexCString, -1, nil)
+let timestamp = Int64(Date().timeIntervalSince1970 * 1000)
+sqlite3_bind_int64(insertStmt, 2, timestamp)
+if sqlite3_step(insertStmt) == SQLITE_DONE { /* Success */ }
+sqlite3_reset(insertStmt)
+sqlite3_clear_bindings(insertStmt)
+```
+**Teardown:**
+```swift
+sqlite3_finalize(insertStmt)
+sqlite3_close(db)
+```
+
+## Wave B — Nitro Module Scaffolding & Code Generation [Planned]
+
+**Task ID:** `WB-NITRO-SCAFFOLD`
+**Depends on:** Wave A (database configuration documented).
+
+### Goal
+Define the TypeScript specification for the `HybridTracker` Nitro Module and execute the Nitrogen code generation pipeline. Produce step-by-step Xcode GUI linkage instructions for the human developer.
+
+### Agent Directives
+
+1. **Create the Nitro TypeScript specification (`src/native/TrackingService.nitro.ts`):**
+   * Extend `HybridObject` with `{ ios: 'swift' }`.
+   * Expose methods:
+     * `startTracking(): void` — Initialize the native `CLLocationManager` and SQLite connection.
+     * `stopTracking(): void` — Terminate the background service and release resources.
+     * `addListener(callback: (h3Index: string) => void): void` — Register a JS callback for real-time foreground notifications when new hexes are discovered.
+     * `removeListener(): void` — Unregister the callback.
+     * `getDiscoveredHexesSince(timestamp: number): string[]` — Synchronous delta query for AppState hydration.
+
+2. **Run the Nitrogen code generator:**
+   * Execute `npx nitrogen` to generate the `nitrogen/generated/` directory containing C++ JSI translation layers and the `HybridTrackingSpec.swift` protocol.
+
+3. **Produce Xcode GUI linkage instructions:**
+   * Step-by-step instructions for the human developer to:
+     1. Open `ios/FogOfWburg.xcworkspace`.
+     2. Drag `nitrogen/generated/ios/` into the Xcode Project Navigator under the main app target.
+     3. Verify target membership and "Create groups" selection.
+     4. Create `HybridTracker.swift` via Xcode New File dialog.
+     5. Accept the bridging header prompt and add `#import "h3api.h"` and `#import <sqlite3.h>`.
+   * These instructions must be written as a standalone reference document.
+
+### Verification
+* `npx nitrogen` completes without errors.
+* Generated `nitrogen/generated/ios/` directory contains `HybridTrackingSpec.swift` with the expected method signatures.
+* Linkage instructions are clear enough for a developer unfamiliar with Xcode to follow.

@@ -82,6 +82,29 @@ PODS:
   - maplibre-react-native/DynamicLibrary (10.4.2):
     - React
     - React-Core
+  - NitroModules (0.36.3):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.01.01.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-callinvoker
+    - React-Codegen
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
   - op-sqlite (3.0.7):
     - React
     - React-callinvoker
@@ -1357,6 +1380,7 @@ DEPENDENCIES:
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - "maplibre-react-native (from `../node_modules/@maplibre/maplibre-react-native`)"
+  - NitroModules (from `../node_modules/react-native-nitro-modules`)
   - "op-sqlite (from `../node_modules/@op-engineering/op-sqlite`)"
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCT-Folly/Fabric (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
@@ -1461,6 +1485,8 @@ EXTERNAL SOURCES:
     :tag: hermes-2024-06-28-RNv0.74.3-7bda0c267e76d11b68a585f84cfdd65000babf85
   maplibre-react-native:
     :path: "../node_modules/@maplibre/maplibre-react-native"
+  NitroModules:
+    :path: "../node_modules/react-native-nitro-modules"
   op-sqlite:
     :path: "../node_modules/@op-engineering/op-sqlite"
   RCT-Folly:
@@ -1593,6 +1619,7 @@ SPEC CHECKSUMS:
   glog: fdfdfe5479092de0c4bdbebedd9056951f092c4f
   hermes-engine: 8c1577f3fdb849cbe7729c2e7b5abc4b845e88f8
   maplibre-react-native: 37d86b5b7b04dedaceebc577644e67acd7b5f437
+  NitroModules: 603cc1f9fceac1582ab117bd7b0f98f42eb80179
   op-sqlite: e7e65be362b1e58b0924fd4aff133a2f9969d2f5
   RCT-Folly: 5dc73daec3476616d19e8a53f0156176f7b55461
   RCTDeprecation: 3afceddffa65aee666dafd6f0116f1d975db1584
@@ -1650,6 +1677,6 @@ SPEC CHECKSUMS:
   UMAppLoader: f17a5ee8e85b536ace0fc254b447a37ed198d57e
   Yoga: 950bbfd7e6f04790fdb51149ed51df41f329fcc8
 
-PODFILE CHECKSUM: 9c4ce474ce250ba1599705dcdd1e7880e3c7947a
+PODFILE CHECKSUM: 651bd0194f0018c79022b6dd495f1224e64f1fcd
 
 COCOAPODS: 1.16.2

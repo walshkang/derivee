@@ -1,0 +1,18 @@
+{
+  "cxxNamespace": ["hybridtracker"],
+  "ios": {
+    "iosModuleName": "FogOfWburg"
+  },
+  "android": {
+    "androidNamespace": ["com", "fogofwburg", "app"],
+    "androidCxxLibName": "FogOfWburg"
+  },
+  "autolinking": {
+    "HybridTracking": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridTracker"
+      }
+    }
+  }
+}

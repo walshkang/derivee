@@ -60,6 +60,26 @@ target 'FogofWburg' do
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
 
+    # Enable Swift C++ interop for NitroModules, main Pods target, and user main app target
+    installer.pods_project.targets.each do |target|
+      if target.name == 'NitroModules' || target.name.include?('Pods-FogofWburg')
+        target.build_configurations.each do |config|
+          config.build_settings['SWIFT_OBJC_INTEROP_MODE'] = 'objcxx'
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
+        end
+      end
+    end
+
+    installer.aggregate_targets.each do |aggregate_target|
+      aggregate_target.user_project.targets.each do |user_target|
+        user_target.build_configurations.each do |config|
+          config.build_settings['SWIFT_OBJC_INTEROP_MODE'] = 'objcxx'
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
+        end
+      end
+      aggregate_target.user_project.save
+    end
+
     # This is necessary for Xcode 14, because it signs resource bundles by default
     # when building for devices.
     installer.target_installation_results.pod_target_installation_results
