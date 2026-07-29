@@ -29,8 +29,10 @@ export default function ArchiveScreen() {
   const router = useRouter();
 
   useEffect(() => {
+    let interactionHandle: { cancel: () => void } | null = null;
+    
     if (isNYCExpanded) {
-      InteractionManager.runAfterInteractions(() => {
+      interactionHandle = InteractionManager.runAfterInteractions(() => {
         const sorted = [...neighborhoodStats]
           .filter(n => n.explored_hexes > 0)
           .sort((a, b) => {
@@ -43,6 +45,12 @@ export default function ArchiveScreen() {
     } else {
       setDeferredNeighborhoods([]);
     }
+    
+    return () => {
+      if (interactionHandle) {
+        interactionHandle.cancel();
+      }
+    };
   }, [isNYCExpanded, neighborhoodStats]);
 
   useEffect(() => {
@@ -221,27 +229,26 @@ export default function ArchiveScreen() {
 
 
           {/* Neighborhood Leaderboard Dropdown */}
-          {isNYCExpanded && (
-            <View style={styles.neighborhoodList}>
-              <Text style={styles.neighborhoodHeader}>Neighborhoods</Text>
-              
-              {!hasAnyNeighborhoods ? (
-                <View style={styles.poiEmptyState}>
-                  <Text style={styles.poiEmptyTitle}>No Neighborhoods Explored</Text>
-                  <Text style={styles.poiEmptySub}>Walk around to unlock your first NYC neighborhood.</Text>
-                </View>
-              ) : (
-                <View style={{ height: 400, width: '100%' }}>
-                  <FlashList
-                    data={deferredNeighborhoods}
-                    renderItem={({ item, index }) => <NeighborhoodItem item={item as NeighborhoodStat} index={index} />}
-                    nestedScrollEnabled={true}
-                    keyExtractor={(item) => (item as NeighborhoodStat).id}
-                  />
-                </View>
-              )}
-            </View>
-          )}
+          <View style={[styles.neighborhoodList, { display: isNYCExpanded ? 'flex' : 'none' }]}>
+            <Text style={styles.neighborhoodHeader}>Neighborhoods</Text>
+            
+            {!hasAnyNeighborhoods ? (
+              <View style={styles.poiEmptyState}>
+                <Text style={styles.poiEmptyTitle}>No Neighborhoods Explored</Text>
+                <Text style={styles.poiEmptySub}>Walk around to unlock your first NYC neighborhood.</Text>
+              </View>
+            ) : (
+              <View style={{ height: 400, width: '100%' }}>
+                <FlashList
+                  data={deferredNeighborhoods}
+                  renderItem={({ item, index }) => <NeighborhoodItem item={item as NeighborhoodStat} index={index} />}
+                  estimatedItemSize={48}
+                  nestedScrollEnabled={true}
+                  keyExtractor={(item) => (item as NeighborhoodStat).id}
+                />
+              </View>
+            )}
+          </View>
         </View>
       </View>
 
