@@ -40,6 +40,10 @@ This document is the single source of truth for all planned development waves.
 | **14.5** | **W14.5-STORE** | **AppState Delta-Buffer & Zustand Refactor** | **M** | ✅ Done |
 | **14.5** | **W14.5-RENDER** | **MapLibre Native Array Concatenation (Remove Turf)** | **M** | ✅ Done |
 | **14.6** | **W14.6-BATTERY-HOTFIX** | **Bridge & Polling Optimization Patch** | **M** | ✅ Done |
+| **14.7** | **W14.7-LOCATION-AUDIT** | **Stop the Bleeding: expo-location Audit** | **S** | Planned |
+| **14.8** | **W14.8-SET-GATE** | **Unblock the Thread: In-Memory Set Gate** | **M** | Planned |
+| **14.9** | **W14.9-DDS-FOG** | **DDS Refactor: MapLibre Data-Driven Styling** | **L** | Planned |
+| **14.10** | **W14.10-STATS-UI** | **Fix UI Bottlenecks: FlashList & Bottom Sheet** | **M** | Planned |
 | **15** | **W15-DYNAMIC-ISLAND** | **Dynamic Island Support for Stat Bar** | **S** | Planned |
 
 ---
@@ -144,6 +148,50 @@ This document is the single source of truth for all planned development waves.
 
 ## Wave 14.6 — Battery & Bridge Optimization Hotfix (✅ Completed)
 *Task W14.6-BATTERY-HOTFIX shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
+
+---
+
+## Wave 14.7 — Stop the Bleeding (Location Audit) [Planned]
+
+* **Goal**: Eliminate redundant OS wakeups caused by time-based GPS polling.
+* **Agent Directives**:
+  * Inspect the `expo-location` background task initialization (e.g., `startLocationUpdatesAsync`).
+  * Ensure the configuration object strictly uses `distanceInterval: 10` (meters) and `deferredUpdatesDistance: 50` (meters).
+  * Confirm that `timeInterval` is completely removed or commented out.
+  * Verify that `pausesLocationUpdatesAutomatically` is set to `true` and `activityType` is set to `Location.ActivityType.Fitness`.
+
+---
+
+## Wave 14.8 — Unblock the Main Thread (In-Memory Set Gate) [Planned]
+
+* **Goal**: Implement an $O(1)$ JS-side gatekeeper to prevent redundant SQLite queries and MapLibre bridge transfers when the user is stationary or in already-explored territory.
+* **Agent Directives**:
+  * On app initialization, query `@op-engineering/op-sqlite` to fetch all historically unlocked H3 string IDs. Load these into a standard JavaScript `Set` (e.g., `const unlockedHexes = new Set(dbResults)`).
+  * In the background location callback, after converting the raw GPS coordinate to an H3 index, immediately check `unlockedHexes.has(currentH3Index)`.
+  * If the Set returns `true`, **drop execution entirely**. Do not call Zustand, do not query SQLite, and do not update MapLibre.
+  * If the Set returns `false`, add the new index to the Set, fire the SQLite `INSERT`, and update the Zustand state array to trigger a single bridge transfer to MapLibre.
+
+---
+
+## Wave 14.9 — The Fog Engine DDS Refactor [Planned]
+
+* **Goal**: Deprecate JS-thread hole-punching (`h3.cellsToMultiPolygon`) and offload fog rendering to the native GPU using MapLibre Data-Driven Styling.
+* **Agent Directives**:
+  * Strip out `@turf/mask` and `cellsToMultiPolygon` from the fog geometry generation utilities.
+  * Update the MapLibre component to render a static geometry base (e.g., a static grid of H3 hex polygons covering the 50km bounding box).
+  * Configure the fog layer's `fill-opacity` using a MapLibre `['match']` expression. Pass the Zustand array of unlocked H3 IDs to set their opacity to `0.0`, rendering them transparent and revealing the map below.
+  * Ensure `withSynchronousUpdate(true)` is applied to the data source to bypass bridge serialization bottlenecks.
+
+---
+
+## Wave 14.10 — Stats Screen UI Bottlenecks [Planned]
+
+* **Goal**: Resolve unresponsive touches and callback leaks in `app/stats.tsx` caused by rendering heavy lists inside a gesture-based bottom sheet.
+* **Agent Directives**:
+  * Refactor the Neighborhood Stats list to use `@shopify/flash-list` instead of standard `ScrollView` or `FlatList`.
+  * Because this list lives inside a Gorhom Bottom Sheet, wrap the `FlashList` in a `<BottomSheetScrollView>` or ensure gesture handler imports are strictly from `react-native-gesture-handler`.
+  * Wrap individual row items in `React.memo` to prevent redundant re-renders.
+  * Utilize `InteractionManager.runAfterInteractions` to defer the mounting of the heavy list data until the bottom-sheet opening animation has fully completed.
 
 ---
 

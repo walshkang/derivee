@@ -36,7 +36,7 @@ Built with an AI-driven "vibe coding" approach, relying strictly on Expo Prebuil
 * **Transit Decoding:** `protobufjs` + `gtfs-realtime-bindings`
 
 **Technical Highlights:**
-* **Synchronous Rendering:** Utilizes MapLibre's JSI bindings (`withSynchronousUpdate`) and background geometry unioning (`h3.cellsToMultiPolygon`) to bypass the React Native bridge, rendering tens of thousands of hexagonal holes at 60fps.
+* **Zero-Congestion Rendering:** Utilizes an $O(1)$ In-Memory Set Gate to drop redundant GPS updates, and MapLibre Data-Driven Styling (DDS) to bypass the React Native bridge, rendering tens of thousands of hexagonal holes natively on the GPU at 60fps.
 * **Battery & Drift Optimization:** CPU remains asleep until physical movement occurs via hardware-level distance intervals (`deferredUpdatesDistance`). An implied speed filter (< 12 m/s) aggressively discards urban canyon GPS multipath noise.
 
 ## 🚀 Getting Started

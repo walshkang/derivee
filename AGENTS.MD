@@ -40,12 +40,12 @@ When configuring `@maplibre/maplibre-react-native`, you must strictly adhere to 
 * **Interaction Rule**: Because POIs are invisible ("Ghosts"), interactions are handled via a Geospatial Point-in-Polygon (PiP) check.
 * **Rule**: When a user taps the map, calculate the coordinate, ensure they are within physical proximity, and query `@op-engineering/op-sqlite` synchronously to trigger the bottom sheet.
 
-### 4. Bridge Congestion Prevention & Unioning
+### 4. Bridge Congestion Prevention & Data-Driven Styling
 
-* **JSI Updates**: **Always** enable `withSynchronousUpdate(true)` on the `ShapeSource` to bypass JSON stringification penalties over the React Native bridge.
-* **Positional Delta Processing**: Maintain a local memory cache of visible H3 indexes. Only recalculate multi-polygons when the hex delta is non-empty.
-* **Geometry Worker**: Never push raw arrays of un-merged H3 holes. Periodic workers must execute `h3.cellsToMultiPolygon` to dissolve internal vertices for MapLibre's `earcut.hpp` triangulator.
-* **UI Thread Protection**: **Never** execute heavy geometry generation (like looping over 10,000+ hexes to build GeoJSON) on the main JS thread during React renders (e.g., inside `useMemo` on secondary screens like Stats). Stringifying massive GeoJSON payloads over the React Native bridge blocks the thread and freezes all UI interactions. Secondary screens should use lightweight representations or pre-computed summaries rather than full-city geometries.
+* **JSI Updates**: **Always** enable `withSynchronousUpdate(true)` on any `ShapeSource` to bypass JSON stringification penalties over the React Native bridge.
+* **In-Memory Set Gate**: Maintain a local JavaScript `Set` of unlocked H3 string IDs. On every background GPS tick, perform an $O(1)$ lookup (`Set.has(currentH3Index)`). If the user is in an already-cleared area, do absolutely nothing (drop execution) to keep the bridge silent.
+* **Geometry Worker (DDS)**: **Never** use `h3.cellsToMultiPolygon` or heavy GeoJSON stringification for hole-punching (this is a deprecated legacy approach). Instead, use MapLibre Data-Driven Styling (DDS). Treat the fog as a static base grid and dynamically filter the `fill-opacity` by passing the array of unlocked IDs into a `['match']` expression.
+* **UI Thread Protection**: Secondary screens (like Stats) should use lightweight representations or virtualized lists (`@shopify/flash-list`) and `InteractionManager` rather than triggering heavy multi-polygon math.
 
 ---
 
@@ -105,5 +105,5 @@ In an Expo Managed workflow, native behavior changes (e.g. background location p
 - **Rule**: Testing native configuration changes requires verifying the prebuild. Always run `npx expo prebuild --clean` to ensure the iOS/Android folders generate successfully and the `Info.plist`/`AndroidManifest.xml` contain the correct values.
 
 ### 5. E2E and Performance Profiling
-Since the biggest risk is frame drops during the `h3.cellsToMultiPolygon` merge step, unit tests are insufficient for performance guarantees.
+Since the biggest risk is frame drops during the MapLibre fog rendering, unit tests are insufficient for performance guarantees.
 - **Rule**: UI and map performance verification should be done on a physical device or via an E2E framework (like Maestro). Never trust the iOS Simulator/Android Emulator performance for MapLibre fog rendering.

@@ -18,4 +18,5 @@ The neighborhood progression tracking and statistics system UI is built, but we 
   - Next debugging priority: Resolve OP-SQLite singleton connection persistence across Expo Router screen transitions and isolate any native MapView/ScrollView gesture conflicts on `app/stats.tsx`.
 
 **Next Planned Wave:**
+- **Wave 14.7 (`W14.7-BRIDGE-REFACTOR`)**: Refactor background location processing with an $O(1)$ 'In-Memory Set Gate' and pivot MapLibre rendering to Data-Driven Styling (DDS) to eliminate UI thread starvation.
 - **Wave 15 (`W15-DYNAMIC-ISLAND`)**: Add iOS Dynamic Island / Live Activities support for ambient neighborhood progression tracking.

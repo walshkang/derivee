@@ -30,11 +30,11 @@ The application state flows in a strict, non-blocking sequence to prevent backgr
 1. **Hardware:** iOS CoreLocation batches GPS coordinates (every 50 meters).
 2. **Background Task:** `expo-location` receives the batch, filters out GPS drift, and calculates implied speed.
 3. **Spatial Engine:** `h3-js` converts valid coordinates to Resolution 11 H3 hexes and calculates the buffer radius.
-4. **Persistence:** `@op-engineering/op-sqlite` executes a synchronous `$O(\log N)$` check. New hexes are inserted via `INSERT OR IGNORE`. The state tracks both permanent `explored_hexes` and transient active sight reference counts.
-5. **Delta Processing & Caching:** A local JS memory cache of previously visible H3 indexes is maintained.
-6. **Geometry Worker:** Only when the hex delta is non-empty, adjacent unlocked/visible hexes are merged using `h3.cellsToMultiPolygon` to reduce vertex count.
-7. **Bridge Bypass:** The simplified GeoJSON is passed to `@maplibre/maplibre-react-native` via shared JSI memory (`withSynchronousUpdate(true)`).
-8. **Render:** MapLibre Native's `earcut.hpp` tessellates the geometry, punching transparent holes through the fog layer to reveal the 3-tier (desaturated/full-color) environment beneath.
+4. **Persistence & Set Gate:** `@op-engineering/op-sqlite` holds the persistent state. On app load, unlocked hexes are cached into a JavaScript `Set`. 
+5. **The Micro-Calculation:** When a new coordinate arrives, `h3-js` converts it. We instantly check `Set.has(currentH3Index)`. If true, execution is dropped entirely, keeping the bridge completely silent.
+6. **State Update:** If a new hex is discovered, it is inserted into the `Set`, written to SQLite (`INSERT OR IGNORE`), and added to the Zustand store.
+7. **Bridge Bypass (DDS):** The array of unlocked H3 IDs is passed to `@maplibre/maplibre-react-native`.
+8. **Render:** We use MapLibre Data-Driven Styling (DDS) with a `['match']` expression on `fill-opacity` to instantly hide the discovered hexes, offloading all spatial hole-punching math to the C++ GPU layer.
 
 ---
 
@@ -48,13 +48,13 @@ Rendering tens of thousands of individual hexagons will cause catastrophic frame
   * **Layer 1 (The Explored Base):** The base MapTiler `streets-v2` vector style. This represents areas the user has previously explored, revealed by holes in the fog layer.
   * **Layer 2 (The Visible Base):** (Deprecated in MVP) Future support for dynamic active area highlighting.
   * **Layer 3 (The Sub-Context):** Faint vectors of major geographic arteries (coastlines, bridges) with zero text labels.
-  * **Layer 4 (The Cloud Layer):** The 50km soft, translucent, blurred GeoJSON polygon (pitch black for strictly Unexplored).
-  * **Layer 5 (The Holes):** The user's unlocked H3 hexagons (both Explored and Visible states), added as "inner rings" to Layer 4 to punch transparent holes into the Cloud Layer.
+  * **Layer 4 (The Cloud Layer):** The base H3 grid loaded as a static geometry source, acting as the fog.
+  * **Layer 5 (The DDS Filter):** We dynamically filter the `fill-opacity` of Layer 4. By passing the array of unlocked H3 IDs into a MapLibre `['match']` expression, we make unlocked hexes fully transparent, revealing the layers beneath.
   * **Layer 6 (The Vicinity Bubble):** Detailed geospatial data (street names, transit nodes, Ghost POIs) rendered strictly within a dynamic 200m radius of the user's live location.
 
 
-* **Algorithmic Simplification:** Never pass thousands of isolated hexagonal holes to MapLibre. Map engines use the Earcut algorithm to triangulate polygons. Processing thousands of individual holes degrades performance to `$O(N^2)$`. You must periodically merge adjacent hexagons into larger, continuous shapes using `h3.cellsToMultiPolygon` before updating the map.
-* **Synchronous Updates:** To prevent UI freezing during large fog updates, you must enable `withSynchronousUpdate(true)` on the MapLibre `ShapeSource` to bypass `JSON.stringify` serialization.
+* **Algorithmic Simplification:** The legacy approach of using `h3.cellsToMultiPolygon` to generate a massive GeoJSON with holes is **deprecated**. We strictly use Data-Driven Styling (DDS) to avoid sending heavy JSON strings over the React Native bridge, reducing UI thread starvation.
+* **Synchronous Updates:** To prevent UI freezing during large updates, you must enable `withSynchronousUpdate(true)` on the MapLibre `ShapeSource` to bypass `JSON.stringify` serialization.
 
 ---
 
