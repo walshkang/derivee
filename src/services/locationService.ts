@@ -61,6 +61,8 @@ export async function startBackgroundTracking(): Promise<boolean> {
   if (permissions.background) {
     const isStarted = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
     if (!isStarted) {
+      // Continuous native generation / location options per AGENTS.md & Wave 14.7:
+      // timeInterval is intentionally omitted to eliminate time-based OS wakeups and prevent battery drain.
       await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
         accuracy: Location.Accuracy.Balanced,
         distanceInterval: 10,

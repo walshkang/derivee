@@ -1,5 +1,5 @@
 import * as h3 from 'h3-js';
-import { insertUnlockedHexes } from '../db/database';
+import { insertUnlockedHexes, getAllUnlockedHexes } from '../db/database';
 
 /**
  * Default H3 resolution for Fog of Wburg.
@@ -12,6 +12,91 @@ export const DEFAULT_H3_RESOLUTION = 11;
  * Radius 1 yields 7 hexes (1 center cell + 6 immediate neighbors).
  */
 export const DEFAULT_BUFFER_RADIUS = 1;
+
+/**
+ * Standalone module-scoped in-memory Set gatekeeper.
+ * Maintains all known unlocked H3 string IDs for fast O(1) membership checks.
+ * Keeps ephemeral gatekeeper state OUTSIDE Zustand reactive store to avoid GC sweeps and re-render overhead.
+ */
+const unlockedHexesSet = new Set<string>();
+
+/**
+ * Flag indicating whether the in-memory gatekeeper has been populated from SQLite.
+ * Prevents race conditions during startup if background GPS ticks fire before DB load completes.
+ */
+let isGatekeeperLoaded = false;
+
+/**
+ * Initializes the in-memory gatekeeper by reading all historically unlocked H3 hexes from SQLite.
+ */
+export function initGatekeeperFromDB(): void {
+  try {
+    const hexes = getAllUnlockedHexes();
+    unlockedHexesSet.clear();
+    for (const hex of hexes) {
+      if (typeof hex === 'string' && hex.length > 0) {
+        unlockedHexesSet.add(hex);
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to hydrate in-memory gatekeeper from database:', e);
+  } finally {
+    isGatekeeperLoaded = true;
+  }
+}
+
+/**
+ * Clears the in-memory gatekeeper Set and resets the hydration flag.
+ */
+export function resetGatekeeper(): void {
+  unlockedHexesSet.clear();
+  isGatekeeperLoaded = false;
+}
+
+/**
+ * Syncs/overwrites the in-memory gatekeeper Set with a given array of hexes.
+ */
+export function syncGatekeeperHexes(hexes: string[]): void {
+  unlockedHexesSet.clear();
+  for (const hex of hexes) {
+    if (typeof hex === 'string' && hex.length > 0) {
+      unlockedHexesSet.add(hex);
+    }
+  }
+  isGatekeeperLoaded = true;
+}
+
+/**
+ * Adds new hexes to the in-memory gatekeeper Set.
+ */
+export function addGatekeeperHexes(hexes: string[]): void {
+  for (const hex of hexes) {
+    if (typeof hex === 'string' && hex.length > 0) {
+      unlockedHexesSet.add(hex);
+    }
+  }
+}
+
+/**
+ * Returns true if the gatekeeper has completed initialization.
+ */
+export function isGatekeeperReady(): boolean {
+  return isGatekeeperLoaded;
+}
+
+/**
+ * Returns true if a given H3 cell is already unlocked.
+ */
+export function isHexUnlocked(hex: string): boolean {
+  return unlockedHexesSet.has(hex);
+}
+
+/**
+ * Returns true if all given H3 cell strings are already unlocked in the gatekeeper Set.
+ */
+export function areAllHexesUnlocked(hexes: string[]): boolean {
+  return hexes.every((h) => unlockedHexesSet.has(h));
+}
 
 /**
  * Validates whether a value is a valid H3 index string.
@@ -101,15 +186,17 @@ export function getHexesForCoordinate(
 
 /**
  * Processes a new location coordinate update:
- * 1. Converts location to Resolution 11 H3 cell index and calculates surrounding buffer hexes.
- * 2. Writes newly unlocked hexes to local op-sqlite database (explored_hexes).
- * 3. Updates Zustand exploration store with newly unlocked hexes.
+ * 1. Ensures in-memory gatekeeper is initialized from SQLite.
+ * 2. Converts location to Resolution 11 H3 cell index and calculates surrounding buffer hexes.
+ * 3. Performs O(1) membership check against unlockedHexesSet. If all hexes are already unlocked, aborts early.
+ * 4. Writes newly unlocked hexes to local op-sqlite database (explored_hexes).
+ * 5. Updates Zustand exploration store with newly unlocked hexes for MapLibre DDS array rendering.
  *
  * @param lat Latitude
  * @param lng Longitude
  * @param radius Buffer radius (default: 1)
  * @param resolution H3 resolution (default: 11)
- * @returns Object containing center hex and all buffer hexes
+ * @returns Object containing center hex, buffer hexes, and count of newly unlocked hexes
  */
 export function processAndStoreLocationHexes(
   lat: number,
@@ -117,8 +204,24 @@ export function processAndStoreLocationHexes(
   radius: number = DEFAULT_BUFFER_RADIUS,
   resolution: number = DEFAULT_H3_RESOLUTION
 ): { centerHex: string; bufferHexes: string[]; newHexCount: number } {
+  if (!isGatekeeperLoaded) {
+    initGatekeeperFromDB();
+  }
+
   const centerHex = coordToH3(lat, lng, resolution);
   const bufferHexes = getH3Buffer(centerHex, radius);
+
+  // O(1) Membership Gate: If all buffer hexes are already unlocked, drop execution entirely
+  if (bufferHexes.every((hex) => unlockedHexesSet.has(hex))) {
+    return {
+      centerHex,
+      bufferHexes,
+      newHexCount: 0,
+    };
+  }
+
+  // At least one hex is newly discovered: add to gatekeeper Set
+  addGatekeeperHexes(bufferHexes);
 
   // Persist hexes to op-sqlite database
   const dbInsertedCount = insertUnlockedHexes(bufferHexes);
@@ -137,3 +240,4 @@ export function processAndStoreLocationHexes(
     newHexCount,
   };
 }
+

@@ -6,9 +6,8 @@ export interface Location {
 }
 
 import type { Feature, Polygon, MultiPolygon, LineString } from 'geojson';
-import { generateFogGeoJSON } from '../utils/fogGeoJSON';
 import { NeighborhoodStat, getCurrentNeighborhoodStat, getAllUnlockedHexes, insertUnlockedHexes, clearExploredHexes } from '../db/database';
-import { coordToH3 } from '../utils/h3Utils';
+import { coordToH3, initGatekeeperFromDB, resetGatekeeper, syncGatekeeperHexes, addGatekeeperHexes } from '../utils/h3Utils';
 import { withBackgroundTask } from '../../modules/expo-background-assertion';
 
 export interface ExplorationState {
@@ -38,14 +37,6 @@ export interface ExplorationState {
    */
   visibleHexes: string[];
 
-  /**
-   * The inverted GeoJSON polygon representing the fog.
-   */
-  fogGeoJSON: Feature<Polygon | MultiPolygon> | null;
-
-  // W13-FOG: Positional Delta tracking
-  lastProcessedHexesHash: string;
-
   // Wave 10: Macro Reveal State
   isMacroRevealing: boolean;
   macroRevealCount: number;
@@ -67,7 +58,6 @@ export interface ExplorationState {
   addUnlockedHexes: (hexes: string[]) => number;
   commitActiveBuffer: () => Promise<number>;
   incrementSessionDistance: (distanceMeters: number) => void;
-  updateFogGeoJSON: () => Promise<void>;
   resetExploration: () => void;
   triggerMacroReveal: (count: number) => void;
   clearMacroReveal: () => void;
@@ -82,8 +72,6 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   activeBufferHexes: [],
   unlockedHexes: [],
   visibleHexes: [],
-  fogGeoJSON: null,
-  lastProcessedHexesHash: '',
   isMacroRevealing: false,
   macroRevealCount: 0,
   selectedHistoricalRoute: null,
@@ -97,6 +85,7 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
 
   loadUnlockedHexes: () => {
     try {
+      initGatekeeperFromDB();
       const hexes = getAllUnlockedHexes();
       const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
       set({
@@ -112,6 +101,7 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
   setUnlockedHexes: (hexes: string[]) => {
     // Sanity check to guarantee string types (AGENTS.md guardrail)
     const validHexes = hexes.filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
+    syncGatekeeperHexes(validHexes);
     set({
       historicalHexes: validHexes,
       activeBufferHexes: [],
@@ -126,6 +116,7 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
 
   addUnlockedHexes: (newHexes: string[]) => {
     const validHexes = newHexes.filter((hex): hex is string => typeof hex === 'string' && hex.length > 0);
+    addGatekeeperHexes(validHexes);
     let addedCount = 0;
     set((state) => {
       const existingSet = new Set([...state.historicalHexes, ...state.activeBufferHexes]);
@@ -184,40 +175,13 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
     set((state) => ({ sessionDistanceMeters: state.sessionDistanceMeters + distanceMeters }));
   },
 
-  updateFogGeoJSON: async () => {
-    const { currentLocation, unlockedHexes, visibleHexes, lastProcessedHexesHash } = get();
-    if (!currentLocation) return;
-
-    // W13-FOG: Positional Delta Processing
-    // Merge unlocked and visible hexes
-    const allActiveHexes = Array.from(new Set([...unlockedHexes, ...visibleHexes]));
-
-    // Create a fast hash/string to check if the set of hexes has changed
-    const currentHash = allActiveHexes.sort().join('');
-
-    if (currentHash === lastProcessedHexesHash && lastProcessedHexesHash !== '') {
-      // Delta is empty; skip expensive h3.cellsToMultiPolygon worker call
-      return;
-    }
-
-    const geoJSON = await generateFogGeoJSON(
-      currentLocation.latitude,
-      currentLocation.longitude,
-      allActiveHexes
-    );
-
-    set({
-      fogGeoJSON: geoJSON,
-      lastProcessedHexesHash: currentHash,
-    });
-  },
-
   resetExploration: () => {
     try {
       clearExploredHexes();
     } catch (e) {
       console.warn('Failed to clear database on reset:', e);
     }
+    resetGatekeeper();
     set({
       isExploring: false,
       currentLocation: null,
@@ -225,8 +189,6 @@ export const useExplorationStore = create<ExplorationState>((set, get) => ({
       activeBufferHexes: [],
       unlockedHexes: [],
       visibleHexes: [],
-      fogGeoJSON: null,
-      lastProcessedHexesHash: '',
       isMacroRevealing: false,
       macroRevealCount: 0,
       sessionUnlockedCount: 0,

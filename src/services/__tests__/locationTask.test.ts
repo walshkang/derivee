@@ -134,4 +134,57 @@ describe('Background Location Task (locationTask.ts)', () => {
     const unlockedHexes = handleBackgroundLocationUpdate(mockLocations);
     expect(unlockedHexes.length).toBe(7);
   });
+
+  it('W14.8: drops execution and returns 0 new hexes when location update is in already unlocked hexes', () => {
+    const mockLocation: LocationObject[] = [
+      {
+        coords: {
+          latitude: 40.7128,
+          longitude: -73.956,
+          altitude: null,
+          accuracy: 5,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    // First GPS update unlocks 7 hexes
+    const firstPass = handleBackgroundLocationUpdate(mockLocation);
+    expect(firstPass.length).toBe(7);
+
+    // Second GPS update at exact same location encounters O(1) in-memory Set gatekeeper
+    const secondPass = handleBackgroundLocationUpdate(mockLocation);
+    expect(secondPass.length).toBe(0);
+  });
+
+  it('W14.8: resets in-memory gatekeeper state on store resetExploration()', () => {
+    const mockLocation: LocationObject[] = [
+      {
+        coords: {
+          latitude: 40.7128,
+          longitude: -73.956,
+          altitude: null,
+          accuracy: 5,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    handleBackgroundLocationUpdate(mockLocation);
+    expect(getAllUnlockedHexes().length).toBe(7);
+
+    // Reset exploration state
+    useExplorationStore.getState().resetExploration();
+    expect(getAllUnlockedHexes().length).toBe(0);
+
+    // Subsequent update after reset unlocks 7 hexes again
+    const postResetPass = handleBackgroundLocationUpdate(mockLocation);
+    expect(postResetPass.length).toBe(7);
+  });
 });

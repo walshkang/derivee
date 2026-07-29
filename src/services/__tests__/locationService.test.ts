@@ -32,8 +32,9 @@ describe('Location Service Lifecycle (locationService.ts)', () => {
   it('starts background tracking with correct battery-conscious parameters', async () => {
     const success = await startBackgroundTracking();
     expect(success).toBe(true);
-    expect(Location.startLocationUpdatesAsync).toHaveBeenCalledWith(
-      BACKGROUND_LOCATION_TASK,
+    const callArgs = (Location.startLocationUpdatesAsync as jest.Mock).mock.calls[0];
+    expect(callArgs[0]).toBe(BACKGROUND_LOCATION_TASK);
+    expect(callArgs[1]).toEqual(
       expect.objectContaining({
         accuracy: Location.Accuracy.Balanced,
         distanceInterval: 10,
@@ -43,6 +44,7 @@ describe('Location Service Lifecycle (locationService.ts)', () => {
         showsBackgroundLocationIndicator: true,
       })
     );
+    expect(callArgs[1].timeInterval).toBeUndefined();
     expect(useExplorationStore.getState().isExploring).toBe(true);
   });
 

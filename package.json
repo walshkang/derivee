@@ -17,6 +17,7 @@
   "dependencies": {
     "@maplibre/maplibre-react-native": "^10.4.2",
     "@op-engineering/op-sqlite": "^3.0.0",
+    "@shopify/flash-list": "^2.3.2",
     "@shopify/react-native-skia": "1.2.3",
     "@turf/destination": "^7.3.5",
     "@turf/helpers": "^7.3.5",

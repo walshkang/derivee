@@ -29,6 +29,8 @@ This document is the single source of truth for all planned development waves.
 | **10** | **W10-HISTORIAN** | **GPX/HealthKit Import & Macro-Reveal Animation** | **L** | ✅ Done |
 | **11** | **W11-TIMETABLE** | **Standalone Transit App (Web/Spinoff) & Headway Matrix** | **L** | ✅ Done |
 | **11.5** | **W11.5-MVP-POLISH** | **Light Mode UI Refactor & MVP Launch** | **S** | ✅ Done |
+| **11.6** | **W11.6-DEVOPS** | **Deploy New Go Observer to Oracle Cloud** | **M** | Planned |
+| **11.7** | **W11.7-UI-MATRIX** | **Build Headway Matrix (Timetable) UI** | **L** | Planned |
 | **12** | **W12-BOSTON** | **Multi-City Expansion: MBTA (Post-MVP)** | **L** | Planned |
 | **13** | **W13-FOG-TIERS** | **3-Tier Fog State & Reference Counting (Post-MVP)** | **M** | ✅ Done |
 | **13** | **W13-FOG-STYLE** | **MapLibre Dual-Layer & Temporal Interpolation (Post-MVP)** | **S** | ✅ Done |
@@ -40,10 +42,10 @@ This document is the single source of truth for all planned development waves.
 | **14.5** | **W14.5-STORE** | **AppState Delta-Buffer & Zustand Refactor** | **M** | ✅ Done |
 | **14.5** | **W14.5-RENDER** | **MapLibre Native Array Concatenation (Remove Turf)** | **M** | ✅ Done |
 | **14.6** | **W14.6-BATTERY-HOTFIX** | **Bridge & Polling Optimization Patch** | **M** | ✅ Done |
-| **14.7** | **W14.7-LOCATION-AUDIT** | **Stop the Bleeding: expo-location Audit** | **S** | Planned |
-| **14.8** | **W14.8-SET-GATE** | **Unblock the Thread: In-Memory Set Gate** | **M** | Planned |
-| **14.9** | **W14.9-DDS-FOG** | **DDS Refactor: MapLibre Data-Driven Styling** | **L** | Planned |
-| **14.10** | **W14.10-STATS-UI** | **Fix UI Bottlenecks: FlashList & Bottom Sheet** | **M** | Planned |
+| **14.7** | **W14.7-LOCATION-AUDIT** | **Stop the Bleeding: expo-location Audit** | **S** | ✅ Done |
+| **14.8** | **W14.8-SET-GATE** | **Unblock the Thread: In-Memory Set Gate** | **M** | ✅ Done |
+| **14.9** | **W14.9-DDS-FOG** | **DDS Refactor: MapLibre Data-Driven Styling** | **L** | ✅ Done |
+| **14.10** | **W14.10-STATS-UI** | **Fix UI Bottlenecks: FlashList & Bottom Sheet** | **M** | ✅ Done |
 | **15** | **W15-DYNAMIC-ISLAND** | **Dynamic Island Support for Stat Bar** | **S** | Planned |
 
 ---
@@ -113,6 +115,26 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
+## Wave 11.6 — DevOps: Deploy the New Observer [Planned]
+
+* **Goal**: Deploy the rewritten Golang daemon (handling both Subways and Buses, outputting `static_gtfs.sqlite`) to production.
+* **Agent Directives**:
+  * SSH into the Oracle Cloud VPS (`150.136.171.50`).
+  * Pull the latest Observer code and rebuild the Go binary with SQLite CGO dependencies.
+  * Restart the systemd background service to resume polling the MTA every 3 minutes.
+
+---
+
+## Wave 11.7 — UI: Build the Headway Matrix (Timetable) [Planned]
+
+* **Goal**: Build the Timetable / Headway Matrix UI inside the Transit bottom-sheet using the downloaded `transit_delta.sqlite.zst` data.
+* **Agent Directives**:
+  * Implement the UI in the Transit bottom-sheet to query the local SQLite database.
+  * Render 7-day historical reliability sparklines and actual headway ($\Delta t$) data for the selected station/stop.
+  * **Next Agent Prompt**: "Read `design.md` and `context.md`. We are executing Wave 11. Our `syncService.ts` is already successfully downloading and attaching `transit_delta.sqlite`. Your task is to build the Timetable/Headway Matrix UI component for the transit bottom-sheet. It must query the attached local SQLite database to display the historical reliability sparklines and real-time headways for the selected transit node. Remember to respect our 'Ambient Explorer' design constraints—keep the UI minimalist and native."
+
+---
+
 ## Wave 12 — Multi-City Expansion: Boston (W12-BOSTON) [Post-MVP]
 
 * **The Goal:** Prove the scalability of the architecture by expanding transit coverage to the MBTA system.
@@ -151,47 +173,20 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave 14.7 — Stop the Bleeding (Location Audit) [Planned]
-
-* **Goal**: Eliminate redundant OS wakeups caused by time-based GPS polling.
-* **Agent Directives**:
-  * Inspect the `expo-location` background task initialization (e.g., `startLocationUpdatesAsync`).
-  * Ensure the configuration object strictly uses `distanceInterval: 10` (meters) and `deferredUpdatesDistance: 50` (meters).
-  * Confirm that `timeInterval` is completely removed or commented out.
-  * Verify that `pausesLocationUpdatesAutomatically` is set to `true` and `activityType` is set to `Location.ActivityType.Fitness`.
+## Wave 14.7 — Stop the Bleeding (Location Audit) (✅ Completed)
+*Task W14.7-LOCATION-AUDIT shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
 
-## Wave 14.8 — Unblock the Main Thread (In-Memory Set Gate) [Planned]
-
-* **Goal**: Implement an $O(1)$ JS-side gatekeeper to prevent redundant SQLite queries and MapLibre bridge transfers when the user is stationary or in already-explored territory.
-* **Agent Directives**:
-  * On app initialization, query `@op-engineering/op-sqlite` to fetch all historically unlocked H3 string IDs. Load these into a standard JavaScript `Set` (e.g., `const unlockedHexes = new Set(dbResults)`).
-  * In the background location callback, after converting the raw GPS coordinate to an H3 index, immediately check `unlockedHexes.has(currentH3Index)`.
-  * If the Set returns `true`, **drop execution entirely**. Do not call Zustand, do not query SQLite, and do not update MapLibre.
-  * If the Set returns `false`, add the new index to the Set, fire the SQLite `INSERT`, and update the Zustand state array to trigger a single bridge transfer to MapLibre.
+## Wave 14.8 — Unblock the Main Thread (In-Memory Set Gate) (✅ Completed)
+*Task W14.8-SET-GATE shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
 
-## Wave 14.9 — The Fog Engine DDS Refactor [Planned]
-
-* **Goal**: Deprecate JS-thread hole-punching (`h3.cellsToMultiPolygon`) and offload fog rendering to the native GPU using MapLibre Data-Driven Styling.
-* **Agent Directives**:
-  * Strip out `@turf/mask` and `cellsToMultiPolygon` from the fog geometry generation utilities.
-  * Update the MapLibre component to render a static geometry base (e.g., a static grid of H3 hex polygons covering the 50km bounding box).
-  * Configure the fog layer's `fill-opacity` using a MapLibre `['match']` expression. Pass the Zustand array of unlocked H3 IDs to set their opacity to `0.0`, rendering them transparent and revealing the map below.
-  * Ensure `withSynchronousUpdate(true)` is applied to the data source to bypass bridge serialization bottlenecks.
+## Wave 14.9 — The Fog Engine DDS Refactor (✅ Completed)
+*Task W14.9-DDS-FOG shipped. Prompt archived in `archive/shipped-waves-archive.md`.*
 
 ---
-
-## Wave 14.10 — Stats Screen UI Bottlenecks [Planned]
-
-* **Goal**: Resolve unresponsive touches and callback leaks in `app/stats.tsx` caused by rendering heavy lists inside a gesture-based bottom sheet.
-* **Agent Directives**:
-  * Refactor the Neighborhood Stats list to use `@shopify/flash-list` instead of standard `ScrollView` or `FlatList`.
-  * Because this list lives inside a Gorhom Bottom Sheet, wrap the `FlashList` in a `<BottomSheetScrollView>` or ensure gesture handler imports are strictly from `react-native-gesture-handler`.
-  * Wrap individual row items in `React.memo` to prevent redundant re-renders.
-  * Utilize `InteractionManager.runAfterInteractions` to defer the mounting of the heavy list data until the bottom-sheet opening animation has fully completed.
 
 ---
 

@@ -95,11 +95,13 @@ export function handleBackgroundLocationUpdate(locations: LocationObject[]): str
     const { bufferHexes, newHexCount } = processAndStoreLocationHexes(latitude, longitude);
     totalNewHexCount += newHexCount;
 
-    // Enforce 15-character hex string precision guardrail (AGENTS.md)
-    const validHexes = bufferHexes.filter(
-      (hex): hex is string => typeof hex === 'string' && hex.length === 15
-    );
-    allUnlockedHexes.push(...validHexes);
+    if (newHexCount > 0) {
+      // Enforce 15-character hex string precision guardrail (AGENTS.md)
+      const validHexes = bufferHexes.filter(
+        (hex): hex is string => typeof hex === 'string' && hex.length === 15
+      );
+      allUnlockedHexes.push(...validHexes);
+    }
   }
 
   // 1.5 Background POI Discovery Hook
@@ -124,12 +126,6 @@ export function handleBackgroundLocationUpdate(locations: LocationObject[]): str
         longitude: lastValidLoc.coords.longitude,
       });
     }
-  }
-
-  if (store.currentLocation && totalNewHexCount > 0) {
-    store.updateFogGeoJSON().catch((err) => {
-      console.warn('Failed updating fog GeoJSON in background task handler:', err);
-    });
   }
 
   return allUnlockedHexes;

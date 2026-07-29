@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, Alert, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, Alert, TouchableOpacity, InteractionManager } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useExplorationStore } from '@/store/useExplorationStore';
 import { PRIVACY_STATEMENT, exportSpatialDataJSON } from '@/utils/privacyExporter';
 import * as DocumentPicker from 'expo-document-picker';
@@ -7,13 +8,42 @@ import { useRouter } from 'expo-router';
 import { insertUnlockedHexes, insertTrackingSession, getAllTrackingSessions, TrackingSession, getNeighborhoodCompletion, NeighborhoodStat } from '@/db/database';
 import { parseGPX, parseFIT } from '@/utils/workoutParser';
 
+const NeighborhoodItem = React.memo(({ item, index }: { item: NeighborhoodStat, index: number }) => {
+  const pct = item.total_hexes > 0 ? ((item.explored_hexes / item.total_hexes) * 100).toFixed(2) : '0.00';
+  return (
+    <View style={styles.leaderboardItem}>
+      <Text style={styles.leaderboardRank}>{index + 1}</Text>
+      <Text style={styles.leaderboardName}>{item.name}</Text>
+      <Text style={styles.leaderboardPct}>{pct}%</Text>
+    </View>
+  );
+});
+
 export default function ArchiveScreen() {
   const { unlockedHexes, resetExploration, addUnlockedHexes, triggerMacroReveal, setSelectedHistoricalRoute } = useExplorationStore();
   const [exportedStatus, setExportedStatus] = useState<string | null>(null);
   const [sessions, setSessions] = useState<TrackingSession[]>([]);
   const [neighborhoodStats, setNeighborhoodStats] = useState<NeighborhoodStat[]>([]);
   const [isNYCExpanded, setIsNYCExpanded] = useState(false);
+  const [deferredNeighborhoods, setDeferredNeighborhoods] = useState<NeighborhoodStat[]>([]);
   const router = useRouter();
+
+  useEffect(() => {
+    if (isNYCExpanded) {
+      InteractionManager.runAfterInteractions(() => {
+        const sorted = [...neighborhoodStats]
+          .filter(n => n.explored_hexes > 0)
+          .sort((a, b) => {
+            const aPct = a.total_hexes > 0 ? (a.explored_hexes / a.total_hexes) : 0;
+            const bPct = b.total_hexes > 0 ? (b.explored_hexes / b.total_hexes) : 0;
+            return bPct - aPct;
+          });
+        setDeferredNeighborhoods(sorted);
+      });
+    } else {
+      setDeferredNeighborhoods([]);
+    }
+  }, [isNYCExpanded, neighborhoodStats]);
 
   useEffect(() => {
     loadSessions();
@@ -131,13 +161,7 @@ export default function ArchiveScreen() {
   const cityExploredHexes = neighborhoodStats.reduce((acc, curr) => acc + curr.explored_hexes, 0);
   const cityCompletion = cityTotalHexes > 0 ? ((cityExploredHexes / cityTotalHexes) * 100).toFixed(2) : '0.00';
 
-  const sortedNeighborhoods = [...neighborhoodStats]
-    .filter(n => n.explored_hexes > 0)
-    .sort((a, b) => {
-      const aPct = a.total_hexes > 0 ? (a.explored_hexes / a.total_hexes) : 0;
-      const bPct = b.total_hexes > 0 ? (b.explored_hexes / b.total_hexes) : 0;
-      return bPct - aPct;
-    });
+  const hasAnyNeighborhoods = neighborhoodStats.some(n => n.explored_hexes > 0);
 
   return (
     <View style={styles.container}>
@@ -201,22 +225,20 @@ export default function ArchiveScreen() {
             <View style={styles.neighborhoodList}>
               <Text style={styles.neighborhoodHeader}>Neighborhoods</Text>
               
-              {sortedNeighborhoods.length === 0 ? (
+              {!hasAnyNeighborhoods ? (
                 <View style={styles.poiEmptyState}>
                   <Text style={styles.poiEmptyTitle}>No Neighborhoods Explored</Text>
                   <Text style={styles.poiEmptySub}>Walk around to unlock your first NYC neighborhood.</Text>
                 </View>
               ) : (
-                sortedNeighborhoods.map((n, index) => {
-                  const pct = n.total_hexes > 0 ? ((n.explored_hexes / n.total_hexes) * 100).toFixed(2) : '0.00';
-                  return (
-                    <View key={n.id} style={styles.leaderboardItem}>
-                      <Text style={styles.leaderboardRank}>{index + 1}</Text>
-                      <Text style={styles.leaderboardName}>{n.name}</Text>
-                      <Text style={styles.leaderboardPct}>{pct}%</Text>
-                    </View>
-                  );
-                })
+                <View style={{ height: 400, width: '100%' }}>
+                  <FlashList
+                    data={deferredNeighborhoods}
+                    renderItem={({ item, index }) => <NeighborhoodItem item={item as NeighborhoodStat} index={index} />}
+                    nestedScrollEnabled={true}
+                    keyExtractor={(item) => (item as NeighborhoodStat).id}
+                  />
+                </View>
               )}
             </View>
           )}

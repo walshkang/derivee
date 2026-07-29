@@ -18,7 +18,7 @@ import * as h3 from 'h3-js';
 
 export default function MapScreen() {
   const router = useRouter();
-  const { isExploring, currentLocation, activeBufferHexes, unlockedHexes, fogGeoJSON, updateFogGeoJSON, isMacroRevealing, clearMacroReveal, selectedHistoricalRoute, setSelectedHistoricalRoute, refreshCurrentNeighborhoodStat, loadUnlockedHexes } =
+  const { isExploring, currentLocation, activeBufferHexes, unlockedHexes, isMacroRevealing, clearMacroReveal, selectedHistoricalRoute, setSelectedHistoricalRoute, refreshCurrentNeighborhoodStat, loadUnlockedHexes } =
     useExplorationStore();
   const { startTracking } = useBackgroundLocation();
   const { loadPOIs } = usePOIStore();
@@ -71,13 +71,12 @@ export default function MapScreen() {
     startTracking().catch((err) => console.warn('Failed to start ambient tracking:', err));
   }, [startTracking]);
 
-  // Update the fog GeoJSON layer whenever location or unlocked hexes change
+  // Refresh neighborhood stat whenever location changes
   useEffect(() => {
     if (currentLocation) {
-      updateFogGeoJSON();
       refreshCurrentNeighborhoodStat();
     }
-  }, [unlockedHexes, currentLocation?.latitude, currentLocation?.longitude, updateFogGeoJSON, refreshCurrentNeighborhoodStat]);
+  }, [currentLocation?.latitude, currentLocation?.longitude, refreshCurrentNeighborhoodStat]);
 
   // Layer 5: Dynamic 200m Vicinity Bubble GeoJSON Feature
   const vicinityBubbleGeoJSON = useMemo(() => {
@@ -241,32 +240,43 @@ export default function MapScreen() {
             </MapLibreGL.ShapeSource>
           )}
 
-          {/* Layer 3 & 4: Soft Translucent Cloud Fog Mask with Unlocked Hex Holes */}
-          {fogGeoJSON && (
-            <MapLibreGL.ShapeSource
-              id="fog-source"
-              shape={fogGeoJSON}
-              {...({ withSynchronousUpdate: true } as any)}
-            >
-              {/* W13-FOG-2D: Flat Fog Mask */}
-              <MapLibreGL.FillLayer
-                id="fog-layer"
-                style={{
-                  fillColor: '#0f172a',
-                  fillOpacity: 0.9,
-                }}
-              />
-              {/* Subtle Hex Outlines for Unlocked Hexes */}
-              <MapLibreGL.LineLayer
-                id="fog-hex-outlines"
-                style={{
-                  lineColor: '#64748b',
-                  lineWidth: 2,
-                  lineOpacity: 0.6,
-                }}
-              />
-            </MapLibreGL.ShapeSource>
-          )}
+          {/* Layer 3 & 4: Soft Translucent Cloud Fog Mask with Unlocked Hex Holes (Vector Tiles) */}
+          <MapLibreGL.VectorSource
+            id="fog-source"
+            url="mbtiles://fog-grid.mbtiles" // Fallback: pmtiles://https://fog-of-wburg-cdn.r2.dev/fog-grid.pmtiles
+          >
+            {/* W13-FOG-2D: Flat Fog Mask */}
+            <MapLibreGL.FillLayer
+              id="fog-layer"
+              sourceLayerID="h3_base_grid"
+              style={{
+                fillColor: '#0f172a',
+                fillOpacity: [
+                  'match',
+                  ['get', 'id'],
+                  unlockedHexes.length > 0 ? unlockedHexes : ['none'],
+                  0.0,
+                  0.9
+                ],
+              }}
+            />
+            {/* Subtle Hex Outlines for Unlocked Hexes */}
+            <MapLibreGL.LineLayer
+              id="fog-hex-outlines"
+              sourceLayerID="h3_base_grid"
+              style={{
+                lineColor: '#64748b',
+                lineWidth: 2,
+                lineOpacity: [
+                  'match',
+                  ['get', 'id'],
+                  unlockedHexes.length > 0 ? unlockedHexes : ['none'],
+                  0.6,
+                  0.0
+                ],
+              }}
+            />
+          </MapLibreGL.VectorSource>
 
 
 

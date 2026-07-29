@@ -207,3 +207,44 @@ This archive contains detailed task prompts for completed development waves.
 1. **Objective 1 (Foreground Polling):** In `src/services/locationService.ts`, locate the `watchPositionAsync` foreground fallback and completely remove `timeInterval: 3000`. Time-based polling is strictly forbidden.
 2. **Objective 2 (Background Sync):** In `src/services/locationTask.ts`, ensure that `handleBackgroundLocationUpdate` actually updates `useExplorationStore.getState().setCurrentLocation(...)` using the most recent valid coordinate before it attempts to trigger `store.updateFogGeoJSON()`.
 3. **Objective 3 (Bridge Congestion):** Rip out the custom JS-driven `AnimatedUserLocation` component. Its use of Reanimated `withTiming` to pump `FeatureCollection` JSON over the React Native bridge at 60fps violates the core architecture rules. Replace it in `app/map.tsx` with MapLibre's native `<MapLibreGL.UserLocation visible={true} />` component to achieve zero-bridge-traffic rendering.
+
+---
+
+## Wave 14.7 — Stop the Bleeding (Location Audit)
+
+### Task Prompt: W14.7-LOCATION-AUDIT — Location Audit
+**Goal**: Eliminate redundant OS wakeups caused by time-based GPS polling.
+1. Inspect the `expo-location` background task initialization (`startLocationUpdatesAsync`) in `src/services/locationService.ts`.
+2. Ensure the configuration object strictly uses `distanceInterval: 10` (meters) and `deferredUpdatesDistance: 50` (meters).
+3. Confirm that `timeInterval` is completely removed / omitted from background options and foreground watchers.
+4. Verify that `pausesUpdatesAutomatically` (or `pausesLocationUpdatesAutomatically`) is set to `true` and `activityType` is set to `Location.ActivityType.Fitness`.
+5. Add unit tests in `src/services/__tests__/locationService.test.ts` asserting parameters and the omission of `timeInterval`.
+
+---
+
+## Wave 14.8 — Unblock the Main Thread (In-Memory Set Gate)
+
+### Task Prompt: W14.8-SET-GATE — In-Memory Set Gatekeeper
+**Goal**: Implement an $O(1)$ JS-side gatekeeper outside Zustand to prevent redundant SQLite queries and MapLibre bridge transfers when the user is stationary or in already-explored territory.
+1. Build a module-scoped Set gatekeeper (`const unlockedHexesSet = new Set<string>();`) outside of Zustand state to intercept location updates without React state/re-render overhead.
+2. Implement a race-condition lock (`let isGatekeeperLoaded = false;`) so background GPS ticks are dropped or auto-hydrated until the Set is populated via SQLite on boot.
+3. In `processAndStoreLocationHexes`, perform an $O(1)$ membership check (`bufferHexes.every(hex => unlockedHexesSet.has(hex))`). If `true`, drop execution early (`newHexCount: 0`).
+4. If `false`, add new hexes to the Set, persist to SQLite, and dispatch Zustand updates for MapLibre Data-Driven Styling (`['match']` expression).
+
+## Wave 14.9 — The Fog Engine DDS Refactor [Planned]
+
+* **Goal**: Deprecate JS-thread hole-punching (`h3.cellsToMultiPolygon`) and offload fog rendering to the native GPU using MapLibre Data-Driven Styling.
+* **Agent Directives**:
+  * Strip out `@turf/mask` and `cellsToMultiPolygon` from the fog geometry generation utilities.
+  * Update the MapLibre component to render a static geometry base (e.g., a static grid of H3 hex polygons covering the 50km bounding box).
+  * Configure the fog layer's `fill-opacity` using a MapLibre `['match']` expression. Pass the Zustand array of unlocked H3 IDs to set their opacity to `0.0`, rendering them transparent and revealing the map below.
+  * Ensure `withSynchronousUpdate(true)` is applied to the data source to bypass bridge serialization bottlenecks.
+
+## Wave 14.10 — Stats Screen UI Bottlenecks
+
+* **Goal**: Resolve unresponsive touches and callback leaks in `app/stats.tsx` caused by rendering heavy lists inside a gesture-based bottom sheet.
+* **Agent Directives**:
+  * Refactor the Neighborhood Stats list to use `@shopify/flash-list` instead of standard `ScrollView` or `FlatList`.
+  * Because this list lives inside a Gorhom Bottom Sheet, wrap the `FlashList` in a `<BottomSheetScrollView>` or ensure gesture handler imports are strictly from `react-native-gesture-handler`.
+  * Wrap individual row items in `React.memo` to prevent redundant re-renders.
+  * Utilize `InteractionManager.runAfterInteractions` to defer the mounting of the heavy list data until the bottom-sheet opening animation has fully completed.
