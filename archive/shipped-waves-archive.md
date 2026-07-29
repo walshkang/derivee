@@ -248,3 +248,79 @@ This archive contains detailed task prompts for completed development waves.
   * Because this list lives inside a Gorhom Bottom Sheet, wrap the `FlashList` in a `<BottomSheetScrollView>` or ensure gesture handler imports are strictly from `react-native-gesture-handler`.
   * Wrap individual row items in `React.memo` to prevent redundant re-renders.
   * Utilize `InteractionManager.runAfterInteractions` to defer the mounting of the heavy list data until the bottom-sheet opening animation has fully completed.
+
+---
+
+# 🔄 Superseded Waves — Pre-Sleepy Hermes Architecture
+
+> [!IMPORTANT]
+> The waves below were completed under the original **Expo Managed / JS-background** architecture. They have been **architecturally superseded** by the **Sleepy Hermes Transition (Wave A–D)**, which moves all background location processing to a pure native Swift layer. These entries are preserved for historical context only.
+
+---
+
+## Wave 4 — Background Location & Anti-Drift (🔄 Superseded by Wave C)
+
+### Task Prompt: W4-TRACK — expo-location Background Service & Batching
+**Goal**: Configure `expo-location` and `expo-task-manager` to handle background GPS coordinate batching using the Expo Managed Workflow.
+* **Status**: Originally ✅ Done. Now **superseded** — background tracking is handled by native Swift `CLLocationManager`, not `expo-task-manager`.
+* **Reason for supersession**: `expo-task-manager` executes JavaScript in the background, triggering Hermes garbage collection sweeps and bridge serialization. iOS watchdog processes terminate apps that consume excessive background CPU cycles, yielding `0x8badf00d` (watchdog timeout) and `0xdead10cc` (resource deadlock) exception codes.
+
+### Task Prompt: W4-DRIFT — Implied Speed Filter & Geometry Unioning
+**Goal**: Implement the Drift Gate (Implied Speed Filter) in JavaScript.
+* **Status**: Originally ✅ Done. The **math is preserved** but now executes in the native Swift layer (Wave C), not in a JS background task.
+
+---
+
+## Wave 14.5-BACKGROUND — Local Expo Module for iOS Background Assertions (🔄 Superseded by Wave C)
+
+### Task Prompt: W14.5-BACKGROUND — beginBackgroundTask / endBackgroundTask
+**Goal**: Create a local Expo Module providing Swift bindings for `UIApplication.shared.beginBackgroundTask` and `endBackgroundTask` to prevent iOS watchdog termination during background DB commits.
+* **Status**: Originally ✅ Done. Now **superseded** — background task assertions are integrated directly into the native Swift `HybridTracker` service (Wave C), eliminating the need for a separate Expo Module wrapper.
+
+---
+
+## Wave 14.5 — The Delta-Buffer Architecture (🔄 Superseded by Wave D)
+
+### Task Prompt: W14.5-STORE — AppState Delta-Buffer & Zustand Refactor
+**Goal**: Refactor `useExplorationStore` to manage `historicalHexes` vs `activeBufferHexes` using React Native `AppState` to commit the active buffer when the user locks their phone.
+* **Status**: Originally ✅ Done. Now **superseded** — the AppState hydration pattern is redesigned under Sleepy Hermes (Wave D) to pull delta reads from the shared SQLite database populated by the Swift background service, rather than committing a JS-side active buffer.
+
+---
+
+## Wave 14.6 — Battery & Bridge Optimization Hotfix (🔄 Superseded by Wave A/D)
+
+### Task Prompt: W14.6-BATTERY-HOTFIX
+**Goal**: Patch bridge congestion and polling overhead caused by the JS-based background location pipeline.
+* **Status**: Originally ✅ Done. Now **superseded** — the root cause (JS executing in the background) is eliminated entirely by Sleepy Hermes. Bridge congestion prevention is handled by the $O(1)$ In-Memory Set Gate (Wave D).
+
+---
+
+## Wave 14.7 — Stop the Bleeding: expo-location Audit (🔄 Superseded by Wave C)
+
+### Task Prompt: W14.7-LOCATION-AUDIT
+**Goal**: Audit and minimize `expo-location` background wake frequency to reduce battery drain.
+* **Status**: Originally ✅ Done. Now **superseded** — `expo-location` is no longer used for background tracking. The native Swift `CLLocationManager` with hardware batching (Wave C) replaces the entire pipeline.
+
+---
+
+## Wave 14.8 — Unblock the Main Thread: In-Memory Set Gate (Partially superseded by Wave D)
+
+### Task Prompt: W14.8-SET-GATE
+**Goal**: Implement the $O(1)$ In-Memory `Set` Gate to prevent redundant bridge crossings.
+* **Status**: Originally ✅ Done. The **concept is preserved and enhanced** in Wave D, but the trigger mechanism changes from `expo-task-manager` callbacks to Nitro JSI callbacks and AppState delta hydration.
+
+---
+
+## Wave 14.9 — DDS Fog Refactor (Preserved — not superseded)
+
+### Note
+**W14.9-DDS-FOG** remains valid under Sleepy Hermes. The MapLibre Data-Driven Styling approach is unchanged; only the *source* of hex data shifts from JS background processing to Swift-side database writes hydrated on foreground.
+
+---
+
+## Planned Waves Deferred Pending Sleepy Hermes Completion
+
+* **W11.6-DEVOPS**: Deploy New Go Observer to Oracle Cloud — Deferred, unrelated to Sleepy Hermes.
+* **W11.7-UI-MATRIX**: Build Headway Matrix (Timetable) UI — Deferred, unrelated to Sleepy Hermes.
+* **W12-BOSTON**: Multi-City Expansion: MBTA — Post-MVP, deferred.
+* **W15-DYNAMIC-ISLAND**: Dynamic Island Support — Deferred until Sleepy Hermes stabilizes.

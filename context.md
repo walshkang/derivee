@@ -1,22 +1,72 @@
 # Project Context
 
-## Current Status: Wave 14 (W14-UI-STATS) In Progress / Debugging
-The neighborhood progression tracking and statistics system UI is built, but we are actively working through issues on the Statistics screen (`app/stats.tsx`).
+## Current Status: 🚧 Architectural Migration — Sleepy Hermes Transition (Wave A–D)
 
-### Key Milestones Completed:
-1. **Data Pipeline & GIS Water Subtraction (`W14-DATA-NEIGHBORHOODS`)**:
-   - Created `scripts/generate_neighborhood_db.py` to calculate neighborhood hex counts while excluding water bodies (using NYC Open Data GIS boundaries & Turf.js / Shapely boolean difference).
-   - Generated pre-populated `assets/neighborhood.sqlite` attached dynamically in `src/db/database.ts`.
+**Feature development is frozen.** The project is executing a critical architectural migration from a pure **Expo Managed / JS-background** architecture to a hybrid **"Brownfield" Sleepy Hermes** paradigm.
 
-2. **Contextual Stat Bar & UI Polish (`W14-UI-STATS`)**:
-   - Implemented `ContextualStatPill` (`src/components/ContextualStatPill.tsx`) with a high-contrast light-mode glassmorphic appearance (`rgba(255, 255, 255, 0.95)`, `#e2e8f0` border, `zIndex: 100`) that stands out clearly over map fog.
-   - Built the full Statistics & Records Screen (`app/stats.tsx`) featuring unlocked hex metrics, city-wide percentage, NYC neighborhood leaderboard dropdown, workout GPX/FIT file importer, past workout list, and offline privacy exporter.
+### What Changed
 
-### ⚠️ Open Issue / Active Focus:
-- **Stats Page Navigation & Database Lifecycle (`app/stats.tsx`)**:
-  - We are still struggling with touch interaction/navigation and OP-SQLite connection host function errors (`[OP-SQLite] DB is not open`) when opening the stats screen on iOS runtime.
-  - Next debugging priority: Resolve OP-SQLite singleton connection persistence across Expo Router screen transitions and isolate any native MapView/ScrollView gesture conflicts on `app/stats.tsx`.
+The original architecture relied on `expo-task-manager` and `expo-location` to execute JavaScript in the background for ambient location tracking. This caused:
 
-**Next Planned Wave:**
-- **Wave 14.7 (`W14.7-BRIDGE-REFACTOR`)**: Refactor background location processing with an $O(1)$ 'In-Memory Set Gate' and pivot MapLibre rendering to Data-Driven Styling (DDS) to eliminate UI thread starvation.
-- **Wave 15 (`W15-DYNAMIC-ISLAND`)**: Add iOS Dynamic Island / Live Activities support for ambient neighborhood progression tracking.
+* **iOS watchdog terminations** (`0x8badf00d`, `0xdead10cc`) — the OS kills apps that run JS (with Hermes GC sweeps, bridge serialization, and React state reconciliations) while backgrounded.
+* **Catastrophic battery drain** — background JS execution keeps the CPU awake far beyond what hardware-level GPS batching requires.
+* **Bridge congestion** — rapid background-to-foreground bridge crossings caused micro-stutters below 60fps.
+
+### The Sleepy Hermes Paradigm
+
+All background location processing now runs in a **pure native Swift layer**:
+
+* **Background:** Swift `CLLocationManager` → Drift Gate → H3 C-library → SQLite C-API (WAL mode). Hermes sleeps.
+* **Foreground:** `AppState` resume → `@op-engineering/op-sqlite` delta hydration → $O(1)$ In-Memory Set Gate → Zustand → MapLibre DDS. Hermes wakes.
+* **Bridge:** `react-native-nitro-modules` (JSI) — zero-serialization callbacks between Swift and JS.
+
+### Key Files Updated
+
+| File | Purpose |
+| --- | --- |
+| `docs/architecture.md` | Full Sleepy Hermes architecture specification |
+| `AGENTS.md` | AI guardrails: forbidden patterns, Xcode protocol, H3 string mandate |
+| `ROADMAP.MD` | Fresh roadmap with Wave A–D, old waves archived |
+| `archive/shipped-waves-archive.md` | Superseded waves preserved with rationale |
+
+---
+
+## 🔨 Immediate Next Step (Human Developer)
+
+**Prepare the Xcode workspace for manual GUI linkage.**
+
+The native iOS workspace has been materialized via `npx expo prebuild --clean` and committed on branch `feature/brownfield-sleepy-hermes`. The next physical step (before any code waves can execute) is:
+
+1. Open `ios/FogOfWburg.xcworkspace` in Xcode.
+2. Verify the project builds cleanly with the CNG-generated native code.
+3. Once Wave B (Nitro Scaffolding) generates the `nitrogen/generated/ios/` directory, import it via the Xcode GUI (drag into Project Navigator → "Create groups" → check target membership).
+4. Create `HybridTracker.swift` via Xcode New File → Swift File.
+5. Accept the bridging header prompt → add `#import "h3api.h"` and `#import <sqlite3.h>`.
+6. Integrate the H3 C-library headers into the project search paths.
+
+> These steps **cannot** be automated by the AI agent — they require the Xcode GUI.
+
+---
+
+## Migration Wave Status
+
+| Wave | Task ID | Title | Status |
+|:---:|:---:|:---|:---:|
+| **A** | WA-DB-CONCURRENCY | Database Config & Dual-Thread Concurrency | Planned |
+| **B** | WB-NITRO-SCAFFOLD | Nitro Module Scaffolding & Code Generation | Planned |
+| **C** | WC-SWIFT-SERVICE | Swift Background Service & Baseband Economics | Blocked (needs Xcode GUI linkage from Wave B) |
+| **D** | WD-UI-HYDRATION | UI Synchronization & Foreground Hydration | Blocked (needs Wave C) |
+
+---
+
+## Previous Milestones (Pre-Sleepy Hermes)
+
+All waves 1–14.10 were completed under the original Expo Managed architecture. Key accomplishments preserved:
+
+* MapLibre fog rendering engine with DDS (Data-Driven Styling)
+* Neighborhood progression tracking and statistics UI
+* GTFS-RT transit pipeline with Go Observer backend
+* GPX/HealthKit import with macro-reveal animation
+* Multi-city transit data architecture (NYC + Boston scaffolding)
+
+Detailed prompts and supersession notes are in `archive/shipped-waves-archive.md`.
