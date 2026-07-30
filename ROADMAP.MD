@@ -64,7 +64,8 @@ This document is the single source of truth for all planned development waves.
 
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
-| **11.6** | **W11.6-DEVOPS** | **Deploy Go Observer to Oracle Cloud & Seed R2** | **M** | Planned |
+| **11.6** | **W11.6-DEVOPS** | **Deploy Go Observer to Oracle Cloud & Seed R2** | **M** | ✅ Done |
+| **11.8** | **W11.8-WEB-FIXES** | **Transit Web MVP Bugfixes & Polish** | **M** | Planned |
 | **E** | **WE-ONBOARDING** | **Onboarding Gate & First-Launch Infrastructure** | **M** | Planned |
 | **F** | **WF-MAP-OVERHAUL** | **Map UI Overhaul & Ghost POI Lifecycle** | **L** | Planned |
 | **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | **S** | Planned |
@@ -212,6 +213,40 @@ Deploy the Go-based Observer daemon to Oracle Cloud infrastructure and establish
 * `nyc_transit_delta.sqlite.zst` is present and fresh (< 24 hours old) on the R2 bucket.
 * The file is publicly fetchable from the mobile client's network context.
 * File decompresses cleanly and contains valid SQLite with the expected schema.
+
+---
+
+## Wave 11.8 — Transit Web MVP Bugfixes & Polish [Planned]
+
+**Task ID:** `W11.8-WEB-FIXES`
+**Depends on:** Wave 11.5 (Transit Web MVP Launch).
+
+### Goal
+Address immediate visual and functional bugs in the `transit-web` spinoff to ensure the MVP is stable, visually polished, and matches the fidelity of the official MTA maps.
+
+### Agent Directives
+
+1. **Map Color & Stop Matching:**
+   * [x] Fix the `stop_id` to route matching logic so that all subway stops (e.g. the ones rendering as purple defaults) correctly inherit their official MTA route colors and properly pull live arrival times.
+2. **Map Design & Routing Fidelity:**
+   * [ ] Take inspiration from the latest MTA subway map: show all individual lines on the map rather than merged trunks.
+   * [ ] Render multiple parallel lines for shared corridors (e.g. 3 distinct green lines for the 4/5/6 to visually indicate transfer stations).
+   * [ ] Ensure bridges carrying multiple services (e.g., Williamsburg bridge) render with all respective colors (Orange for M, Brown for J/Z).
+3. **Arrivals UI Contrast & Direction:**
+   * [x] Update the real-time arrivals text in the bottom sheet to display proper directionality (e.g., "Manhattan-bound", "Uptown").
+   * [ ] Fix the color contrast for the arrivals text (the current Electric Amber `#FFB300` is unreadable against the light mode background).
+4. **Historical Data Validation:**
+   * [x] Ensure historical reliability sparklines accurately load real SQLite data for both subways and buses from the Observer daemon, rather than falling back to dummy/empty states.
+5. **Bus Map Clutter Reduction:**
+   * [ ] Optimize the bus map view by implementing dynamic zoom-based loading.
+   * [ ] Only render bus stops that are within the current view window at a close zoom level, or filter to only display the busiest nodes at macro zoom levels.
+
+### Verification
+* All subway nodes match their official colors and fetch live data correctly.
+* Parallel subway lines are visible on shared corridors.
+* Arrivals text is legible in Light Mode and includes direction strings.
+* Sparklines render real data from `transit_delta.sqlite`.
+* Bus view remains performant and legible at all zoom levels.
 
 ---
 

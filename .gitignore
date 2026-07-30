@@ -18,3 +18,8 @@ venv/
 # IDE
 .vscode/
 .idea/
+
+# Build logs and AI scratch
+*.log
+.agents/
+skills-lock.json

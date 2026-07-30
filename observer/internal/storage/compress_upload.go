@@ -64,6 +64,7 @@ func UploadToR2(filePath string) error {
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(endpoint)
 		o.UsePathStyle = true
+		o.Region = region
 	})
 
 	file, err := os.Open(filePath)

@@ -1,0 +1,39 @@
+.sparkline-container {
+  width: 100%;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sparkline-svg {
+  width: 100%;
+  height: 60px;
+  overflow: visible;
+}
+
+.sparkline-stroke {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: all 0.3s ease;
+}
+
+.sparkline-area {
+  transition: all 0.3s ease;
+}
+
+.sparkline-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-family: 'SF Mono', monospace;
+  font-size: 10px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.5));
+}
+
+.sparkline-empty {
+  font-family: 'SF Pro', sans-serif;
+  font-size: 14px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.5));
+  text-align: center;
+  padding: 20px 0;
+}

@@ -32,6 +32,7 @@ func InitDB(path string) (*Database, error) {
 		event_id TEXT PRIMARY KEY,
 		trip_id TEXT NOT NULL,
 		route_id TEXT NOT NULL,
+		direction_id INTEGER NOT NULL DEFAULT 0,
 		stop_id TEXT NOT NULL,
 		scheduled_time INTEGER,
 		actual_time INTEGER NOT NULL,
@@ -42,14 +43,17 @@ func InitDB(path string) (*Database, error) {
 	CREATE TABLE IF NOT EXISTS stop_reliability_hourly (
 		route_id TEXT NOT NULL,
 		stop_id TEXT NOT NULL,
+		direction_id INTEGER NOT NULL DEFAULT 0,
 		hour_of_day INTEGER NOT NULL,
 		day_of_week INTEGER NOT NULL,
 		median_delay_sec INTEGER NOT NULL,
 		p90_delay_sec INTEGER NOT NULL,
+		median_headway_sec INTEGER NOT NULL DEFAULT 0,
+		headway_stddev_sec INTEGER NOT NULL DEFAULT 0,
 		ewt_seconds REAL NOT NULL,
 		on_time_pct REAL NOT NULL,
 		sample_count INTEGER NOT NULL,
-		PRIMARY KEY (route_id, stop_id, hour_of_day, day_of_week)
+		PRIMARY KEY (route_id, stop_id, direction_id, hour_of_day, day_of_week)
 	) WITHOUT ROWID;
 	
 	CREATE INDEX IF NOT EXISTS idx_stop_events_observed ON stop_events(observed_at);
@@ -74,8 +78,8 @@ func (d *Database) InsertEvents(events []processor.StopEvent) error {
 	}
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO stop_events (event_id, trip_id, route_id, stop_id, scheduled_time, actual_time, delay_seconds, observed_at) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO stop_events (event_id, trip_id, route_id, direction_id, stop_id, scheduled_time, actual_time, delay_seconds, observed_at) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(event_id) DO NOTHING;
 	`)
 	if err != nil {
@@ -85,7 +89,7 @@ func (d *Database) InsertEvents(events []processor.StopEvent) error {
 	defer stmt.Close()
 
 	for _, e := range events {
-		_, err = stmt.Exec(e.EventID, e.TripID, e.RouteID, e.StopID, e.ScheduledTime, e.ActualTime, e.DelaySeconds, e.ObservedAt)
+		_, err = stmt.Exec(e.EventID, e.TripID, e.RouteID, e.DirectionID, e.StopID, e.ScheduledTime, e.ActualTime, e.DelaySeconds, e.ObservedAt)
 		if err != nil {
 			log.Printf("Failed to insert event %s: %v", e.EventID, err)
 		}

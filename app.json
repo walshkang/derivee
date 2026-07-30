@@ -50,7 +50,16 @@
           "isAndroidBackgroundLocationEnabled": true
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-build-properties",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ]
   }
 }

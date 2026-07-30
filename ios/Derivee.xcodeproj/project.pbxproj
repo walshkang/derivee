@@ -10,7 +10,7 @@
 		13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB01A68108700A75B9A /* AppDelegate.mm */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
-		32307EDC301AEF68000EB43D /* React-Codegen.podspec.json in Resources */ = {isa = PBXBuildFile; fileRef = 32307ED2301AEF68000EB43D /* React-Codegen.podspec.json */; };
+		1576236F7D8A55C3F9398175 /* Pods_Derivee.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 494C9478E776AC985F92E6A5 /* Pods_Derivee.framework */; };
 		32307EDD301AEF68000EB43D /* NitroModulesSpec-generated.mm in Sources */ = {isa = PBXBuildFile; fileRef = 32307E86301AEF68000EB43D /* NitroModulesSpec-generated.mm */; };
 		32307EDE301AEF68000EB43D /* ComponentDescriptors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E8C301AEF68000EB43D /* ComponentDescriptors.cpp */; };
 		32307EDF301AEF68000EB43D /* rnskiaJSI-generated.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307ED8301AEF68000EB43D /* rnskiaJSI-generated.cpp */; };
@@ -51,7 +51,6 @@
 		364D748BAB2C4085B0714420 /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCD02DB5B78B41E6BCEE4798 /* noop-file.swift */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		79906E06BBEE46693F81737F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6FE69F0095C3C4920D96DEE6 /* PrivacyInfo.xcprivacy */; };
-		96905EF65AED1B983A6B3ABC /* libPods-Derivee.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 58EEBF8E8E6FB1BC6CAF49B5 /* libPods-Derivee.a */; };
 		B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 /* End PBXBuildFile section */
@@ -130,7 +129,6 @@
 		32307ECF301AEF68000EB43D /* OPSQLiteSpecJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "OPSQLiteSpecJSI-generated.cpp"; sourceTree = "<group>"; };
 		32307ED0301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RCTModulesConformingToProtocolsProvider.h; sourceTree = "<group>"; };
 		32307ED1301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = RCTModulesConformingToProtocolsProvider.mm; sourceTree = "<group>"; };
-		32307ED2301AEF68000EB43D /* React-Codegen.podspec.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "React-Codegen.podspec.json"; sourceTree = "<group>"; };
 		32307ED3301AEF68000EB43D /* rnreanimatedJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rnreanimatedJSI.h; sourceTree = "<group>"; };
 		32307ED4301AEF68000EB43D /* rnreanimatedJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "rnreanimatedJSI-generated.cpp"; sourceTree = "<group>"; };
 		32307ED5301AEF68000EB43D /* rnscreensJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rnscreensJSI.h; sourceTree = "<group>"; };
@@ -140,7 +138,7 @@
 		32307ED9301AEF68000EB43D /* safeareacontextJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = safeareacontextJSI.h; sourceTree = "<group>"; };
 		32307EDA301AEF68000EB43D /* safeareacontextJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "safeareacontextJSI-generated.cpp"; sourceTree = "<group>"; };
 		32307F00301AEF88000EB43D /* HybridTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridTracker.swift; sourceTree = "<group>"; };
-		58EEBF8E8E6FB1BC6CAF49B5 /* libPods-Derivee.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Derivee.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		494C9478E776AC985F92E6A5 /* Pods_Derivee.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Derivee.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C2E3173556A471DD304B334 /* Pods-Derivee.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Derivee.debug.xcconfig"; path = "Target Support Files/Pods-Derivee/Pods-Derivee.debug.xcconfig"; sourceTree = "<group>"; };
 		6FE69F0095C3C4920D96DEE6 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = Derivee/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		7A4D352CD337FB3A3BF06240 /* Pods-Derivee.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Derivee.release.xcconfig"; path = "Target Support Files/Pods-Derivee/Pods-Derivee.release.xcconfig"; sourceTree = "<group>"; };
@@ -157,7 +155,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				32CB0EB0301AE51000BE6A14 /* MapLibre in Frameworks */,
-				96905EF65AED1B983A6B3ABC /* libPods-Derivee.a in Frameworks */,
+				1576236F7D8A55C3F9398175 /* Pods_Derivee.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -187,7 +185,7 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				58EEBF8E8E6FB1BC6CAF49B5 /* libPods-Derivee.a */,
+				494C9478E776AC985F92E6A5 /* Pods_Derivee.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -373,7 +371,6 @@
 				32307ECF301AEF68000EB43D /* OPSQLiteSpecJSI-generated.cpp */,
 				32307ED0301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.h */,
 				32307ED1301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.mm */,
-				32307ED2301AEF68000EB43D /* React-Codegen.podspec.json */,
 				32307ED3301AEF68000EB43D /* rnreanimatedJSI.h */,
 				32307ED4301AEF68000EB43D /* rnreanimatedJSI-generated.cpp */,
 				32307ED5301AEF68000EB43D /* rnscreensJSI.h */,
@@ -522,7 +519,6 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				79906E06BBEE46693F81737F /* PrivacyInfo.xcprivacy in Resources */,
-				32307EDC301AEF68000EB43D /* React-Codegen.podspec.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -813,6 +809,17 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"${PODS_CONFIGURATION_BUILD_DIR}/ReactCommon/ReactCommon.framework/Headers",
+					"${PODS_CONFIGURATION_BUILD_DIR}/ReactCommon/ReactCommon.framework/Headers/react/nativemodule/core",
+					"${PODS_CONFIGURATION_BUILD_DIR}/ReactCommon-Samples/ReactCommon_Samples.framework/Headers",
+					"${PODS_CONFIGURATION_BUILD_DIR}/ReactCommon-Samples/ReactCommon_Samples.framework/Headers/platform/ios",
+					"${PODS_CONFIGURATION_BUILD_DIR}/React-Fabric/React_Fabric.framework/Headers/react/renderer/components/view/platform/cxx",
+					"${PODS_CONFIGURATION_BUILD_DIR}/React-NativeModulesApple/React_NativeModulesApple.framework/Headers",
+					"${PODS_CONFIGURATION_BUILD_DIR}/React-graphics/React_graphics.framework/Headers",
+					"${PODS_CONFIGURATION_BUILD_DIR}/React-graphics/React_graphics.framework/Headers/react/renderer/graphics/platform/ios",
+				);
 				IPHONEOS_DEPLOYMENT_TARGET = 13.4;
 				LD = "";
 				LDPLUSPLUS = "";
@@ -823,7 +830,10 @@
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				OTHER_LDFLAGS = "$(inherited)  ";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;
@@ -872,6 +882,17 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"${PODS_CONFIGURATION_BUILD_DIR}/ReactCommon/ReactCommon.framework/Headers",
+					"${PODS_CONFIGURATION_BUILD_DIR}/ReactCommon/ReactCommon.framework/Headers/react/nativemodule/core",
+					"${PODS_CONFIGURATION_BUILD_DIR}/ReactCommon-Samples/ReactCommon_Samples.framework/Headers",
+					"${PODS_CONFIGURATION_BUILD_DIR}/ReactCommon-Samples/ReactCommon_Samples.framework/Headers/platform/ios",
+					"${PODS_CONFIGURATION_BUILD_DIR}/React-Fabric/React_Fabric.framework/Headers/react/renderer/components/view/platform/cxx",
+					"${PODS_CONFIGURATION_BUILD_DIR}/React-NativeModulesApple/React_NativeModulesApple.framework/Headers",
+					"${PODS_CONFIGURATION_BUILD_DIR}/React-graphics/React_graphics.framework/Headers",
+					"${PODS_CONFIGURATION_BUILD_DIR}/React-graphics/React_graphics.framework/Headers/react/renderer/graphics/platform/ios",
+				);
 				IPHONEOS_DEPLOYMENT_TARGET = 13.4;
 				LD = "";
 				LDPLUSPLUS = "";
@@ -881,7 +902,10 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = NO;
-				OTHER_LDFLAGS = "$(inherited)  ";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;

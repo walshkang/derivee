@@ -25,40 +25,46 @@ export const historianService = {
     }
   },
 
-  async getHeadwayData(routeId, stopId) {
+  async getSparklineData(routeId, stopId) {
     if (!db) await this.init();
     if (!db) return [];
 
     try {
-      // The observer currently exports dummy rows to reliability_stats
-      const res = db.exec(`SELECT * FROM stop_reliability_hourly WHERE route_id = '${routeId}' ORDER BY hour_of_day DESC LIMIT 5`);
+      const res = db.exec(`
+        SELECT day_of_week, hour_of_day, on_time_pct 
+        FROM stop_reliability_hourly 
+        WHERE route_id = '${routeId}' AND stop_id = '${stopId}' 
+        ORDER BY day_of_week, hour_of_day
+      `);
       
-      // In the future we will map the SQLite rows to the headway matrix format
-      // For now, since the DB contains a single dummy reliability row, 
-      // we generate a headway matrix to demonstrate the UI works when DB is loaded.
+      if (res.length === 0 || !res[0].values || res[0].values.length === 0) {
+        return [];
+      }
+
+      // Initialize array of 168 points to 0
+      const dataPoints = new Array(168).fill(0);
       
-      return [
-        {
-          hour: '12',
-          arrivals: [
-            { minute: '05', status: 'on-time' },
-            { minute: '12', status: 'delayed' },
-            { minute: '25', status: 'severe' },
-            { minute: '35', status: 'on-time' }
-          ]
-        },
-        {
-          hour: '13',
-          arrivals: [
-            { minute: '02', status: 'on-time' },
-            { minute: '15', status: 'on-time' },
-            { minute: '30', status: 'delayed' },
-            { minute: '45', status: 'on-time' }
-          ]
+      const values = res[0].values;
+      let hasData = false;
+      for (const row of values) {
+        const dayOfWeek = row[0];
+        const hourOfDay = row[1];
+        const onTimePct = row[2];
+        const index = (dayOfWeek * 24) + hourOfDay;
+        if (index >= 0 && index < 168) {
+          dataPoints[index] = onTimePct;
+          hasData = true;
         }
-      ];
+      }
+
+      if (!hasData) {
+        // Fallback dummy data for MVP demonstration when DB is empty for a stop
+        return Array.from({ length: 168 }, (_, i) => 70 + Math.sin(i / 12) * 20 + Math.random() * 10);
+      }
+
+      return dataPoints;
     } catch (e) {
-      console.error('Query failed:', e);
+      console.error('Sparkline Query failed:', e);
       return [];
     }
   }

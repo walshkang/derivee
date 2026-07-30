@@ -2,7 +2,7 @@
 
 This document is the **single authoritative reference** for all visual design, screen hierarchy, interaction patterns, and UI acceptance criteria. If a screen, component, or animation is not defined here, an agent **must not** invent it.
 
-For backend data flows, native bridging, and library constraints, see [architecture.md](file:///Volumes/T7ssd/fog-of-wburg/docs/architecture.md).
+For backend data flows, native bridging, and library constraints, see [architecture.md](file:///Volumes/T7ssd/derivee/docs/architecture.md).
 
 ---
 
@@ -77,7 +77,7 @@ Standard cartographic data (streets, parks, travel direction) is handled entirel
 
 ### 2.2 The 6-Layer Rendering Stack
 
-The MapLibre layer stack **must** follow this exact Z-index order. See [architecture.md §8](file:///Volumes/T7ssd/fog-of-wburg/docs/architecture.md) for implementation specifics.
+The MapLibre layer stack **must** follow this exact Z-index order. See [architecture.md §8](file:///Volumes/T7ssd/derivee/docs/architecture.md) for implementation specifics.
 
 | Z-Index | Layer Name | Purpose |
 |:---|:---|:---|
@@ -313,7 +313,7 @@ When a user uploads a heavy GPX file containing hundreds of new hexes, the bridg
 * **Implementation:** Use MapLibre's native `fill-opacity-transition` with a staggered delay per hex cluster (sorted by distance from the user's position). The fog literally "melts away" from the user outward.
 
 > [!NOTE]
-> **Design Aspiration — Skia Enhancement:** For a more dramatic volumetric sunburst effect, `@shopify/react-native-skia` could be introduced to render a custom shader-based dissolve mask. This library is **not currently in the locked stack** (see [architecture.md §2](file:///Volumes/T7ssd/fog-of-wburg/docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
+> **Design Aspiration — Skia Enhancement:** For a more dramatic volumetric sunburst effect, `@shopify/react-native-skia` could be introduced to render a custom shader-based dissolve mask. This library is **not currently in the locked stack** (see [architecture.md §2](file:///Volumes/T7ssd/derivee/docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
 
 ### 5.2 Bottom Sheet Transitions
 
@@ -348,7 +348,7 @@ Progression stats must eventually be accessible **outside** the app while the us
 
 * **Delivery:** A native Swift module pushes exploration progress to the iOS Dynamic Island and Lock Screen Live Activities (e.g., "5 hexes unlocked this walk").
 * **Update Frequency:** Batched — update the Live Activity only when a new hex cluster (≥ 3 hexes) is unlocked, not on every individual hex. This prevents excessive UI refreshes.
-* **Scope:** This is explicitly deferred to **Wave 15** (see [ROADMAP.MD](file:///Volumes/T7ssd/fog-of-wburg/ROADMAP.MD)). Agents **must not** implement this until Wave 15 is active.
+* **Scope:** This is explicitly deferred to **Wave 15** (see [ROADMAP.MD](file:///Volumes/T7ssd/derivee/ROADMAP.MD)). Agents **must not** implement this until Wave 15 is active.
 
 ---
 
@@ -405,4 +405,4 @@ The `total_hexes` value must represent **only physically walkable/cyclable terri
 This is entirely front-end/local state:
 * The Zustand store tracks the continuous delta of newly unlocked hexes (sourced from Nitro real-time callbacks or AppState hydration reads).
 * Progress percentage is computed as: `(cleared_hexes_in_neighborhood / total_hexes_in_neighborhood) * 100`.
-* The $O(1)$ In-Memory Set Gate (see [architecture.md §7.3](file:///Volumes/T7ssd/fog-of-wburg/docs/architecture.md)) ensures this comparison is instantaneous.
+* The $O(1)$ In-Memory Set Gate (see [architecture.md §7.3](file:///Volumes/T7ssd/derivee/docs/architecture.md)) ensures this comparison is instantaneous.

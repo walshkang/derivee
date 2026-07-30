@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Map from 'react-map-gl/maplibre';
 import DeckGL from '@deck.gl/react';
 import { ScatterplotLayer, GeoJsonLayer } from '@deck.gl/layers';
-import { MTA_SUBWAY_FEEDS } from '../services/transitConfig';
+import { MTA_SUBWAY_FEEDS, getRouteColor, hexToRgb } from '../services/transitConfig';
 import { transitService } from '../services/transitService';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './TransitMap.css';
@@ -77,7 +77,10 @@ export default function TransitMap({ activeMode, onNodeTap }) {
     stroked: true,
     filled: false,
     lineWidthMinPixels: 3,
-    getLineColor: [170, 59, 255, 120], 
+    getLineColor: f => {
+      const rgb = hexToRgb(getRouteColor(f.properties.route_id));
+      return [...rgb, 180]; // add alpha
+    },
     visible: activeMode === 'subway'
   });
 
@@ -86,7 +89,11 @@ export default function TransitMap({ activeMode, onNodeTap }) {
     data: '/subway-stops.geojson',
     pointRadiusMinPixels: 4,
     getFillColor: [255, 255, 255],
-    getLineColor: [170, 59, 255],
+    getLineColor: f => {
+      const routeId = f.properties.stop_id.charAt(0);
+      const rgb = hexToRgb(getRouteColor(routeId));
+      return rgb;
+    },
     stroked: true,
     lineWidthMinPixels: 2,
     pickable: true,
@@ -96,7 +103,7 @@ export default function TransitMap({ activeMode, onNodeTap }) {
         onNodeTap({
           stopId: info.object.properties.stop_id,
           name: info.object.properties.stop_name,
-          route: 'L' // MVP: hardcoded to L train
+          route: info.object.properties.stop_id.charAt(0) // Extract route from stop_id
         });
       }
     }

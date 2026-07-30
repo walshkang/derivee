@@ -48,5 +48,54 @@
 }
 
 .drawer-matrix-container {
-  margin-top: 16px;
+  margin-top: 10px;
+}
+
+.drawer-arrivals-list {
+  margin-top: 20px;
+  margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.drawer-arrival-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.arrival-route {
+  font-family: 'SF Pro', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #fff;
+  min-width: 30px;
+}
+
+.arrival-direction {
+  flex: 1;
+  font-family: 'SF Pro', sans-serif;
+  font-size: 14px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  margin-left: 12px;
+  text-transform: capitalize;
+}
+
+.arrival-time {
+  font-family: 'SF Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-amber, #FFB300);
+}
+
+.arrival-empty {
+  font-family: 'SF Pro', sans-serif;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  padding: 10px 0;
 }

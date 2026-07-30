@@ -31,6 +31,7 @@ type StopEvent struct {
 	EventID       string
 	TripID        string
 	RouteID       string
+	DirectionID   uint32
 	StopID        string
 	ScheduledTime int
 	ActualTime    int
@@ -133,6 +134,7 @@ func (e *StopEventEngine) recordStopEvent(trip *ActiveTrip, pred StopPrediction,
 		EventID:       uuid.New().String(),
 		TripID:        trip.TripID,
 		RouteID:       trip.RouteID,
+		DirectionID:   trip.DirectionID,
 		StopID:        pred.StopID,
 		ScheduledTime: scheduledTime,
 		ActualTime:    int(actualTime),
