@@ -7,7 +7,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>Fog of Wburg</string>
+    <string>Dérivée</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -27,8 +27,8 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>fog-of-wburg</string>
-          <string>com.fogofwburg.app</string>
+          <string>derivee</string>
+          <string>com.derivee.app</string>
         </array>
       </dict>
     </array>
@@ -44,11 +44,11 @@
       <true/>
     </dict>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Allow Fog of Wburg to use your location in the background to uncover the map as you explore.</string>
+    <string>Allow Dérivée to use your location in the background to uncover the map as you explore.</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>Allow Fog of Wburg to track your exploration even when the app is in the background.</string>
+    <string>Allow Dérivée to track your exploration even when the app is in the background.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Allow Fog of Wburg to track your exploration while using the app.</string>
+    <string>Allow Dérivée to track your exploration while using the app.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
@@ -81,7 +81,7 @@
       <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>UIUserInterfaceStyle</key>
-    <string>Dark</string>
+    <string>Automatic</string>
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>
   </dict>

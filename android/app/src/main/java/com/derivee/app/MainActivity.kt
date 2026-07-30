@@ -1,4 +1,4 @@
-package com.fogofwburg.app
+package com.derivee.app
 
 import android.os.Build
 import android.os.Bundle

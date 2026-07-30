@@ -44,7 +44,7 @@ if (getRNMinorVersion() >= 75) {
   }
 }
 
-rootProject.name = 'Fog of Wburg'
+rootProject.name = 'Derivee'
 
 dependencyResolutionManagement {
   versionCatalogs {

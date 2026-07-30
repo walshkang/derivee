@@ -10,7 +10,7 @@
 #include "HybridHybridTrackingSpec.hpp"
 
 // Forward declaration of `HybridHybridTrackingSpec_cxx` to properly resolve imports.
-namespace FogOfWburg { class HybridHybridTrackingSpec_cxx; }
+namespace Derivee { class HybridHybridTrackingSpec_cxx; }
 
 
 
@@ -18,7 +18,7 @@ namespace FogOfWburg { class HybridHybridTrackingSpec_cxx; }
 #include <functional>
 #include <vector>
 
-#include "FogOfWburg-Swift-Cxx-Umbrella.hpp"
+#include "Derivee-Swift-Cxx-Umbrella.hpp"
 
 namespace margelo::nitro::hybridtracker {
 
@@ -35,13 +35,13 @@ namespace margelo::nitro::hybridtracker {
   class HybridHybridTrackingSpecSwift: public virtual HybridHybridTrackingSpec {
   public:
     // Constructor from a Swift instance
-    explicit HybridHybridTrackingSpecSwift(const FogOfWburg::HybridHybridTrackingSpec_cxx& swiftPart):
+    explicit HybridHybridTrackingSpecSwift(const Derivee::HybridHybridTrackingSpec_cxx& swiftPart):
       HybridObject(HybridHybridTrackingSpec::TAG),
       _swiftPart(swiftPart) { }
 
   public:
     // Get the Swift part
-    inline FogOfWburg::HybridHybridTrackingSpec_cxx& getSwiftPart() noexcept {
+    inline Derivee::HybridHybridTrackingSpec_cxx& getSwiftPart() noexcept {
       return _swiftPart;
     }
 
@@ -102,7 +102,7 @@ namespace margelo::nitro::hybridtracker {
     }
 
   private:
-    FogOfWburg::HybridHybridTrackingSpec_cxx _swiftPart;
+    Derivee::HybridHybridTrackingSpec_cxx _swiftPart;
   };
 
 } // namespace margelo::nitro::hybridtracker

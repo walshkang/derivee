@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Dérivée",
+    "name": "Derivee",
     "slug": "derivee",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,6 +15,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.derivee.app",
       "infoPlist": {
+        "CFBundleDisplayName": "Dérivée",
         "UIBackgroundModes": [
           "location"
         ]
