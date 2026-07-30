@@ -1,4 +1,4 @@
-# Shipped Waves Archive — Fog of Wburg
+# Shipped Waves Archive — Dérivée
 
 This archive contains detailed task prompts for completed development waves.
 

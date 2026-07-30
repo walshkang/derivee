@@ -1,6 +1,6 @@
-# Fog of Wburg: Architecture & Technical Specification
+# Dérivée: Architecture & Technical Specification
 
-This document defines the strictly enforced architectural paradigms, library choices, and data flows for **Fog of Wburg**.
+This document defines the strictly enforced architectural paradigms, library choices, and data flows for **Dérivée**.
 
 The application is an offline-first, battery-conscious iOS app built as a **hybrid "Brownfield" architecture**. It uses Expo for UI rendering, navigation, and config plugins, while critical background operations execute in a **pure native Swift layer** that bypasses the JavaScript engine entirely.
 
@@ -177,11 +177,11 @@ The legacy React Native bridge serializes all cross-boundary calls through async
 
 Because the project operates under a **Brownfield constraint** prohibiting programmatic modifications to `ios/*.pbxproj`, all native file linkage must be executed through the **Xcode GUI**. The sequence:
 
-1. **Open Workspace:** Launch Xcode → open `ios/FogOfWburg.xcworkspace` (CocoaPods workspace, not bare project).
+1. **Open Workspace:** Launch Xcode → open `ios/Derivee.xcworkspace` (CocoaPods workspace, not bare project).
 2. **Import Nitrogen Sources:** Drag `nitrogen/generated/ios/` from Finder into the Xcode Project Navigator under the main app target.
-3. **Target Membership:** In the import dialog, check the main application target (e.g., `FogOfWburg`) and select **"Create groups"** (not folder references).
+3. **Target Membership:** In the import dialog, check the main application target (e.g., `Derivee`) and select **"Create groups"** (not folder references).
 4. **Create Implementation:** Right-click the app target folder → New File → Swift File → `HybridTracker.swift`. Verify target membership.
-5. **Bridging Header:** Accept the Xcode prompt to create `FogOfWburg-Bridging-Header.h`. Add:
+5. **Bridging Header:** Accept the Xcode prompt to create `Derivee-Bridging-Header.h`. Add:
    ```c
    #import "h3api.h"
    #import <sqlite3.h>

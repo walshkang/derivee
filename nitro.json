@@ -1,11 +1,11 @@
 {
   "cxxNamespace": ["hybridtracker"],
   "ios": {
-    "iosModuleName": "FogOfWburg"
+    "iosModuleName": "Derivee"
   },
   "android": {
-    "androidNamespace": ["com", "fogofwburg", "app"],
-    "androidCxxLibName": "FogOfWburg"
+    "androidNamespace": ["com", "derivee", "app"],
+    "androidCxxLibName": "Derivee"
   },
   "autolinking": {
     "HybridTracking": {

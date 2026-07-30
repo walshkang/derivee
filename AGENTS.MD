@@ -1,4 +1,4 @@
-# AGENTS.md — Project-Level Instructions for AI Sessions ("Fog of Wburg")
+# AGENTS.md — Project-Level Instructions for AI Sessions ("Dérivée")
 
 ## 🤖 AI Session Startup & Operational Rules
 
@@ -26,7 +26,7 @@ The project operates under a **Brownfield constraint** that prohibits programmat
 
 * **NEVER script or programmatically alter `ios/*.pbxproj`**: All Nitro Module linkage, H3 C-library header imports, bridging header configuration, and Swift implementation file additions must be performed **exclusively through the Xcode Graphical User Interface** by the human developer.
 * **Agent responsibility**: When a task requires native file changes (adding a new Swift file, importing generated Nitrogen sources, updating the bridging header), the agent must produce **clear, step-by-step Xcode GUI instructions** for the human developer to execute manually. Never attempt to automate these steps via shell commands, `sed`, `ruby`, or `xcodeproj` scripts.
-* **Workspace, not project**: Always instruct the human to open `ios/FogOfWburg.xcworkspace` (the CocoaPods workspace), **not** the bare `.xcodeproj`.
+* **Workspace, not project**: Always instruct the human to open `ios/Derivee.xcworkspace` (the CocoaPods workspace), **not** the bare `.xcodeproj`.
 * **"Create groups" not "Create folder references"**: When importing files into Xcode, always instruct selection of "Create groups" to ensure the Swift compiler properly indexes the files.
 
 ---
@@ -35,7 +35,7 @@ The project operates under a **Brownfield constraint** that prohibits programmat
 
 * **Progressive Disclosure strictly enforced**: The map is the UI. **Never** build heavy, persistent HUDs (like constant "Distance Traveled" widgets overlaying the screen).
 * **Ambient Tracking**: The app uses an always-on, ambient tracking model. Never build manual 'Start/Stop Tracking' UI elements. Tracking begins silently via the native Swift `CLLocationManager` on open.
-* **Aesthetics**: Default to Light Mode. Use soft whites, light grays, and Apple's native `UltraThinMaterial` (via Expo blur) for UI elements. Avoid serif fonts; strictly use modern geometric sans-serif.
+* **Aesthetics**: Dynamic Day/Night Cycle based on local First Light (Sunrise) and Last Light (Sunset). Day Mode uses soft parchment whites (`#F9F9F6`) and matte graphite fog (`#1C1C1E`). Night Mode uses deep midnight slate (`#12121A`) and OLED black fog (`#000000`). The universal accent color is **Electric Amber (`#FFB300`)** — used for the live GPS dot, active transit routes, and Ghost POI glows. Typography uses SF Pro / Inter for UI text; **SF Mono** exclusively for all quantitative metrics (percentages, headways, H3 IDs). Apple's native `UltraThinMaterial` (Light/Dark variant) for floating elements. Avoid serif fonts; strictly use modern geometric sans-serif.
 * **Ghost POIs**: **Never** implement permanent map pins or markers for Points of Interest or Transit nodes. They must be completely invisible in cleared hexes.
 
 ---
@@ -103,7 +103,7 @@ When configuring `@maplibre/maplibre-react-native`, you must strictly adhere to 
 
 ## 📋 Roadmap Execution & Protocol
 
-When executing tasks from `roadmap.md`:
+When executing tasks from `ROADMAP.MD`:
 
 1. **Atomic Scoping**: Focus entirely on the assigned Task ID. Do not bleed into subsequent waves.
 2. **Verification**: Run local tests, prebuild checks, or type-checking to verify the implementation.

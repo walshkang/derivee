@@ -1,8 +1,10 @@
-# Fog of Wburg: The Ambient Explorer
+# Dérivée — The Calculus of Your City
 
-> A mindful, offline-first iOS application that transforms your daily commute and neighborhood walks into an ambient journey of discovery.
+> *Unlearn your commute.*
 
-**Fog of Wburg** is a harness for real life. Inspired by the progressive disclosure of *Zelda: Breath of the Wild* and the utility of *Google Maps*, it gamifies real-world exploration using an H3-powered "fog of war." However, it abandons the aggressive completionism of traditional mapping games. Instead, it offers a calming, translucent environment that teases discovery and provides commuter-grade transit data *only* when you explicitly ask for it.
+**Dérivée** *(day-ree-vay)* — a double-entendre combining the mathematical *derivative* (the rate of change at a specific point on a curve) with the Situationist *dérive* (an unplanned drift through an urban landscape). This app is literally the intersection: **calculating the rate of change of your physical presence across the city map.**
+
+An ambient, offline-first iOS application that transforms your daily commute and neighborhood walks into a quiet journey of discovery. It rejects the aggressive completionism of traditional mapping games. Instead, it offers a calm, translucent environment — a harness for real life — that teases discovery through a volumetric fog-of-war and provides commuter-grade transit data *only* when you explicitly ask for it.
 
 ---
 
@@ -12,11 +14,12 @@
 * **The Vicinity Bubble:** The app heavily utilizes progressive disclosure. Detailed geospatial data (street names, transit stops, bike docks) is only rendered within a dynamic ~200-meter physical radius of your live location.
 * **Pristine History:** When you pan the camera to view an area you cleared weeks ago, you see only clean, beautiful satellite terrain. The map gets out of your way.
 * **Ghost POIs:** Points of interest and transit nodes do not permanently clutter the map with pins. Once an area is cleared, they become invisible. They are only revealed if you are physically standing in that hex and tap your location to pull up a minimalist data sheet.
-* **The Archive (Soft Completionism):** While the main map abandons gamified HUDs, a dedicated profile screen tracks your macro-level progress (e.g., "Williamsburg: 14% Cleared") and houses a beautiful grid of your discovered Ghost POIs, satisfying the completionist itch without the anxiety.
+* **Exploration Stats:** While the main map abandons gamified HUDs, a dedicated profile screen tracks your macro-level progress (e.g., "Williamsburg: 14% Cleared") and houses a beautiful grid of your discovered Ghost POIs, satisfying the completionist itch without the anxiety.
+* **Dynamic Day/Night Cycle:** The interface automatically shifts between Day Mode ("Clear Morning" — parchment whites, graphite fog) and Night Mode ("Midnight Grid" — midnight slate, OLED black fog) based on local sunrise and sunset.
 
 ## 🚇 Commuter-Grade Transit (Raw GTFS)
 
-Fog of Wburg features a Naver Maps-style transit integration built on a strictly "make it yourself, and make it well" philosophy, bypassing third-party API limits.
+Dérivée features a Naver Maps-style transit integration built on a strictly "make it yourself, and make it well" philosophy, bypassing third-party API limits.
 
 1. **Live Protocol Buffers:** Tapping a transit node in your Vicinity Bubble decodes the transit authority's binary GTFS-RT feeds on the fly, delivering crisp, real-time arrival countdowns and dynamic vector route previews.
 2. **The Observer Pipeline:** Historical reliability (average headways, arrival sparklines) is powered by a custom, standalone Go (Golang) daemon hosted on a lightweight VPS. This persistent pipeline crunches raw GTFS data 24/7, generates a Zstandard-compressed SQLite delta database (`.sqlite.zst`), and pushes it to Cloudflare R2.
@@ -26,18 +29,20 @@ Fog of Wburg features a Naver Maps-style transit integration built on a strictly
 
 ## 🛠 Tech Stack & Architecture
 
-Built with an AI-driven "vibe coding" approach, relying strictly on Expo Prebuild (Continuous Native Generation) to completely eliminate manual Xcode management.
+Built as a **hybrid "Brownfield" architecture** under the **Sleepy Hermes** paradigm. Expo Managed Workflow (CNG / Prebuild) governs UI rendering, navigation, and config plugins. The `ios/` native workspace is manually managed for Nitro Module linkage, the H3 C-library bridging header, and the native Swift background service.
 
-* **Framework:** React Native + Expo (Managed Workflow)
-* **Map Engine:** `@rnmapbox/maps` (MapLibre vector tiles, 3D terrain, custom raster layers)
-* **Spatial Indexing:** Uber's H3 Grid System via `h3-js` (Resolution 11)
-* **Local Database:** `@op-engineering/op-sqlite` (Blazing fast C++ synchronous SQLite for instant spatial querying)
-* **Location Services:** `expo-location` (Foreground/Background distance-interval tracking)
+* **Framework:** React Native + Expo (Brownfield Hybrid — CNG / Prebuild)
+* **Map Engine:** `@maplibre/maplibre-react-native` (MapLibre vector tiles, custom raster layers, Data-Driven Styling)
+* **Spatial Indexing:** Uber's H3 Grid System — `h3-js` (foreground) + H3 C-library (background via Swift)
+* **Local Database:** `@op-engineering/op-sqlite` (Blazing fast JSI synchronous SQLite for instant spatial querying)
+* **Background Location:** Native Swift `CLLocationManager` (hardware-level distance filtering — Hermes sleeps)
+* **JS↔Swift Bridge:** `react-native-nitro-modules` (zero-serialization JSI callbacks)
 * **Transit Decoding:** `protobufjs` + `gtfs-realtime-bindings`
 
 **Technical Highlights:**
+* **Sleepy Hermes:** All background location processing runs in pure native Swift — the Hermes JS engine sleeps when the app is backgrounded, preventing iOS watchdog terminations and battery drain.
 * **Zero-Congestion Rendering:** Utilizes an $O(1)$ In-Memory Set Gate to drop redundant GPS updates, and MapLibre Data-Driven Styling (DDS) to bypass the React Native bridge, rendering tens of thousands of hexagonal holes natively on the GPU at 60fps.
-* **Battery & Drift Optimization:** CPU remains asleep until physical movement occurs via hardware-level distance intervals (`deferredUpdatesDistance`). An implied speed filter (< 12 m/s) aggressively discards urban canyon GPS multipath noise.
+* **Battery & Drift Optimization:** CPU remains asleep until physical movement occurs via hardware-level distance intervals (`distanceFilter: 10m`, deferred updates: `50m`). An implied speed filter (< 12 m/s) aggressively discards urban canyon GPS multipath noise.
 
 ## 🚀 Getting Started
 
@@ -53,8 +58,8 @@ Built with an AI-driven "vibe coding" approach, relying strictly on Expo Prebuil
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/your-username/fog-of-wburg.git
-cd fog-of-wburg
+git clone https://github.com/walshkang/derivee.git
+cd derivee
 ```
 
 2. **Install dependencies:**
@@ -83,14 +88,14 @@ Press `i` to open the iOS simulator, or build directly to a tethered iPhone (rec
 
 ---
 
-## 📁 Repository Structure (Upcoming)
+## 📁 Repository Structure
 
-* `/app` - The Expo React Native mobile application.
-* `/components` - UI overlays, the Vicinity Bubble elements, bottom-sheets.
-* `/core` - The H3 engine, location tracking hooks, MapLibre layer stack.
-* `/db` - SQLite schema, queries, and spatial point-in-polygon checks.
+* `/app` - The Expo React Native mobile application (screens & routing).
+* `/src` - Core logic: hooks, stores, database, native bridge, components.
+* `/ios` - Native workspace (manually managed for Nitro/H3/Swift).
+* `/nitrogen` - Generated Nitro Module C++/Swift translation layers.
 * `/observer` - The standalone Go (Golang) persistent daemon for GTFS-RT ingestion and historical sparkline generation.
-* `/docs` - Architecture blueprints, design language specs, and feature roadmaps.
+* `/docs` - Architecture blueprints, design language specs.
 
 ---
 

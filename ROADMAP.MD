@@ -1,4 +1,4 @@
-# Fog of Wburg — Unified Roadmap
+# Dérivée — Unified Roadmap
 
 This document is the single source of truth for all planned development waves.
 
@@ -242,7 +242,7 @@ Replace the decorative splash screen (`app/index.tsx`) with a functional first-l
      * Mount a full-screen branded lock screen with atmospheric fog background animation, pulsing logo, and a translucent progress indicator.
      * **No interactive buttons. No map mounted.**
      * Check network connectivity.
-       * If offline: display a single-line prompt ("Connect to the internet to set up Fog of Wburg"). Poll for connectivity via `NetInfo`; resume automatically when restored.
+       * If offline: display a single-line prompt ("Connect to the internet to set up Dérivée"). Poll for connectivity via `NetInfo`; resume automatically when restored.
        * If online: proceed to downloads.
 
 3. **MapLibre offline tile region download:**

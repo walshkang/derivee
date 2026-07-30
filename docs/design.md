@@ -1,19 +1,54 @@
-# design.md — Fog of Wburg: UI Blueprint & Screen Specification
+# Dérivée — UI Blueprint & Screen Specification
 
 This document is the **single authoritative reference** for all visual design, screen hierarchy, interaction patterns, and UI acceptance criteria. If a screen, component, or animation is not defined here, an agent **must not** invent it.
 
-For backend data flows, native bridging, and library constraints, see [architecture.md](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/docs/architecture.md).
+For backend data flows, native bridging, and library constraints, see [architecture.md](file:///Volumes/T7ssd/fog-of-wburg/docs/architecture.md).
 
 ---
 
 ## 1. Core Philosophy & Visual Identity
 
-"Fog of Wburg" is an ambient, location-based fog-of-war explorer and transit utility. The map **is** the UI. All overlays, sheets, and controls exist only to serve the map — never to obscure or compete with it.
+### 1.0 Brand Manifesto & Naming Architecture
 
-* **Theme:** Light Mode default. Soft whites (`#FAFAFA`), warm grays (`#E8E8E8`), and Apple's native `UltraThinMaterial` blur for floating elements.
-* **Typography:** OS Native only — SF Pro (iOS), Inter (Android). Used strictly for clear data labels and list content. **No serif fonts. No decorative type.**
+* **The Name:** **Dérivée** *(Pronounced: day-ree-vay)*
+* **The Meaning:** A double-entendre combining the mathematical derivative (rate of change / instantaneous calculation) with the Situationist *dérive* (an unplanned, exploratory drift through a city). The app is literally the intersection of these two ideas: **calculating the rate of change of your physical presence across the city map.**
+* **The Tagline:** *Unlearn your commute.*
+* **Brand Persona:** Calm, intelligent, utilitarian, and understated. It is a quiet harness for real life — it gets out of your way, respects your attention span, and never behaves like an obnoxious fitness tracker or a noisy arcade game.
+
+"Dérivée" is an ambient, offline-first location explorer and transit utility. The map **is** the app. All controls, floating sheets, and metrics exist only to serve the map without cluttering it.
+
+### 1.1 The Dynamic Environmental Shift (Day/Night Cycle)
+
+The interface automatically transitions between Light and Dark modes based on local **First Light (Sunrise)** and **Last Light (Sunset)** calculated via the background GPS coordinate, eliminating screen glare on dark street corners or inside subway cars.
+
+* **Day Mode (First Light to Last Light — "Clear Morning"):**
+  * **Base Map:** Soft parchment whites (`#F9F9F6`) and clean muted light grays.
+  * **The Fog (Layer 4):** Inky, matte graphite clouds (`#1C1C1E`) with high translucency. Major geographic arteries (coastlines, rivers, arterial bridges) are faintly visible beneath as subtle, unlabelled vectors, acting as natural lures.
+  * **UI Materials:** Apple's native `UltraThinMaterialLight` blur. Text and icons rendered in high-contrast pure black (`#000000`).
+
+* **Night Mode (Last Light to First Light — "Midnight Grid"):**
+  * **Base Map:** Deep midnight slate (`#12121A`).
+  * **The Fog (Layer 4):** Pure OLED Black (`#000000`) with a heavy cloud-like blur mask, absorbing light while cleared hexes provide subtle illumination.
+  * **UI Materials:** Apple's native `UltraThinMaterialDark` blur. Text and icons rendered in clean, crisp white (`#FFFFFF`).
+
+* **The Universal Accent Color (`#FFB300` — Electric Amber):**
+  * Shared across both modes. Used strictly for the live GPS indicator dot, active transit vector routes, and glowing "Ghost POIs" in the fog. It mimics the aesthetic of vintage LED transit arrival boards.
+
+### 1.2 Typography & Micro-Interference
+
+* **Primary System Font:** OS Native only — **SF Pro** (iOS), **Inter** (Android). Clean, neutral sans-serif used exclusively for labels, UI titles, and menus. **No serif fonts. No decorative type.**
+* **The Math Font:** Native **SF Mono**. Every numerical metric — neighborhood completion percentages, subway arrival headways ($\Delta t$), or H3 hex IDs — is rendered in monospace. This subtle visual cue highlights the heavy mathematical precision of the SQLite and H3 engines running underneath.
+
+### 1.3 Tone of Voice
+
+* **Actionable, transparent, and direct.**
+* *Avoid:* Flowery gaming jargon ("The Archive", "Cartography", "Conquer Territory").
+* *Embrace:* Clear utility naming ("Exploration Stats", "Neighborhood Data", "Import Workout").
+
+### 1.4 Visual System Summary
+
 * **Iconography:** Geometric, high negative-space SVG glyphs. No text inside icons. No branded teardrop pins.
-* **Interaction Model:** All touchable surfaces use `react-native-gesture-handler` exclusively (never standard React Native `Touchable*` components) to guarantee seamless coexistence with MapLibre pan/pinch gestures and `@gorhom/bottom-sheet` sheet gestures.
+* **Gesture Integration:** Strictly utilizes `react-native-gesture-handler` exclusively (never standard React Native `Touchable*` components) to guarantee seamless coexistence with MapLibre pan/pinch gestures and `@gorhom/bottom-sheet` sheet gestures.
 
 ---
 
@@ -23,7 +58,7 @@ The map uses a 3-tier state to separate where the user **is**, where they **have
 
 | Tier | Name | Visual Treatment |
 |:---|:---|:---|
-| **Hidden** | Unexplored | A high-blur, translucent dark mask (`fill-opacity-transition: { duration: 300 }`). No base map details, pins, or labels visible beneath. |
+| **Hidden** | Unexplored | Matte graphite clouds (Day: `#1C1C1E`) or OLED Black (Night: `#000000`) with high-blur translucency (`fill-opacity-transition: { duration: 300 }`). No base map details, pins, or labels visible beneath. |
 | **Explored** | Cleared but Inactive | Base MapTiler `streets-v2` style rendered through a permanently dimmed raster layer (`rasterSaturation: -1.0`). H3 hex outlines display as faint, semi-transparent borders. **No POI markers or labels.** |
 | **Active** | Current Vicinity (200m) | Full-color, unmasked satellite/street rendering within a 200m radius of the user's live GPS position. Street names, building footprints, and Ghost POI nodes render here and **only** here. |
 
@@ -42,7 +77,7 @@ Standard cartographic data (streets, parks, travel direction) is handled entirel
 
 ### 2.2 The 6-Layer Rendering Stack
 
-The MapLibre layer stack **must** follow this exact Z-index order. See [architecture.md §8](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/docs/architecture.md) for implementation specifics.
+The MapLibre layer stack **must** follow this exact Z-index order. See [architecture.md §8](file:///Volumes/T7ssd/fog-of-wburg/docs/architecture.md) for implementation specifics.
 
 | Z-Index | Layer Name | Purpose |
 |:---|:---|:---|
@@ -76,7 +111,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 │  └────────────────────────────────────────┼───────────┘  │
 │                                           │              │
 │  ┌────────────────────────────────────────▼───────────┐  │
-│  │  Screen 3: The Archive  (Stats & GPX Upload)       │  │
+│  │  Screen 3: Exploration Stats  (Stats & GPX Upload)  │  │
 │  └────────────────────────────────────────────────────┘  │
 │                                                          │
 │  ┌────────────────────────────────────────────────────┐  │
@@ -101,7 +136,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 * **No interactive buttons.** No map is mounted.
 
 **Actions:**
-1. If offline: display a single-line prompt asking the user to connect to the network. Poll for connectivity; resume automatically when restored.
+1. If offline: display a single-line prompt ("Connect to the internet to set up Dérivée"). Poll for connectivity; resume automatically when restored.
 2. If online: silently download the MapLibre offline tile region (50km radius centered on device location) and the `transit_delta.sqlite.zst` file from Cloudflare R2.
 3. On completion: write the hydration flag to `meta` table.
 
@@ -123,11 +158,11 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 **UI Elements:**
 * **Edge-to-edge MapLibre map.** No tab bars, no navigation headers, no persistent HUDs.
 * **The Fog Layer:** Dark, volumetric masking polygon (see §2 3-Tier logic).
-* **The User Marker:** A native-feeling, smoothly interpolating blue pulsing dot. Must use MapLibre's built-in user location layer with custom styling — not a React component overlaid on the map.
+* **The User Marker:** A native-feeling, smoothly interpolating Electric Amber (`#FFB300`) pulsing dot. Must use MapLibre's built-in user location layer with custom styling — not a React component overlaid on the map.
 * **Ghost POI Nodes:** Transit beacons visible **only** within the 200m Active Vicinity Bubble. Rendered as unbranded, glowing geometric nodes (dots, diamonds) — never as traditional teardrop map pins or icons with text labels.
 * **Floating Action Buttons (FABs):** Two minimalist, translucent circular buttons floating over the map:
   * **Recenter FAB** (bottom-right): Re-centers the camera on the user's current GPS position with a smooth 300ms ease animation.
-  * **Profile FAB** (top-right): Navigates to Screen 3 (The Archive). Styled with `UltraThinMaterial` blur and a subtle shadow.
+  * **Profile FAB** (top-right): Navigates to Screen 3 (Exploration Stats). Styled with `UltraThinMaterial` blur and a subtle shadow.
 
 **Ambient Tracking:** Tracking begins silently and automatically via the native Swift `CLLocationManager` (Nitro `HybridTracker` module) the moment Screen 1 mounts. There is **no** manual "Start/Stop Tracking" button. The app is always tracking.
 
@@ -181,9 +216,9 @@ When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top*
 
 ---
 
-### Screen 3: The Archive (Stats & GPX Upload)
+### Screen 3: Exploration Stats (Stats & GPX Upload)
 
-**Trigger:** User taps the Profile FAB on the Ambient Map.
+**Trigger:** User taps the Profile FAB on the Ambient Map. Navigates to the Exploration Stats screen.
 
 **UI Elements:**
 A clean, native list view using `@shopify/flash-list` for guaranteed 60fps scrolling.
@@ -278,7 +313,7 @@ When a user uploads a heavy GPX file containing hundreds of new hexes, the bridg
 * **Implementation:** Use MapLibre's native `fill-opacity-transition` with a staggered delay per hex cluster (sorted by distance from the user's position). The fog literally "melts away" from the user outward.
 
 > [!NOTE]
-> **Design Aspiration — Skia Enhancement:** For a more dramatic volumetric sunburst effect, `@shopify/react-native-skia` could be introduced to render a custom shader-based dissolve mask. This library is **not currently in the locked stack** (see [architecture.md §2](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
+> **Design Aspiration — Skia Enhancement:** For a more dramatic volumetric sunburst effect, `@shopify/react-native-skia` could be introduced to render a custom shader-based dissolve mask. This library is **not currently in the locked stack** (see [architecture.md §2](file:///Volumes/T7ssd/fog-of-wburg/docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
 
 ### 5.2 Bottom Sheet Transitions
 
@@ -311,9 +346,9 @@ When a new hex is discovered in real-time (via Nitro callback during active use)
 
 Progression stats must eventually be accessible **outside** the app while the user walks with their phone locked.
 
-* **Delivery:** A native Swift module pushes exploration progress to the iOS Dynamic Island and Lock Screen Live Activities (e.g., "🔥 5 hexes unlocked this walk").
+* **Delivery:** A native Swift module pushes exploration progress to the iOS Dynamic Island and Lock Screen Live Activities (e.g., "5 hexes unlocked this walk").
 * **Update Frequency:** Batched — update the Live Activity only when a new hex cluster (≥ 3 hexes) is unlocked, not on every individual hex. This prevents excessive UI refreshes.
-* **Scope:** This is explicitly deferred to **Wave 15** (see [ROADMAP.MD](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/ROADMAP.MD)). Agents **must not** implement this until Wave 15 is active.
+* **Scope:** This is explicitly deferred to **Wave 15** (see [ROADMAP.MD](file:///Volumes/T7ssd/fog-of-wburg/ROADMAP.MD)). Agents **must not** implement this until Wave 15 is active.
 
 ---
 
@@ -331,14 +366,14 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 | G6 | **Native Gesture Handling Only:** All touchable elements use `react-native-gesture-handler`. No standard React Native `TouchableOpacity` or `Pressable`. | Prevents gesture conflicts with MapLibre and bottom sheets. |
 | G7 | **Thread Yielding for Lists:** Complex lists (Neighborhood Stats, Session History) must yield the thread during entry animations via `InteractionManager.runAfterInteractions()`. | Prevents frame drops during screen transitions. |
 | G8 | **No Serif Fonts:** Strictly modern geometric sans-serif (SF Pro / Inter). | Design system consistency. |
-| G9 | **Light Mode Default:** Soft whites, light grays. No dark mode until explicitly scoped and designed. | Visual identity constraint. |
+| G9 | **Dynamic Day/Night Cycle:** Interface automatically shifts between Day Mode ("Clear Morning" — parchment whites, graphite fog) and Night Mode ("Midnight Grid" — midnight slate, OLED black fog) based on local First Light / Last Light. **Electric Amber (`#FFB300`)** is the universal accent color across both modes. | Brand identity: Dérivée calculates the rate of change of your presence across the city — the environment shifts with you. |
 | G10 | **Screen Enumeration is Exhaustive:** Screens 0–4 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. | Prevents scope creep and hallucinated features. |
 
 ---
 
 ## 8. The "Backend" (Data Layer) — Progression Stats
 
-To support exploration percentages in Screen 3 (The Archive) and any future contextual displays, the local database must maintain:
+To support exploration percentages in Screen 3 (Exploration Stats) and any future contextual displays, the local database must maintain:
 
 ### 8.1 The Denominator Problem
 
@@ -370,4 +405,4 @@ The `total_hexes` value must represent **only physically walkable/cyclable terri
 This is entirely front-end/local state:
 * The Zustand store tracks the continuous delta of newly unlocked hexes (sourced from Nitro real-time callbacks or AppState hydration reads).
 * Progress percentage is computed as: `(cleared_hexes_in_neighborhood / total_hexes_in_neighborhood) * 100`.
-* The $O(1)$ In-Memory Set Gate (see [architecture.md §7.3](file:///Users/walsh.kang/Documents/GitHub/fog-of-wburg/docs/architecture.md)) ensures this comparison is instantaneous.
+* The $O(1)$ In-Memory Set Gate (see [architecture.md §7.3](file:///Volumes/T7ssd/fog-of-wburg/docs/architecture.md)) ensures this comparison is instantaneous.

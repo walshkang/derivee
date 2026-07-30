@@ -37,7 +37,7 @@ All background location processing now runs in a **pure native Swift layer**:
 
 The native iOS workspace has been materialized via `npx expo prebuild --clean` and committed on branch `feature/brownfield-sleepy-hermes`. The next physical step (before any code waves can execute) is:
 
-1. Open `ios/FogOfWburg.xcworkspace` in Xcode.
+1. Open `ios/Derivee.xcworkspace` in Xcode.
 2. Verify the project builds cleanly with the CNG-generated native code.
 3. Once Wave B (Nitro Scaffolding) generates the `nitrogen/generated/ios/` directory, import it via the Xcode GUI (drag into Project Navigator → "Create groups" → check target membership).
 4. Create `HybridTracker.swift` via Xcode New File → Swift File.
@@ -52,8 +52,8 @@ The native iOS workspace has been materialized via `npx expo prebuild --clean` a
 
 | Wave | Task ID | Title | Status |
 |:---:|:---:|:---|:---:|
-| **A** | WA-DB-CONCURRENCY | Database Config & Dual-Thread Concurrency | Planned |
-| **B** | WB-NITRO-SCAFFOLD | Nitro Module Scaffolding & Code Generation | Planned |
+| **A** | WA-DB-CONCURRENCY | Database Config & Dual-Thread Concurrency | ✅ Done |
+| **B** | WB-NITRO-SCAFFOLD | Nitro Module Scaffolding & Code Generation | 🔧 In Progress (Human: Xcode Linkage) |
 | **C** | WC-SWIFT-SERVICE | Swift Background Service & Baseband Economics | Blocked (needs Xcode GUI linkage from Wave B) |
 | **D** | WD-UI-HYDRATION | UI Synchronization & Foreground Hydration | Blocked (needs Wave C) |
 

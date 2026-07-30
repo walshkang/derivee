@@ -1,19 +1,19 @@
 {
   "expo": {
-    "name": "Fog of Wburg",
-    "slug": "fog-of-wburg",
+    "name": "Dérivée",
+    "slug": "derivee",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0d1117"
+      "backgroundColor": "#F9F9F6"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fogofwburg.app",
+      "bundleIdentifier": "com.derivee.app",
       "infoPlist": {
         "UIBackgroundModes": [
           "location"
@@ -23,28 +23,28 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0d1117"
+        "backgroundColor": "#F9F9F6"
       },
-      "package": "com.fogofwburg.app"
+      "package": "com.derivee.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "fog-of-wburg",
+    "scheme": "derivee",
     "plugins": [
       "expo-router",
       [
         "@maplibre/maplibre-react-native",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Fog of Wburg to use your location to uncover the map."
+          "locationAlwaysAndWhenInUsePermission": "Allow Dérivée to use your location to uncover the map."
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Fog of Wburg to use your location in the background to uncover the map as you explore.",
-          "locationAlwaysPermission": "Allow Fog of Wburg to track your exploration even when the app is in the background.",
-          "locationWhenInUsePermission": "Allow Fog of Wburg to track your exploration while using the app.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Dérivée to use your location in the background to uncover the map as you explore.",
+          "locationAlwaysPermission": "Allow Dérivée to track your exploration even when the app is in the background.",
+          "locationWhenInUsePermission": "Allow Dérivée to track your exploration while using the app.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true
         }
