@@ -21,5 +21,6 @@ venv/
 
 # Build logs and AI scratch
 *.log
+.expo/
 .agents/
 skills-lock.json
