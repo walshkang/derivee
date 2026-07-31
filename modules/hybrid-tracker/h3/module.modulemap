@@ -1,4 +1,4 @@
 module h3 {
-    header "src/h3api.h"
+    header "src/h3lib/include/h3api.h"
     export *
 }

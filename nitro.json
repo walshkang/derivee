@@ -1,7 +1,7 @@
 {
   "cxxNamespace": ["hybridtracker"],
   "ios": {
-    "iosModuleName": "Derivee"
+    "iosModuleName": "hybrid_tracker"
   },
   "android": {
     "androidNamespace": ["com", "derivee", "app"],
