@@ -1,0 +1,9 @@
+{
+  "name": "hybrid-tracker",
+  "version": "1.0.0",
+  "description": "Hybrid tracking module for Derivee",
+  "main": "index.js",
+  "peerDependencies": {
+    "expo": "*"
+  }
+}

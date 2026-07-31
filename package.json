@@ -23,6 +23,7 @@
     "@turf/helpers": "^7.3.5",
     "babel-preset-expo": "~11.0.0",
     "expo": "~51.0.0",
+    "hybrid-tracker": "file:./modules/hybrid-tracker",
     "expo-asset": "~10.0.10",
     "expo-blur": "~13.0.3",
     "expo-build-properties": "~0.12.5",

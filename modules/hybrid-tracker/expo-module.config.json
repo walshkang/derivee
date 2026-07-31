@@ -1,0 +1,11 @@
+{
+  "name": "hybrid-tracker",
+  "platforms": [
+    "ios"
+  ],
+  "ios": {
+    "modules": [
+      "HybridTracker"
+    ]
+  }
+}
