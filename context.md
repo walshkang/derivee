@@ -31,20 +31,15 @@ All background location processing now runs in a **pure native Swift layer**:
 
 ---
 
-## 🔨 Immediate Next Step (Human Developer)
+## 🔨 Immediate Next Step
 
-**Prepare the Xcode workspace for manual GUI linkage.**
+**Kick off Wave C.1: Folly Config Plugin**
 
-The native iOS workspace has been materialized via `npx expo prebuild --clean` and committed on branch `feature/brownfield-sleepy-hermes`. The next physical step (before any code waves can execute) is:
+The previous requirement for "Manual Xcode GUI Linkage" has been **strictly banned** because it violates the `prebuild --clean` lifecycle. All native iOS changes must now be encapsulated inside an Expo Config Plugin (Wave C.1) and a Local Expo Module (Wave C.2) using Clang Module Maps instead of Objective-C bridging headers.
 
-1. Open `ios/Derivee.xcworkspace` in Xcode.
-2. Verify the project builds cleanly with the CNG-generated native code.
-3. Once Wave B (Nitro Scaffolding) generates the `nitrogen/generated/ios/` directory, import it via the Xcode GUI (drag into Project Navigator → "Create groups" → check target membership).
-4. Create `HybridTracker.swift` via Xcode New File → Swift File.
-5. Accept the bridging header prompt → add `#import "h3api.h"` and `#import <sqlite3.h>`.
-6. Integrate the H3 C-library headers into the project search paths.
-
-> These steps **cannot** be automated by the AI agent — they require the Xcode GUI.
+Next steps for the agent:
+1. Extract the Folly Ruby regex hacks from `ios/Podfile` into a `withFollyPodfile.js` Config Plugin.
+2. Ensure the patches survive `npx expo prebuild --clean`.
 
 ---
 
@@ -53,9 +48,11 @@ The native iOS workspace has been materialized via `npx expo prebuild --clean` a
 | Wave | Task ID | Title | Status |
 |:---:|:---:|:---|:---:|
 | **A** | WA-DB-CONCURRENCY | Database Config & Dual-Thread Concurrency | ✅ Done |
-| **B** | WB-NITRO-SCAFFOLD | Nitro Module Scaffolding & Code Generation | 🔧 In Progress (Human: Xcode Linkage) |
-| **C** | WC-SWIFT-SERVICE | Swift Background Service & Baseband Economics | Blocked (needs Xcode GUI linkage from Wave B) |
-| **D** | WD-UI-HYDRATION | UI Synchronization & Foreground Hydration | Blocked (needs Wave C) |
+| **B** | WB-NITRO-SCAFFOLD | Nitro Module Scaffolding & Code Generation | 🔄 Superseded → Wave C.2 |
+| **C.1** | WC1-CONFIG-PLUGIN | Folly Config Plugin (Podfile Survival) | Planned |
+| **C.2** | WC2-LOCAL-MODULE | Local Expo Module & H3 Module Map | Planned |
+| **C.3** | WC3-SWIFT-SERVICE | Swift Background Service & SQLite Concurrency | Planned |
+| **D.1** | WD1-UI-HYDRATION | UI Synchronization, AppState Teardown & Legacy Cleanup | Planned |
 
 ---
 

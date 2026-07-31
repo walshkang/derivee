@@ -114,7 +114,10 @@ Traditional SQLite rollback journals acquire an **exclusive, file-level lock** d
 PRAGMA journal_mode = WAL;
 ```
 
-WAL mode permits simultaneous readers and writers by appending mutations to a separate `.wal` file rather than overwriting main database pages. The foreground JS connection executes uninterrupted `SELECT` queries against established pages while the Swift background service simultaneously appends new spatial indices.
+WAL mode permits simultaneous readers and writers by appending mutations to a separate `.wal` file. However, this introduces the risk of WAL bloat and checkpoint deadlocks ("Zombie Readers"). To mitigate this:
+1. **Background Writes:** The Swift service must use `SQLITE_CHECKPOINT_PASSIVE` during active tracking to prevent thread blocking.
+2. **AppState JSI Teardown:** The JS foreground must actively listen to `AppState` transitions to `"inactive"` or `"background"` and explicitly teardown/close the `@op-engineering/op-sqlite` connection to release its read lock.
+3. **Defensive Checkpointing:** When the app transitions to the background, the Swift service must wrap a full `SQLITE_CHECKPOINT_RESTART` inside an `@available(iOS 17.0, *) CLBackgroundActivitySession` (with a legacy iOS 15/16 `beginBackgroundTask` fallback) to safely reset the WAL file to byte zero without triggering `0x8badf00d` watchdog terminations.
 
 ### 4.4 Configuration Reference Table
 
@@ -173,20 +176,17 @@ The legacy React Native bridge serializes all cross-boundary calls through async
 2. **Code Generation (`npx nitrogen`):** The Nitrogen CLI parses the spec and generates a `nitrogen/generated/` directory containing C++ JSI translation layers and Swift protocol definitions (e.g., `HybridTrackingSpec.swift`).
 3. **Compile-Time Safety:** If the Swift implementation fails to satisfy the generated protocol signatures, the Xcode build immediately halts — eliminating runtime bridging failures.
 
-### 5.3 Manual Xcode GUI Linkage
+### 5.3 The Local Expo Module Encapsulation Strategy
 
-Because the project operates under a **Brownfield constraint** prohibiting programmatic modifications to `ios/*.pbxproj`, all native file linkage must be executed through the **Xcode GUI**. The sequence:
+Because the project operates under a **Brownfield constraint** prohibiting programmatic modifications to `ios/*.pbxproj` via shell scripts or `sed`, and because we rely on `npx expo prebuild --clean` (which vaporizes manual Xcode GUI changes), **all custom native linkage must be encapsulated in a Local Expo Module**. 
 
-1. **Open Workspace:** Launch Xcode → open `ios/Derivee.xcworkspace` (CocoaPods workspace, not bare project).
-2. **Import Nitrogen Sources:** Drag `nitrogen/generated/ios/` from Finder into the Xcode Project Navigator under the main app target.
-3. **Target Membership:** In the import dialog, check the main application target (e.g., `Derivee`) and select **"Create groups"** (not folder references).
-4. **Create Implementation:** Right-click the app target folder → New File → Swift File → `HybridTracker.swift`. Verify target membership.
-5. **Bridging Header:** Accept the Xcode prompt to create `Derivee-Bridging-Header.h`. Add:
-   ```c
-   #import "h3api.h"
-   #import <sqlite3.h>
-   ```
-6. **`HybridTracker.swift`:** Declares a `final class` inheriting from `HybridTrackingSpec`, holding the `CLLocationManager`, the SQLite `OpaquePointer`, and bridging Nitro commands to native tracking logic.
+Furthermore, utilizing an Objective-C bridging header for the pure C H3 library is an architectural anti-pattern in a modular `use_frameworks!` environment.
+
+**The Encapsulation Protocol:**
+1. **Module Scaffolding:** Create a localized Expo module (e.g., `modules/hybrid-tracker`) containing an `expo-module.config.json` and a `.podspec`.
+2. **Clang Module Map:** The pure C H3 library must be wrapped in a strict Clang Module Map (`module.modulemap` containing `module H3 { header "h3api.h" export * }`).
+3. **Nitrogen Generation Target:** Nitrogen JSI bridging files (`HybridTrackingSpec.hpp`, `HybridTrackingSpec.swift`) and the custom Swift implementations must be routed into this local module's directory structure.
+4. **Autolinking:** Expo's native autolinker automatically handles target membership, `.pbxproj` injection, and build phase mapping during prebuild, completely abstracting the developer from manual Xcode GUI drag-and-drop.
 
 ---
 
@@ -295,3 +295,13 @@ To support the "ambient explorer" progressive disclosure model, detailed mapping
 * **Spatial Querying (200m Radius):** Detailed vector layers (street labels, transit nodes, Ghost POIs) are masked by a dynamic 200m radius around the live GPS coordinate. When the user pans away, these elements are suppressed.
 * **Unified Transit Decoding (GTFS-RT Protobuf):** Transit nodes act as "Ghost POIs". Upon interaction, the app fetches data directly from the transit authority using binary Protocol Buffers (`protobufjs`), parsing GTFS-RT feeds uniformly. Service Alerts must correctly parse MTA's `informed_entity` structure (handling station-level nodes and specific `direction_id` flags).
 * **Historical Sync (Multi-Region):** The app silently fetches a Zstandard-compressed SQLite database (e.g., `nyc_transit_delta.sqlite.zst`) from Cloudflare R2, generated nightly by a Go daemon (The Observer). This file is attached synchronously via `@op-engineering/op-sqlite`, enabling offline transit performance metrics in under 12ms.
+
+---
+
+## 10. Build System Patches & `use_frameworks!`
+
+The integration of `react-native-nitro-modules` requires CocoaPods to use static frameworks via `use_frameworks! :linkage => :static`. This fundamentally changes how iOS headers are resolved, leading to a known impedance mismatch with React Native's C++ dependencies (specifically `RCT-Folly`).
+
+* **Umbrella Header Cascades:** When `use_frameworks!` is active, CocoaPods generates an umbrella header for `RCT-Folly` that includes platform-incompatible headers (e.g., Linux-specific code, libstdc++ internals, and un-guarded inline headers). 
+* **The Post-Install Contract:** The project relies on a Ruby `post_install` hook that explicitly acts as a **targeted deny-list** to strip these incompatible headers from the generated `RCT-Folly-umbrella.h` and inject necessary C++ standards.
+* **The `prebuild --clean` Paradox (Config Plugin Mandate):** These Ruby hacks **must not** reside directly in `ios/Podfile`, as they will be permanently vaporized by Expo's Continuous Native Generation. Instead, they must be encapsulated within a Custom Expo Config Plugin (using `@expo/config-plugins` `withDangerousMod`) living in the project root. This ensures the `post_install` loop is re-injected automatically on every prebuild. See `AGENTS.md` for the exact protocol and patch definitions.

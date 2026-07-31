@@ -11,42 +11,15 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
 		1576236F7D8A55C3F9398175 /* Pods_Derivee.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 494C9478E776AC985F92E6A5 /* Pods_Derivee.framework */; };
-		32307EDD301AEF68000EB43D /* NitroModulesSpec-generated.mm in Sources */ = {isa = PBXBuildFile; fileRef = 32307E86301AEF68000EB43D /* NitroModulesSpec-generated.mm */; };
-		32307EDE301AEF68000EB43D /* ComponentDescriptors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E8C301AEF68000EB43D /* ComponentDescriptors.cpp */; };
-		32307EDF301AEF68000EB43D /* rnskiaJSI-generated.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307ED8301AEF68000EB43D /* rnskiaJSI-generated.cpp */; };
-		32307EE0301AEF68000EB43D /* EventEmitters.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E9A301AEF68000EB43D /* EventEmitters.cpp */; };
-		32307EE1301AEF68000EB43D /* rnskia-generated.mm in Sources */ = {isa = PBXBuildFile; fileRef = 32307EC5301AEF68000EB43D /* rnskia-generated.mm */; };
-		32307EE2301AEF68000EB43D /* rnreanimated-generated.mm in Sources */ = {isa = PBXBuildFile; fileRef = 32307EBF301AEF68000EB43D /* rnreanimated-generated.mm */; };
-		32307EE3301AEF68000EB43D /* States.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E95301AEF68000EB43D /* States.cpp */; };
-		32307EE4301AEF68000EB43D /* States.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EAD301AEF68000EB43D /* States.cpp */; };
-		32307EE5301AEF68000EB43D /* safeareacontextJSI-generated.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EDA301AEF68000EB43D /* safeareacontextJSI-generated.cpp */; };
-		32307EE6301AEF68000EB43D /* ComponentDescriptors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EA4301AEF68000EB43D /* ComponentDescriptors.cpp */; };
-		32307EE7301AEF68000EB43D /* ComponentDescriptors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E98301AEF68000EB43D /* ComponentDescriptors.cpp */; };
-		32307EE8301AEF68000EB43D /* EventEmitters.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E8E301AEF68000EB43D /* EventEmitters.cpp */; };
-		32307EE9301AEF68000EB43D /* NitroModulesSpecJSI-generated.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307ECD301AEF68000EB43D /* NitroModulesSpecJSI-generated.cpp */; };
-		32307EEA301AEF68000EB43D /* EventEmitters.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EB2301AEF68000EB43D /* EventEmitters.cpp */; };
-		32307EEB301AEF68000EB43D /* ShadowNodes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E93301AEF68000EB43D /* ShadowNodes.cpp */; };
-		32307EEC301AEF68000EB43D /* Props.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E90301AEF68000EB43D /* Props.cpp */; };
-		32307EED301AEF68000EB43D /* FBReactNativeSpecJSI-generated.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307ECB301AEF68000EB43D /* FBReactNativeSpecJSI-generated.cpp */; };
-		32307EEE301AEF68000EB43D /* safeareacontext-generated.mm in Sources */ = {isa = PBXBuildFile; fileRef = 32307EC8301AEF68000EB43D /* safeareacontext-generated.mm */; };
-		32307EEF301AEF68000EB43D /* States.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EA1301AEF68000EB43D /* States.cpp */; };
-		32307EF0301AEF68000EB43D /* ShadowNodes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EAB301AEF68000EB43D /* ShadowNodes.cpp */; };
-		32307EF1301AEF68000EB43D /* ComponentDescriptors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EB0301AEF68000EB43D /* ComponentDescriptors.cpp */; };
-		32307EF2301AEF68000EB43D /* rnscreensJSI-generated.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307ED6301AEF68000EB43D /* rnscreensJSI-generated.cpp */; };
-		32307EF3301AEF68000EB43D /* rnscreens-generated.mm in Sources */ = {isa = PBXBuildFile; fileRef = 32307EC2301AEF68000EB43D /* rnscreens-generated.mm */; };
-		32307EF4301AEF68000EB43D /* OPSQLiteSpec-generated.mm in Sources */ = {isa = PBXBuildFile; fileRef = 32307E89301AEF68000EB43D /* OPSQLiteSpec-generated.mm */; };
-		32307EF5301AEF68000EB43D /* ShadowNodes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EB7301AEF68000EB43D /* ShadowNodes.cpp */; };
-		32307EF6301AEF68000EB43D /* Props.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EA8301AEF68000EB43D /* Props.cpp */; };
-		32307EF7301AEF68000EB43D /* rnreanimatedJSI-generated.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307ED4301AEF68000EB43D /* rnreanimatedJSI-generated.cpp */; };
-		32307EF8301AEF68000EB43D /* Props.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E9C301AEF68000EB43D /* Props.cpp */; };
-		32307EF9301AEF68000EB43D /* FBReactNativeSpec-generated.mm in Sources */ = {isa = PBXBuildFile; fileRef = 32307E83301AEF68000EB43D /* FBReactNativeSpec-generated.mm */; };
-		32307EFA301AEF68000EB43D /* OPSQLiteSpecJSI-generated.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307ECF301AEF68000EB43D /* OPSQLiteSpecJSI-generated.cpp */; };
-		32307EFB301AEF68000EB43D /* ShadowNodes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307E9F301AEF68000EB43D /* ShadowNodes.cpp */; };
-		32307EFC301AEF68000EB43D /* EventEmitters.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EA6301AEF68000EB43D /* EventEmitters.cpp */; };
-		32307EFD301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.mm in Sources */ = {isa = PBXBuildFile; fileRef = 32307ED1301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.mm */; };
-		32307EFE301AEF68000EB43D /* States.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EB9301AEF68000EB43D /* States.cpp */; };
-		32307EFF301AEF68000EB43D /* Props.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32307EB4301AEF68000EB43D /* Props.cpp */; };
 		32307F01301AEFBF000EB43D /* HybridTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32307F00301AEF88000EB43D /* HybridTracker.swift */; };
+		3292C76F301BDCE7001ECA62 /* HybridHybridTrackingSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3292C765301BDCE7001ECA62 /* HybridHybridTrackingSpec.swift */; };
+		3292C770301BDCE7001ECA62 /* Derivee-Swift-Cxx-Bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3292C769301BDCE7001ECA62 /* Derivee-Swift-Cxx-Bridge.cpp */; };
+		3292C771301BDCE7001ECA62 /* Func_void_std__string.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3292C764301BDCE7001ECA62 /* Func_void_std__string.swift */; };
+		3292C772301BDCE7001ECA62 /* DeriveeAutolinking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3292C76D301BDCE7001ECA62 /* DeriveeAutolinking.swift */; };
+		3292C773301BDCE7001ECA62 /* DeriveeAutolinking.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3292C76C301BDCE7001ECA62 /* DeriveeAutolinking.mm */; };
+		3292C774301BDCE7001ECA62 /* HybridHybridTrackingSpec_cxx.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3292C766301BDCE7001ECA62 /* HybridHybridTrackingSpec_cxx.swift */; };
+		3292C775301BDCE7001ECA62 /* HybridHybridTrackingSpecSwift.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3292C762301BDCE7001ECA62 /* HybridHybridTrackingSpecSwift.cpp */; };
+		3292C776301BDCE7001ECA62 /* Derivee+autolinking.rb in Resources */ = {isa = PBXBuildFile; fileRef = 3292C76B301BDCE7001ECA62 /* Derivee+autolinking.rb */; };
 		32CB0EB0301AE51000BE6A14 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 1F255F8764D1AD4B8DF7FF30 /* MapLibre */; };
 		364D748BAB2C4085B0714420 /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCD02DB5B78B41E6BCEE4798 /* noop-file.swift */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
@@ -63,81 +36,18 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Derivee/Info.plist; sourceTree = "<group>"; };
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = Derivee/main.m; sourceTree = "<group>"; };
 		262D08B7CA3346B69BC75740 /* Derivee-Bridging-Header.h */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.c.h; name = "Derivee-Bridging-Header.h"; path = "Derivee/Derivee-Bridging-Header.h"; sourceTree = "<group>"; };
-		32307E82301AEF68000EB43D /* FBReactNativeSpec.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBReactNativeSpec.h; sourceTree = "<group>"; };
-		32307E83301AEF68000EB43D /* FBReactNativeSpec-generated.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "FBReactNativeSpec-generated.mm"; sourceTree = "<group>"; };
-		32307E85301AEF68000EB43D /* NitroModulesSpec.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NitroModulesSpec.h; sourceTree = "<group>"; };
-		32307E86301AEF68000EB43D /* NitroModulesSpec-generated.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "NitroModulesSpec-generated.mm"; sourceTree = "<group>"; };
-		32307E88301AEF68000EB43D /* OPSQLiteSpec.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OPSQLiteSpec.h; sourceTree = "<group>"; };
-		32307E89301AEF68000EB43D /* OPSQLiteSpec-generated.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "OPSQLiteSpec-generated.mm"; sourceTree = "<group>"; };
-		32307E8B301AEF68000EB43D /* ComponentDescriptors.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ComponentDescriptors.h; sourceTree = "<group>"; };
-		32307E8C301AEF68000EB43D /* ComponentDescriptors.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ComponentDescriptors.cpp; sourceTree = "<group>"; };
-		32307E8D301AEF68000EB43D /* EventEmitters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EventEmitters.h; sourceTree = "<group>"; };
-		32307E8E301AEF68000EB43D /* EventEmitters.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EventEmitters.cpp; sourceTree = "<group>"; };
-		32307E8F301AEF68000EB43D /* Props.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Props.h; sourceTree = "<group>"; };
-		32307E90301AEF68000EB43D /* Props.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Props.cpp; sourceTree = "<group>"; };
-		32307E91301AEF68000EB43D /* RCTComponentViewHelpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RCTComponentViewHelpers.h; sourceTree = "<group>"; };
-		32307E92301AEF68000EB43D /* ShadowNodes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShadowNodes.h; sourceTree = "<group>"; };
-		32307E93301AEF68000EB43D /* ShadowNodes.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ShadowNodes.cpp; sourceTree = "<group>"; };
-		32307E94301AEF68000EB43D /* States.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = States.h; sourceTree = "<group>"; };
-		32307E95301AEF68000EB43D /* States.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = States.cpp; sourceTree = "<group>"; };
-		32307E97301AEF68000EB43D /* ComponentDescriptors.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ComponentDescriptors.h; sourceTree = "<group>"; };
-		32307E98301AEF68000EB43D /* ComponentDescriptors.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ComponentDescriptors.cpp; sourceTree = "<group>"; };
-		32307E99301AEF68000EB43D /* EventEmitters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EventEmitters.h; sourceTree = "<group>"; };
-		32307E9A301AEF68000EB43D /* EventEmitters.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EventEmitters.cpp; sourceTree = "<group>"; };
-		32307E9B301AEF68000EB43D /* Props.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Props.h; sourceTree = "<group>"; };
-		32307E9C301AEF68000EB43D /* Props.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Props.cpp; sourceTree = "<group>"; };
-		32307E9D301AEF68000EB43D /* RCTComponentViewHelpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RCTComponentViewHelpers.h; sourceTree = "<group>"; };
-		32307E9E301AEF68000EB43D /* ShadowNodes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShadowNodes.h; sourceTree = "<group>"; };
-		32307E9F301AEF68000EB43D /* ShadowNodes.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ShadowNodes.cpp; sourceTree = "<group>"; };
-		32307EA0301AEF68000EB43D /* States.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = States.h; sourceTree = "<group>"; };
-		32307EA1301AEF68000EB43D /* States.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = States.cpp; sourceTree = "<group>"; };
-		32307EA3301AEF68000EB43D /* ComponentDescriptors.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ComponentDescriptors.h; sourceTree = "<group>"; };
-		32307EA4301AEF68000EB43D /* ComponentDescriptors.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ComponentDescriptors.cpp; sourceTree = "<group>"; };
-		32307EA5301AEF68000EB43D /* EventEmitters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EventEmitters.h; sourceTree = "<group>"; };
-		32307EA6301AEF68000EB43D /* EventEmitters.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EventEmitters.cpp; sourceTree = "<group>"; };
-		32307EA7301AEF68000EB43D /* Props.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Props.h; sourceTree = "<group>"; };
-		32307EA8301AEF68000EB43D /* Props.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Props.cpp; sourceTree = "<group>"; };
-		32307EA9301AEF68000EB43D /* RCTComponentViewHelpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RCTComponentViewHelpers.h; sourceTree = "<group>"; };
-		32307EAA301AEF68000EB43D /* ShadowNodes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShadowNodes.h; sourceTree = "<group>"; };
-		32307EAB301AEF68000EB43D /* ShadowNodes.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ShadowNodes.cpp; sourceTree = "<group>"; };
-		32307EAC301AEF68000EB43D /* States.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = States.h; sourceTree = "<group>"; };
-		32307EAD301AEF68000EB43D /* States.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = States.cpp; sourceTree = "<group>"; };
-		32307EAF301AEF68000EB43D /* ComponentDescriptors.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ComponentDescriptors.h; sourceTree = "<group>"; };
-		32307EB0301AEF68000EB43D /* ComponentDescriptors.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ComponentDescriptors.cpp; sourceTree = "<group>"; };
-		32307EB1301AEF68000EB43D /* EventEmitters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EventEmitters.h; sourceTree = "<group>"; };
-		32307EB2301AEF68000EB43D /* EventEmitters.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EventEmitters.cpp; sourceTree = "<group>"; };
-		32307EB3301AEF68000EB43D /* Props.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Props.h; sourceTree = "<group>"; };
-		32307EB4301AEF68000EB43D /* Props.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Props.cpp; sourceTree = "<group>"; };
-		32307EB5301AEF68000EB43D /* RCTComponentViewHelpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RCTComponentViewHelpers.h; sourceTree = "<group>"; };
-		32307EB6301AEF68000EB43D /* ShadowNodes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShadowNodes.h; sourceTree = "<group>"; };
-		32307EB7301AEF68000EB43D /* ShadowNodes.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ShadowNodes.cpp; sourceTree = "<group>"; };
-		32307EB8301AEF68000EB43D /* States.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = States.h; sourceTree = "<group>"; };
-		32307EB9301AEF68000EB43D /* States.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = States.cpp; sourceTree = "<group>"; };
-		32307EBE301AEF68000EB43D /* rnreanimated.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rnreanimated.h; sourceTree = "<group>"; };
-		32307EBF301AEF68000EB43D /* rnreanimated-generated.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "rnreanimated-generated.mm"; sourceTree = "<group>"; };
-		32307EC1301AEF68000EB43D /* rnscreens.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rnscreens.h; sourceTree = "<group>"; };
-		32307EC2301AEF68000EB43D /* rnscreens-generated.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "rnscreens-generated.mm"; sourceTree = "<group>"; };
-		32307EC4301AEF68000EB43D /* rnskia.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rnskia.h; sourceTree = "<group>"; };
-		32307EC5301AEF68000EB43D /* rnskia-generated.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "rnskia-generated.mm"; sourceTree = "<group>"; };
-		32307EC7301AEF68000EB43D /* safeareacontext.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = safeareacontext.h; sourceTree = "<group>"; };
-		32307EC8301AEF68000EB43D /* safeareacontext-generated.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "safeareacontext-generated.mm"; sourceTree = "<group>"; };
-		32307ECA301AEF68000EB43D /* FBReactNativeSpecJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBReactNativeSpecJSI.h; sourceTree = "<group>"; };
-		32307ECB301AEF68000EB43D /* FBReactNativeSpecJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "FBReactNativeSpecJSI-generated.cpp"; sourceTree = "<group>"; };
-		32307ECC301AEF68000EB43D /* NitroModulesSpecJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NitroModulesSpecJSI.h; sourceTree = "<group>"; };
-		32307ECD301AEF68000EB43D /* NitroModulesSpecJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "NitroModulesSpecJSI-generated.cpp"; sourceTree = "<group>"; };
-		32307ECE301AEF68000EB43D /* OPSQLiteSpecJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OPSQLiteSpecJSI.h; sourceTree = "<group>"; };
-		32307ECF301AEF68000EB43D /* OPSQLiteSpecJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "OPSQLiteSpecJSI-generated.cpp"; sourceTree = "<group>"; };
-		32307ED0301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RCTModulesConformingToProtocolsProvider.h; sourceTree = "<group>"; };
-		32307ED1301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = RCTModulesConformingToProtocolsProvider.mm; sourceTree = "<group>"; };
-		32307ED3301AEF68000EB43D /* rnreanimatedJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rnreanimatedJSI.h; sourceTree = "<group>"; };
-		32307ED4301AEF68000EB43D /* rnreanimatedJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "rnreanimatedJSI-generated.cpp"; sourceTree = "<group>"; };
-		32307ED5301AEF68000EB43D /* rnscreensJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rnscreensJSI.h; sourceTree = "<group>"; };
-		32307ED6301AEF68000EB43D /* rnscreensJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "rnscreensJSI-generated.cpp"; sourceTree = "<group>"; };
-		32307ED7301AEF68000EB43D /* rnskiaJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rnskiaJSI.h; sourceTree = "<group>"; };
-		32307ED8301AEF68000EB43D /* rnskiaJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "rnskiaJSI-generated.cpp"; sourceTree = "<group>"; };
-		32307ED9301AEF68000EB43D /* safeareacontextJSI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = safeareacontextJSI.h; sourceTree = "<group>"; };
-		32307EDA301AEF68000EB43D /* safeareacontextJSI-generated.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "safeareacontextJSI-generated.cpp"; sourceTree = "<group>"; };
 		32307F00301AEF88000EB43D /* HybridTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridTracker.swift; sourceTree = "<group>"; };
+		3292C761301BDCE7001ECA62 /* HybridHybridTrackingSpecSwift.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = HybridHybridTrackingSpecSwift.hpp; sourceTree = "<group>"; };
+		3292C762301BDCE7001ECA62 /* HybridHybridTrackingSpecSwift.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = HybridHybridTrackingSpecSwift.cpp; sourceTree = "<group>"; };
+		3292C764301BDCE7001ECA62 /* Func_void_std__string.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Func_void_std__string.swift; sourceTree = "<group>"; };
+		3292C765301BDCE7001ECA62 /* HybridHybridTrackingSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridHybridTrackingSpec.swift; sourceTree = "<group>"; };
+		3292C766301BDCE7001ECA62 /* HybridHybridTrackingSpec_cxx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridHybridTrackingSpec_cxx.swift; sourceTree = "<group>"; };
+		3292C768301BDCE7001ECA62 /* Derivee-Swift-Cxx-Bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "Derivee-Swift-Cxx-Bridge.hpp"; sourceTree = "<group>"; };
+		3292C769301BDCE7001ECA62 /* Derivee-Swift-Cxx-Bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "Derivee-Swift-Cxx-Bridge.cpp"; sourceTree = "<group>"; };
+		3292C76A301BDCE7001ECA62 /* Derivee-Swift-Cxx-Umbrella.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "Derivee-Swift-Cxx-Umbrella.hpp"; sourceTree = "<group>"; };
+		3292C76B301BDCE7001ECA62 /* Derivee+autolinking.rb */ = {isa = PBXFileReference; lastKnownFileType = text.script.ruby; path = "Derivee+autolinking.rb"; sourceTree = "<group>"; };
+		3292C76C301BDCE7001ECA62 /* DeriveeAutolinking.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DeriveeAutolinking.mm; sourceTree = "<group>"; };
+		3292C76D301BDCE7001ECA62 /* DeriveeAutolinking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeriveeAutolinking.swift; sourceTree = "<group>"; };
 		494C9478E776AC985F92E6A5 /* Pods_Derivee.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Derivee.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C2E3173556A471DD304B334 /* Pods-Derivee.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Derivee.debug.xcconfig"; path = "Target Support Files/Pods-Derivee/Pods-Derivee.debug.xcconfig"; sourceTree = "<group>"; };
 		6FE69F0095C3C4920D96DEE6 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = Derivee/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -176,7 +86,7 @@
 				FCD02DB5B78B41E6BCEE4798 /* noop-file.swift */,
 				262D08B7CA3346B69BC75740 /* Derivee-Bridging-Header.h */,
 				6FE69F0095C3C4920D96DEE6 /* PrivacyInfo.xcprivacy */,
-				32307EDB301AEF68000EB43D /* ios */,
+				3292C76E301BDCE7001ECA62 /* nitro */,
 			);
 			name = Derivee;
 			sourceTree = "<group>";
@@ -190,197 +100,38 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		32307E84301AEF68000EB43D /* FBReactNativeSpec */ = {
+		3292C763301BDCE7001ECA62 /* c++ */ = {
 			isa = PBXGroup;
 			children = (
-				32307E82301AEF68000EB43D /* FBReactNativeSpec.h */,
-				32307E83301AEF68000EB43D /* FBReactNativeSpec-generated.mm */,
+				3292C761301BDCE7001ECA62 /* HybridHybridTrackingSpecSwift.hpp */,
+				3292C762301BDCE7001ECA62 /* HybridHybridTrackingSpecSwift.cpp */,
 			);
-			path = FBReactNativeSpec;
+			path = "c++";
 			sourceTree = "<group>";
 		};
-		32307E87301AEF68000EB43D /* NitroModulesSpec */ = {
+		3292C767301BDCE7001ECA62 /* swift */ = {
 			isa = PBXGroup;
 			children = (
-				32307E85301AEF68000EB43D /* NitroModulesSpec.h */,
-				32307E86301AEF68000EB43D /* NitroModulesSpec-generated.mm */,
+				3292C764301BDCE7001ECA62 /* Func_void_std__string.swift */,
+				3292C765301BDCE7001ECA62 /* HybridHybridTrackingSpec.swift */,
+				3292C766301BDCE7001ECA62 /* HybridHybridTrackingSpec_cxx.swift */,
 			);
-			path = NitroModulesSpec;
+			path = swift;
 			sourceTree = "<group>";
 		};
-		32307E8A301AEF68000EB43D /* OPSQLiteSpec */ = {
+		3292C76E301BDCE7001ECA62 /* nitro */ = {
 			isa = PBXGroup;
 			children = (
-				32307E88301AEF68000EB43D /* OPSQLiteSpec.h */,
-				32307E89301AEF68000EB43D /* OPSQLiteSpec-generated.mm */,
+				3292C763301BDCE7001ECA62 /* c++ */,
+				3292C767301BDCE7001ECA62 /* swift */,
+				3292C768301BDCE7001ECA62 /* Derivee-Swift-Cxx-Bridge.hpp */,
+				3292C769301BDCE7001ECA62 /* Derivee-Swift-Cxx-Bridge.cpp */,
+				3292C76A301BDCE7001ECA62 /* Derivee-Swift-Cxx-Umbrella.hpp */,
+				3292C76B301BDCE7001ECA62 /* Derivee+autolinking.rb */,
+				3292C76C301BDCE7001ECA62 /* DeriveeAutolinking.mm */,
+				3292C76D301BDCE7001ECA62 /* DeriveeAutolinking.swift */,
 			);
-			path = OPSQLiteSpec;
-			sourceTree = "<group>";
-		};
-		32307E96301AEF68000EB43D /* rnflashlist */ = {
-			isa = PBXGroup;
-			children = (
-				32307E8B301AEF68000EB43D /* ComponentDescriptors.h */,
-				32307E8C301AEF68000EB43D /* ComponentDescriptors.cpp */,
-				32307E8D301AEF68000EB43D /* EventEmitters.h */,
-				32307E8E301AEF68000EB43D /* EventEmitters.cpp */,
-				32307E8F301AEF68000EB43D /* Props.h */,
-				32307E90301AEF68000EB43D /* Props.cpp */,
-				32307E91301AEF68000EB43D /* RCTComponentViewHelpers.h */,
-				32307E92301AEF68000EB43D /* ShadowNodes.h */,
-				32307E93301AEF68000EB43D /* ShadowNodes.cpp */,
-				32307E94301AEF68000EB43D /* States.h */,
-				32307E95301AEF68000EB43D /* States.cpp */,
-			);
-			path = rnflashlist;
-			sourceTree = "<group>";
-		};
-		32307EA2301AEF68000EB43D /* rnscreens */ = {
-			isa = PBXGroup;
-			children = (
-				32307E97301AEF68000EB43D /* ComponentDescriptors.h */,
-				32307E98301AEF68000EB43D /* ComponentDescriptors.cpp */,
-				32307E99301AEF68000EB43D /* EventEmitters.h */,
-				32307E9A301AEF68000EB43D /* EventEmitters.cpp */,
-				32307E9B301AEF68000EB43D /* Props.h */,
-				32307E9C301AEF68000EB43D /* Props.cpp */,
-				32307E9D301AEF68000EB43D /* RCTComponentViewHelpers.h */,
-				32307E9E301AEF68000EB43D /* ShadowNodes.h */,
-				32307E9F301AEF68000EB43D /* ShadowNodes.cpp */,
-				32307EA0301AEF68000EB43D /* States.h */,
-				32307EA1301AEF68000EB43D /* States.cpp */,
-			);
-			path = rnscreens;
-			sourceTree = "<group>";
-		};
-		32307EAE301AEF68000EB43D /* rnskia */ = {
-			isa = PBXGroup;
-			children = (
-				32307EA3301AEF68000EB43D /* ComponentDescriptors.h */,
-				32307EA4301AEF68000EB43D /* ComponentDescriptors.cpp */,
-				32307EA5301AEF68000EB43D /* EventEmitters.h */,
-				32307EA6301AEF68000EB43D /* EventEmitters.cpp */,
-				32307EA7301AEF68000EB43D /* Props.h */,
-				32307EA8301AEF68000EB43D /* Props.cpp */,
-				32307EA9301AEF68000EB43D /* RCTComponentViewHelpers.h */,
-				32307EAA301AEF68000EB43D /* ShadowNodes.h */,
-				32307EAB301AEF68000EB43D /* ShadowNodes.cpp */,
-				32307EAC301AEF68000EB43D /* States.h */,
-				32307EAD301AEF68000EB43D /* States.cpp */,
-			);
-			path = rnskia;
-			sourceTree = "<group>";
-		};
-		32307EBA301AEF68000EB43D /* safeareacontext */ = {
-			isa = PBXGroup;
-			children = (
-				32307EAF301AEF68000EB43D /* ComponentDescriptors.h */,
-				32307EB0301AEF68000EB43D /* ComponentDescriptors.cpp */,
-				32307EB1301AEF68000EB43D /* EventEmitters.h */,
-				32307EB2301AEF68000EB43D /* EventEmitters.cpp */,
-				32307EB3301AEF68000EB43D /* Props.h */,
-				32307EB4301AEF68000EB43D /* Props.cpp */,
-				32307EB5301AEF68000EB43D /* RCTComponentViewHelpers.h */,
-				32307EB6301AEF68000EB43D /* ShadowNodes.h */,
-				32307EB7301AEF68000EB43D /* ShadowNodes.cpp */,
-				32307EB8301AEF68000EB43D /* States.h */,
-				32307EB9301AEF68000EB43D /* States.cpp */,
-			);
-			path = safeareacontext;
-			sourceTree = "<group>";
-		};
-		32307EBB301AEF68000EB43D /* components */ = {
-			isa = PBXGroup;
-			children = (
-				32307E96301AEF68000EB43D /* rnflashlist */,
-				32307EA2301AEF68000EB43D /* rnscreens */,
-				32307EAE301AEF68000EB43D /* rnskia */,
-				32307EBA301AEF68000EB43D /* safeareacontext */,
-			);
-			path = components;
-			sourceTree = "<group>";
-		};
-		32307EBC301AEF68000EB43D /* renderer */ = {
-			isa = PBXGroup;
-			children = (
-				32307EBB301AEF68000EB43D /* components */,
-			);
-			path = renderer;
-			sourceTree = "<group>";
-		};
-		32307EBD301AEF68000EB43D /* react */ = {
-			isa = PBXGroup;
-			children = (
-				32307EBC301AEF68000EB43D /* renderer */,
-			);
-			path = react;
-			sourceTree = "<group>";
-		};
-		32307EC0301AEF68000EB43D /* rnreanimated */ = {
-			isa = PBXGroup;
-			children = (
-				32307EBE301AEF68000EB43D /* rnreanimated.h */,
-				32307EBF301AEF68000EB43D /* rnreanimated-generated.mm */,
-			);
-			path = rnreanimated;
-			sourceTree = "<group>";
-		};
-		32307EC3301AEF68000EB43D /* rnscreens */ = {
-			isa = PBXGroup;
-			children = (
-				32307EC1301AEF68000EB43D /* rnscreens.h */,
-				32307EC2301AEF68000EB43D /* rnscreens-generated.mm */,
-			);
-			path = rnscreens;
-			sourceTree = "<group>";
-		};
-		32307EC6301AEF68000EB43D /* rnskia */ = {
-			isa = PBXGroup;
-			children = (
-				32307EC4301AEF68000EB43D /* rnskia.h */,
-				32307EC5301AEF68000EB43D /* rnskia-generated.mm */,
-			);
-			path = rnskia;
-			sourceTree = "<group>";
-		};
-		32307EC9301AEF68000EB43D /* safeareacontext */ = {
-			isa = PBXGroup;
-			children = (
-				32307EC7301AEF68000EB43D /* safeareacontext.h */,
-				32307EC8301AEF68000EB43D /* safeareacontext-generated.mm */,
-			);
-			path = safeareacontext;
-			sourceTree = "<group>";
-		};
-		32307EDB301AEF68000EB43D /* ios */ = {
-			isa = PBXGroup;
-			children = (
-				32307E84301AEF68000EB43D /* FBReactNativeSpec */,
-				32307E87301AEF68000EB43D /* NitroModulesSpec */,
-				32307E8A301AEF68000EB43D /* OPSQLiteSpec */,
-				32307EBD301AEF68000EB43D /* react */,
-				32307EC0301AEF68000EB43D /* rnreanimated */,
-				32307EC3301AEF68000EB43D /* rnscreens */,
-				32307EC6301AEF68000EB43D /* rnskia */,
-				32307EC9301AEF68000EB43D /* safeareacontext */,
-				32307ECA301AEF68000EB43D /* FBReactNativeSpecJSI.h */,
-				32307ECB301AEF68000EB43D /* FBReactNativeSpecJSI-generated.cpp */,
-				32307ECC301AEF68000EB43D /* NitroModulesSpecJSI.h */,
-				32307ECD301AEF68000EB43D /* NitroModulesSpecJSI-generated.cpp */,
-				32307ECE301AEF68000EB43D /* OPSQLiteSpecJSI.h */,
-				32307ECF301AEF68000EB43D /* OPSQLiteSpecJSI-generated.cpp */,
-				32307ED0301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.h */,
-				32307ED1301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.mm */,
-				32307ED3301AEF68000EB43D /* rnreanimatedJSI.h */,
-				32307ED4301AEF68000EB43D /* rnreanimatedJSI-generated.cpp */,
-				32307ED5301AEF68000EB43D /* rnscreensJSI.h */,
-				32307ED6301AEF68000EB43D /* rnscreensJSI-generated.cpp */,
-				32307ED7301AEF68000EB43D /* rnskiaJSI.h */,
-				32307ED8301AEF68000EB43D /* rnskiaJSI-generated.cpp */,
-				32307ED9301AEF68000EB43D /* safeareacontextJSI.h */,
-				32307EDA301AEF68000EB43D /* safeareacontextJSI-generated.cpp */,
-			);
-			path = ios;
+			path = nitro;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -515,6 +266,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3292C776301BDCE7001ECA62 /* Derivee+autolinking.rb in Resources */,
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
@@ -649,42 +401,14 @@
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
 				B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */,
-				32307EDD301AEF68000EB43D /* NitroModulesSpec-generated.mm in Sources */,
-				32307EDE301AEF68000EB43D /* ComponentDescriptors.cpp in Sources */,
-				32307EDF301AEF68000EB43D /* rnskiaJSI-generated.cpp in Sources */,
-				32307EE0301AEF68000EB43D /* EventEmitters.cpp in Sources */,
-				32307EE1301AEF68000EB43D /* rnskia-generated.mm in Sources */,
-				32307EE2301AEF68000EB43D /* rnreanimated-generated.mm in Sources */,
-				32307EE3301AEF68000EB43D /* States.cpp in Sources */,
-				32307EE4301AEF68000EB43D /* States.cpp in Sources */,
-				32307EE5301AEF68000EB43D /* safeareacontextJSI-generated.cpp in Sources */,
-				32307EE6301AEF68000EB43D /* ComponentDescriptors.cpp in Sources */,
-				32307EE7301AEF68000EB43D /* ComponentDescriptors.cpp in Sources */,
-				32307EE8301AEF68000EB43D /* EventEmitters.cpp in Sources */,
-				32307EE9301AEF68000EB43D /* NitroModulesSpecJSI-generated.cpp in Sources */,
-				32307EEA301AEF68000EB43D /* EventEmitters.cpp in Sources */,
-				32307EEB301AEF68000EB43D /* ShadowNodes.cpp in Sources */,
-				32307EEC301AEF68000EB43D /* Props.cpp in Sources */,
-				32307EED301AEF68000EB43D /* FBReactNativeSpecJSI-generated.cpp in Sources */,
 				32307F01301AEFBF000EB43D /* HybridTracker.swift in Sources */,
-				32307EEE301AEF68000EB43D /* safeareacontext-generated.mm in Sources */,
-				32307EEF301AEF68000EB43D /* States.cpp in Sources */,
-				32307EF0301AEF68000EB43D /* ShadowNodes.cpp in Sources */,
-				32307EF1301AEF68000EB43D /* ComponentDescriptors.cpp in Sources */,
-				32307EF2301AEF68000EB43D /* rnscreensJSI-generated.cpp in Sources */,
-				32307EF3301AEF68000EB43D /* rnscreens-generated.mm in Sources */,
-				32307EF4301AEF68000EB43D /* OPSQLiteSpec-generated.mm in Sources */,
-				32307EF5301AEF68000EB43D /* ShadowNodes.cpp in Sources */,
-				32307EF6301AEF68000EB43D /* Props.cpp in Sources */,
-				32307EF7301AEF68000EB43D /* rnreanimatedJSI-generated.cpp in Sources */,
-				32307EF8301AEF68000EB43D /* Props.cpp in Sources */,
-				32307EF9301AEF68000EB43D /* FBReactNativeSpec-generated.mm in Sources */,
-				32307EFA301AEF68000EB43D /* OPSQLiteSpecJSI-generated.cpp in Sources */,
-				32307EFB301AEF68000EB43D /* ShadowNodes.cpp in Sources */,
-				32307EFC301AEF68000EB43D /* EventEmitters.cpp in Sources */,
-				32307EFD301AEF68000EB43D /* RCTModulesConformingToProtocolsProvider.mm in Sources */,
-				32307EFE301AEF68000EB43D /* States.cpp in Sources */,
-				32307EFF301AEF68000EB43D /* Props.cpp in Sources */,
+				3292C76F301BDCE7001ECA62 /* HybridHybridTrackingSpec.swift in Sources */,
+				3292C770301BDCE7001ECA62 /* Derivee-Swift-Cxx-Bridge.cpp in Sources */,
+				3292C771301BDCE7001ECA62 /* Func_void_std__string.swift in Sources */,
+				3292C772301BDCE7001ECA62 /* DeriveeAutolinking.swift in Sources */,
+				3292C773301BDCE7001ECA62 /* DeriveeAutolinking.mm in Sources */,
+				3292C774301BDCE7001ECA62 /* HybridHybridTrackingSpec_cxx.swift in Sources */,
+				3292C775301BDCE7001ECA62 /* HybridHybridTrackingSpecSwift.cpp in Sources */,
 				364D748BAB2C4085B0714420 /* noop-file.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
