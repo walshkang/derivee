@@ -419,3 +419,15 @@ Define the TypeScript specification for the `HybridTracker` Nitro Module and exe
 * `npx nitrogen` completes without errors.
 * Generated `nitrogen/generated/ios/` directory contains `HybridTrackingSpec.swift` with the expected method signatures.
 * Linkage instructions are clear enough for a developer unfamiliar with Xcode to follow.
+
+---
+
+## Wave C.1 — Folly Config Plugin (Podfile Survival)
+
+### Task Prompt: WC1-CONFIG-PLUGIN — Folly Config Plugin (Podfile Survival)
+**Goal**: Encapsulate Podfile RCT-Folly build patches into a Custom Expo Config Plugin (`plugins/withFollyPodfile.js`).
+1. Write `plugins/withFollyPodfile.js` using `withDangerousMod(['ios', ...])` from `@expo/config-plugins`.
+2. Read `ios/Podfile`, inject RCT-Folly `post_install` header stripping and stub generation, and write back safely.
+3. Register `./plugins/withFollyPodfile` in `app.json` plugins array.
+4. Verify `npx expo prebuild --clean` regenerates `ios/Podfile` with the patch block preserved.
+

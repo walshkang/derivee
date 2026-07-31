@@ -57,7 +57,7 @@ This document is the single source of truth for all planned development waves.
 |:---:|:---:|:---|:---:|:---:|
 | A | WA-DB-CONCURRENCY | Database Config & Dual-Thread Concurrency | M | ✅ Done |
 | B | WB-NITRO-SCAFFOLD | Nitro Module Scaffolding & Code Generation | M | 🔄 Superseded → Wave C.2 |
-| **C.1** | **WC1-CONFIG-PLUGIN** | **Folly Config Plugin (Podfile Survival)** | **S** | Planned |
+| **C.1** | **WC1-CONFIG-PLUGIN** | **Folly Config Plugin (Podfile Survival)** | **S** | ✅ Done |
 | **C.2** | **WC2-LOCAL-MODULE** | **Local Expo Module & H3 Module Map** | **M** | Planned |
 | **C.3** | **WC3-SWIFT-SERVICE** | **Swift Background Service & SQLite Concurrency** | **L** | Planned |
 | **D.1** | **WD1-UI-HYDRATION** | **UI Synchronization, AppState Teardown & Legacy Cleanup** | **L** | Planned |
@@ -80,26 +80,6 @@ This document is the single source of truth for all planned development waves.
 | — | W11.7-UI-MATRIX | Build Headway Matrix (Timetable) UI | L | Deferred |
 | — | W12-BOSTON | Multi-City Expansion: MBTA | L | Deferred |
 | — | W15-DYNAMIC-ISLAND | Dynamic Island Support for Stat Bar | S | Deferred |
-
----
-
-## Wave C.1 — Folly Config Plugin (Podfile Survival) [Planned]
-
-**Task ID:** `WC1-CONFIG-PLUGIN`
-**Depends on:** Wave B
-
-### Goal
-Extract the fragile Ruby regex hacks from `ios/Podfile` and encapsulate them into a Custom Expo Config Plugin (`plugins/withFollyPodfile.js`). This ensures the `post_install` loop survives `npx expo prebuild --clean` without vaporizing the build cascade fixes.
-
-### Agent Directives
-1. **Create Config Plugin:**
-   * Write `plugins/withFollyPodfile.js`.
-   * Use `withDangerousMod(['ios', async (config) => { ... }])` from `@expo/config-plugins`.
-   * Read `ios/Podfile`, perform the exact regex replacements currently in the `Podfile`, and write back.
-2. **Update `app.json`:** Register `./plugins/withFollyPodfile.js` in the `plugins` array.
-
-### Verification
-* Run `npx expo prebuild --clean` and verify the generated `ios/Podfile` correctly contains the Folly patches.
 
 ---
 

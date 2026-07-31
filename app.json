@@ -33,6 +33,7 @@
     },
     "scheme": "derivee",
     "plugins": [
+      "./plugins/withFollyPodfile",
       "expo-router",
       [
         "@maplibre/maplibre-react-native",
