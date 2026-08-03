@@ -2,7 +2,7 @@
 
 This document is the **single authoritative reference** for all visual design, screen hierarchy, interaction patterns, and UI acceptance criteria. If a screen, component, or animation is not defined here, an agent **must not** invent it.
 
-For backend data flows, native bridging, and library constraints, see [architecture.md](file:///Volumes/T7ssd/derivee/docs/architecture.md).
+For backend data flows, native constraints, and library stacks, see [architecture.md](file:///Volumes/T7ssd/derivee/docs/architecture.md).
 
 ---
 
@@ -24,19 +24,19 @@ The interface automatically transitions between Light and Dark modes based on lo
 * **Day Mode (First Light to Last Light — "Clear Morning"):**
   * **Base Map:** Soft parchment whites (`#F9F9F6`) and clean muted light grays.
   * **The Fog (Layer 4):** Inky, matte graphite clouds (`#1C1C1E`) with high translucency. Major geographic arteries (coastlines, rivers, arterial bridges) are faintly visible beneath as subtle, unlabelled vectors, acting as natural lures.
-  * **UI Materials:** Apple's native `UltraThinMaterialLight` blur. Text and icons rendered in high-contrast pure black (`#000000`).
+  * **UI Materials:** Apple's native `.ultraThinMaterial` (Light). Text and icons rendered in high-contrast pure black (`#000000`).
 
 * **Night Mode (Last Light to First Light — "Midnight Grid"):**
   * **Base Map:** Deep midnight slate (`#12121A`).
   * **The Fog (Layer 4):** Pure OLED Black (`#000000`) with a heavy cloud-like blur mask, absorbing light while cleared hexes provide subtle illumination.
-  * **UI Materials:** Apple's native `UltraThinMaterialDark` blur. Text and icons rendered in clean, crisp white (`#FFFFFF`).
+  * **UI Materials:** Apple's native `.ultraThinMaterial` (Dark). Text and icons rendered in clean, crisp white (`#FFFFFF`).
 
 * **The Universal Accent Color (`#FFB300` — Electric Amber):**
   * Shared across both modes. Used strictly for the live GPS indicator dot, active transit vector routes, and glowing "Ghost POIs" in the fog. It mimics the aesthetic of vintage LED transit arrival boards.
 
 ### 1.2 Typography & Micro-Interference
 
-* **Primary System Font:** OS Native only — **SF Pro** (iOS), **Inter** (Android). Clean, neutral sans-serif used exclusively for labels, UI titles, and menus. **No serif fonts. No decorative type.**
+* **Primary System Font:** OS Native only — **SF Pro**. Clean, neutral sans-serif used exclusively for labels, UI titles, and menus. **No serif fonts. No decorative type.**
 * **The Math Font:** Native **SF Mono**. Every numerical metric — neighborhood completion percentages, subway arrival headways ($\Delta t$), or H3 hex IDs — is rendered in monospace. This subtle visual cue highlights the heavy mathematical precision of the SQLite and H3 engines running underneath.
 
 ### 1.3 Tone of Voice
@@ -143,7 +143,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 **Transition:** Once hydration is complete, the lock screen fades out over 400ms, revealing Screen 1.
 
 **Definition of Done:**
-- [ ] Hydration flag is stored in op-sqlite, not AsyncStorage.
+- [ ] Hydration flag is stored in GRDB, not UserDefaults.
 - [ ] Offline tile region downloads successfully for the 50km bounding box.
 - [ ] Transit delta file decompresses and attaches to the local database.
 - [ ] No map is rendered until hydration is verified complete.
@@ -158,7 +158,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 **UI Elements:**
 * **Edge-to-edge MapLibre map.** No tab bars, no navigation headers, no persistent HUDs.
 * **The Fog Layer:** Dark, volumetric masking polygon (see §2 3-Tier logic).
-* **The User Marker:** A native-feeling, smoothly interpolating Electric Amber (`#FFB300`) pulsing dot. Must use MapLibre's built-in user location layer with custom styling — not a React component overlaid on the map.
+* **The User Marker:** A native-feeling, smoothly interpolating Electric Amber (`#FFB300`) pulsing dot. Must use MapLibre's built-in user location layer with custom styling — not a custom SwiftUI view overlaid on the map.
 * **Ghost POI Nodes:** Transit beacons visible **only** within the 200m Active Vicinity Bubble. Rendered as unbranded, glowing geometric nodes (dots, diamonds) — never as traditional teardrop map pins or icons with text labels.
 * **Floating Action Buttons (FABs):** Two minimalist, translucent circular buttons floating over the map:
   * **Recenter FAB** (bottom-right): Re-centers the camera on the user's current GPS position with a smooth 300ms ease animation.
@@ -190,7 +190,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 **Trigger:** User taps a Subway or Bus Ghost POI node within their 200m Vicinity Bubble.
 
 **UI Elements:**
-* A native iOS-style bottom sheet (via `@gorhom/bottom-sheet`) slides up over the map.
+* A native iOS-style bottom sheet (via SwiftUI `.sheet`) slides up over the map.
 * **Station/Stop Name:** Large, bold SF Pro heading.
 * **Real-Time Arrivals:** GTFS-RT countdown list (e.g., "L train → Manhattan — 3 min", "8 min").
 * **Historical Reliability Sparkline:** A compact 7-day sparkline chart showing headway reliability, queried locally from the SQLite transit delta database in < 12ms.
@@ -221,7 +221,7 @@ When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top*
 **Trigger:** User taps the Profile FAB on the Ambient Map. Navigates to the Exploration Stats screen.
 
 **UI Elements:**
-A clean, native list view using `@shopify/flash-list` for guaranteed 60fps scrolling.
+A clean, native list view using SwiftUI `List` or `LazyVStack` for guaranteed 120fps scrolling.
 
 * **Macro Metrics Header:**
   * Total hexes unlocked (absolute count).
@@ -236,8 +236,8 @@ A clean, native list view using `@shopify/flash-list` for guaranteed 60fps scrol
 
 * **GPX/FIT Upload:**
   * A prominent "Upload Previous Workouts" button.
-  * Triggers `expo-document-picker` for local `.gpx` or `.fit` file selection.
-  * Processing: `fast-xml-parser` (GPX) or lightweight FIT decoder. Parsing is chunked to prevent UI freezing, coordinate arrays downsampled (>10m deltas), and deduped hexes saved via bulk SQLite inserts.
+  * Triggers SwiftUI `.fileImporter` for local `.gpx` or `.fit` file selection.
+  * Processing: Native `XMLParser` (GPX) or lightweight FIT decoder. Parsing is chunked to prevent UI freezing, coordinate arrays downsampled (>10m deltas), and deduped hexes saved via bulk SQLite inserts.
   * On successful processing, the fog state on Screen 1 updates immediately.
 
 **Thread Yielding Rule:** The SwiftUI `List` should render smoothly. Complex data processing must occur off the main thread (`Task.detached`) before updating the `@Observable` store, preventing frame drops.
@@ -313,11 +313,11 @@ When a user uploads a heavy GPX file containing hundreds of new hexes, the bridg
 * **Implementation:** Use MapLibre's native `fill-opacity-transition` with a staggered delay per hex cluster (sorted by distance from the user's position). The fog literally "melts away" from the user outward.
 
 > [!NOTE]
-> **Design Aspiration — Skia Enhancement:** For a more dramatic volumetric sunburst effect, `@shopify/react-native-skia` could be introduced to render a custom shader-based dissolve mask. This library is **not currently in the locked stack** (see [architecture.md §2](file:///Volumes/T7ssd/derivee/docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
+> **Design Aspiration — Metal Enhancement:** For a more dramatic volumetric sunburst effect, SwiftUI `.colorEffect` with a custom Metal shader could be introduced to render a shader-based dissolve mask. This capability is **not currently in the locked stack** (see [architecture.md §2](file:///Volumes/T7ssd/derivee/docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
 
 ### 5.2 Bottom Sheet Transitions
 
-* **Entry:** `@gorhom/bottom-sheet` spring animation with `damping: 50`, `stiffness: 500`. No bounce.
+* **Entry:** Native SwiftUI `.spring` animation (e.g., `.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0)`). No bounce.
 * **Exit:** Smooth deceleration swipe-to-dismiss. Route line unmounts at the exact frame the sheet reaches its dismissed position.
 * **Backdrop:** Dim the map slightly (`opacity: 0.3` dark overlay) when the sheet is at its expanded snap point, creating focus hierarchy.
 
