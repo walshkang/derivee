@@ -1,0 +1,33 @@
+name: Derivee
+options:
+  bundleIdPrefix: com.derivee
+  minimumXcodeGenVersion: 2.0.0
+targets:
+  Derivee:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [Derivee]
+    info:
+      path: Derivee/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSLocationWhenInUseUsageDescription: "We need your location to track explored hexes."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "We need your location in the background to track explored hexes."
+        UIBackgroundModes:
+          - location
+    dependencies:
+      - package: swift-h3
+        product: H3
+      - package: GRDB.swift
+        product: GRDB
+
+packages:
+  swift-h3:
+    url: https://github.com/JeremyEspresso/swift-h3
+    branch: main
+  GRDB.swift:
+    url: https://github.com/groue/GRDB.swift.git
+    from: 6.27.0
