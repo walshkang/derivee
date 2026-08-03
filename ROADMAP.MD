@@ -67,7 +67,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 |:---:|:---:|:---|:---:|:---:|
 | **11.6** | **W11.6-DEVOPS** | **Deploy Go Observer to Oracle Cloud & Seed R2** | **M** | ✅ Done |
 | **11.8** | **W11.8-WEB-FIXES** | **Transit Web MVP Bugfixes & Polish** | **M** | Planned |
-| **E** | **WE-ONBOARDING** | **Onboarding Gate & First-Launch Infrastructure** | **M** | Planned |
+| **E** | **WE-ONBOARDING** | **Onboarding Gate & First-Launch Infrastructure** | **M** | ✅ Done |
 | **F** | **WF-MAP-OVERHAUL** | **Map UI Overhaul & Ghost POI Lifecycle** | **L** | Planned |
 | **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | **S** | Planned |
 | **H** | **WH-SHIP** | **Polish, Settings Rewire & Ship Prep** | **M** | Planned |

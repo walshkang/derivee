@@ -23,6 +23,10 @@ targets:
         product: H3
       - package: GRDB.swift
         product: GRDB
+      - package: maplibre-gl-native-distribution
+        product: MapLibre
+      - package: swift-zstd
+        product: SwiftZSTD
 
 packages:
   swift-h3:
@@ -31,3 +35,9 @@ packages:
   GRDB.swift:
     url: https://github.com/groue/GRDB.swift.git
     from: 6.27.0
+  maplibre-gl-native-distribution:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution.git
+    from: 6.20.1
+  swift-zstd:
+    url: https://github.com/aperedera/SwiftZSTD.git
+    from: 1.0.0

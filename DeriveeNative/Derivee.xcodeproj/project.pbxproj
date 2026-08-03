@@ -9,7 +9,12 @@
 /* Begin PBXBuildFile section */
 		1F5B268F5BE018AC168B81D9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F85690F66F7D272181E21F2D /* GRDB */; };
 		20EE44C349BA7287D539F085 /* SpatialDatabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */; };
+		44846034DC3956691503AD6B /* HydrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08C048FE60010DC495C1C7AB /* HydrationManager.swift */; };
+		44F838BC32769B876A0FE448 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863A532D137F91C7E2021C95 /* OnboardingView.swift */; };
+		55031B6D0543C31F17B09277 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85968E07BB90EBA8E2B9F0D /* Secrets.swift */; };
+		64957D178FDC5E68FA993DB7 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = DF080F7BA7E8F484792D0F31 /* MapLibre */; };
 		79F5841560521971FD651E75 /* SpatialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5C593BBD5275D900632F1B /* SpatialStore.swift */; };
+		A48E67BDED56249F370FA65D /* SwiftZSTD in Frameworks */ = {isa = PBXBuildFile; productRef = DFD08D205B790E222084B47A /* SwiftZSTD */; };
 		A4BED02FF1B808AA720963C9 /* AmbientTrackingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */; };
 		A825909AB76BEA7ABCC21986 /* H3 in Frameworks */ = {isa = PBXBuildFile; productRef = 9406C642B57B83517386E129 /* H3 */; };
 		F5E76E643AE8FE5415701241 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF81045CC27721884C49C776 /* ContentView.swift */; };
@@ -17,13 +22,16 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		08C048FE60010DC495C1C7AB /* HydrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HydrationManager.swift; sourceTree = "<group>"; };
 		5AFFB73189473060ADA73222 /* Derivee.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Derivee.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		69DD2D8BDDA6A03164A4A524 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialDatabaseManager.swift; sourceTree = "<group>"; };
+		863A532D137F91C7E2021C95 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientTrackingEngine.swift; sourceTree = "<group>"; };
 		AF81045CC27721884C49C776 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeriveeApp.swift; sourceTree = "<group>"; };
 		CE5C593BBD5275D900632F1B /* SpatialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialStore.swift; sourceTree = "<group>"; };
+		F85968E07BB90EBA8E2B9F0D /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -33,6 +41,8 @@
 			files = (
 				A825909AB76BEA7ABCC21986 /* H3 in Frameworks */,
 				1F5B268F5BE018AC168B81D9 /* GRDB in Frameworks */,
+				64957D178FDC5E68FA993DB7 /* MapLibre in Frameworks */,
+				A48E67BDED56249F370FA65D /* SwiftZSTD in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,7 +63,10 @@
 				919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */,
 				AF81045CC27721884C49C776 /* ContentView.swift */,
 				BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */,
+				08C048FE60010DC495C1C7AB /* HydrationManager.swift */,
 				69DD2D8BDDA6A03164A4A524 /* Info.plist */,
+				863A532D137F91C7E2021C95 /* OnboardingView.swift */,
+				F85968E07BB90EBA8E2B9F0D /* Secrets.swift */,
 				75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */,
 				CE5C593BBD5275D900632F1B /* SpatialStore.swift */,
 			);
@@ -86,6 +99,8 @@
 			packageProductDependencies = (
 				9406C642B57B83517386E129 /* H3 */,
 				F85690F66F7D272181E21F2D /* GRDB */,
+				DF080F7BA7E8F484792D0F31 /* MapLibre */,
+				DFD08D205B790E222084B47A /* SwiftZSTD */,
 			);
 			productName = Derivee;
 			productReference = 5AFFB73189473060ADA73222 /* Derivee.app */;
@@ -112,7 +127,9 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				3C6361049F927E52680C2F39 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				AD90F0283C5F16FAABE3FBCB /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
 				82ED3C92F2419CD4150EB037 /* XCRemoteSwiftPackageReference "swift-h3" */,
+				DF937CC7693D350B42F576DB /* XCRemoteSwiftPackageReference "SwiftZSTD" */,
 			);
 			projectDirPath = "";
 			projectRoot = "";
@@ -130,6 +147,9 @@
 				A4BED02FF1B808AA720963C9 /* AmbientTrackingEngine.swift in Sources */,
 				F5E76E643AE8FE5415701241 /* ContentView.swift in Sources */,
 				F92498446F8CFD8DA0BDB9BE /* DeriveeApp.swift in Sources */,
+				44846034DC3956691503AD6B /* HydrationManager.swift in Sources */,
+				44F838BC32769B876A0FE448 /* OnboardingView.swift in Sources */,
+				55031B6D0543C31F17B09277 /* Secrets.swift in Sources */,
 				20EE44C349BA7287D539F085 /* SpatialDatabaseManager.swift in Sources */,
 				79F5841560521971FD651E75 /* SpatialStore.swift in Sources */,
 			);
@@ -331,6 +351,22 @@
 				kind = branch;
 			};
 		};
+		AD90F0283C5F16FAABE3FBCB /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.20.1;
+			};
+		};
+		DF937CC7693D350B42F576DB /* XCRemoteSwiftPackageReference "SwiftZSTD" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/aperedera/SwiftZSTD.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -338,6 +374,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 82ED3C92F2419CD4150EB037 /* XCRemoteSwiftPackageReference "swift-h3" */;
 			productName = H3;
+		};
+		DF080F7BA7E8F484792D0F31 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD90F0283C5F16FAABE3FBCB /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
+		};
+		DFD08D205B790E222084B47A /* SwiftZSTD */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF937CC7693D350B42F576DB /* XCRemoteSwiftPackageReference "SwiftZSTD" */;
+			productName = SwiftZSTD;
 		};
 		F85690F66F7D272181E21F2D /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;

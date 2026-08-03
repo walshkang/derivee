@@ -1,5 +1,5 @@
 {
-  "originHash" : "446aa9c6ec53146b8c6c0c29cbf5084f09e4900df876c658b8cd7a45bb68ccaf",
+  "originHash" : "a8bdbcec01245b0fd8bac837044f17d6c3ac6f4002d4bc6a825e4b977ca84ae6",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -11,12 +11,30 @@
       }
     },
     {
+      "identity" : "maplibre-gl-native-distribution",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/maplibre/maplibre-gl-native-distribution.git",
+      "state" : {
+        "revision" : "5ee345ca5d65238a6fce29bba87816204be7df20",
+        "version" : "6.28.0"
+      }
+    },
+    {
       "identity" : "swift-h3",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/JeremyEspresso/swift-h3",
       "state" : {
         "branch" : "main",
         "revision" : "4954df5b0007c012409156308d5cc66bb06f48ec"
+      }
+    },
+    {
+      "identity" : "swiftzstd",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/aperedera/SwiftZSTD.git",
+      "state" : {
+        "revision" : "ab63273ff89c6ed2966967b7998038352d00f813",
+        "version" : "1.0.1"
       }
     }
   ],
