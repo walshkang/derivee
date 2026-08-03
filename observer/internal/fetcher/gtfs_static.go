@@ -19,8 +19,21 @@ type ScheduledStopTime struct {
 	ArrivalTime int
 }
 
-// FetchAndParseStaticGTFS downloads a GTFS zip and extracts stop_times.txt, streaming to the provided callback
-func FetchAndParseStaticGTFS(zipURL string, insertBatch func([]ScheduledStopTime) error) error {
+// GTFSStop holds static stop location details
+type GTFSStop struct {
+	StopID       string
+	StopName     string
+	StopLat      float64
+	StopLon      float64
+	LocationType int
+}
+
+// FetchAndParseStaticGTFS downloads a GTFS zip and extracts stop_times.txt and stops.txt, streaming to the provided callbacks
+func FetchAndParseStaticGTFS(
+	zipURL string,
+	insertStopTimes func([]ScheduledStopTime) error,
+	insertStops func([]GTFSStop) error,
+) error {
 	log.Printf("Downloading static GTFS from %s", zipURL)
 	resp, err := http.Get(zipURL)
 	if err != nil {
@@ -39,17 +52,20 @@ func FetchAndParseStaticGTFS(zipURL string, insertBatch func([]ScheduledStopTime
 	}
 
 	for _, file := range zipReader.File {
-		if file.Name == "stop_times.txt" {
+		if file.Name == "stop_times.txt" && insertStopTimes != nil {
 			log.Printf("Parsing stop_times.txt from %s...", zipURL)
-			err = parseStopTimesToDB(file, insertBatch)
-			if err != nil {
-				return fmt.Errorf("failed to parse stop_times.txt: %w", err)
+			if err := parseStopTimesToDB(file, insertStopTimes); err != nil {
+				log.Printf("Warning: failed to parse stop_times.txt: %v", err)
 			}
-			break
+		} else if file.Name == "stops.txt" && insertStops != nil {
+			log.Printf("Parsing stops.txt from %s...", zipURL)
+			if err := parseStopsToDB(file, insertStops); err != nil {
+				log.Printf("Warning: failed to parse stops.txt: %v", err)
+			}
 		}
 	}
 
-	log.Printf("Successfully parsed static GTFS.")
+	log.Printf("Successfully processed static GTFS archive.")
 	return nil
 }
 
@@ -61,6 +77,7 @@ func parseStopTimesToDB(file *zip.File, insertBatch func([]ScheduledStopTime) er
 	defer f.Close()
 
 	reader := csv.NewReader(f)
+	reader.FieldsPerRecord = -1
 	// Read header
 	headers, err := reader.Read()
 	if err != nil {
@@ -70,7 +87,7 @@ func parseStopTimesToDB(file *zip.File, insertBatch func([]ScheduledStopTime) er
 	// Find column indices
 	var tripIDIdx, stopIDIdx, arrivalTimeIdx int = -1, -1, -1
 	for i, h := range headers {
-		switch h {
+		switch strings.TrimSpace(h) {
 		case "trip_id":
 			tripIDIdx = i
 		case "stop_id":
@@ -97,8 +114,12 @@ func parseStopTimesToDB(file *zip.File, insertBatch func([]ScheduledStopTime) er
 			continue // skip bad lines
 		}
 
-		tripID := record[tripIDIdx]
-		stopID := record[stopIDIdx]
+		if len(record) <= tripIDIdx || len(record) <= stopIDIdx || len(record) <= arrivalTimeIdx {
+			continue
+		}
+
+		tripID := strings.TrimSpace(record[tripIDIdx])
+		stopID := strings.TrimSpace(record[stopIDIdx])
 		arrivalTime := parseTime(record[arrivalTimeIdx])
 
 		batch = append(batch, ScheduledStopTime{
@@ -128,6 +149,94 @@ func parseStopTimesToDB(file *zip.File, insertBatch func([]ScheduledStopTime) er
 	return nil
 }
 
+func parseStopsToDB(file *zip.File, insertBatch func([]GTFSStop) error) error {
+	f, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	reader := csv.NewReader(f)
+	reader.FieldsPerRecord = -1
+
+	headers, err := reader.Read()
+	if err != nil {
+		return err
+	}
+
+	stopIDIdx, stopNameIdx, stopLatIdx, stopLonIdx, locTypeIdx := -1, -1, -1, -1, -1
+	for i, h := range headers {
+		switch strings.TrimSpace(h) {
+		case "stop_id":
+			stopIDIdx = i
+		case "stop_name":
+			stopNameIdx = i
+		case "stop_lat":
+			stopLatIdx = i
+		case "stop_lon":
+			stopLonIdx = i
+		case "location_type":
+			locTypeIdx = i
+		}
+	}
+
+	if stopIDIdx == -1 || stopNameIdx == -1 || stopLatIdx == -1 || stopLonIdx == -1 {
+		return fmt.Errorf("missing required columns in stops.txt")
+	}
+
+	const BatchSize = 5000
+	var batch []GTFSStop
+	totalRows := 0
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue
+		}
+
+		if len(record) <= stopIDIdx || len(record) <= stopNameIdx || len(record) <= stopLatIdx || len(record) <= stopLonIdx {
+			continue
+		}
+
+		lat, _ := strconv.ParseFloat(strings.TrimSpace(record[stopLatIdx]), 64)
+		lon, _ := strconv.ParseFloat(strings.TrimSpace(record[stopLonIdx]), 64)
+
+		locType := 0
+		if locTypeIdx != -1 && locTypeIdx < len(record) && strings.TrimSpace(record[locTypeIdx]) != "" {
+			locType, _ = strconv.Atoi(strings.TrimSpace(record[locTypeIdx]))
+		}
+
+		batch = append(batch, GTFSStop{
+			StopID:       strings.TrimSpace(record[stopIDIdx]),
+			StopName:     strings.TrimSpace(record[stopNameIdx]),
+			StopLat:      lat,
+			StopLon:      lon,
+			LocationType: locType,
+		})
+
+		if len(batch) >= BatchSize {
+			if err := insertBatch(batch); err != nil {
+				log.Printf("Error inserting stops batch: %v", err)
+			}
+			totalRows += len(batch)
+			batch = batch[:0]
+		}
+	}
+
+	if len(batch) > 0 {
+		if err := insertBatch(batch); err != nil {
+			log.Printf("Error inserting final stops batch: %v", err)
+		}
+		totalRows += len(batch)
+	}
+
+	log.Printf("Parsed %d stop records.", totalRows)
+	return nil
+}
+
 // parseTime converts HH:MM:SS to seconds past midnight. Can handle HH > 23.
 func parseTime(t string) int {
 	parts := strings.Split(t, ":")
@@ -141,3 +250,4 @@ func parseTime(t string) int {
 	
 	return h*3600 + m*60 + s
 }
+

@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	PollInterval   = 3 * time.Minute
-	DBPath         = "transit_delta.sqlite"
-	ZstPath        = "transit_delta.sqlite.zst"
-	StaticDBPath   = "static_gtfs.sqlite"
+	PollInterval       = 3 * time.Minute
+	DBPath             = "transit_delta.sqlite"
+	ZstPath            = "transit_delta.sqlite.zst"
+	StaticDBPath       = "static_gtfs.sqlite"
 	MTASubwayStaticURL = "http://web.mta.info/developers/data/nyct/subway/google_transit.zip"
 	MTABusStaticURL    = "http://web.mta.info/developers/data/busco/google_transit.zip"
 )
@@ -41,17 +41,28 @@ func main() {
 	}
 	defer staticDB.Close()
 
-	// 3. Load GTFS Static Schedules into Static DB
-	log.Println("Loading Subway Static Schedule...")
-	if err := fetcher.FetchAndParseStaticGTFS(MTASubwayStaticURL, staticDB.BulkInsertStopTimes); err != nil {
+	// 3. Load GTFS Static Schedules & Stops into Static DB
+	log.Println("Loading Subway Static Schedule & Stops...")
+	if err := fetcher.FetchAndParseStaticGTFS(MTASubwayStaticURL, staticDB.BulkInsertStopTimes, staticDB.BulkInsertStops); err != nil {
 		log.Printf("Warning: Failed to load subway static GTFS. Error: %v", err)
-	}
-	log.Println("Loading Bus Static Schedule...")
-	if err := fetcher.FetchAndParseStaticGTFS(MTABusStaticURL, staticDB.BulkInsertStopTimes); err != nil {
-		log.Printf("Warning: Failed to load bus static GTFS. Error: %v", err)
+	} else {
+		log.Println("Syncing subway static stops into delta database...")
+		if err := db.SyncStopsFromStatic(staticDB); err != nil {
+			log.Printf("Warning: Failed to sync subway stops to delta DB: %v", err)
+		}
 	}
 
-	// 4. Initialize Stop Event Engine with SQLite Backend
+	log.Println("Loading Bus Static Schedule & Stops...")
+	if err := fetcher.FetchAndParseStaticGTFS(MTABusStaticURL, staticDB.BulkInsertStopTimes, staticDB.BulkInsertStops); err != nil {
+		log.Printf("Warning: Failed to load bus static GTFS. Error: %v", err)
+	} else {
+		log.Println("Syncing bus static stops into delta database...")
+		if err := db.SyncStopsFromStatic(staticDB); err != nil {
+			log.Printf("Warning: Failed to sync bus stops to delta DB: %v", err)
+		}
+	}
+
+	// 5. Initialize Stop Event Engine with SQLite Backend
 	engine := processor.NewStopEventEngine(staticDB)
 
 	log.Println("Starting The Observer daemon...")
@@ -59,14 +70,14 @@ func main() {
 	defer ticker.Stop()
 
 	// Initial run before ticker
-	pollAndProcess(engine, db)
+	pollAndProcess(engine, db, staticDB)
 
 	for range ticker.C {
-		pollAndProcess(engine, db)
+		pollAndProcess(engine, db, staticDB)
 	}
 }
 
-func pollAndProcess(engine *processor.StopEventEngine, db *storage.Database) {
+func pollAndProcess(engine *processor.StopEventEngine, db *storage.Database, staticDB *storage.StaticDatabase) {
 	log.Println("Polling MTA feeds...")
 
 	// 1. Fetch Subways
@@ -108,7 +119,12 @@ func pollAndProcess(engine *processor.StopEventEngine, db *storage.Database) {
 		log.Printf("Error aggregating stats: %v", err)
 	}
 
-	// 5. Compress
+	// 5. Ensure stops table is populated in delta DB before export
+	if err := db.SyncStopsFromStatic(staticDB); err != nil {
+		log.Printf("Warning: Failed to sync stops into delta DB: %v", err)
+	}
+
+	// 6. Compress
 	log.Println("Compressing SQLite database...")
 	err = storage.CompressSQLite(DBPath, ZstPath)
 	if err != nil {
@@ -116,7 +132,7 @@ func pollAndProcess(engine *processor.StopEventEngine, db *storage.Database) {
 		return
 	}
 
-	// 6. Upload to R2 (CDN Handoff)
+	// 7. Upload to R2 (CDN Handoff)
 	log.Println("Pushing to Cloudflare R2...")
 	err = storage.UploadToR2(ZstPath)
 	if err != nil {
@@ -128,3 +144,4 @@ func pollAndProcess(engine *processor.StopEventEngine, db *storage.Database) {
 	os.Remove(ZstPath)
 	log.Println("Cycle complete. Waiting for next interval.")
 }
+

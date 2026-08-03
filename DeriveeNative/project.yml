@@ -8,6 +8,8 @@ targets:
     platform: iOS
     deploymentTarget: "17.0"
     sources: [Derivee]
+    resources:
+      - path: ../observer/transit_delta.sqlite
     info:
       path: Derivee/Info.plist
       properties:

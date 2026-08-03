@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var spatialStore = SpatialStore()
     @State private var showTransitSheet = false
     @State private var selectedTransitStop: String? = nil
+    @State private var showGlow = false
     
     var body: some View {
         Group {
@@ -23,6 +24,14 @@ struct ContentView: View {
                             showTransitSheet: $showTransitSheet,
                             selectedTransitStop: $selectedTransitStop)
                         .ignoresSafeArea()
+                    
+                    if showGlow {
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.8), lineWidth: 4)
+                            .frame(width: 80, height: 80)
+                            .shadow(color: .white, radius: 10)
+                            .transition(.scale.combined(with: .opacity))
+                    }
                     
                     VStack {
                         HStack {
@@ -45,6 +54,19 @@ struct ContentView: View {
                             }
                             .padding(.bottom, 40)
                             .padding(.trailing, 20)
+                        }
+                    }
+                }
+                .onChange(of: spatialStore.newlyUnlockedHexLocation != nil) {
+                    if spatialStore.newlyUnlockedHexLocation != nil {
+                        withAnimation(.easeOut(duration: 0.1)) {
+                            showGlow = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation {
+                                showGlow = false
+                            }
+                            spatialStore.newlyUnlockedHexLocation = nil
                         }
                     }
                 }

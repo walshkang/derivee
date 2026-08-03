@@ -75,16 +75,8 @@ func (d *Database) AggregateDailyStats() error {
 	}
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO stop_reliability_hourly (route_id, stop_id, direction_id, hour_of_day, day_of_week, median_delay_sec, p90_delay_sec, median_headway_sec, headway_stddev_sec, ewt_seconds, on_time_pct, sample_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(route_id, stop_id, direction_id, hour_of_day, day_of_week) DO UPDATE SET
-			median_delay_sec = excluded.median_delay_sec,
-			p90_delay_sec = excluded.p90_delay_sec,
-			median_headway_sec = excluded.median_headway_sec,
-			headway_stddev_sec = excluded.headway_stddev_sec,
-			ewt_seconds = excluded.ewt_seconds,
-			on_time_pct = excluded.on_time_pct,
-			sample_count = excluded.sample_count;
+		INSERT OR REPLACE INTO stop_reliability_hourly (route_id, stop_id, direction_id, hour_of_day, day_of_week, median_delay_sec, p90_delay_sec, median_headway_sec, headway_stddev_sec, ewt_seconds, on_time_pct, sample_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`)
 	if err != nil {
 		tx.Rollback()

@@ -18,8 +18,19 @@ final class SpatialDatabaseManager {
             configuration.prepareDatabase { db in
                 try db.execute(sql: "PRAGMA synchronous = NORMAL;")
                 try db.execute(sql: "PRAGMA busy_timeout = 5000;")
+                
+                // Dev Overwrite: Forcefully replace stale SQLite cache with the fresh bundled Observer output
+                if let bundleURL = Bundle.main.url(forResource: "transit_delta", withExtension: "sqlite") ?? Bundle.main.url(forResource: "derivee_transit", withExtension: "sqlite") {
+                    try? fileManager.removeItem(at: transitDBURL)
+                    try? fileManager.copyItem(at: bundleURL, to: transitDBURL)
+                }
+                
                 if fileManager.fileExists(atPath: transitDBURL.path) {
-                    try db.execute(sql: "ATTACH DATABASE '\(transitDBURL.path)' AS transit")
+                    do {
+                        try db.execute(sql: "ATTACH DATABASE '\(transitDBURL.path)' AS transit")
+                    } catch {
+                        print("⚠️ Transit POIs unavailable: \(error)")
+                    }
                 }
             }
             

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		094712DE5F55C5A2F994A612 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1269ACE7C6346A1302459B0 /* MapView.swift */; };
 		1F5B268F5BE018AC168B81D9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F85690F66F7D272181E21F2D /* GRDB */; };
 		20EE44C349BA7287D539F085 /* SpatialDatabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */; };
 		44846034DC3956691503AD6B /* HydrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08C048FE60010DC495C1C7AB /* HydrationManager.swift */; };
@@ -14,6 +15,7 @@
 		55031B6D0543C31F17B09277 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85968E07BB90EBA8E2B9F0D /* Secrets.swift */; };
 		64957D178FDC5E68FA993DB7 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = DF080F7BA7E8F484792D0F31 /* MapLibre */; };
 		79F5841560521971FD651E75 /* SpatialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5C593BBD5275D900632F1B /* SpatialStore.swift */; };
+		9E18AE610A3DB924C58DD4DF /* MapFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878744028003B6170BB298EA /* MapFAB.swift */; };
 		A48E67BDED56249F370FA65D /* SwiftZSTD in Frameworks */ = {isa = PBXBuildFile; productRef = DFD08D205B790E222084B47A /* SwiftZSTD */; };
 		A4BED02FF1B808AA720963C9 /* AmbientTrackingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */; };
 		A825909AB76BEA7ABCC21986 /* H3 in Frameworks */ = {isa = PBXBuildFile; productRef = 9406C642B57B83517386E129 /* H3 */; };
@@ -27,9 +29,11 @@
 		69DD2D8BDDA6A03164A4A524 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialDatabaseManager.swift; sourceTree = "<group>"; };
 		863A532D137F91C7E2021C95 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		878744028003B6170BB298EA /* MapFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapFAB.swift; sourceTree = "<group>"; };
 		919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientTrackingEngine.swift; sourceTree = "<group>"; };
 		AF81045CC27721884C49C776 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeriveeApp.swift; sourceTree = "<group>"; };
+		C1269ACE7C6346A1302459B0 /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
 		CE5C593BBD5275D900632F1B /* SpatialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialStore.swift; sourceTree = "<group>"; };
 		F85968E07BB90EBA8E2B9F0D /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -65,6 +69,8 @@
 				BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */,
 				08C048FE60010DC495C1C7AB /* HydrationManager.swift */,
 				69DD2D8BDDA6A03164A4A524 /* Info.plist */,
+				878744028003B6170BB298EA /* MapFAB.swift */,
+				C1269ACE7C6346A1302459B0 /* MapView.swift */,
 				863A532D137F91C7E2021C95 /* OnboardingView.swift */,
 				F85968E07BB90EBA8E2B9F0D /* Secrets.swift */,
 				75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */,
@@ -148,6 +154,8 @@
 				F5E76E643AE8FE5415701241 /* ContentView.swift in Sources */,
 				F92498446F8CFD8DA0BDB9BE /* DeriveeApp.swift in Sources */,
 				44846034DC3956691503AD6B /* HydrationManager.swift in Sources */,
+				9E18AE610A3DB924C58DD4DF /* MapFAB.swift in Sources */,
+				094712DE5F55C5A2F994A612 /* MapView.swift in Sources */,
 				44F838BC32769B876A0FE448 /* OnboardingView.swift in Sources */,
 				55031B6D0543C31F17B09277 /* Secrets.swift in Sources */,
 				20EE44C349BA7287D539F085 /* SpatialDatabaseManager.swift in Sources */,

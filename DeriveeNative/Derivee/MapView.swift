@@ -10,10 +10,8 @@ struct MapView: UIViewRepresentable {
     @Binding var showTransitSheet: Bool
     @Binding var selectedTransitStop: String?
     
-    // MapTiler Satellite URL (Mocked key for now)
-    let styleURL = URL(string: "https://api.maptiler.com/maps/satellite/style.json?key=YOUR_API_KEY")!
-    
-    @State private var glowLocation: CGPoint? = nil
+    // MapTiler Satellite URL
+    let styleURL = URL(string: "https://api.maptiler.com/maps/satellite/style.json?key=\(Secrets.mapTilerKey)")!
     
     func makeUIView(context: Context) -> MLNMapView {
         let mapView = MLNMapView(frame: .zero, styleURL: styleURL)
@@ -27,7 +25,9 @@ struct MapView: UIViewRepresentable {
         context.coordinator.mapView = mapView
         
         // Start tracking
-        trackingEngine.startTracking()
+        DispatchQueue.main.async {
+            self.trackingEngine.startTracking()
+        }
         
         return mapView
     }
@@ -35,23 +35,7 @@ struct MapView: UIViewRepresentable {
     func updateUIView(_ uiView: MLNMapView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.updateFogColor(for: colorScheme, in: uiView)
-        
-        // Check for new hexes to trigger animation
-        if context.coordinator.previousHexCount < spatialStore.exploredHexes.count {
-            context.coordinator.previousHexCount = spatialStore.exploredHexes.count
-            // Trigger transient glow ring
-            if let userLoc = uiView.userLocation?.location {
-                let point = uiView.convert(userLoc.coordinate, toPointTo: uiView)
-                DispatchQueue.main.async {
-                    self.glowLocation = point
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.glowLocation = nil // Reset to trigger again
-                    }
-                }
-            }
-        }
-        
-        context.coordinator.updateExploredHexes(spatialStore.exploredHexes, in: uiView)
+        context.coordinator.updateExploredHexes(in: uiView, with: spatialStore.currentFogShape)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
     }
     
@@ -75,7 +59,6 @@ struct MapView: UIViewRepresentable {
         
         var pois: [GhostPOI] = []
         var lastLocation: CLLocation?
-        var previousHexCount: Int = 0
         
         init(_ parent: MapView) {
             self.parent = parent
@@ -84,11 +67,9 @@ struct MapView: UIViewRepresentable {
         }
         
         func loadPOIs() {
-            // Load from GRDB transit.stops
             Task {
                 do {
                     pois = try await SpatialDatabaseManager.shared.dbPool.read { db in
-                        // Assuming transit.stops exists with standard GTFS columns
                         let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1 OR location_type = 0")
                         return rows.map { row in
                             GhostPOI(
@@ -99,7 +80,7 @@ struct MapView: UIViewRepresentable {
                         }
                     }
                 } catch {
-                    print("Failed to load POIs, table might not exist yet: \(error)")
+                    print("⚠️ Transit POIs unavailable: \(error)")
                 }
             }
         }
@@ -118,18 +99,7 @@ struct MapView: UIViewRepresentable {
         }
         
         func setupLayers(in style: MLNStyle) {
-            // 1 & 2. Base layers are handled by MapTiler style
-            // 4. Cloud Layer (Fog)
-            // Creating a large polygon for the 50km bounding box
-            let bounds = [
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5),
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0),
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0),
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5),
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5)
-            ]
-            let fogPolygon = MLNPolygon(coordinates: bounds, count: 5)
-            let fogSource = MLNShapeSource(identifier: "fog-source", shape: fogPolygon, options: nil)
+            let fogSource = MLNShapeSource(identifier: "fog-source", shape: nil, options: nil)
             style.addSource(fogSource)
             
             let fogLayer = MLNFillStyleLayer(identifier: fogLayerId, source: fogSource)
@@ -138,11 +108,9 @@ struct MapView: UIViewRepresentable {
             fogLayer.fillOpacity = NSExpression(forConstantValue: 0.95)
             style.addLayer(fogLayer)
             
-            // Ghost POI Source
             let source = MLNShapeSource(identifier: poiSourceId, features: [], options: nil)
             style.addSource(source)
             
-            // Phase 1: Lure (Faint beacon above fog)
             let lureLayer = MLNCircleStyleLayer(identifier: lureLayerId, source: source)
             lureLayer.predicate = NSPredicate(format: "phase == 1")
             lureLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
@@ -151,7 +119,6 @@ struct MapView: UIViewRepresentable {
             lureLayer.circleBlur = NSExpression(forConstantValue: 2.0)
             style.insertLayer(lureLayer, above: fogLayer)
             
-            // Phase 2: Active (Crisp geometric node)
             let activeLayer = MLNCircleStyleLayer(identifier: activeLayerId, source: source)
             activeLayer.predicate = NSPredicate(format: "phase == 2")
             activeLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
@@ -159,7 +126,6 @@ struct MapView: UIViewRepresentable {
             activeLayer.circleOpacity = NSExpression(forConstantValue: 1.0)
             style.insertLayer(activeLayer, above: lureLayer)
             
-            // Phase 3: Archive (Faded mark, only visible at high zoom)
             let archiveLayer = MLNCircleStyleLayer(identifier: archiveLayerId, source: source)
             archiveLayer.predicate = NSPredicate(format: "phase == 3")
             archiveLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
@@ -173,10 +139,12 @@ struct MapView: UIViewRepresentable {
             guard let style = mapView.style, let fogLayer = style.layer(withIdentifier: fogLayerId) as? MLNFillStyleLayer else { return }
             let colorHex = colorScheme == .dark ? "#000000" : "#1C1C1E"
             fogLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
+            fogLayer.fillOpacity = NSExpression(forConstantValue: 0.5) // Temporary for debugging mask and base map
         }
         
-        func updateExploredHexes(_ hexes: Set<String>, in mapView: MLNMapView) {
-            // MapLibre hex holes logic goes here (updating mask or DDS)
+        func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {
+            guard let style = mapView.style, let fogSource = style.source(withIdentifier: "fog-source") as? MLNShapeSource else { return }
+            fogSource.shape = shape
         }
         
         func updateTransitSheetState(showSheet: Bool, selectedStop: String?, in mapView: MLNMapView) {
@@ -243,8 +211,10 @@ struct MapView: UIViewRepresentable {
             
             if let first = features.first, let phase = first.attributes["phase"] as? Int, phase == 2 {
                 if let stopId = first.attributes["id"] as? String {
-                    parent.selectedTransitStop = stopId
-                    parent.showTransitSheet = true
+                    DispatchQueue.main.async {
+                        self.parent.selectedTransitStop = stopId
+                        self.parent.showTransitSheet = true
+                    }
                 }
             }
         }
