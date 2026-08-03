@@ -27,14 +27,21 @@ The app is now fully native:
 
 ## 🔨 Immediate Next Step
 
-**Kick off Wave F: Map UI Overhaul & Ghost POI Lifecycle**
+**Wave F Debugging: Systematic Map Restoration**
 
-With the native foundation (Waves N.1–N.3) and Onboarding (Wave E) complete, the next objective is aligning the core map view with the `design.md` specifications.
+We are currently debugging why the native MapLibre map is not visible. To avoid haphazard changes, we are executing a systematic 3-phase debugging plan:
 
-Next steps for the agent:
-1. Implement native SwiftUI Floating Action Buttons (FABs) over the map.
-2. Build the 3-phase Ghost POI lifecycle natively using MapLibre data-driven styling.
-3. Ensure ambient hex unlock animations trigger smoothly via GRDB observations.
+**Phase 1: Base Map & Network Isolation**
+*   **Root Cause Identified:** `Secrets.swift` uses a placeholder `"YOUR_MAPTILER_KEY"`. MapLibre's style fetch fails with network errors (401/403), which prevents `mapView(_:didFinishLoading:)` from firing. Since our custom layers (fog, POIs) are injected *after* the style loads, a failed style fetch means absolutely nothing renders.
+*   **Action:** Provide a valid MapTiler key (or swap to a public debug style temporarily) to confirm base satellite tiles load successfully.
+
+**Phase 2: Fog Mask Validation**
+*   **Root Cause Identified:** The fog mask covers the entire map with high opacity. If the geometry for the holes (explored hexes) is malformed or delayed, the mask will blanket the screen opaquely.
+*   **Action:** Once the base map loads, temporarily lower fog opacity to 0.5. Verify `spatialStore.currentFogShape` successfully applies interior rings to cut holes in the fog layer. 
+
+**Phase 3: POI Layer & Database Binding**
+*   **Root Cause Identified:** POIs rely on precise coordinate math and layer ordering above the fog mask.
+*   **Action:** Verify POIs are rendering and responding to distance changes (Lure, Active, Archive phases) as the simulated location updates.
 
 ---
 

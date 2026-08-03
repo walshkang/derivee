@@ -5,7 +5,7 @@ import MapLibre
 import H3
 
 @Observable
-final class SpatialStore {
+final class SpatialStore: @unchecked Sendable {
     var exploredHexes: Set<String> = []
     
     var newlyUnlockedHexLocation: CLLocationCoordinate2D? = nil
@@ -61,9 +61,9 @@ final class SpatialStore {
         polygonTask = Task.detached(priority: .background) {
             let bounds = [
                 CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5),
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0),
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0),
                 CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5),
+                CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0),
+                CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0),
                 CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5)
             ]
             
@@ -104,13 +104,12 @@ final class SpatialStore {
                 }
             }
             
+            let capturedNewHexLocation = newHexLocation
             await MainActor.run { [weak self] in
                 if Task.isCancelled { return }
                 self?.currentFogShape = fogPolygon
-                if newHexLocation != nil {
-                    DispatchQueue.main.async {
-                        self?.newlyUnlockedHexLocation = newHexLocation
-                    }
+                if let loc = capturedNewHexLocation {
+                    self?.newlyUnlockedHexLocation = loc
                 }
             }
         }

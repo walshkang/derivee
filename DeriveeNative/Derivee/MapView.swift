@@ -10,8 +10,8 @@ struct MapView: UIViewRepresentable {
     @Binding var showTransitSheet: Bool
     @Binding var selectedTransitStop: String?
     
-    // MapTiler Satellite URL
-    let styleURL = URL(string: "https://api.maptiler.com/maps/satellite/style.json?key=\(Secrets.mapTilerKey)")!
+    // MapTiler Streets URL
+    let styleURL = URL(string: "https://api.maptiler.com/maps/streets-v2/style.json?key=\(Secrets.mapTilerKey)")!
     
     func makeUIView(context: Context) -> MLNMapView {
         let mapView = MLNMapView(frame: .zero, styleURL: styleURL)
@@ -88,6 +88,7 @@ struct MapView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             setupLayers(in: style)
             updatePOIs(in: style)
+            updateExploredHexes(in: mapView, with: parent.spatialStore.currentFogShape)
         }
         
         func mapView(_ mapView: MLNMapView, didUpdate userLocation: MLNUserLocation?) {
@@ -130,8 +131,7 @@ struct MapView: UIViewRepresentable {
             archiveLayer.predicate = NSPredicate(format: "phase == 3")
             archiveLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
             archiveLayer.circleRadius = NSExpression(forConstantValue: 6)
-            let zoomInterpolation = NSExpression(format: "mgl_step:from:stops:($zoomLevel, 0.0, %@)", [16: 0.0, 17: 0.15])
-            archiveLayer.circleOpacity = zoomInterpolation
+            archiveLayer.circleOpacity = NSExpression(forConstantValue: 0.15)
             style.insertLayer(archiveLayer, above: activeLayer)
         }
         
