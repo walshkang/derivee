@@ -91,7 +91,7 @@ final class SpatialStore {
             if Task.isCancelled { return }
             print("Generated \(innerRings.count) interior rings for the fog mask")
             
-            let fogPolygon = MLNPolygon(coordinates: bounds, count: UInt(bounds.count), interiorPolygons: innerRings)
+            let fogPolygon = MLNPolygon(coordinates: bounds, count: UInt(bounds.count), interiorPolygons: innerRings.isEmpty ? nil : innerRings)
             
             // If a new hex was unlocked, get its center coordinate
             var newHexLocation: CLLocationCoordinate2D? = nil

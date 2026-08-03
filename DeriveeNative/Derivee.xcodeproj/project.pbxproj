@@ -10,6 +10,7 @@
 		094712DE5F55C5A2F994A612 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1269ACE7C6346A1302459B0 /* MapView.swift */; };
 		1F5B268F5BE018AC168B81D9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F85690F66F7D272181E21F2D /* GRDB */; };
 		20EE44C349BA7287D539F085 /* SpatialDatabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */; };
+		251F343B49766CAB12CA3411 /* transit_delta.sqlite in Resources */ = {isa = PBXBuildFile; fileRef = 199B3BD0E20EFB91632E8F30 /* transit_delta.sqlite */; };
 		44846034DC3956691503AD6B /* HydrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08C048FE60010DC495C1C7AB /* HydrationManager.swift */; };
 		44F838BC32769B876A0FE448 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863A532D137F91C7E2021C95 /* OnboardingView.swift */; };
 		55031B6D0543C31F17B09277 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85968E07BB90EBA8E2B9F0D /* Secrets.swift */; };
@@ -25,6 +26,7 @@
 
 /* Begin PBXFileReference section */
 		08C048FE60010DC495C1C7AB /* HydrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HydrationManager.swift; sourceTree = "<group>"; };
+		199B3BD0E20EFB91632E8F30 /* transit_delta.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = transit_delta.sqlite; sourceTree = "<group>"; };
 		5AFFB73189473060ADA73222 /* Derivee.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Derivee.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		69DD2D8BDDA6A03164A4A524 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialDatabaseManager.swift; sourceTree = "<group>"; };
@@ -57,8 +59,18 @@
 			isa = PBXGroup;
 			children = (
 				68481505568707C6723D2078 /* Derivee */,
+				33F8AC572062E265B16515C1 /* observer */,
 				F8104CB44E5EB895B44F5249 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		33F8AC572062E265B16515C1 /* observer */ = {
+			isa = PBXGroup;
+			children = (
+				199B3BD0E20EFB91632E8F30 /* transit_delta.sqlite */,
+			);
+			name = observer;
+			path = ../observer;
 			sourceTree = "<group>";
 		};
 		68481505568707C6723D2078 /* Derivee */ = {
@@ -95,6 +107,7 @@
 			buildConfigurationList = D996B5BA38D10E53FC3C9DC2 /* Build configuration list for PBXNativeTarget "Derivee" */;
 			buildPhases = (
 				01DEF9C6F9550F07AA5319DB /* Sources */,
+				3433A57926DAC46A44F99624 /* Resources */,
 				54840BC5D92C90674DCAC125 /* Frameworks */,
 			);
 			buildRules = (
@@ -144,6 +157,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3433A57926DAC46A44F99624 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				251F343B49766CAB12CA3411 /* transit_delta.sqlite in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		01DEF9C6F9550F07AA5319DB /* Sources */ = {

@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
-	"io"
+
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -15,26 +15,21 @@ import (
 
 // CompressSQLite reads the sqlite file, compresses it with Zstandard, and writes to output path
 func CompressSQLite(inputPath, outputPath string) error {
-	inFile, err := os.Open(inputPath)
+	inData, err := os.ReadFile(inputPath)
 	if err != nil {
-		return fmt.Errorf("failed to open input sqlite file: %w", err)
+		return fmt.Errorf("failed to read input sqlite file: %w", err)
 	}
-	defer inFile.Close()
 
-	outFile, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output zst file: %w", err)
-	}
-	defer outFile.Close()
-
-	writer, err := zstd.NewWriter(outFile)
+	encoder, err := zstd.NewWriter(nil, zstd.WithSingleSegment(true))
 	if err != nil {
 		return fmt.Errorf("failed to initialize zstd writer: %w", err)
 	}
-	defer writer.Close()
+	defer encoder.Close()
 
-	if _, err := io.Copy(writer, inFile); err != nil {
-		return fmt.Errorf("failed to compress file: %w", err)
+	outData := encoder.EncodeAll(inData, make([]byte, 0, len(inData)))
+
+	if err := os.WriteFile(outputPath, outData, 0644); err != nil {
+		return fmt.Errorf("failed to write output zst file: %w", err)
 	}
 
 	return nil

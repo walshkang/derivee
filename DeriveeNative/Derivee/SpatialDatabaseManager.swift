@@ -13,24 +13,36 @@ final class SpatialDatabaseManager {
             let databaseURL = appSupportURL.appendingPathComponent("derivee_spatial.sqlite")
             let transitDBURL = appSupportURL.appendingPathComponent("derivee_transit.sqlite")
             
+            if let bundleURL = Bundle.main.url(forResource: "transit_delta", withExtension: "sqlite") ?? Bundle.main.url(forResource: "derivee_transit", withExtension: "sqlite") {
+                print("Found transit DB in bundle at \(bundleURL)")
+                do {
+                    if fileManager.fileExists(atPath: transitDBURL.path) {
+                        try fileManager.removeItem(at: transitDBURL)
+                    }
+                    try fileManager.copyItem(at: bundleURL, to: transitDBURL)
+                    print("Successfully copied transit DB to \(transitDBURL)")
+                } catch {
+                    print("⚠️ Failed to copy transit DB: \(error)")
+                }
+            } else {
+                print("⚠️ Could not find transit_delta.sqlite in main bundle")
+            }
+            
             var configuration = Configuration()
             // Setting pragmas as specified in the blueprint
             configuration.prepareDatabase { db in
                 try db.execute(sql: "PRAGMA synchronous = NORMAL;")
                 try db.execute(sql: "PRAGMA busy_timeout = 5000;")
                 
-                // Dev Overwrite: Forcefully replace stale SQLite cache with the fresh bundled Observer output
-                if let bundleURL = Bundle.main.url(forResource: "transit_delta", withExtension: "sqlite") ?? Bundle.main.url(forResource: "derivee_transit", withExtension: "sqlite") {
-                    try? fileManager.removeItem(at: transitDBURL)
-                    try? fileManager.copyItem(at: bundleURL, to: transitDBURL)
-                }
-                
                 if fileManager.fileExists(atPath: transitDBURL.path) {
                     do {
                         try db.execute(sql: "ATTACH DATABASE '\(transitDBURL.path)' AS transit")
+                        print("Successfully attached transit database")
                     } catch {
-                        print("⚠️ Transit POIs unavailable: \(error)")
+                        print("⚠️ Failed to attach transit DB: \(error)")
                     }
+                } else {
+                    print("⚠️ No transit DB file to attach at \(transitDBURL)")
                 }
             }
             
