@@ -42,57 +42,40 @@ The app follows a strict visual identity defined in [`docs/design.md`](docs/desi
 
 ## 🛠 Tech Stack & Architecture
 
-Built as a **hybrid "Brownfield" architecture** under the **Sleepy Hermes** paradigm. Expo Managed Workflow (CNG / Prebuild) governs UI rendering, navigation, and config plugins. The `ios/` native workspace is **manually managed** for Nitro Module linkage, the H3 C-library bridging header, and the native Swift background service.
+Built as a **pure native iOS application** under the **Sleepy Hermes** paradigm (originally named during the React Native era, now fully realized in Swift). The project uses `xcodegen` for a clean, reproducible Xcode workspace, entirely bypassing CocoaPods and legacy React Native bridging constraints.
 
 ### Core Stack
 
-| Package | Version | Role |
-| --- | --- | --- |
-| `expo` | `~51.0.0` | Core framework — CNG plugin support and UI rendering |
-| `react-native` | `0.74.5` | Runtime |
-| `@maplibre/maplibre-react-native` | `^10.4.2` | Map engine — vector tiles, custom raster layers, Data-Driven Styling |
-| `h3-js` | `^4.5.0` | **Foreground only** — `gridDisk`, geometry unioning, `cellsToMultiPolygon` |
-| `h3` (C library) | `v4.x` | **Background only** — native C-library linked via Xcode bridging header for `latLngToCell` at Resolution 11 |
-| `@op-engineering/op-sqlite` | `^3.0.0` | JSI-powered SQLite — microsecond synchronous reads for spatial querying |
-| `react-native-nitro-modules` | `^0.36.3` | JSI bridging — zero-serialization C++ templates mapping JS types to Swift objects in shared memory |
-| `expo-location` | `~17.0.1` | **Foreground only** — permission requests and UI-level location display |
-| `zustand` | `^4.5.2` | Lightweight, non-blocking UI state management |
-| `protobufjs` | `^8.7.1` | On-the-fly decoding of binary GTFS-RT transit feeds |
-| `react-native-reanimated` | `~3.10.1` | Sheet and UI animations |
-| `@shopify/flash-list` | `^1.7.2` | 60fps virtualized lists for Exploration Stats |
-| `@shopify/react-native-skia` | `1.2.3` | Aspirational — GPX reveal shader animation |
-| `fast-xml-parser` | `^5.10.1` | GPX file parsing for workout import |
-| `fit-file-parser` | `^4.1.0` | FIT file parsing for workout import |
-| `expo-document-picker` | `~12.0.2` | Local file selection for GPX/FIT upload |
-
-> **Removed from stack:** `expo-task-manager` — headless JS background tasks are architecturally banned under Sleepy Hermes. *(Still in `package.json` pending Wave D cleanup.)*
+| Technology | Role |
+| --- | --- |
+| **Swift (iOS 17+)** | Core language. Takes full advantage of modern Swift concurrency (`async/await`, `Task`). |
+| **SwiftUI** | UI framework. Drives the declarative, reactive interface. |
+| **MapLibre Native** | Map engine — vector tiles, custom raster layers, Data-Driven Styling. |
+| **H3 (swift-h3)** | Native Swift Package wrapper for the Uber H3 spatial indexing C-library. Used for `latLngToCell` conversions at Resolution 11. |
+| **GRDB.swift** | SQLite toolkit for Swift. Runs in WAL mode with `WITHOUT ROWID` optimizations for microsecond-fast spatial queries and highly concurrent background writes. |
+| **CLLocationUpdate** | iOS 17's modern background location stream, kept alive by `CLBackgroundActivitySession`. |
 
 ### Architectural Highlights
 
-* **Sleepy Hermes:** All background location processing runs in pure native Swift — the Hermes JS engine sleeps when the app is backgrounded, preventing iOS watchdog terminations (`0x8badf00d`, `0xdead10cc`) and battery drain. See [`docs/architecture.md`](docs/architecture.md) for the full specification.
-* **Dual-Thread SQLite:** Two concurrent connections (JS via `@op-engineering/op-sqlite`, Swift via raw C API) share a single `.db` file in WAL mode — enabling simultaneous background writes and foreground reads with zero lock contention.
-* **Zero-Congestion Rendering:** An $O(1)$ In-Memory Set Gate drops redundant GPS updates before they hit the bridge. MapLibre Data-Driven Styling (DDS) `['match']` expressions filter fog opacity natively on the GPU — bypassing JSON stringification entirely.
-* **Battery & Drift Optimization:** CPU remains asleep until physical movement occurs via hardware-level distance intervals (`distanceFilter: 10m`, deferred updates: `50m`). An implied speed filter ($\Delta d / \Delta t \leq 12$ m/s) aggressively discards urban canyon GPS multipath noise.
-* **Nitro Pipeline:** TypeScript spec (`*.nitro.ts`) → `npx nitro-codegen` → generated C++/Swift translation layers (`nitrogen/generated/`) → manual Xcode GUI linkage. Zero-serialization JSI callbacks fire in real-time when the app is foregrounded.
-
-### Brownfield Constraint
-
-The `ios/` native workspace is manually managed. All Nitro Module linkage, H3 C-library imports, bridging header configuration, and Swift implementation files must be added through the **Xcode GUI** — never via scripts or `xcodeproj` manipulation. Always open `ios/Derivee.xcworkspace` (the CocoaPods workspace), not the bare `.xcodeproj`. See [`xcode_linkage_instructions.md`](xcode_linkage_instructions.md) for step-by-step instructions.
+* **Pure Native Background Engine:** All background location processing runs in pure native Swift using `CLLocationUpdate.liveUpdates()` in a detached `Task`. This prevents iOS watchdog terminations and dramatically reduces battery drain.
+* **Concurrent SQLite (GRDB):** The database operates in WAL mode using `DatabasePool`, enabling simultaneous background writes (logging hexes) and foreground reads (UI rendering) with zero lock contention.
+* **Reactive Observation:** The SwiftUI interface binds directly to the database via `@Observable` stores and GRDB's `ValueObservation`, ensuring the UI instantaneously reflects newly discovered territory.
+* **Battery & Drift Optimization:** CPU remains asleep until physical movement occurs. An implied speed filter ($\Delta d / \Delta t \leq 12$ m/s) aggressively discards urban canyon GPS multipath noise before it touches the H3 conversion step.
+* **Clean Project Generation:** The Xcode project is generated deterministically via `xcodegen`, eliminating merge conflicts in `.pbxproj` files and providing seamless Swift Package Manager integration.
 
 ---
 
 ## 📍 Current Status
 
-The project is mid-transition through the **Sleepy Hermes** architectural migration, replacing all legacy JavaScript-based background tracking with a pure native Swift service.
+The project has fully completed the **Pure Native iOS Migration**. All legacy JavaScript/React Native dependencies have been removed in favor of a clean Swift/SwiftUI architecture (`DeriveeNative/`).
 
 | Phase | Status |
 | --- | --- |
-| **Waves 1–14.10** (Expo Managed / JS Background) | ✅ Archived — see [`archive/shipped-waves-archive.md`](archive/shipped-waves-archive.md) |
-| **Wave A** — Database Config & Dual-Thread Concurrency | ✅ Done |
-| **Wave B** — Nitro Module Scaffolding & Code Generation | 🔧 In Progress (Human: Xcode GUI linkage) |
-| **Wave 11.6** — Deploy Go Observer to Oracle Cloud & Seed R2 | ✅ Done (Systemd Active) |
-| **Waves C–D** — Swift Background Service & UI Hydration | Planned |
-| **Waves E–H** — Design Alignment & Ship Prep | Planned |
+| **Legacy React Native Iterations** | ✅ Archived |
+| **Native Migration: H3 & Project Setup** | ✅ Done |
+| **Native Migration: GRDB Database Layer** | ✅ Done |
+| **Native Migration: Ambient Tracking Engine** | ✅ Done |
+| **SwiftUI Rendering & Polish** | Planned |
 
 Full details in [`ROADMAP.MD`](ROADMAP.MD).
 
@@ -102,10 +85,8 @@ Full details in [`ROADMAP.MD`](ROADMAP.MD).
 
 ### Prerequisites
 
-* Node.js (v18+)
-* Yarn or npm
-* Ruby / CocoaPods (for iOS Prebuilds)
-* Xcode 15+ (for native Swift service and Nitro Module linkage)
+* macOS with Xcode 15+
+* Homebrew (to install `xcodegen`)
 * MapTiler API Key (for base tiles)
 
 ### Installation
@@ -116,41 +97,25 @@ Full details in [`ROADMAP.MD`](ROADMAP.MD).
    cd derivee
    ```
 
-2. **Install dependencies:**
+2. **Install XcodeGen:**
    ```bash
-   npm install
+   brew install xcodegen
    ```
 
-3. **Configure environment:**
-   Create a `.env` file in the root directory:
-   ```env
-   EXPO_PUBLIC_MAP_API_KEY=your_maptiler_api_key_here
-   ```
-
-4. **Generate Nitro bindings:**
+3. **Generate the Xcode Project:**
    ```bash
-   npx nitro-codegen
+   cd DeriveeNative
+   xcodegen generate
    ```
-   This generates the C++/Swift translation layers in `nitrogen/generated/`. The generated iOS sources must then be linked manually via the Xcode GUI (see [`xcode_linkage_instructions.md`](xcode_linkage_instructions.md)).
 
-5. **Run Expo Prebuild:**
+4. **Open the Project:**
    ```bash
-   npx expo prebuild --clean
+   open Derivee.xcodeproj
    ```
+   > ⚠️ Xcode will automatically resolve the Swift Package Manager dependencies (H3 and GRDB).
 
-6. **Open Xcode workspace for native linkage:**
-   ```
-   open ios/Derivee.xcworkspace
-   ```
-   > ⚠️ Always open `.xcworkspace`, never the bare `.xcodeproj`. Follow the Xcode linkage instructions to import Nitrogen sources, configure the bridging header, and add the Swift background service.
-
-7. **Start the Metro Bundler:**
-   ```bash
-   npx expo start
-   ```
-
-8. **Run on device:**
-   Press `i` to open the iOS simulator, or build directly to a tethered iPhone (recommended for accurate background GPS and MapLibre fog rendering performance — per project rules, never trust the Simulator for MapLibre performance).
+5. **Run on device:**
+   Select your physical iPhone target in Xcode and press `Cmd + R` to build and run. (Recommended for accurate background GPS and MapLibre fog rendering performance).
 
 ---
 
@@ -158,40 +123,23 @@ Full details in [`ROADMAP.MD`](ROADMAP.MD).
 
 ```
 derivee/
-├── app/                    # Expo Router screens
-│   ├── _layout.tsx         # Root navigation layout
-│   ├── index.tsx           # Screen 0: Onboarding Gate / Splash
-│   ├── map.tsx             # Screen 1: Ambient Map (core loop)
-│   ├── stats.tsx           # Screen 3: Exploration Stats & GPX Upload
-│   ├── settings.tsx        # Screen 4: Settings & Data Management
-│   └── city/               # City-specific routes
-├── src/                    # Core application logic
-│   ├── components/         # Reusable UI components (TransitBottomSheet, etc.)
-│   ├── constants/          # App-wide constants and config values
-│   ├── db/                 # Database initialization, migrations, queries
-│   ├── hooks/              # React hooks (location, app state, etc.)
-│   ├── native/             # Nitro module TypeScript specs & bridge API
-│   ├── proto/              # GTFS-RT Protobuf definitions & generated decoders
-│   ├── services/           # Location, transit, and sync services
-│   ├── store/              # Zustand state management (exploration, transit)
-│   └── utils/              # H3 utilities, geo math, helpers
-├── ios/                    # Native workspace (manually managed for Nitro/H3/Swift)
-├── android/                # Android native project (CNG-managed)
-├── nitrogen/               # Generated Nitro Module C++/Swift translation layers
-├── modules/                # Local Expo Modules (expo-background-assertion)
+├── DeriveeNative/          # Pure Native iOS Swift Application
+│   ├── Derivee/            # Application Source Code
+│   │   ├── AmbientTrackingEngine.swift # Background location tracking
+│   │   ├── SpatialDatabaseManager.swift# GRDB SQLite manager
+│   │   ├── SpatialStore.swift          # Observable UI store
+│   │   ├── ContentView.swift           # Root SwiftUI view
+│   │   └── Info.plist                  # Permissions & Config
+│   ├── project.yml         # XcodeGen configuration
+│   └── Derivee.xcodeproj   # Generated Xcode Project
 ├── observer/               # Go daemon for GTFS-RT ingestion & historical sparklines
 ├── transit-web/            # Standalone transit timetable web app (W11 spinoff)
 ├── archive/                # Shipped wave documentation archive
 ├── docs/                   # Architecture blueprints & design language specs
-│   ├── architecture.md     # Full technical specification (Sleepy Hermes, SQLite, Nitro)
+│   ├── architecture.md     # Full technical specification
 │   └── design.md           # UI blueprint, screen specs, visual identity
-├── scripts/                # Utility & data generation scripts
-├── __tests__/              # Unit tests
-├── .maestro/               # E2E test flows (Maestro)
-├── nitro.json              # Nitro Module configuration
 ├── ROADMAP.MD              # Development roadmap & wave tracking
-├── AGENTS.MD               # AI agent operational rules & constraints
-└── xcode_linkage_instructions.md  # Step-by-step Xcode GUI linkage guide
+└── AGENTS.MD               # AI agent operational rules & constraints
 ```
 
 ---

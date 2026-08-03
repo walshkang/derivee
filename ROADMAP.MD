@@ -51,16 +51,15 @@ This document is the single source of truth for all planned development waves.
 | 14.9 | W14.9-DDS-FOG | DDS Refactor: MapLibre Data-Driven Styling | ✅ Archived |
 | 14.10 | W14.10-STATS-UI | Fix UI Bottlenecks: FlashList & Bottom Sheet | ✅ Archived |
 
-### 🚀 Sleepy Hermes Transition (Active)
+### 🚀 Pure Native iOS Migration (Complete)
+
+The project has fully abandoned the hybrid React Native / Expo architecture. All tracking, database, and UI logic is now executed natively in Swift within the `DeriveeNative/` folder.
 
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
-| A | WA-DB-CONCURRENCY | Database Config & Dual-Thread Concurrency | M | ✅ Done |
-| B | WB-NITRO-SCAFFOLD | Nitro Module Scaffolding & Code Generation | M | 🔄 Superseded → Wave C.2 |
-| **C.1** | **WC1-CONFIG-PLUGIN** | **Folly Config Plugin (Podfile Survival)** | **S** | ✅ Done |
-| **C.2** | **WC2-LOCAL-MODULE** | **Local Expo Module & H3 Module Map** | **M** | Planned |
-| **C.3** | **WC3-SWIFT-SERVICE** | **Swift Background Service & SQLite Concurrency** | **L** | Planned |
-| **D.1** | **WD1-UI-HYDRATION** | **UI Synchronization, AppState Teardown & Legacy Cleanup** | **L** | Planned |
+| **N.1** | **WN1-XCODEGEN** | **Pure Native Project Setup (xcodegen + H3)** | **M** | ✅ Done |
+| **N.2** | **WN2-GRDB** | **GRDB SQLite Manager & Observable Store** | **M** | ✅ Done |
+| **N.3** | **WN3-TRACKING** | **Ambient Tracking Engine (liveUpdates + Shield)** | **L** | ✅ Done |
 
 ### 🎨 Design Alignment & Ship
 
@@ -83,76 +82,7 @@ This document is the single source of truth for all planned development waves.
 
 ---
 
-## Wave C.2 — Local Expo Module & H3 Module Map [Planned]
 
-**Task ID:** `WC2-LOCAL-MODULE`
-**Depends on:** Wave C.1
-
-### Goal
-To survive Continuous Native Generation (CNG) without violating the "no `pbxproj` scripting" rule, we must encapsulate the background location tracking and pure C H3 library into a Local Expo Module. This completely replaces the Objective-C bridging header anti-pattern with a clean Clang Module Map.
-
-### Agent Directives
-1. **Module Scaffolding:** Create `modules/hybrid-tracker/` with `expo-module.config.json` and a local `.podspec`.
-2. **H3 Module Map:**
-   * Create `module.modulemap` alongside the H3 C-headers in the module.
-   * `module H3 { header "h3api.h" export * }`
-   * Configure the podspec to preserve header paths and declare the `module_map`.
-3. **Migration:** Move the generated Nitrogen JSI bindings and native Swift files into this module directory so Expo's autolinker handles them natively.
-
-### Verification
-* `npx expo prebuild --clean` successfully injects the `hybrid-tracker` pod into the Xcode workspace.
-
----
-
-## Wave C.3 — Swift Background Service & SQLite Concurrency [Planned]
-
-**Task ID:** `WC3-SWIFT-SERVICE`
-**Depends on:** Wave C.2
-
-### Goal
-Implement the core native Swift background service (`HybridTracker.swift`) to independently manage hardware location requests, execute H3 spatial hashing via the new Clang Module Map, and perform concurrent SQLite WAL writes using strict iOS 17 background checkpointing.
-
-### Agent Directives
-1. **`CLLocationManager` Configuration:**
-   * `distanceFilter = 10` (meters), deferred updates at 50m. Implied Speed filter ($\Delta d / \Delta t \le 12 \text{ m/s}$).
-2. **SQLite Connection:**
-   * Use `sqlite3_open_v2` with `SQLITE_OPEN_FULLMUTEX`.
-   * Bind 15-character hex strings to prepared statements.
-   * Use `SQLITE_CHECKPOINT_PASSIVE` during active background coordinate logging.
-3. **The iOS 17 Checkpoint Gate:**
-   * Wrap the aggressive `SQLITE_CHECKPOINT_RESTART` in an `@available(iOS 17.0, *)` `CLBackgroundActivitySession`.
-   * Provide a fallback using `UIApplication.shared.beginBackgroundTask` for iOS 15/16.
-
-### Verification
-* Xcode compiles `HybridTracker.swift` successfully importing the `H3` module.
-
----
-
-## Wave D.1 — UI Synchronization, AppState Teardown & Legacy Cleanup [Planned]
-
-**Task ID:** `WD1-UI-HYDRATION`
-**Depends on:** Wave C.3
-
-### Goal
-Wire the React Native foreground to seamlessly hydrate from the shared SQLite database upon app resume, using the $O(1)$ In-Memory Set Gate. **Crucially, wire up React Native's `AppState` to drop JSI read locks to prevent Swift deadlocks.** Clean up all deprecated JS-background code.
-
-### Agent Directives
-1. **AppState JSI Teardown (CRITICAL):**
-   * Listen for `AppState` transitioning to `"inactive"` or `"background"`.
-   * Explicitly teardown/close the `@op-engineering/op-sqlite` connection or finalize pending transactions to release the file descriptor lock.
-2. **AppState Hydration:**
-   * On `"background"` → `"active"`, re-initialize op-sqlite and execute a synchronous `SELECT` for newly discovered H3 hexes.
-   * Feed results through the $O(1)$ `Set.has(h3Index)` Gate before updating Zustand.
-3. **Nitro Real-Time Callbacks:**
-   * Register listener on mount. Feed incoming hexes through the Set Gate. Update MapLibre DDS via `withSynchronousUpdate(true)`.
-4. **Remove Legacy Code:**
-   * Remove `expo-task-manager` and `expo-location` background services completely (`useBackgroundLocation.ts`, `locationTask.ts`).
-
-### Verification
-* App correctly drops locks on background (no `0x8badf00d` watchdogs).
-* MapLibre maintains 60fps during hydration.
-
----
 
 ## Wave 11.6 — Deploy Go Observer to Oracle Cloud & Seed R2 [Planned]
 

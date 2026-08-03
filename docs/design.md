@@ -48,7 +48,7 @@ The interface automatically transitions between Light and Dark modes based on lo
 ### 1.4 Visual System Summary
 
 * **Iconography:** Geometric, high negative-space SVG glyphs. No text inside icons. No branded teardrop pins.
-* **Gesture Integration:** Strictly utilizes `react-native-gesture-handler` exclusively (never standard React Native `Touchable*` components) to guarantee seamless coexistence with MapLibre pan/pinch gestures and `@gorhom/bottom-sheet` sheet gestures.
+* **Gesture Integration:** Strictly utilizes native SwiftUI gesture modifiers (`.onTapGesture`, `Button`) to guarantee seamless coexistence with MapLibre pan/pinch gestures and native presentation sheets.
 
 ---
 
@@ -128,7 +128,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 
 **Trigger:** User opens the app for the very first time.
 
-**State Logic:** On launch, query the local `@op-engineering/op-sqlite` database for the hydration completion flag (a row in a `meta` table). Do **not** use AsyncStorage or any async storage wrapper (per `architecture.md` library constraints).
+**State Logic:** On launch, query the local `GRDB` database for the hydration completion flag (a row in a `meta` table). Do **not** use UserDefaults for this critical state.
 
 **UI Elements:**
 * A full-screen, branded loading lock screen with an atmospheric fog background animation and a subtle pulsing logo.
@@ -164,10 +164,10 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
   * **Recenter FAB** (bottom-right): Re-centers the camera on the user's current GPS position with a smooth 300ms ease animation.
   * **Profile FAB** (top-right): Navigates to Screen 3 (Exploration Stats). Styled with `UltraThinMaterial` blur and a subtle shadow.
 
-**Ambient Tracking:** Tracking begins silently and automatically via the native Swift `CLLocationManager` (Nitro `HybridTracker` module) the moment Screen 1 mounts. There is **no** manual "Start/Stop Tracking" button. The app is always tracking.
+**Ambient Tracking:** Tracking begins silently and automatically via the native Swift `AmbientTrackingEngine` the moment Screen 1 mounts. There is **no** manual "Start/Stop Tracking" button. The app is always tracking.
 
 **Interactions:**
-* **Tap Ghost POI:** Triggers a geospatial Point-in-Polygon (PiP) check. If the user is within physical proximity (200m), query `@op-engineering/op-sqlite` synchronously and open Screen 2 (Transit Reveal bottom sheet).
+* **Tap Ghost POI:** Triggers a geospatial Point-in-Polygon (PiP) check. If the user is within physical proximity (200m), query `GRDB` synchronously and open Screen 2 (Transit Reveal native `.sheet`).
 * **Tap Recenter FAB:** Smooth camera animation to user location.
 * **Tap Profile FAB:** Navigate to Screen 3.
 * **Long-press map:** Reserved for future use. No action.
@@ -179,8 +179,8 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 - [ ] Tracking begins ambiently on mount — no start button exists anywhere.
 - [ ] Ghost POI nodes appear only within the 200m Vicinity Bubble.
 - [ ] Ghost POI nodes are geometric shapes (dots/diamonds), not teardrop pins, with zero text labels.
-- [ ] FABs use `@react-native-community/blur` for native iOS frosted glass styling.
-- [ ] FABs use `react-native-gesture-handler` for touch handling (not `TouchableOpacity`).
+- [ ] FABs use SwiftUI `.ultraThinMaterial` for native iOS frosted glass styling.
+- [ ] FABs use native SwiftUI buttons/gestures.
 - [ ] PiP check on tap correctly gates transit sheet opening to physical proximity.
 
 ---
@@ -212,7 +212,7 @@ When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top*
 - [ ] Historical sparkline renders from local SQLite data in < 12ms.
 - [ ] Ephemeral route `LineLayer` injects on open and unmounts on dismiss with no stale artifacts.
 - [ ] Sheet is dismissible via swipe-down and map tap.
-- [ ] `@gorhom/bottom-sheet` is used (not a custom modal or React Native `Modal`).
+- [ ] Uses native SwiftUI `.sheet(presentationDetents: ...)` modifier.
 
 ---
 
@@ -240,12 +240,12 @@ A clean, native list view using `@shopify/flash-list` for guaranteed 60fps scrol
   * Processing: `fast-xml-parser` (GPX) or lightweight FIT decoder. Parsing is chunked to prevent UI freezing, coordinate arrays downsampled (>10m deltas), and deduped hexes saved via bulk SQLite inserts.
   * On successful processing, the fog state on Screen 1 updates immediately.
 
-**Thread Yielding Rule:** The `@shopify/flash-list` **must not** begin populating data until the screen's entry animation completes. Use `InteractionManager.runAfterInteractions()` to yield the JS thread during the transition, preventing frame drops.
+**Thread Yielding Rule:** The SwiftUI `List` should render smoothly. Complex data processing must occur off the main thread (`Task.detached`) before updating the `@Observable` store, preventing frame drops.
 
 **Definition of Done:**
 - [ ] Queries the local SQLite database, grouping unlocked H3 hexes by neighborhood boundaries.
-- [ ] Uses `@shopify/flash-list` (not `FlatList`) for the neighborhood list.
-- [ ] Thread yields during entry animation via `InteractionManager`.
+- [ ] Uses SwiftUI native `List` or lazy stacks.
+- [ ] Heavy processing yields the main actor.
 - [ ] Tapping a neighborhood pans Screen 1's map camera to that neighborhood.
 - [ ] GPX/FIT upload processes chunked, does not freeze the UI.
 - [ ] Upload results correctly update the fog state on Screen 1.
@@ -260,17 +260,17 @@ A clean, native list view using `@shopify/flash-list` for guaranteed 60fps scrol
 **UI Elements:**
 A standard native grouped list of toggles and actions.
 
-* **Background Location Toggle:** Controls the native Swift `CLLocationManager` via the Nitro `startTracking()` / `stopTracking()` interface. Shows the current permission state.
+* **Background Location Toggle:** Controls the native `AmbientTrackingEngine` directly. Shows the current permission state.
 * **Push Notification Toggle:** Standard notification permission control.
 * **Data Management:**
   * "Clear Local Cache" — purges cached tiles and transit data (re-triggers Onboarding Gate on next launch).
-  * "Reset Exploration Data" — destructive action with a confirmation dialog. Drops all unlocked hexes from SQLite and resets the in-memory `Set`.
+  * "Reset Exploration Data" — destructive action with a confirmation dialog. Drops all unlocked hexes from SQLite and resets the in-memory state.
 
 **Definition of Done:**
-- [ ] Background Location toggle correctly invokes Nitro `startTracking()` / `stopTracking()`.
+- [ ] Background Location toggle correctly invokes tracking state changes on the `AmbientTrackingEngine`.
 - [ ] Destructive "Reset" action requires explicit user confirmation before executing.
 - [ ] Clearing cache correctly re-triggers the Onboarding Gate flow.
-- [ ] All toggles use `react-native-gesture-handler` for touch handling.
+- [ ] All toggles use native SwiftUI components.
 
 ---
 
@@ -363,8 +363,8 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 | G3 | **No Permanent POI Pins:** Ghost POIs in Explored territory must be invisible at zoom ≤ 16 and near-invisible (opacity ≤ 0.15) at zoom 17+. | Per AGENTS.MD: "Never implement permanent map pins for POIs." |
 | G4 | **No Manual Tracking Controls:** No "Start/Stop Tracking" buttons. Tracking is ambient and automatic. | Per AGENTS.MD: "Never build manual Start/Stop Tracking UI elements." |
 | G5 | **No Heavy Persistent HUDs:** No persistent dashboard widgets, distance counters, or speed readouts overlaying the map. | Per AGENTS.MD: "Never build heavy, persistent HUDs." |
-| G6 | **Native Gesture Handling Only:** All touchable elements use `react-native-gesture-handler`. No standard React Native `TouchableOpacity` or `Pressable`. | Prevents gesture conflicts with MapLibre and bottom sheets. |
-| G7 | **Thread Yielding for Lists:** Complex lists (Neighborhood Stats, Session History) must yield the thread during entry animations via `InteractionManager.runAfterInteractions()`. | Prevents frame drops during screen transitions. |
+| G6 | **Native UI Components Only:** All touchable elements use native SwiftUI buttons and gestures. | Prevents gesture conflicts with MapLibre and bottom sheets. |
+| G7 | **Thread Yielding for Lists:** Complex lists (Neighborhood Stats, Session History) must process data in background tasks before binding to `@Observable` UI. | Prevents frame drops during screen transitions. |
 | G8 | **No Serif Fonts:** Strictly modern geometric sans-serif (SF Pro / Inter). | Design system consistency. |
 | G9 | **Dynamic Day/Night Cycle:** Interface automatically shifts between Day Mode ("Clear Morning" — parchment whites, graphite fog) and Night Mode ("Midnight Grid" — midnight slate, OLED black fog) based on local First Light / Last Light. **Electric Amber (`#FFB300`)** is the universal accent color across both modes. | Brand identity: Dérivée calculates the rate of change of your presence across the city — the environment shifts with you. |
 | G10 | **Screen Enumeration is Exhaustive:** Screens 0–4 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. | Prevents scope creep and hallucinated features. |
@@ -402,7 +402,7 @@ The `total_hexes` value must represent **only physically walkable/cyclable terri
 
 ### 8.4 Current Progress Calculation
 
-This is entirely front-end/local state:
-* The Zustand store tracks the continuous delta of newly unlocked hexes (sourced from Nitro real-time callbacks or AppState hydration reads).
+This is entirely local state driven by SwiftUI `@Observable`:
+* The store tracks the continuous delta of newly unlocked hexes (sourced from GRDB `ValueObservation`).
 * Progress percentage is computed as: `(cleared_hexes_in_neighborhood / total_hexes_in_neighborhood) * 100`.
-* The $O(1)$ In-Memory Set Gate (see [architecture.md §7.3](file:///Volumes/T7ssd/derivee/docs/architecture.md)) ensures this comparison is instantaneous.
+* A fast, thread-safe Set validation ensures this comparison is instantaneous for real-time rendering.
