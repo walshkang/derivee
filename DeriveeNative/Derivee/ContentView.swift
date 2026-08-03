@@ -21,6 +21,7 @@ struct ContentView: View {
             } else {
                 ZStack {
                     MapView(spatialStore: spatialStore,
+                            fogShape: spatialStore.currentFogShape,
                             showTransitSheet: $showTransitSheet,
                             selectedTransitStop: $selectedTransitStop)
                         .ignoresSafeArea()

@@ -7,6 +7,7 @@ struct MapView: UIViewRepresentable {
     @Environment(\.colorScheme) var colorScheme
     @StateObject var trackingEngine = AmbientTrackingEngine()
     var spatialStore: SpatialStore
+    var fogShape: MLNShape?
     @Binding var showTransitSheet: Bool
     @Binding var selectedTransitStop: String?
     
@@ -17,6 +18,9 @@ struct MapView: UIViewRepresentable {
         let mapView = MLNMapView(frame: .zero, styleURL: styleURL)
         mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mapView.showsUserLocation = true
+        mapView.minimumZoomLevel = 12
+        mapView.setCenter(CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060), zoomLevel: 15.5, animated: false)
+        mapView.userTrackingMode = .follow
         mapView.delegate = context.coordinator
         
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleMapTap(_:)))
@@ -35,7 +39,7 @@ struct MapView: UIViewRepresentable {
     func updateUIView(_ uiView: MLNMapView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.updateFogColor(for: colorScheme, in: uiView)
-        context.coordinator.updateExploredHexes(in: uiView, with: spatialStore.currentFogShape)
+        context.coordinator.updateExploredHexes(in: uiView, with: fogShape)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
     }
     
