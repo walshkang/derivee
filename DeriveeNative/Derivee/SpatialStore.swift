@@ -11,6 +11,9 @@ final class SpatialStore: @unchecked Sendable {
     var newlyUnlockedHexLocation: CLLocationCoordinate2D? = nil
     var currentFogShape: MLNShape? = nil
     
+    var discoveredPOIs: Set<String> = []
+    var newlyDiscoveredPOIName: String? = nil
+    
     // We retain the cancellable observation so it stays alive
     private var observationTask: AnyDatabaseCancellable?
     private var polygonTask: Task<Void, Never>?
@@ -19,6 +22,17 @@ final class SpatialStore: @unchecked Sendable {
     
     init(dbManager: SpatialDatabaseManager = .shared) {
         startObservation(dbManager: dbManager)
+        
+        Task {
+            do {
+                let pois = try await dbManager.loadDiscoveredPOIs()
+                await MainActor.run {
+                    self.discoveredPOIs = pois
+                }
+            } catch {
+                print("Failed to load discovered POIs: \(error)")
+            }
+        }
     }
     
     private func startObservation(dbManager: SpatialDatabaseManager) {
@@ -124,6 +138,21 @@ final class SpatialStore: @unchecked Sendable {
                 try await SpatialDatabaseManager.shared.insertDiscoveredHex(h3Index: h3Index)
             } catch {
                 print("Failed to insert hex \(h3Index): \(error)")
+            }
+        }
+    }
+    
+    func discoverPOI(id: String, name: String) {
+        guard !discoveredPOIs.contains(id) else { return }
+        
+        discoveredPOIs.insert(id)
+        newlyDiscoveredPOIName = name
+        
+        Task {
+            do {
+                try await SpatialDatabaseManager.shared.insertDiscoveredPOI(id)
+            } catch {
+                print("Failed to save discovered POI \(id): \(error)")
             }
         }
     }

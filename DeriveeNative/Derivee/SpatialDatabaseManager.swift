@@ -69,6 +69,12 @@ final class SpatialDatabaseManager {
             }
         }
         
+        migrator.registerMigration("v3") { db in
+            try db.create(table: "discovered_pois", options: .withoutRowID) { t in
+                t.column("poi_id", .text).primaryKey()
+            }
+        }
+        
         return migrator
     }
     
@@ -96,6 +102,19 @@ final class SpatialDatabaseManager {
     func setHydrationComplete() async throws {
         try await dbPool.write { db in
             try db.execute(sql: "INSERT OR REPLACE INTO meta (key, value) VALUES ('hydration_complete', '1')")
+        }
+    }
+    
+    func loadDiscoveredPOIs() async throws -> Set<String> {
+        return try await dbPool.read { db in
+            let rows = try String.fetchAll(db, sql: "SELECT poi_id FROM discovered_pois")
+            return Set(rows)
+        }
+    }
+    
+    func insertDiscoveredPOI(_ id: String) async throws {
+        try await dbPool.write { db in
+            try db.execute(sql: "INSERT OR IGNORE INTO discovered_pois (poi_id) VALUES (?)", arguments: [id])
         }
     }
 }

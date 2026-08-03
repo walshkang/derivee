@@ -211,6 +211,11 @@ struct MapView: UIViewRepresentable {
                 // 1 = Lure, 2 = Active, 3 = Archive
                 if distance < 200 {
                     feature.attributes["phase"] = 2
+                    
+                    // Wave F.2: Discovery Trigger
+                    DispatchQueue.main.async {
+                        self.parent.spatialStore.discoverPOI(id: poi.id, name: poi.name)
+                    }
                 } else if distance < 1000 {
                     feature.attributes["phase"] = 1
                 } else {

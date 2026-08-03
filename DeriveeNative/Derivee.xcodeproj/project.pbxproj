@@ -21,8 +21,10 @@
 		A4BED02FF1B808AA720963C9 /* AmbientTrackingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */; };
 		A825909AB76BEA7ABCC21986 /* H3 in Frameworks */ = {isa = PBXBuildFile; productRef = 9406C642B57B83517386E129 /* H3 */; };
 		B20170553147346CCAB314B5 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B214904FA41349F5C65F7A9 /* StatsView.swift */; };
+		E5AC07B09045A40A8F83388F /* derivee_transit.sqlite in Resources */ = {isa = PBXBuildFile; fileRef = 86B2FFDED57A84490398B9F8 /* derivee_transit.sqlite */; };
 		F5E76E643AE8FE5415701241 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF81045CC27721884C49C776 /* ContentView.swift */; };
 		F92498446F8CFD8DA0BDB9BE /* DeriveeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */; };
+		FE732603E08BAA36426E2DAE /* DiscoveryToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7565F6B0E0AE526D3E3AA4D /* DiscoveryToast.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,12 +35,14 @@
 		69DD2D8BDDA6A03164A4A524 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialDatabaseManager.swift; sourceTree = "<group>"; };
 		863A532D137F91C7E2021C95 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		86B2FFDED57A84490398B9F8 /* derivee_transit.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = derivee_transit.sqlite; sourceTree = "<group>"; };
 		878744028003B6170BB298EA /* MapFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapFAB.swift; sourceTree = "<group>"; };
 		919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientTrackingEngine.swift; sourceTree = "<group>"; };
 		AF81045CC27721884C49C776 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeriveeApp.swift; sourceTree = "<group>"; };
 		C1269ACE7C6346A1302459B0 /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
 		CE5C593BBD5275D900632F1B /* SpatialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialStore.swift; sourceTree = "<group>"; };
+		D7565F6B0E0AE526D3E3AA4D /* DiscoveryToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryToast.swift; sourceTree = "<group>"; };
 		F85968E07BB90EBA8E2B9F0D /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -80,7 +84,9 @@
 			children = (
 				919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */,
 				AF81045CC27721884C49C776 /* ContentView.swift */,
+				86B2FFDED57A84490398B9F8 /* derivee_transit.sqlite */,
 				BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */,
+				D7565F6B0E0AE526D3E3AA4D /* DiscoveryToast.swift */,
 				08C048FE60010DC495C1C7AB /* HydrationManager.swift */,
 				69DD2D8BDDA6A03164A4A524 /* Info.plist */,
 				878744028003B6170BB298EA /* MapFAB.swift */,
@@ -167,6 +173,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E5AC07B09045A40A8F83388F /* derivee_transit.sqlite in Resources */,
 				251F343B49766CAB12CA3411 /* transit_delta.sqlite in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -181,6 +188,7 @@
 				A4BED02FF1B808AA720963C9 /* AmbientTrackingEngine.swift in Sources */,
 				F5E76E643AE8FE5415701241 /* ContentView.swift in Sources */,
 				F92498446F8CFD8DA0BDB9BE /* DeriveeApp.swift in Sources */,
+				FE732603E08BAA36426E2DAE /* DiscoveryToast.swift in Sources */,
 				44846034DC3956691503AD6B /* HydrationManager.swift in Sources */,
 				9E18AE610A3DB924C58DD4DF /* MapFAB.swift in Sources */,
 				094712DE5F55C5A2F994A612 /* MapView.swift in Sources */,

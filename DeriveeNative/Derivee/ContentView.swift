@@ -61,7 +61,30 @@ struct ContentView: View {
                             .padding(.trailing, 20)
                         }
                     }
+                    
+                    if let poiName = spatialStore.newlyDiscoveredPOIName {
+                        VStack {
+                            DiscoveryToast(stationName: poiName) {
+                                spatialStore.newlyDiscoveredPOIName = nil
+                            }
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            
+                            Spacer()
+                        }
+                        .padding(.top, 50)
+                        .zIndex(2)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                if spatialStore.newlyDiscoveredPOIName == poiName {
+                                    withAnimation {
+                                        spatialStore.newlyDiscoveredPOIName = nil
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+                .animation(.spring(), value: spatialStore.newlyDiscoveredPOIName)
                 .onChange(of: spatialStore.newlyUnlockedHexLocation != nil) {
                     if spatialStore.newlyUnlockedHexLocation != nil {
                         withAnimation(.easeOut(duration: 0.1)) {
