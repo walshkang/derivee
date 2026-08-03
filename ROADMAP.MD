@@ -68,7 +68,10 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **11.6** | **W11.6-DEVOPS** | **Deploy Go Observer to Oracle Cloud & Seed R2** | **M** | ✅ Done |
 | **11.8** | **W11.8-WEB-FIXES** | **Transit Web MVP Bugfixes & Polish** | **M** | Planned |
 | **E** | **WE-ONBOARDING** | **Onboarding Gate & First-Launch Infrastructure** | **M** | ✅ Done |
-| **F** | **WF-MAP-OVERHAUL** | **Map UI Overhaul & Ghost POI Lifecycle** | **L** | Planned |
+| **F.1** | **WF1-FAB** | **Map UI: Floating Action Buttons** | **S** | ✅ Done |
+| **F.2** | **WF2-TOAST** | **Discovery Toast Overlay** | **S** | Planned |
+| **F.3** | **WF3-POI-LIFECYCLE** | **Ghost POI 3-Phase Lifecycle** | **M** | Planned |
+| **F.4** | **WF4-HEX-ANIMATION** | **Ambient Hex Unlock Animation** | **S** | Planned |
 | **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | **S** | Planned |
 | **H** | **WH-SHIP** | **Polish, Settings Rewire & Ship Prep** | **M** | Planned |
 
@@ -208,61 +211,95 @@ Replace the decorative splash screen (`app/index.tsx`) with a functional first-l
 
 ---
 
-## Wave F — Map UI Overhaul & Ghost POI Lifecycle [Planned]
 
-**Task ID:** `WF-MAP-OVERHAUL`
-**Depends on:** Wave C (Tracking Engine) and Wave E (Onboarding & MapLibre Hydration).
+
+## Wave F.2 — Discovery Toast Overlay [Planned]
+
+**Task ID:** `WF2-TOAST`
+**Depends on:** Wave C (Tracking Engine) and Wave F.1.
 
 ### Goal
-Align the core map screen (`DeriveeNative/Derivee/MapView.swift` and `ContentView.swift`) with the updated `docs/design.md` specification. Replace legacy navigation with native FABs, implement the 3-phase Ghost POI lifecycle via MapLibre Data-Driven Styling, and add ambient hex unlock animations driven by `SpatialStore`.
+Implement a lightweight SwiftUI toast notification that appears when the user discovers a new Transit POI, providing immediate, non-intrusive feedback without blocking the UI.
 
 ### Agent Directives
 
-1. **Floating Action Buttons (`DeriveeNative/Derivee/MapFAB.swift` — new file):**
-   * **Recenter FAB** (bottom-right): Re-centers the MapLibre camera on the user's GPS position with a 300ms ease animation.
-     * Idle: semi-transparent (`opacity: 0.7`), SwiftUI `.ultraThinMaterial` background.
-     * Press: instant `UIImpactFeedbackGenerator(style: .light)` haptic, scale to `0.92` over 100ms, spring back.
-     * State: filled icon variant when centered on user; outlined variant when user has panned away.
-   * **Profile FAB** (top-right): Navigates to `StatsView.swift` (Screen 3).
-     * Same blur/haptic/scale behavior as Recenter.
-   * Both FABs use native SwiftUI `Button` or `.onTapGesture` modifiers for interaction.
+1. **Toast UI Component (`DeriveeNative/Derivee/DiscoveryToast.swift` — new file):**
+   * A pill-shaped SwiftUI view using `.ultraThinMaterial` or a dark translucent background.
+   * Slides down from the top edge of the screen (or pops up near the bottom) on discovery.
+   * Contains the station name and a fun fact/subtitle (e.g., "New Transit POI Discovered").
+   * Include a subtle scale and opacity animation on entry.
 
-2. **Ghost POI 3-Phase Lifecycle (refactor MapLibre layers & UI overlays):**
-   * **Phase 1 — The Lure (Hidden Territory):**
-     * Render Ghost POIs as soft, anonymous beacon glows **above** the fog layer (Layer 4 in the 6-layer stack).
-     * Zero text labels, zero identification. Faint pulsing glow animation.
-     * Implemented as a MapLibre `MLNCircleStyleLayer` with low opacity, large blur radius, and a subtle scale pulse via expressions.
-   * **Phase 2 — The Unlocking (Active Vicinity):**
-     * When the user's GPS enters the hex containing a Ghost POI (within the 200m bubble):
-       * Beacon resolves into a crisp geometric node: dot for bus stops, diamond for subway entrances.
-       * Subtle reveal scale animation (0→1 over 200ms, ease-out).
-       * On **first encounter** with a previously unseen POI: show a lightweight SwiftUI toast notification sliding from the top with the station name and a fun fact. Auto-dismiss after 3 seconds.
-     * Tappable. Triggers PiP proximity check → Transit Reveal bottom sheet (`.sheet` presentation for Screen 2).
-   * **Phase 3 — The Archive (Explored Territory):**
-     * When the user leaves the Active Vicinity, the node fades to near-invisibility.
-     * **Completely invisible at zoom ≤ 16.** At zoom 17+: ultra-faint desaturated mark (opacity ≤ 0.15).
-     * Not tappable when outside Active Vicinity — PiP check gates all interactions.
+2. **Toast Lifecycle:**
+   * Triggered on **first encounter** with a previously unseen POI when the user's GPS enters the hex containing it.
+   * Auto-dismisses after 3 seconds with a smooth exit animation.
+   * Supports manual dismissal via upward swipe.
+
+### Verification
+* Toast appears organically without interrupting map interactions.
+* Auto-dismisses after 3 seconds.
+* Dismisses manually via swipe.
+
+---
+
+## Wave F.3 — Ghost POI 3-Phase Lifecycle [Planned]
+
+**Task ID:** `WF3-POI-LIFECYCLE`
+**Depends on:** Wave F.2.
+
+### Goal
+Implement the 3-phase Ghost POI lifecycle via MapLibre Data-Driven Styling (`NSExpression`) to dynamically transition POIs between Hidden, Active, and Explored states.
+
+### Agent Directives
+
+1. **Phase 1 — The Lure (Hidden Territory):**
+   * Render Ghost POIs as soft, anonymous beacon glows **above** the fog layer (Layer 4 in the 6-layer stack).
+   * Zero text labels, zero identification. Faint pulsing glow animation.
+   * Implemented as a MapLibre `MLNCircleStyleLayer` with low opacity, large blur radius, and a subtle scale pulse via expressions.
+
+2. **Phase 2 — The Unlocking (Active Vicinity):**
+   * When the user's GPS enters the hex containing a Ghost POI (within the 200m bubble):
+     * Beacon resolves into a crisp geometric node: dot for bus stops, diamond for subway entrances.
+     * Subtle reveal scale animation (0→1 over 200ms, ease-out).
+   * Tappable. Triggers PiP proximity check → Transit Reveal bottom sheet (`.sheet` presentation for Screen 2).
+
+3. **Phase 3 — The Archive (Explored Territory):**
+   * When the user leaves the Active Vicinity, the node fades to near-invisibility.
+   * **Completely invisible at zoom ≤ 16.** At zoom 17+: ultra-faint desaturated mark (opacity ≤ 0.15).
+   * Not tappable when outside Active Vicinity — PiP check gates all interactions.
+
+4. **Integration:**
    * Use MapLibre Data-Driven Styling with `NSExpression` keyed on POI phase state to control visibility per-node.
+   * Connect to the database/state to track which POIs have been discovered to link with the Toast notification logic from Wave F.2.
 
-3. **Native user location marker:**
-   * Verify that MapLibre's built-in user location layer (`mapView.showsUserLocation = true`) is used, mapped to the native pulsing dot.
-   * Subtle directional heading cone when device compass is active.
+### Verification
+* Ghost POIs in Hidden territory show as faint beacons through the fog.
+* Ghost POIs in Active vicinity show as crisp geometric nodes and are tappable.
+* Ghost POIs in Explored territory are invisible at zoom ≤ 16.
+* Transitions between states occur smoothly.
 
-4. **Real-time hex unlock animation:**
+---
+
+## Wave F.4 — Ambient Hex Unlock Animation [Planned]
+
+**Task ID:** `WF4-HEX-ANIMATION`
+**Depends on:** Wave F.3.
+
+### Goal
+Add ambient visual feedback when a user unlocks a new hex, enhancing the gamification feel without intrusive popups.
+
+### Agent Directives
+
+1. **Real-time hex unlock animation:**
    * On `SpatialStore` `@Observable` update (new hex discovered):
      * Hex fog transitions opaque→transparent via MapLibre expression animations.
      * A soft glow ring (single pulse) emanates from the user's position using a transient SwiftUI view overlay.
      * **No sound effects. No confetti. No modal popups.** Ambient and organic.
 
 ### Verification
-* FABs render with `.ultraThinMaterial` blur effect, respond to taps with haptic feedback.
-* Recenter FAB toggles between filled/outlined state based on camera position.
-* Ghost POIs in Hidden territory show as faint beacons through the fog.
-* Ghost POIs in Active vicinity show as crisp geometric nodes and are tappable.
-* Ghost POIs in Explored territory are invisible at zoom ≤ 16.
-* Discovery toast appears on first encounter with a new POI, auto-dismisses after 3 seconds.
 * Hex unlock animation plays at 60fps without frame drops.
-* No legacy top-bar buttons or Contextual Stat Pill remain anywhere in the codebase.
+* The transition from opaque to transparent feels natural.
+* A subtle pulse rings from the user location upon new hex discovery.
+
 
 ---
 

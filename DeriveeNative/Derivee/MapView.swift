@@ -10,6 +10,8 @@ struct MapView: UIViewRepresentable {
     var fogShape: MLNShape?
     @Binding var showTransitSheet: Bool
     @Binding var selectedTransitStop: String?
+    @Binding var isCentered: Bool
+    @Binding var recenterTrigger: Bool
     
     // MapTiler Streets URL
     let styleURL = URL(string: "https://api.maptiler.com/maps/streets-v2/style.json?key=\(Secrets.mapTilerKey)")!
@@ -18,9 +20,10 @@ struct MapView: UIViewRepresentable {
         let mapView = MLNMapView(frame: .zero, styleURL: styleURL)
         mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mapView.showsUserLocation = true
-        mapView.minimumZoomLevel = 12
+        mapView.showsUserHeadingIndicator = true
+        mapView.minimumZoomLevel = 10.5
         mapView.setCenter(CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060), zoomLevel: 15.5, animated: false)
-        mapView.userTrackingMode = .follow
+        mapView.userTrackingMode = .followWithHeading
         mapView.delegate = context.coordinator
         
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleMapTap(_:)))
@@ -41,6 +44,11 @@ struct MapView: UIViewRepresentable {
         context.coordinator.updateFogColor(for: colorScheme, in: uiView)
         context.coordinator.updateExploredHexes(in: uiView, with: fogShape)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
+        
+        if context.coordinator.lastRecenterTrigger != recenterTrigger {
+            context.coordinator.lastRecenterTrigger = recenterTrigger
+            uiView.setUserTrackingMode(.followWithHeading, animated: true, completionHandler: nil)
+        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -63,6 +71,7 @@ struct MapView: UIViewRepresentable {
         
         var pois: [GhostPOI] = []
         var lastLocation: CLLocation?
+        var lastRecenterTrigger: Bool = false
         
         init(_ parent: MapView) {
             self.parent = parent
@@ -103,6 +112,12 @@ struct MapView: UIViewRepresentable {
             }
         }
         
+        func mapView(_ mapView: MLNMapView, didChange mode: MLNUserTrackingMode, animated: Bool) {
+            DispatchQueue.main.async {
+                self.parent.isCentered = (mode == .follow || mode == .followWithHeading)
+            }
+        }
+        
         func setupLayers(in style: MLNStyle) {
             let fogSource = MLNShapeSource(identifier: "fog-source", shape: nil, options: nil)
             style.addSource(fogSource)
@@ -110,7 +125,7 @@ struct MapView: UIViewRepresentable {
             let fogLayer = MLNFillStyleLayer(identifier: fogLayerId, source: fogSource)
             let colorHex = parent.colorScheme == .dark ? "#000000" : "#1C1C1E"
             fogLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
-            fogLayer.fillOpacity = NSExpression(forConstantValue: 0.95)
+            fogLayer.fillOpacity = NSExpression(forConstantValue: 0.3)
             style.addLayer(fogLayer)
             
             let source = MLNShapeSource(identifier: poiSourceId, features: [], options: nil)
@@ -143,7 +158,7 @@ struct MapView: UIViewRepresentable {
             guard let style = mapView.style, let fogLayer = style.layer(withIdentifier: fogLayerId) as? MLNFillStyleLayer else { return }
             let colorHex = colorScheme == .dark ? "#000000" : "#1C1C1E"
             fogLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
-            fogLayer.fillOpacity = NSExpression(forConstantValue: 0.5) // Temporary for debugging mask and base map
+            fogLayer.fillOpacity = NSExpression(forConstantValue: 0.3)
         }
         
         func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {

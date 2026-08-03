@@ -59,12 +59,13 @@ final class SpatialStore: @unchecked Sendable {
     private func recomputeFogShape(hexes: Set<String>, newlyUnlockedCell: UInt64?) {
         polygonTask?.cancel()
         polygonTask = Task.detached(priority: .background) {
+            // Clockwise winding order for exterior bounds
             let bounds = [
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5),
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5),
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0),
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0),
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5)
+                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5), // Top Left
+                CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0), // Top Right
+                CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0), // Bottom Right
+                CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5), // Bottom Left
+                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5)  // Top Left (closed)
             ]
             
             var innerRings: [MLNPolygon] = []
@@ -105,8 +106,10 @@ final class SpatialStore: @unchecked Sendable {
             }
             
             let capturedNewHexLocation = newHexLocation
+            let capturedRingsCount = innerRings.count
             await MainActor.run { [weak self] in
                 if Task.isCancelled { return }
+                print("Rendering \(capturedRingsCount) interior rings")
                 self?.currentFogShape = fogPolygon
                 if let loc = capturedNewHexLocation {
                     self?.newlyUnlockedHexLocation = loc

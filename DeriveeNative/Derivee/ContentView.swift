@@ -7,6 +7,9 @@ struct ContentView: View {
     @State private var showTransitSheet = false
     @State private var selectedTransitStop: String? = nil
     @State private var showGlow = false
+    @State private var isMapCentered = true
+    @State private var recenterTrigger = false
+    @State private var showStatsView = false
     
     var body: some View {
         Group {
@@ -23,7 +26,9 @@ struct ContentView: View {
                     MapView(spatialStore: spatialStore,
                             fogShape: spatialStore.currentFogShape,
                             showTransitSheet: $showTransitSheet,
-                            selectedTransitStop: $selectedTransitStop)
+                            selectedTransitStop: $selectedTransitStop,
+                            isCentered: $isMapCentered,
+                            recenterTrigger: $recenterTrigger)
                         .ignoresSafeArea()
                     
                     if showGlow {
@@ -38,8 +43,7 @@ struct ContentView: View {
                         HStack {
                             Spacer()
                             ProfileFAB {
-                                // Navigate to StatsView
-                                print("Profile tapped")
+                                showStatsView = true
                             }
                             .padding(.top, 50)
                             .padding(.trailing, 20)
@@ -49,9 +53,9 @@ struct ContentView: View {
                         
                         HStack {
                             Spacer()
-                            RecenterFAB(isCentered: false) {
-                                // Action to re-center MapLibre camera
-                                print("Recenter tapped")
+                            RecenterFAB(isCentered: isMapCentered) {
+                                recenterTrigger.toggle()
+                                isMapCentered = true
                             }
                             .padding(.bottom, 40)
                             .padding(.trailing, 20)
@@ -84,6 +88,9 @@ struct ContentView: View {
                     }
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
+                }
+                .sheet(isPresented: $showStatsView) {
+                    StatsView()
                 }
             }
         }

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -20,6 +20,7 @@
 		A48E67BDED56249F370FA65D /* SwiftZSTD in Frameworks */ = {isa = PBXBuildFile; productRef = DFD08D205B790E222084B47A /* SwiftZSTD */; };
 		A4BED02FF1B808AA720963C9 /* AmbientTrackingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */; };
 		A825909AB76BEA7ABCC21986 /* H3 in Frameworks */ = {isa = PBXBuildFile; productRef = 9406C642B57B83517386E129 /* H3 */; };
+		B20170553147346CCAB314B5 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B214904FA41349F5C65F7A9 /* StatsView.swift */; };
 		F5E76E643AE8FE5415701241 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF81045CC27721884C49C776 /* ContentView.swift */; };
 		F92498446F8CFD8DA0BDB9BE /* DeriveeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */; };
 /* End PBXBuildFile section */
@@ -27,7 +28,8 @@
 /* Begin PBXFileReference section */
 		08C048FE60010DC495C1C7AB /* HydrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HydrationManager.swift; sourceTree = "<group>"; };
 		199B3BD0E20EFB91632E8F30 /* transit_delta.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = transit_delta.sqlite; sourceTree = "<group>"; };
-		5AFFB73189473060ADA73222 /* Derivee.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Derivee.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B214904FA41349F5C65F7A9 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
+		5AFFB73189473060ADA73222 /* Derivee.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Derivee.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		69DD2D8BDDA6A03164A4A524 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialDatabaseManager.swift; sourceTree = "<group>"; };
 		863A532D137F91C7E2021C95 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
@@ -87,6 +89,7 @@
 				F85968E07BB90EBA8E2B9F0D /* Secrets.swift */,
 				75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */,
 				CE5C593BBD5275D900632F1B /* SpatialStore.swift */,
+				3B214904FA41349F5C65F7A9 /* StatsView.swift */,
 			);
 			path = Derivee;
 			sourceTree = "<group>";
@@ -150,6 +153,7 @@
 				82ED3C92F2419CD4150EB037 /* XCRemoteSwiftPackageReference "swift-h3" */,
 				DF937CC7693D350B42F576DB /* XCRemoteSwiftPackageReference "SwiftZSTD" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -184,6 +188,7 @@
 				55031B6D0543C31F17B09277 /* Secrets.swift in Sources */,
 				20EE44C349BA7287D539F085 /* SpatialDatabaseManager.swift in Sources */,
 				79F5841560521971FD651E75 /* SpatialStore.swift in Sources */,
+				B20170553147346CCAB314B5 /* StatsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -250,7 +255,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
 				INFOPLIST_FILE = Derivee/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -330,7 +334,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
 				INFOPLIST_FILE = Derivee/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

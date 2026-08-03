@@ -13,30 +13,11 @@ final class HydrationManager {
         progress = 0.1
         
         do {
-            // 1. Download
-            let url = Secrets.transitDeltaURL
-            let (data, response) = try await URLSession.shared.data(from: url)
+            // 1. Transit DB is now bundled locally and copied by SpatialDatabaseManager on init.
+            // We just need to simulate the UI delay and mark hydration as complete.
+            try await Task.sleep(nanoseconds: 1_000_000_000)
             
-            guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-                throw URLError(.badServerResponse)
-            }
-            
-            progress = 0.5
-            
-            // 2. Decompress
-            let processor = ZSTDProcessor()
-            let decompressedData = try processor.decompressFrame(data)
-            
-            progress = 0.8
-            
-            // 3. Save to Application Support
-            let fileManager = FileManager.default
-            let appSupportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            let transitDBURL = appSupportURL.appendingPathComponent("derivee_transit.sqlite")
-            
-            try decompressedData.write(to: transitDBURL, options: .atomic)
-            
-            // 4. Update Meta Table
+            // 2. Update Meta Table
             try await SpatialDatabaseManager.shared.setHydrationComplete()
             
             progress = 1.0
