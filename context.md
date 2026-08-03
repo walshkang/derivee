@@ -1,69 +1,55 @@
 # Project Context
 
-## Current Status: 🚧 Architectural Migration — Sleepy Hermes Transition (Wave A–D)
+## Current Status: 🚧 Design Alignment & Ship (Waves F–H)
 
-**Feature development is frozen.** The project is executing a critical architectural migration from a pure **Expo Managed / JS-background** architecture to a hybrid **"Brownfield" Sleepy Hermes** paradigm.
+**The project is now a 100% pure native iOS app written in Swift.** We have successfully completed the migration away from React Native / Expo (including the abandoned "Sleepy Hermes" hybrid architecture). The focus is now on implementing the final UI/UX polish according to `docs/design.md` and preparing for App Store submission.
 
 ### What Changed
 
-The original architecture relied on `expo-task-manager` and `expo-location` to execute JavaScript in the background for ambient location tracking. This caused:
+The original architecture relied on React Native, Expo, and later a hybrid JSI/Nitro approach. These were abandoned due to inherent framework limitations, background threading complexity, and poor UI performance. 
 
-* **iOS watchdog terminations** (`0x8badf00d`, `0xdead10cc`) — the OS kills apps that run JS (with Hermes GC sweeps, bridge serialization, and React state reconciliations) while backgrounded.
-* **Catastrophic battery drain** — background JS execution keeps the CPU awake far beyond what hardware-level GPS batching requires.
-* **Bridge congestion** — rapid background-to-foreground bridge crossings caused micro-stutters below 60fps.
-
-### The Sleepy Hermes Paradigm
-
-All background location processing now runs in a **pure native Swift layer**:
-
-* **Background:** Swift `CLLocationManager` → Drift Gate → H3 C-library → SQLite C-API (WAL mode). Hermes sleeps.
-* **Foreground:** `AppState` resume → `@op-engineering/op-sqlite` delta hydration → $O(1)$ In-Memory Set Gate → Zustand → MapLibre DDS. Hermes wakes.
-* **Bridge:** `react-native-nitro-modules` (JSI) — zero-serialization callbacks between Swift and JS.
+The app is now fully native:
+* **Project Generation:** Exclusively managed via `xcodegen` (`project.yml`). The `.pbxproj` file is never manually edited.
+* **UI Framework:** SwiftUI exclusively. No UIKit storyboards.
+* **Data Layer:** `GRDB.swift` handles SQLite interactions with `ValueObservation` driving SwiftUI `@Observable` models.
+* **Location Engine:** Ambient tracking uses modern `CLLocationUpdate.liveUpdates()` in a detached `Task` alongside `CLBackgroundActivitySession` to run reliably in the background without legacy delegate methods.
 
 ### Key Files Updated
 
 | File | Purpose |
 | --- | --- |
-| `docs/architecture.md` | Full Sleepy Hermes architecture specification |
-| `AGENTS.md` | AI guardrails: forbidden patterns, Xcode protocol, H3 string mandate |
-| `ROADMAP.MD` | Fresh roadmap with Wave A–D, old waves archived |
-| `archive/shipped-waves-archive.md` | Superseded waves preserved with rationale |
+| `docs/design.md` | Single source of truth for the native UI blueprint and interaction patterns |
+| `AGENTS.md` | AI guardrails: pure native Swift mandates, xcodegen requirements, and UI guidelines |
+| `ROADMAP.MD` | Master status for current waves (F–H) and shipped history |
+| `archive/shipped-waves-archive.md` | Preserved history of the old Expo / React Native waves |
 
 ---
 
 ## 🔨 Immediate Next Step
 
-**Kick off Wave C.1: Folly Config Plugin**
+**Kick off Wave F: Map UI Overhaul & Ghost POI Lifecycle**
 
-The previous requirement for "Manual Xcode GUI Linkage" has been **strictly banned** because it violates the `prebuild --clean` lifecycle. All native iOS changes must now be encapsulated inside an Expo Config Plugin (Wave C.1) and a Local Expo Module (Wave C.2) using Clang Module Maps instead of Objective-C bridging headers.
+With the native foundation (Waves N.1–N.3) and Onboarding (Wave E) complete, the next objective is aligning the core map view with the `design.md` specifications.
 
 Next steps for the agent:
-1. Extract the Folly Ruby regex hacks from `ios/Podfile` into a `withFollyPodfile.js` Config Plugin.
-2. Ensure the patches survive `npx expo prebuild --clean`.
+1. Implement native SwiftUI Floating Action Buttons (FABs) over the map.
+2. Build the 3-phase Ghost POI lifecycle natively using MapLibre data-driven styling.
+3. Ensure ambient hex unlock animations trigger smoothly via GRDB observations.
 
 ---
 
-## Migration Wave Status
+## Current Wave Status
 
 | Wave | Task ID | Title | Status |
 |:---:|:---:|:---|:---:|
-| **A** | WA-DB-CONCURRENCY | Database Config & Dual-Thread Concurrency | ✅ Done |
-| **B** | WB-NITRO-SCAFFOLD | Nitro Module Scaffolding & Code Generation | 🔄 Superseded → Wave C.2 |
-| **C.1** | WC1-CONFIG-PLUGIN | Folly Config Plugin (Podfile Survival) | Planned |
-| **C.2** | WC2-LOCAL-MODULE | Local Expo Module & H3 Module Map | Planned |
-| **C.3** | WC3-SWIFT-SERVICE | Swift Background Service & SQLite Concurrency | Planned |
-| **D.1** | WD1-UI-HYDRATION | UI Synchronization, AppState Teardown & Legacy Cleanup | Planned |
+| **N.1-3** | **WN-NATIVE** | **Pure Native Foundation (xcodegen, GRDB, Tracking)** | ✅ Done |
+| **E** | **WE-ONBOARDING** | **Onboarding Gate & First-Launch Infrastructure** | ✅ Done |
+| **F** | **WF-MAP-OVERHAUL** | **Map UI Overhaul & Ghost POI Lifecycle** | Planned |
+| **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | Planned |
+| **H** | **WH-SHIP** | **Polish, Settings Rewire & Ship Prep** | Planned |
 
 ---
 
-## Previous Milestones (Pre-Sleepy Hermes)
+## Previous Milestones (Archived)
 
-All waves 1–14.10 were completed under the original Expo Managed architecture. Key accomplishments preserved:
-
-* MapLibre fog rendering engine with DDS (Data-Driven Styling)
-* Neighborhood progression tracking and statistics UI
-* GTFS-RT transit pipeline with Go Observer backend
-* GPX/HealthKit import with macro-reveal animation
-* Multi-city transit data architecture (NYC + Boston scaffolding)
-
-Detailed prompts and supersession notes are in `archive/shipped-waves-archive.md`.
+All previous architectures (Expo Managed, Sleepy Hermes) and their corresponding milestones (Waves 1–14.10, A–D) are deprecated. The core ideas (3-Tier Fog, Ghost POIs, Ambient Tracking) remain, but their JavaScript implementations have been entirely replaced by native Swift equivalents. Detailed prompts and supersession notes for these old waves are archived in `archive/shipped-waves-archive.md`.

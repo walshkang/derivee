@@ -211,52 +211,51 @@ Replace the decorative splash screen (`app/index.tsx`) with a functional first-l
 ## Wave F — Map UI Overhaul & Ghost POI Lifecycle [Planned]
 
 **Task ID:** `WF-MAP-OVERHAUL`
-**Depends on:** Wave D (Nitro callbacks + Set Gate operational for Ghost POI lifecycle transitions and hex unlock animations).
+**Depends on:** Wave C (Tracking Engine) and Wave E (Onboarding & MapLibre Hydration).
 
 ### Goal
-Align the core map screen (`app/map.tsx`) with the updated `docs/design.md` specification. Replace legacy navigation with FABs, implement the 3-phase Ghost POI lifecycle, and add ambient hex unlock animations.
+Align the core map screen (`DeriveeNative/Derivee/MapView.swift` and `ContentView.swift`) with the updated `docs/design.md` specification. Replace legacy navigation with native FABs, implement the 3-phase Ghost POI lifecycle via MapLibre Data-Driven Styling, and add ambient hex unlock animations driven by `SpatialStore`.
 
 ### Agent Directives
 
-1. **Floating Action Buttons (`src/components/MapFAB.tsx` — new file):**
+1. **Floating Action Buttons (`DeriveeNative/Derivee/MapFAB.swift` — new file):**
    * **Recenter FAB** (bottom-right): Re-centers the MapLibre camera on the user's GPS position with a 300ms ease animation.
-     * Idle: semi-transparent (`opacity: 0.7`), `@react-native-community/blur` `UltraThinMaterial` background.
-     * Press: instant `impactLight` haptic, scale to `0.92` over 100ms, spring back.
+     * Idle: semi-transparent (`opacity: 0.7`), SwiftUI `.ultraThinMaterial` background.
+     * Press: instant `UIImpactFeedbackGenerator(style: .light)` haptic, scale to `0.92` over 100ms, spring back.
      * State: filled icon variant when centered on user; outlined variant when user has panned away.
-   * **Profile FAB** (top-right): Navigates to `app/stats.tsx` (Screen 3).
+   * **Profile FAB** (top-right): Navigates to `StatsView.swift` (Screen 3).
      * Same blur/haptic/scale behavior as Recenter.
-   * Both FABs use `react-native-gesture-handler` exclusively (not `TouchableOpacity`).
+   * Both FABs use native SwiftUI `Button` or `.onTapGesture` modifiers for interaction.
 
-2. **Ghost POI 3-Phase Lifecycle (refactor `src/components/` + map layers):**
+2. **Ghost POI 3-Phase Lifecycle (refactor MapLibre layers & UI overlays):**
    * **Phase 1 — The Lure (Hidden Territory):**
      * Render Ghost POIs as soft, anonymous beacon glows **above** the fog layer (Layer 4 in the 6-layer stack).
      * Zero text labels, zero identification. Faint pulsing glow animation.
-     * Implemented as a MapLibre `CircleLayer` with low opacity, large blur radius, and a subtle scale pulse via `circleRadius` expression.
+     * Implemented as a MapLibre `MLNCircleStyleLayer` with low opacity, large blur radius, and a subtle scale pulse via expressions.
    * **Phase 2 — The Unlocking (Active Vicinity):**
      * When the user's GPS enters the hex containing a Ghost POI (within the 200m bubble):
        * Beacon resolves into a crisp geometric node: dot for bus stops, diamond for subway entrances.
        * Subtle reveal scale animation (0→1 over 200ms, ease-out).
-       * On **first encounter** with a previously unseen POI: show a lightweight toast notification sliding from the top with the station name and a fun fact. Auto-dismiss after 3 seconds.
-     * Tappable. Triggers PiP proximity check → Transit Reveal bottom sheet (Screen 2).
+       * On **first encounter** with a previously unseen POI: show a lightweight SwiftUI toast notification sliding from the top with the station name and a fun fact. Auto-dismiss after 3 seconds.
+     * Tappable. Triggers PiP proximity check → Transit Reveal bottom sheet (`.sheet` presentation for Screen 2).
    * **Phase 3 — The Archive (Explored Territory):**
      * When the user leaves the Active Vicinity, the node fades to near-invisibility.
      * **Completely invisible at zoom ≤ 16.** At zoom 17+: ultra-faint desaturated mark (opacity ≤ 0.15).
      * Not tappable when outside Active Vicinity — PiP check gates all interactions.
-   * Use MapLibre Data-Driven Styling with `['match']` expressions keyed on POI phase state (stored in the Zustand POI store) to control visibility per-node.
+   * Use MapLibre Data-Driven Styling with `NSExpression` keyed on POI phase state to control visibility per-node.
 
 3. **Native user location marker:**
-   * Verify that MapLibre's built-in user location layer is used (not a React component overlay).
-   * Custom styling: blue pulsing dot with concentric ring animation (1.5s interval, opacity 0.4→0 fade).
+   * Verify that MapLibre's built-in user location layer (`mapView.showsUserLocation = true`) is used, mapped to the native pulsing dot.
    * Subtle directional heading cone when device compass is active.
 
 4. **Real-time hex unlock animation:**
-   * On Nitro callback (new hex discovered):
-     * Hex fog transitions opaque→transparent via existing `fill-opacity-transition: { duration: 300 }`.
-     * A soft glow ring (single pulse) emanates from the user's position.
+   * On `SpatialStore` `@Observable` update (new hex discovered):
+     * Hex fog transitions opaque→transparent via MapLibre expression animations.
+     * A soft glow ring (single pulse) emanates from the user's position using a transient SwiftUI view overlay.
      * **No sound effects. No confetti. No modal popups.** Ambient and organic.
 
 ### Verification
-* FABs render with blur effect, respond to gesture-handler taps with haptic feedback.
+* FABs render with `.ultraThinMaterial` blur effect, respond to taps with haptic feedback.
 * Recenter FAB toggles between filled/outlined state based on camera position.
 * Ghost POIs in Hidden territory show as faint beacons through the fog.
 * Ghost POIs in Active vicinity show as crisp geometric nodes and are tappable.
