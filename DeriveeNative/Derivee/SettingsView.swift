@@ -1,0 +1,106 @@
+import SwiftUI
+import CoreLocation
+
+struct SettingsView: View {
+    @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) var colorScheme
+    @ObservedObject var trackingEngine: AmbientTrackingEngine
+    var spatialStore: SpatialStore
+    
+    @State private var showResetAlert = false
+    @State private var showCacheAlert = false
+    @State private var locationStatus: String = "Undetermined"
+    
+    var body: some View {
+        Form {
+            Section(header: Text("Tracking")) {
+                Toggle("Ambient Tracking", isOn: Binding(
+                    get: { trackingEngine.isTracking },
+                    set: { newValue in
+                        if newValue {
+                            trackingEngine.startTracking()
+                        } else {
+                            trackingEngine.stopTracking()
+                        }
+                    }
+                ))
+                
+                HStack {
+                    Text("Permission Status")
+                    Spacer()
+                    Text(locationStatus)
+                        .foregroundColor(.secondary)
+                }
+                
+                if locationStatus == "Not Determined" || locationStatus == "Denied" {
+                    Button("Request Permissions") {
+                        trackingEngine.requestPermissions()
+                        updateLocationStatus()
+                    }
+                }
+            }
+            
+            Section(header: Text("Data Management"), footer: Text("Clearing the cache will require downloading transit and tile data on the next launch.")) {
+                Button(role: .destructive) {
+                    showCacheAlert = true
+                } label: {
+                    Text("Clear Local Cache")
+                }
+                .alert("Clear Cache?", isPresented: $showCacheAlert) {
+                    Button("Cancel", role: .cancel) { }
+                    Button("Clear", role: .destructive) {
+                        Task {
+                            do {
+                                try await SpatialDatabaseManager.shared.clearLocalCache()
+                            } catch {
+                                print("Failed to clear cache: \(error)")
+                            }
+                        }
+                    }
+                } message: {
+                    Text("This will force the Onboarding Gate to download base data on the next launch.")
+                }
+                
+                Button(role: .destructive) {
+                    showResetAlert = true
+                } label: {
+                    Text("Reset Exploration Data")
+                }
+                .alert("Reset Data?", isPresented: $showResetAlert) {
+                    Button("Cancel", role: .cancel) { }
+                    Button("Reset", role: .destructive) {
+                        Task {
+                            do {
+                                try await SpatialDatabaseManager.shared.resetExplorationData()
+                                await MainActor.run {
+                                    spatialStore.clearData()
+                                }
+                            } catch {
+                                print("Failed to reset exploration data: \(error)")
+                            }
+                        }
+                    }
+                } message: {
+                    Text("This will permanently delete all your explored hexes and discovered transit stops. The fog will return entirely.")
+                }
+            }
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            updateLocationStatus()
+        }
+    }
+    
+    private func updateLocationStatus() {
+        let manager = CLLocationManager()
+        switch manager.authorizationStatus {
+        case .notDetermined: locationStatus = "Not Determined"
+        case .restricted: locationStatus = "Restricted"
+        case .denied: locationStatus = "Denied"
+        case .authorizedAlways: locationStatus = "Authorized Always"
+        case .authorizedWhenInUse: locationStatus = "Authorized When In Use"
+        @unknown default: locationStatus = "Unknown"
+        }
+    }
+}

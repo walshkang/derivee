@@ -172,4 +172,15 @@ final class SpatialStore: @unchecked Sendable {
             }
         }
     }
+    
+    @MainActor
+    func clearData() {
+        exploredHexes.removeAll()
+        previousHexes.removeAll()
+        previousCount = 0
+        discoveredPOIs.removeAll()
+        newlyDiscoveredPOIName = nil
+        currentFogShape = nil
+        transientHexShape = nil
+    }
 }

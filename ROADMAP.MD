@@ -82,7 +82,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **F.3** | **WF3-POI-LIFECYCLE** | **Ghost POI 3-Phase Lifecycle** | **M** | ✅ Done |
 | **F.4** | **WF4-HEX-ANIMATION** | **Ambient Hex Unlock Animation** | **S** | ✅ Done |
 | **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | **S** | ✅ Done |
-| **H** | **WH-SHIP** | **Polish, Settings Rewire & Ship Prep** | **M** | Planned |
+| **H** | **WH-SHIP** | **Polish, Settings Rewire & Ship Prep** | **M** | ✅ Done |
 
 ### Post-Ship (Deferred)
 

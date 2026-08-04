@@ -12,6 +12,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             let appSupportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let databaseURL = appSupportURL.appendingPathComponent("derivee_spatial.sqlite")
             let transitDBURL = customTransitURL ?? appSupportURL.appendingPathComponent("derivee_transit.sqlite")
+            let neighborhoodDBURL = appSupportURL.appendingPathComponent("derivee_neighborhood.sqlite")
             
             if customTransitURL == nil {
                 if let bundleURL = Bundle.main.url(forResource: "transit_delta", withExtension: "sqlite") ?? Bundle.main.url(forResource: "derivee_transit", withExtension: "sqlite") {
@@ -30,6 +31,21 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 }
             }
             
+            if let nbhdURL = Bundle.main.url(forResource: "neighborhood", withExtension: "sqlite") {
+                print("Found neighborhood DB in bundle at \(nbhdURL)")
+                do {
+                    if fileManager.fileExists(atPath: neighborhoodDBURL.path) {
+                        try fileManager.removeItem(at: neighborhoodDBURL)
+                    }
+                    try fileManager.copyItem(at: nbhdURL, to: neighborhoodDBURL)
+                    print("Successfully copied neighborhood DB to \(neighborhoodDBURL)")
+                } catch {
+                    print("⚠️ Failed to copy neighborhood DB: \(error)")
+                }
+            } else {
+                print("⚠️ Could not find neighborhood.sqlite in main bundle")
+            }
+            
             var configuration = Configuration()
             // Setting pragmas as specified in the blueprint
             configuration.prepareDatabase { db in
@@ -45,6 +61,17 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     }
                 } else {
                     print("⚠️ No transit DB file to attach at \(transitDBURL)")
+                }
+                
+                if fileManager.fileExists(atPath: neighborhoodDBURL.path) {
+                    do {
+                        try db.execute(sql: "ATTACH DATABASE '\(neighborhoodDBURL.path)' AS neighborhood")
+                        print("Successfully attached neighborhood database")
+                    } catch {
+                        print("⚠️ Failed to attach neighborhood DB: \(error)")
+                    }
+                } else {
+                    print("⚠️ No neighborhood DB file to attach at \(neighborhoodDBURL)")
                 }
             }
             
@@ -111,6 +138,27 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    func clearLocalCache() async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: "DELETE FROM meta WHERE key = 'hydration_complete'")
+        }
+    }
+    
+    func resetExplorationData() async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: "DELETE FROM explored_hexes")
+            try db.execute(sql: "DELETE FROM discovered_pois")
+        }
+    }
+    
+    func insertHexesBatch(h3Indices: [String]) async throws {
+        try await dbWriter.write { db in
+            for index in h3Indices {
+                try db.execute(sql: "INSERT OR IGNORE INTO explored_hexes (h3_index) VALUES (?)", arguments: [index])
+            }
+        }
+    }
+    
     func loadDiscoveredPOIs() async throws -> Set<String> {
         return try await dbWriter.read { db in
             let rows = try String.fetchAll(db, sql: "SELECT poi_id FROM discovered_pois")
@@ -121,6 +169,45 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     func insertDiscoveredPOI(_ id: String) async throws {
         try await dbWriter.write { db in
             try db.execute(sql: "INSERT OR IGNORE INTO discovered_pois (poi_id) VALUES (?)", arguments: [id])
+        }
+    }
+    
+    struct NeighborhoodProgress: Identifiable {
+        let id: String
+        let name: String
+        let clearedHexes: Int
+        let totalHexes: Int
+        
+        var percentage: Double {
+            guard totalHexes > 0 else { return 0 }
+            return (Double(clearedHexes) / Double(totalHexes)) * 100.0
+        }
+    }
+    
+    func fetchNeighborhoodProgression() async throws -> [NeighborhoodProgress] {
+        return try await dbWriter.read { db in
+            let sql = """
+            SELECT 
+                ns.id, 
+                ns.name, 
+                ns.total_hexes, 
+                COUNT(eh.h3_index) as cleared_hexes
+            FROM neighborhood.neighborhood_stats ns
+            LEFT JOIN neighborhood.neighborhood_hexes nh ON ns.id = nh.neighborhood_id
+            LEFT JOIN explored_hexes eh ON nh.h3_index = eh.h3_index
+            GROUP BY ns.id, ns.name, ns.total_hexes
+            ORDER BY cleared_hexes * 1.0 / ns.total_hexes DESC, ns.name ASC
+            """
+            
+            let rows = try Row.fetchAll(db, sql: sql)
+            return rows.map { row in
+                NeighborhoodProgress(
+                    id: row["id"],
+                    name: row["name"],
+                    clearedHexes: row["cleared_hexes"],
+                    totalHexes: row["total_hexes"]
+                )
+            }
         }
     }
     

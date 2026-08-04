@@ -5,7 +5,7 @@ import CoreLocation
 
 struct MapView: UIViewRepresentable {
     @Environment(\.colorScheme) var colorScheme
-    @StateObject var trackingEngine = AmbientTrackingEngine()
+    @ObservedObject var trackingEngine: AmbientTrackingEngine
     var spatialStore: SpatialStore
     var fogShape: MLNShape?
     @Binding var showTransitSheet: Bool

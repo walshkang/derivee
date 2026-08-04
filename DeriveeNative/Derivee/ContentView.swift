@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State private var isHydrationComplete = false
     @State private var isCheckingHydration = true
+    @StateObject private var trackingEngine = AmbientTrackingEngine()
     @State private var spatialStore = SpatialStore()
     @State private var showTransitSheet = false
     @State private var selectedTransitStop: String? = nil
@@ -26,7 +27,8 @@ struct ContentView: View {
                 OnboardingView(isHydrationComplete: $isHydrationComplete)
             } else {
                 ZStack {
-                    MapView(spatialStore: spatialStore,
+                    MapView(trackingEngine: trackingEngine,
+                            spatialStore: spatialStore,
                             fogShape: spatialStore.currentFogShape,
                             showTransitSheet: $showTransitSheet,
                             selectedTransitStop: $selectedTransitStop,
@@ -119,7 +121,7 @@ struct ContentView: View {
                     }
                 }
                 .sheet(isPresented: $showStatsView) {
-                    StatsView()
+                    StatsView(trackingEngine: trackingEngine, spatialStore: spatialStore)
                 }
             }
         }
