@@ -65,8 +65,8 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 
 | Phase | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
-| **1** | **TEST-PHASE1** | **Core Engine Unit Tests (Background & SQLite)** | **M** | 🚧 In Progress |
-| **2** | **TEST-PHASE2** | **Spatial Math & Transit Hydration Unit Tests** | **S** | Planned (Before Wave G) |
+| **1** | **TEST-PHASE1** | **Core Engine Unit Tests (Background & SQLite)** | **M** | ✅ Done |
+| **2** | **TEST-PHASE2** | **Spatial Math & Transit Hydration Unit Tests** | **S** | ✅ Done |
 | **3** | **TEST-PHASE3** | **Automated UI / Snapshot Testing** | **M** | Planned (During Wave G) |
 | **4** | **TEST-PHASE4** | **CI/CD Pipeline (Xcode Cloud / Actions)** | **M** | Planned (Start of Wave H) |
 
@@ -332,8 +332,9 @@ Broadening the overall testing strategy across upcoming waves. We are adopting a
 
 **Why it's perfect:** It isolates the most volatile, battery-draining, and logic-heavy part of the app (Background Location + SQLite concurrency) and proves it works deterministically without needing physical hardware.
 
-### Phase 2: Pure Spatial & Data Unit Tests (The Next Wave)
-**Timing:** MUST be completed **BEFORE** Wave G.
+### Phase 2: Pure Spatial & Data Unit Tests
+**Status:** Completed.
+The testing wave isolates raw H3 spatial math (Resolution 11), coordinate round-tripping, MapLibre interior hole CW winding order, and GRDB transit database hydration testing.
 Once Phase 1 is merged, the next testing wave isolates the raw math and data hydration, completely separate from the tracking engine. Wave G relies heavily on this transit data and spatial math.
 
 * **H3 Boundary Tests:** Feed known edge-case coordinates (e.g., coordinates exactly on the boundary of two hexes, or coordinates over water) into the `swift-h3` wrapper. Assert that the resulting 15-character hex string exactly matches the expected output.

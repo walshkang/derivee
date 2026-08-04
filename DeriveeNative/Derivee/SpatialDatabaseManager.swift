@@ -6,26 +6,28 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     
     let dbWriter: any DatabaseWriter
     
-    init(inMemory: Bool = false) {
+    init(inMemory: Bool = false, customTransitURL: URL? = nil) {
         do {
             let fileManager = FileManager.default
             let appSupportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let databaseURL = appSupportURL.appendingPathComponent("derivee_spatial.sqlite")
-            let transitDBURL = appSupportURL.appendingPathComponent("derivee_transit.sqlite")
+            let transitDBURL = customTransitURL ?? appSupportURL.appendingPathComponent("derivee_transit.sqlite")
             
-            if let bundleURL = Bundle.main.url(forResource: "transit_delta", withExtension: "sqlite") ?? Bundle.main.url(forResource: "derivee_transit", withExtension: "sqlite") {
-                print("Found transit DB in bundle at \(bundleURL)")
-                do {
-                    if fileManager.fileExists(atPath: transitDBURL.path) {
-                        try fileManager.removeItem(at: transitDBURL)
+            if customTransitURL == nil {
+                if let bundleURL = Bundle.main.url(forResource: "transit_delta", withExtension: "sqlite") ?? Bundle.main.url(forResource: "derivee_transit", withExtension: "sqlite") {
+                    print("Found transit DB in bundle at \(bundleURL)")
+                    do {
+                        if fileManager.fileExists(atPath: transitDBURL.path) {
+                            try fileManager.removeItem(at: transitDBURL)
+                        }
+                        try fileManager.copyItem(at: bundleURL, to: transitDBURL)
+                        print("Successfully copied transit DB to \(transitDBURL)")
+                    } catch {
+                        print("⚠️ Failed to copy transit DB: \(error)")
                     }
-                    try fileManager.copyItem(at: bundleURL, to: transitDBURL)
-                    print("Successfully copied transit DB to \(transitDBURL)")
-                } catch {
-                    print("⚠️ Failed to copy transit DB: \(error)")
+                } else {
+                    print("⚠️ Could not find transit_delta.sqlite in main bundle")
                 }
-            } else {
-                print("⚠️ Could not find transit_delta.sqlite in main bundle")
             }
             
             var configuration = Configuration()
