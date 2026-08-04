@@ -6,10 +6,13 @@ struct ContentView: View {
     @State private var spatialStore = SpatialStore()
     @State private var showTransitSheet = false
     @State private var selectedTransitStop: String? = nil
-    @State private var showGlow = false
     @State private var isMapCentered = true
     @State private var recenterTrigger = false
     @State private var showStatsView = false
+    @State private var userScreenPosition: CGPoint? = nil
+    
+    @State private var glowScale: CGFloat = 1.0
+    @State private var glowOpacity: Double = 0.0
     
     var body: some View {
         Group {
@@ -28,16 +31,22 @@ struct ContentView: View {
                             showTransitSheet: $showTransitSheet,
                             selectedTransitStop: $selectedTransitStop,
                             isCentered: $isMapCentered,
-                            recenterTrigger: $recenterTrigger)
+                            recenterTrigger: $recenterTrigger,
+                            userScreenPosition: $userScreenPosition,
+                            transientHexShape: spatialStore.transientHexShape)
                         .ignoresSafeArea()
                     
-                    if showGlow {
+                    GeometryReader { geo in
                         Circle()
-                            .strokeBorder(Color.white.opacity(0.8), lineWidth: 4)
+                            .strokeBorder(Color.white, lineWidth: 4)
                             .frame(width: 80, height: 80)
                             .shadow(color: .white, radius: 10)
-                            .transition(.scale.combined(with: .opacity))
+                            .scaleEffect(glowScale)
+                            .opacity(glowOpacity)
+                            .position(userScreenPosition ?? CGPoint(x: geo.size.width / 2, y: geo.size.height / 2))
                     }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
                     
                     VStack {
                         HStack {
@@ -87,13 +96,15 @@ struct ContentView: View {
                 .animation(.spring(), value: spatialStore.newlyDiscoveredPOIName)
                 .onChange(of: spatialStore.newlyUnlockedHexLocation != nil) {
                     if spatialStore.newlyUnlockedHexLocation != nil {
-                        withAnimation(.easeOut(duration: 0.1)) {
-                            showGlow = true
+                        glowScale = 1.0
+                        glowOpacity = 0.8
+                        
+                        withAnimation(.easeOut(duration: 1.5)) {
+                            glowScale = 4.0
+                            glowOpacity = 0.0
                         }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            withAnimation {
-                                showGlow = false
-                            }
+                        
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             spatialStore.newlyUnlockedHexLocation = nil
                         }
                     }

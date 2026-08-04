@@ -9,6 +9,7 @@ final class SpatialStore: @unchecked Sendable {
     var exploredHexes: Set<String> = []
     
     var newlyUnlockedHexLocation: CLLocationCoordinate2D? = nil
+    var transientHexShape: MLNShape? = nil
     var currentFogShape: MLNShape? = nil
     
     var discoveredPOIs: Set<String> = []
@@ -110,21 +111,33 @@ final class SpatialStore: @unchecked Sendable {
             
             // If a new hex was unlocked, get its center coordinate
             var newHexLocation: CLLocationCoordinate2D? = nil
+            var transientHexPolygon: MLNPolygon? = nil
             if let cell = newlyUnlockedCell {
                 do {
                     let coord = try H3.cellToLatLng(cell: cell)
                     newHexLocation = CLLocationCoordinate2D(latitude: coord.latitude, longitude: coord.longitude)
+                    
+                    let boundary = try H3.cellToBoundary(cell: cell)
+                    var polyCoords = boundary.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+                    if polyCoords.count > 0, let first = polyCoords.first {
+                        polyCoords.append(first)
+                    }
+                    if polyCoords.count >= 4 {
+                        transientHexPolygon = MLNPolygon(coordinates: polyCoords, count: UInt(polyCoords.count))
+                    }
                 } catch {
                     // Ignore
                 }
             }
             
             let capturedNewHexLocation = newHexLocation
+            let capturedTransientShape = transientHexPolygon
             let capturedRingsCount = innerRings.count
             await MainActor.run { [weak self] in
                 if Task.isCancelled { return }
                 print("Rendering \(capturedRingsCount) interior rings")
                 self?.currentFogShape = fogPolygon
+                self?.transientHexShape = capturedTransientShape
                 if let loc = capturedNewHexLocation {
                     self?.newlyUnlockedHexLocation = loc
                 }

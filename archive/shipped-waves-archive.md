@@ -26,3 +26,86 @@ Replace legacy navigation with native SwiftUI Floating Action Buttons (FABs) to 
 * FABs render with `.ultraThinMaterial` blur effect, respond to taps with haptic feedback.
 * Recenter FAB toggles between filled/outlined state based on camera position.
 * Tapping Recenter FAB animates the camera back to the user's location.
+
+## Wave F.2 — Discovery Toast Overlay [Shipped]
+
+**Task ID:** `WF2-TOAST`
+**Depends on:** Wave C (Tracking Engine) and Wave F.1.
+
+### Goal
+Implement a lightweight SwiftUI toast notification that appears when the user discovers a new Transit POI, providing immediate, non-intrusive feedback without blocking the UI.
+
+### Agent Directives
+
+1. **Toast UI Component (`DeriveeNative/Derivee/DiscoveryToast.swift` — new file):**
+   * A pill-shaped SwiftUI view using `.ultraThinMaterial` or a dark translucent background.
+   * Slides down from the top edge of the screen (or pops up near the bottom) on discovery.
+   * Contains the station name and a fun fact/subtitle (e.g., "New Transit POI Discovered").
+   * Include a subtle scale and opacity animation on entry.
+
+2. **Toast Lifecycle:**
+   * Triggered on **first encounter** with a previously unseen POI when the user's GPS enters the hex containing it.
+   * Auto-dismisses after 3 seconds with a smooth exit animation.
+   * Supports manual dismissal via upward swipe.
+
+### Verification
+* Toast appears organically without interrupting map interactions.
+* Auto-dismisses after 3 seconds.
+* Dismisses manually via swipe.
+
+## Wave F.3 — Ghost POI 3-Phase Lifecycle [Shipped]
+
+**Task ID:** `WF3-POI-LIFECYCLE`
+**Depends on:** Wave F.2.
+
+### Goal
+Implement the 3-phase Ghost POI lifecycle via MapLibre Data-Driven Styling (`NSExpression`) to dynamically transition POIs between Hidden, Active, and Explored states.
+
+### Agent Directives
+
+1. **Phase 1 — The Lure (Hidden Territory):**
+   * Render Ghost POIs as soft, anonymous beacon glows **above** the fog layer (Layer 4 in the 6-layer stack).
+   * Zero text labels, zero identification. Faint pulsing glow animation.
+   * Implemented as a MapLibre `MLNCircleStyleLayer` with low opacity, large blur radius, and a subtle scale pulse via expressions.
+
+2. **Phase 2 — The Unlocking (Active Vicinity):**
+   * When the user's GPS enters the hex containing a Ghost POI (within the 200m bubble):
+     * Beacon resolves into a crisp geometric node: dot for bus stops, diamond for subway entrances.
+     * Subtle reveal scale animation (0→1 over 200ms, ease-out).
+   * Tappable. Triggers PiP proximity check → Transit Reveal bottom sheet (`.sheet` presentation for Screen 2).
+
+3. **Phase 3 — The Archive (Explored Territory):**
+   * When the user leaves the Active Vicinity, the node fades to near-invisibility.
+   * **Completely invisible at zoom ≤ 16.** At zoom 17+: ultra-faint desaturated mark (opacity ≤ 0.15).
+   * Not tappable when outside Active Vicinity — PiP check gates all interactions.
+
+4. **Integration:**
+   * Use MapLibre Data-Driven Styling with `NSExpression` keyed on POI phase state to control visibility per-node.
+   * Connect to the database/state to track which POIs have been discovered to link with the Toast notification logic from Wave F.2.
+
+### Verification
+* Ghost POIs in Hidden territory show as faint beacons through the fog.
+* Ghost POIs in Active vicinity show as crisp geometric nodes and are tappable.
+* Ghost POIs in Explored territory are invisible at zoom ≤ 16.
+* Transitions between states occur smoothly.
+
+## Wave F.4 — Ambient Hex Unlock Animation [Shipped]
+
+**Task ID:** `WF4-HEX-ANIMATION`
+**Depends on:** Wave F.3.
+
+### Goal
+Add ambient visual feedback when a user unlocks a new hex, enhancing the gamification feel without intrusive popups.
+
+### Agent Directives
+
+1. **Real-time hex unlock animation:**
+   * On `SpatialStore` `@Observable` update (new hex discovered):
+     * Hex fog transitions opaque→transparent via MapLibre expression animations.
+     * A soft glow ring (single pulse) emanates from the user's position using a transient SwiftUI view overlay.
+     * **No sound effects. No confetti. No modal popups.** Ambient and organic.
+
+### Verification
+* Hex unlock animation plays at 60fps without frame drops.
+* The transition from opaque to transparent feels natural.
+* A subtle pulse rings from the user location upon new hex discovery.

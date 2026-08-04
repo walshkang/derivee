@@ -12,6 +12,8 @@ struct MapView: UIViewRepresentable {
     @Binding var selectedTransitStop: String?
     @Binding var isCentered: Bool
     @Binding var recenterTrigger: Bool
+    @Binding var userScreenPosition: CGPoint?
+    var transientHexShape: MLNShape?
     
     // MapTiler Streets URL
     let styleURL = URL(string: "https://api.maptiler.com/maps/streets-v2/style.json?key=\(Secrets.mapTilerKey)")!
@@ -43,6 +45,7 @@ struct MapView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.updateFogColor(for: colorScheme, in: uiView)
         context.coordinator.updateExploredHexes(in: uiView, with: fogShape)
+        context.coordinator.updateTransientHex(shape: transientHexShape, in: uiView)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
         
         if context.coordinator.lastRecenterTrigger != recenterTrigger {
@@ -68,27 +71,68 @@ struct MapView: UIViewRepresentable {
         let archiveLayerId = "poi-archive-layer"
         let ephemeralRouteLayerId = "ephemeral-route-layer"
         let ephemeralRouteSourceId = "ephemeral-route-source"
+        let transientHexSourceId = "transient-hex-source"
+        let transientHexLayerId = "transient-hex-layer"
         
         var pois: [GhostPOI] = []
         var lastLocation: CLLocation?
         var lastRecenterTrigger: Bool = false
+        var lastTransientHexShape: MLNShape? = nil
+        
+        var lureTimer: Timer?
+        var isLurePulsed: Bool = false
         
         init(_ parent: MapView) {
             self.parent = parent
             super.init()
             loadPOIs()
+            
+            NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(appWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
+        }
+        
+        deinit {
+            lureTimer?.invalidate()
+            NotificationCenter.default.removeObserver(self)
+        }
+        
+        @objc func appDidEnterBackground() {
+            lureTimer?.invalidate()
+            lureTimer = nil
+        }
+        
+        @objc func appWillEnterForeground() {
+            startLureTimer()
+        }
+        
+        func startLureTimer() {
+            guard lureTimer == nil else { return }
+            lureTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+                self?.toggleLurePulse()
+            }
+        }
+        
+        func toggleLurePulse() {
+            guard let style = mapView?.style, let lureLayer = style.layer(withIdentifier: lureLayerId) as? MLNCircleStyleLayer else { return }
+            isLurePulsed.toggle()
+            let radius: NSNumber = isLurePulsed ? 18.0 : 12.0
+            let opacity: NSNumber = isLurePulsed ? 0.2 : 0.4
+            lureLayer.circleRadius = NSExpression(forConstantValue: radius)
+            lureLayer.circleOpacity = NSExpression(forConstantValue: opacity)
         }
         
         func loadPOIs() {
             Task {
                 do {
                     pois = try await SpatialDatabaseManager.shared.dbPool.read { db in
-                        let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1 OR location_type = 0")
+                        let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon, route_type FROM transit.stops WHERE location_type = 1 OR location_type = 0")
                         return rows.map { row in
-                            GhostPOI(
+                            let routeType = row["route_type"] as? Int ?? 3
+                            return GhostPOI(
                                 id: row["stop_id"] as? String ?? "",
                                 name: row["stop_name"] as? String ?? "",
-                                coordinate: CLLocationCoordinate2D(latitude: row["stop_lat"] as? Double ?? 0, longitude: row["stop_lon"] as? Double ?? 0)
+                                coordinate: CLLocationCoordinate2D(latitude: row["stop_lat"] as? Double ?? 0, longitude: row["stop_lon"] as? Double ?? 0),
+                                type: routeType
                             )
                         }
                     }
@@ -99,9 +143,40 @@ struct MapView: UIViewRepresentable {
         }
         
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
+            let busDot = generateDotImage()
+            let subwayDiamond = generateDiamondImage()
+            style.setImage(busDot, forName: "poi-bus-3")
+            style.setImage(subwayDiamond, forName: "poi-subway-1")
+            
             setupLayers(in: style)
             updatePOIs(in: style)
             updateExploredHexes(in: mapView, with: parent.spatialStore.currentFogShape)
+            startLureTimer()
+        }
+        
+        func generateDotImage() -> UIImage {
+            let size = CGSize(width: 16, height: 16)
+            return UIGraphicsImageRenderer(size: size).image { ctx in
+                let rect = CGRect(origin: .zero, size: size)
+                ctx.cgContext.setFillColor(UIColor(hex: "#FFB300").cgColor)
+                ctx.cgContext.fillEllipse(in: rect)
+            }
+        }
+        
+        func generateDiamondImage() -> UIImage {
+            let size = CGSize(width: 20, height: 20)
+            return UIGraphicsImageRenderer(size: size).image { ctx in
+                let rect = CGRect(origin: .zero, size: size)
+                let path = UIBezierPath()
+                path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+                path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+                path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+                path.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
+                path.close()
+                ctx.cgContext.setFillColor(UIColor(hex: "#FFB300").cgColor)
+                ctx.cgContext.addPath(path.cgPath)
+                ctx.cgContext.fillPath()
+            }
         }
         
         func mapView(_ mapView: MLNMapView, didUpdate userLocation: MLNUserLocation?) {
@@ -128,6 +203,14 @@ struct MapView: UIViewRepresentable {
             fogLayer.fillOpacity = NSExpression(forConstantValue: 0.3)
             style.addLayer(fogLayer)
             
+            let transientHexSource = MLNShapeSource(identifier: transientHexSourceId, shape: nil, options: nil)
+            style.addSource(transientHexSource)
+            
+            let transientHexLayer = MLNFillStyleLayer(identifier: transientHexLayerId, source: transientHexSource)
+            transientHexLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
+            transientHexLayer.fillOpacity = NSExpression(forConstantValue: 0.0)
+            style.insertLayer(transientHexLayer, above: fogLayer)
+            
             let source = MLNShapeSource(identifier: poiSourceId, features: [], options: nil)
             style.addSource(source)
             
@@ -137,20 +220,21 @@ struct MapView: UIViewRepresentable {
             lureLayer.circleRadius = NSExpression(forConstantValue: 15)
             lureLayer.circleOpacity = NSExpression(forConstantValue: 0.3)
             lureLayer.circleBlur = NSExpression(forConstantValue: 2.0)
+            lureLayer.circleRadiusTransition = MLNTransition(duration: 1.5, delay: 0)
+            lureLayer.circleOpacityTransition = MLNTransition(duration: 1.5, delay: 0)
             style.insertLayer(lureLayer, above: fogLayer)
             
-            let activeLayer = MLNCircleStyleLayer(identifier: activeLayerId, source: source)
+            let activeLayer = MLNSymbolStyleLayer(identifier: activeLayerId, source: source)
             activeLayer.predicate = NSPredicate(format: "phase == 2")
-            activeLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
-            activeLayer.circleRadius = NSExpression(forConstantValue: 8)
-            activeLayer.circleOpacity = NSExpression(forConstantValue: 1.0)
+            activeLayer.iconImageName = NSExpression(forKeyPath: "icon_name")
+            activeLayer.iconScale = NSExpression(forConstantValue: 1.0)
             style.insertLayer(activeLayer, above: lureLayer)
             
             let archiveLayer = MLNCircleStyleLayer(identifier: archiveLayerId, source: source)
             archiveLayer.predicate = NSPredicate(format: "phase == 3")
             archiveLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
             archiveLayer.circleRadius = NSExpression(forConstantValue: 6)
-            archiveLayer.circleOpacity = NSExpression(forConstantValue: 0.15)
+            archiveLayer.circleOpacity = NSExpression(format: "mgl_step:from:stops:($zoomLevel, 0.0, %@)", [16.0: 0.0, 17.0: 0.15])
             style.insertLayer(archiveLayer, above: activeLayer)
         }
         
@@ -164,6 +248,34 @@ struct MapView: UIViewRepresentable {
         func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {
             guard let style = mapView.style, let fogSource = style.source(withIdentifier: "fog-source") as? MLNShapeSource else { return }
             fogSource.shape = shape
+        }
+        
+        func updateTransientHex(shape: MLNShape?, in mapView: MLNMapView) {
+            guard let style = mapView.style, 
+                  let source = style.source(withIdentifier: transientHexSourceId) as? MLNShapeSource, 
+                  let layer = style.layer(withIdentifier: transientHexLayerId) as? MLNFillStyleLayer else { return }
+            
+            if shape !== lastTransientHexShape {
+                lastTransientHexShape = shape
+                
+                if let newShape = shape {
+                    layer.fillOpacityTransition = MLNTransition(duration: 0, delay: 0)
+                    layer.fillOpacity = NSExpression(forConstantValue: 0.3)
+                    source.shape = newShape
+                    
+                    if let loc = lastLocation {
+                        let point = mapView.convert(loc.coordinate, toPointTo: mapView)
+                        DispatchQueue.main.async {
+                            self.parent.userScreenPosition = point
+                        }
+                    }
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        layer.fillOpacityTransition = MLNTransition(duration: 1.5, delay: 0)
+                        layer.fillOpacity = NSExpression(forConstantValue: 0.0)
+                    }
+                }
+            }
         }
         
         func updateTransitSheetState(showSheet: Bool, selectedStop: String?, in mapView: MLNMapView) {
@@ -204,7 +316,11 @@ struct MapView: UIViewRepresentable {
             for poi in pois {
                 let feature = MLNPointFeature()
                 feature.coordinate = poi.coordinate
-                feature.attributes = ["id": poi.id, "name": poi.name]
+                feature.attributes = [
+                    "id": poi.id, 
+                    "name": poi.name,
+                    "icon_name": poi.type == 1 ? "poi-subway-1" : "poi-bus-3"
+                ]
                 
                 let distance = userLoc.distance(from: CLLocation(latitude: poi.coordinate.latitude, longitude: poi.coordinate.longitude))
                 
@@ -249,6 +365,7 @@ struct GhostPOI {
     let id: String
     let name: String
     let coordinate: CLLocationCoordinate2D
+    let type: Int
 }
 
 extension UIColor {
