@@ -22,9 +22,8 @@ final class GPXParser: NSObject, XMLParserDelegate {
     
     func parse(url: URL) throws -> [GPXCoordinate] {
         coordinates = []
-        guard let parser = XMLParser(contentsOf: url) else {
-            throw NSError(domain: "GPXParser", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to initialize XML parser"])
-        }
+        let data = try Data(contentsOf: url)
+        let parser = XMLParser(data: data)
         parser.delegate = self
         if parser.parse() {
             return coordinates

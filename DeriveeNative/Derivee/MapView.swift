@@ -32,6 +32,7 @@ struct MapView: UIViewRepresentable {
         mapView.addGestureRecognizer(tapGesture)
         
         context.coordinator.mapView = mapView
+        context.coordinator.setupCompassObservation()
         
         // Start tracking
         DispatchQueue.main.async {
@@ -81,6 +82,9 @@ struct MapView: UIViewRepresentable {
         var lastTransientHexShape: MLNShape? = nil
         var lastSelectedStop: String? = nil
         
+        var compassHiddenObserver: NSKeyValueObservation?
+        var compassAlphaObserver: NSKeyValueObservation?
+        
         var lureTimer: Timer?
         var isLurePulsed: Bool = false
         
@@ -95,7 +99,23 @@ struct MapView: UIViewRepresentable {
         
         deinit {
             lureTimer?.invalidate()
+            compassHiddenObserver?.invalidate()
+            compassAlphaObserver?.invalidate()
             NotificationCenter.default.removeObserver(self)
+        }
+        
+        func setupCompassObservation() {
+            guard let mapView = mapView else { return }
+            compassHiddenObserver = mapView.compassView.observe(\.isHidden, options: [.initial, .new]) { view, _ in
+                if view.isHidden {
+                    view.isHidden = false
+                }
+            }
+            compassAlphaObserver = mapView.compassView.observe(\.alpha, options: [.initial, .new]) { view, _ in
+                if view.alpha == 0 {
+                    view.alpha = 1.0
+                }
+            }
         }
         
         @objc func appDidEnterBackground() {
@@ -127,14 +147,13 @@ struct MapView: UIViewRepresentable {
             Task {
                 do {
                     pois = try await SpatialDatabaseManager.shared.dbWriter.read { db in
-                        let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon, route_type FROM transit.stops WHERE location_type = 1 OR location_type = 0")
+                        let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1 OR location_type = 0")
                         return rows.map { row in
-                            let routeType = row["route_type"] as? Int ?? 3
                             return GhostPOI(
                                 id: row["stop_id"] as? String ?? "",
                                 name: row["stop_name"] as? String ?? "",
                                 coordinate: CLLocationCoordinate2D(latitude: row["stop_lat"] as? Double ?? 0, longitude: row["stop_lon"] as? Double ?? 0),
-                                type: routeType
+                                type: 1
                             )
                         }
                     }
@@ -196,7 +215,16 @@ struct MapView: UIViewRepresentable {
         }
         
         func setupLayers(in style: MLNStyle) {
-            let fogSource = MLNShapeSource(identifier: "fog-source", shape: nil, options: nil)
+            let bounds = [
+                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5),
+                CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0),
+                CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0),
+                CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5),
+                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5)
+            ]
+            let initialFogShape = MLNPolygon(coordinates: bounds, count: UInt(bounds.count))
+            
+            let fogSource = MLNShapeSource(identifier: "fog-source", shape: initialFogShape, options: nil)
             style.addSource(fogSource)
             
             let fogLayer = MLNFillStyleLayer(identifier: fogLayerId, source: fogSource)
@@ -236,7 +264,8 @@ struct MapView: UIViewRepresentable {
             archiveLayer.predicate = NSPredicate(format: "phase == 3")
             archiveLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
             archiveLayer.circleRadius = NSExpression(forConstantValue: 6)
-            archiveLayer.circleOpacity = NSExpression(format: "mgl_step:from:stops:($zoomLevel, 0.0, %@)", [16.0: 0.0, 17.0: 0.15])
+            archiveLayer.circleOpacity = NSExpression(forConstantValue: 0.15)
+            archiveLayer.minimumZoomLevel = 16.5
             style.insertLayer(archiveLayer, above: activeLayer)
         }
         
@@ -249,7 +278,9 @@ struct MapView: UIViewRepresentable {
         
         func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {
             guard let style = mapView.style, let fogSource = style.source(withIdentifier: "fog-source") as? MLNShapeSource else { return }
-            fogSource.shape = shape
+            if let validShape = shape {
+                fogSource.shape = validShape
+            }
         }
         
         func updateTransientHex(shape: MLNShape?, in mapView: MLNMapView) {

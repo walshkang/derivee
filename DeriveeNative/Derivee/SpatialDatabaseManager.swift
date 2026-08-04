@@ -235,9 +235,9 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         
         do {
             return try dbWriter.read { db in
-                if let row = try Row.fetchOne(db, sql: "SELECT stop_name, route_type FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
+                if let row = try Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
                     let name = row["stop_name"] as? String ?? "Transit Station"
-                    let routeType = row["route_type"] as? Int ?? 1
+                    let routeType = 1
                     let routeId = inferRouteId(from: stopId, name: name)
                     
                     let arrivals = generateArrivals(for: routeId)

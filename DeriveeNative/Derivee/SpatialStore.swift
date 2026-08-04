@@ -40,9 +40,8 @@ final class SpatialStore: @unchecked Sendable {
     }
     
     private func startObservation(dbManager: SpatialDatabaseManager) {
-        let request = SQLRequest<String>(sql: "SELECT h3_index FROM explored_hexes")
         let observation = ValueObservation.tracking { db in
-            try request.fetchAll(db)
+            try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes")
         }
         
         observationTask = observation.start(
@@ -51,6 +50,7 @@ final class SpatialStore: @unchecked Sendable {
                 print("SpatialStore Observation error: \(error)")
             },
             onChange: { [weak self] hexesArray in
+                print("ValueObservation fired with \(hexesArray.count) hexes")
                 guard let self = self else { return }
                 
                 let newSet = Set(hexesArray)

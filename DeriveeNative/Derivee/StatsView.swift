@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import UniformTypeIdentifiers
 
 struct StatsView: View {
     @Environment(\.dismiss) var dismiss
@@ -11,6 +12,7 @@ struct StatsView: View {
     @State private var neighborhoods: [SpatialDatabaseManager.NeighborhoodProgress] = []
     @State private var isImporting = false
     @State private var importProgress: Double = 0.0
+    @State private var showFileImporter = false
     
     var body: some View {
         NavigationStack {
@@ -75,7 +77,7 @@ struct StatsView: View {
                         .padding(.horizontal, 40)
                     } else {
                         Button(action: {
-                            importGPX()
+                            showFileImporter = true
                         }) {
                             HStack {
                                 Image(systemName: "square.and.arrow.down")
@@ -111,6 +113,25 @@ struct StatsView: View {
             .onAppear {
                 loadStats()
             }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [UTType.xml, UTType(filenameExtension: "gpx") ?? .xml],
+                allowsMultipleSelection: false
+            ) { result in
+                do {
+                    guard let selectedFile = try result.get().first else { return }
+                    
+                    // Gain access to the security-scoped resource if needed
+                    if selectedFile.startAccessingSecurityScopedResource() {
+                        importGPX(from: selectedFile)
+                        selectedFile.stopAccessingSecurityScopedResource()
+                    } else {
+                        importGPX(from: selectedFile)
+                    }
+                } catch {
+                    print("Error selecting file: \(error)")
+                }
+            }
         }
     }
     
@@ -127,13 +148,7 @@ struct StatsView: View {
         }
     }
     
-    private func importGPX() {
-        // For demonstration, we load the bundled NYC_Walk.gpx
-        guard let url = Bundle.main.url(forResource: "NYC_Walk", withExtension: "gpx") else {
-            print("NYC_Walk.gpx not found in bundle")
-            return
-        }
-        
+    private func importGPX(from url: URL) {
         isImporting = true
         importProgress = 0.0
         

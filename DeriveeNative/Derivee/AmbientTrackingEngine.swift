@@ -42,6 +42,7 @@ final class AmbientTrackingEngine: ObservableObject {
     
     // State for tracking previous location to calculate speed if speed is invalid
     private var lastLocation: CLLocation?
+    private var lastSavedHex: String?
     
     @Published var isTracking = false
     
@@ -109,20 +110,28 @@ final class AmbientTrackingEngine: ObservableObject {
             return
         }
         
-        // Convert to H3 string asynchronously to avoid blocking the actor
-        Task.detached { [self] in
-            do {
-                let index = try H3.latLngToCell(latitude: location.coordinate.latitude,
-                                                longitude: location.coordinate.longitude,
-                                                resolution: 11)
-                let indexString = String(index, radix: 16)
-                
-                // Hand off to the database
-                try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
-                print("Saved hex: \(indexString)")
-            } catch {
-                print("Failed to convert or save hex: \(error)")
+        // Convert to H3 string to avoid blocking the actor
+        do {
+            let index = try H3.latLngToCell(latitude: location.coordinate.latitude,
+                                            longitude: location.coordinate.longitude,
+                                            resolution: 11)
+            let indexString = String(index, radix: 16)
+            
+            // Only hit the database if the hex has changed
+            guard indexString != lastSavedHex else { return }
+            lastSavedHex = indexString
+            
+            Task.detached { [self] in
+                do {
+                    // Hand off to the database
+                    try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
+                    print("Saved hex: \(indexString)")
+                } catch {
+                    print("Failed to save hex: \(error)")
+                }
             }
+        } catch {
+            print("Failed to convert hex: \(error)")
         }
     }
 }
