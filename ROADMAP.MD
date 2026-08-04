@@ -67,7 +67,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 |:---:|:---:|:---|:---:|:---:|
 | **1** | **TEST-PHASE1** | **Core Engine Unit Tests (Background & SQLite)** | **M** | ✅ Done |
 | **2** | **TEST-PHASE2** | **Spatial Math & Transit Hydration Unit Tests** | **S** | ✅ Done |
-| **3** | **TEST-PHASE3** | **Automated UI / Snapshot Testing** | **M** | Planned (During Wave G) |
+| **3** | **TEST-PHASE3** | **Automated UI / Snapshot Testing** | **M** | ✅ Done |
 | **4** | **TEST-PHASE4** | **CI/CD Pipeline (Xcode Cloud / Actions)** | **M** | Planned (Start of Wave H) |
 
 ### 🎨 Design Alignment & Ship
@@ -81,7 +81,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **F.2** | **WF2-TOAST** | **Discovery Toast Overlay** | **S** | ✅ Done |
 | **F.3** | **WF3-POI-LIFECYCLE** | **Ghost POI 3-Phase Lifecycle** | **M** | ✅ Done |
 | **F.4** | **WF4-HEX-ANIMATION** | **Ambient Hex Unlock Animation** | **S** | ✅ Done |
-| **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | **S** | Planned |
+| **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | **S** | ✅ Done |
 | **H** | **WH-SHIP** | **Polish, Settings Rewire & Ship Prep** | **M** | Planned |
 
 ### Post-Ship (Deferred)

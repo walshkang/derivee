@@ -41,6 +41,8 @@ targets:
       - path: DeriveeTests
     dependencies:
       - target: Derivee
+      - package: swift-snapshot-testing
+        product: SnapshotTesting
 
 packages:
   swift-h3:
@@ -55,6 +57,9 @@ packages:
   swift-zstd:
     url: https://github.com/aperedera/SwiftZSTD.git
     from: 1.0.0
+  swift-snapshot-testing:
+    url: https://github.com/pointfreeco/swift-snapshot-testing.git
+    from: 1.15.4
 
 schemes:
   Derivee:

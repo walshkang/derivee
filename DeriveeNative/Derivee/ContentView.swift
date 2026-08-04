@@ -109,19 +109,14 @@ struct ContentView: View {
                         }
                     }
                 }
-                .sheet(isPresented: $showTransitSheet) {
-                    VStack {
-                        Text("Transit Reveal")
-                            .font(.title)
-                            .bold()
-                            .padding()
-                        if let stop = selectedTransitStop {
-                            Text("Stop ID: \(stop)")
-                        }
-                        Spacer()
+                .sheet(isPresented: $showTransitSheet, onDismiss: {
+                    selectedTransitStop = nil
+                }) {
+                    if let stopId = selectedTransitStop {
+                        TransitRevealSheet(stopId: stopId)
+                            .presentationDetents([.medium, .large])
+                            .presentationDragIndicator(.visible)
                     }
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
                 }
                 .sheet(isPresented: $showStatsView) {
                     StatsView()

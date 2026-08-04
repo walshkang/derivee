@@ -1,5 +1,5 @@
 {
-  "originHash" : "a8bdbcec01245b0fd8bac837044f17d6c3ac6f4002d4bc6a825e4b977ca84ae6",
+  "originHash" : "83063c1ff6c5843de46edb145bc3b595e8b10cdc36c08070f7b438d398c76bc7",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -20,6 +20,15 @@
       }
     },
     {
+      "identity" : "swift-custom-dump",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-custom-dump",
+      "state" : {
+        "revision" : "a8cd6c976f335ed361dcecddb0dc39ebda51bc3e",
+        "version" : "1.6.1"
+      }
+    },
+    {
       "identity" : "swift-h3",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/JeremyEspresso/swift-h3",
@@ -29,12 +38,39 @@
       }
     },
     {
+      "identity" : "swift-snapshot-testing",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-snapshot-testing.git",
+      "state" : {
+        "revision" : "59a99c458de4d2dee580529b61b4f78dca7b7fa6",
+        "version" : "1.19.4"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "revision" : "79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1",
+        "version" : "603.0.2"
+      }
+    },
+    {
       "identity" : "swiftzstd",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/aperedera/SwiftZSTD.git",
       "state" : {
         "revision" : "ab63273ff89c6ed2966967b7998038352d00f813",
         "version" : "1.0.1"
+      }
+    },
+    {
+      "identity" : "xctest-dynamic-overlay",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/xctest-dynamic-overlay",
+      "state" : {
+        "revision" : "8f6abcf4c8950e2679d5b2fee4ca284fd7c34886",
+        "version" : "1.11.0"
       }
     }
   ],
