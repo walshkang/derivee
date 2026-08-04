@@ -16,6 +16,7 @@
 		55031B6D0543C31F17B09277 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85968E07BB90EBA8E2B9F0D /* Secrets.swift */; };
 		64957D178FDC5E68FA993DB7 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = DF080F7BA7E8F484792D0F31 /* MapLibre */; };
 		79F5841560521971FD651E75 /* SpatialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5C593BBD5275D900632F1B /* SpatialStore.swift */; };
+		9838261106ACCE6615BCBC25 /* TrackingEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C620FF203F57ED5764A4BF7 /* TrackingEngineTests.swift */; };
 		9E18AE610A3DB924C58DD4DF /* MapFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878744028003B6170BB298EA /* MapFAB.swift */; };
 		A48E67BDED56249F370FA65D /* SwiftZSTD in Frameworks */ = {isa = PBXBuildFile; productRef = DFD08D205B790E222084B47A /* SwiftZSTD */; };
 		A4BED02FF1B808AA720963C9 /* AmbientTrackingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */; };
@@ -27,6 +28,16 @@
 		FE732603E08BAA36426E2DAE /* DiscoveryToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7565F6B0E0AE526D3E3AA4D /* DiscoveryToast.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		05650DA2FD823D1C20FA7CD3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 87112B93271FA6AE514E0617 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 709CC96C5666B5B898FA2F64;
+			remoteInfo = Derivee;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		08C048FE60010DC495C1C7AB /* HydrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HydrationManager.swift; sourceTree = "<group>"; };
 		199B3BD0E20EFB91632E8F30 /* transit_delta.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = transit_delta.sqlite; sourceTree = "<group>"; };
@@ -37,10 +48,12 @@
 		863A532D137F91C7E2021C95 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		86B2FFDED57A84490398B9F8 /* derivee_transit.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = derivee_transit.sqlite; sourceTree = "<group>"; };
 		878744028003B6170BB298EA /* MapFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapFAB.swift; sourceTree = "<group>"; };
+		8C620FF203F57ED5764A4BF7 /* TrackingEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingEngineTests.swift; sourceTree = "<group>"; };
 		919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientTrackingEngine.swift; sourceTree = "<group>"; };
 		AF81045CC27721884C49C776 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeriveeApp.swift; sourceTree = "<group>"; };
 		C1269ACE7C6346A1302459B0 /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
+		C48AF06DA0327D2A4E8DC3D7 /* DeriveeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DeriveeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE5C593BBD5275D900632F1B /* SpatialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialStore.swift; sourceTree = "<group>"; };
 		D7565F6B0E0AE526D3E3AA4D /* DiscoveryToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryToast.swift; sourceTree = "<group>"; };
 		F85968E07BB90EBA8E2B9F0D /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
@@ -65,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				68481505568707C6723D2078 /* Derivee */,
+				A7A8813333787305AAEEB18F /* DeriveeTests */,
 				33F8AC572062E265B16515C1 /* observer */,
 				F8104CB44E5EB895B44F5249 /* Products */,
 			);
@@ -100,10 +114,19 @@
 			path = Derivee;
 			sourceTree = "<group>";
 		};
+		A7A8813333787305AAEEB18F /* DeriveeTests */ = {
+			isa = PBXGroup;
+			children = (
+				8C620FF203F57ED5764A4BF7 /* TrackingEngineTests.swift */,
+			);
+			path = DeriveeTests;
+			sourceTree = "<group>";
+		};
 		F8104CB44E5EB895B44F5249 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				5AFFB73189473060ADA73222 /* Derivee.app */,
+				C48AF06DA0327D2A4E8DC3D7 /* DeriveeTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,6 +134,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		293E1BF99BBA4B121814C212 /* DeriveeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6A3BCDD4203E9D1E418D5DAF /* Build configuration list for PBXNativeTarget "DeriveeTests" */;
+			buildPhases = (
+				3082E366160071397127E5CC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3B9EF3179CE5E259B1D6D07D /* PBXTargetDependency */,
+			);
+			name = DeriveeTests;
+			packageProductDependencies = (
+			);
+			productName = DeriveeTests;
+			productReference = C48AF06DA0327D2A4E8DC3D7 /* DeriveeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		709CC96C5666B5B898FA2F64 /* Derivee */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D996B5BA38D10E53FC3C9DC2 /* Build configuration list for PBXNativeTarget "Derivee" */;
@@ -164,6 +205,7 @@
 			projectRoot = "";
 			targets = (
 				709CC96C5666B5B898FA2F64 /* Derivee */,
+				293E1BF99BBA4B121814C212 /* DeriveeTests */,
 			);
 		};
 /* End PBXProject section */
@@ -200,9 +242,61 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		3082E366160071397127E5CC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9838261106ACCE6615BCBC25 /* TrackingEngineTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		3B9EF3179CE5E259B1D6D07D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 709CC96C5666B5B898FA2F64 /* Derivee */;
+			targetProxy = 05650DA2FD823D1C20FA7CD3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		8D7C3A22BA8326CDBC8DE48F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.derivee.DeriveeTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Derivee.app/Derivee";
+			};
+			name = Release;
+		};
+		944EF5D43ED6072AC5C6E758 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.derivee.DeriveeTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Derivee.app/Derivee";
+			};
+			name = Debug;
+		};
 		A5B4D1156FC3FEC00053A880 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -357,6 +451,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6A3BCDD4203E9D1E418D5DAF /* Build configuration list for PBXNativeTarget "DeriveeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				944EF5D43ED6072AC5C6E758 /* Debug */,
+				8D7C3A22BA8326CDBC8DE48F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		7DCD02703754D94420CFB373 /* Build configuration list for PBXProject "Derivee" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

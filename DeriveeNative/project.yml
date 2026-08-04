@@ -31,6 +31,16 @@ targets:
         product: MapLibre
       - package: swift-zstd
         product: SwiftZSTD
+  DeriveeTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+    sources:
+      - path: DeriveeTests
+    dependencies:
+      - target: Derivee
 
 packages:
   swift-h3:
@@ -45,3 +55,18 @@ packages:
   swift-zstd:
     url: https://github.com/aperedera/SwiftZSTD.git
     from: 1.0.0
+
+schemes:
+  Derivee:
+    build:
+      targets:
+        Derivee: all
+        DeriveeTests: [test]
+    run:
+      config: Debug
+      location:
+        reference: NYC_Walk.gpx
+    test:
+      config: Debug
+      targets:
+        - DeriveeTests

@@ -124,7 +124,7 @@ struct MapView: UIViewRepresentable {
         func loadPOIs() {
             Task {
                 do {
-                    pois = try await SpatialDatabaseManager.shared.dbPool.read { db in
+                    pois = try await SpatialDatabaseManager.shared.dbWriter.read { db in
                         let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon, route_type FROM transit.stops WHERE location_type = 1 OR location_type = 0")
                         return rows.map { row in
                             let routeType = row["route_type"] as? Int ?? 3

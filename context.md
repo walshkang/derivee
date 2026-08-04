@@ -57,6 +57,16 @@ We are currently debugging why the native MapLibre map is not visible. To avoid 
 
 ---
 
+## Testing Rollout
+
+We are adopting a staggered testing strategy to ensure a solid foundation before building further UI:
+* **Phase 1 (Core Engine Tests):** Active and ready for execution.
+* **Phase 2 (Spatial & Data Tests):** MUST be completed **BEFORE** Wave G. Validates the transit data and spatial math that Wave G relies on.
+* **Phase 3 (Automated UI / Snapshot Testing):** To be implemented **DURING** Wave G and **BEFORE** Wave H to catch visual regressions in SwiftUI components.
+* **Phase 4 (CI/CD Pipeline):** To be set up at the **START** of Wave H (Ship Prep).
+
+---
+
 ## Previous Milestones (Archived)
 
 All previous architectures (Expo Managed, Sleepy Hermes) and their corresponding milestones (Waves 1–14.10, A–D) are deprecated. The core ideas (3-Tier Fog, Ghost POIs, Ambient Tracking) remain, but their JavaScript implementations have been entirely replaced by native Swift equivalents. Detailed prompts and supersession notes for these old waves are archived in `archive/shipped-waves-archive.md`.

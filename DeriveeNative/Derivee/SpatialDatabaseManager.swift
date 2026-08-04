@@ -1,12 +1,12 @@
 import Foundation
 import GRDB
 
-final class SpatialDatabaseManager {
+final class SpatialDatabaseManager: @unchecked Sendable {
     static let shared = SpatialDatabaseManager()
     
-    let dbPool: DatabasePool
+    let dbWriter: any DatabaseWriter
     
-    private init() {
+    init(inMemory: Bool = false) {
         do {
             let fileManager = FileManager.default
             let appSupportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
@@ -46,8 +46,12 @@ final class SpatialDatabaseManager {
                 }
             }
             
-            dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
-            try migrator.migrate(dbPool)
+            if inMemory {
+                dbWriter = try DatabaseQueue(configuration: configuration)
+            } else {
+                dbWriter = try DatabasePool(path: databaseURL.path, configuration: configuration)
+            }
+            try migrator.migrate(dbWriter)
         } catch {
             fatalError("Failed to initialize database: \(error)")
         }
@@ -80,7 +84,7 @@ final class SpatialDatabaseManager {
     
     // Asynchronous write
     func insertDiscoveredHex(h3Index: String) async throws {
-        try await dbPool.write { db in
+        try await dbWriter.write { db in
             try db.execute(sql: """
                 INSERT OR IGNORE INTO explored_hexes (h3_index)
                 VALUES (?)
@@ -90,7 +94,7 @@ final class SpatialDatabaseManager {
     
     func isHydrationComplete() -> Bool {
         do {
-            return try dbPool.read { db in
+            return try dbWriter.read { db in
                 let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM meta WHERE key = 'hydration_complete' AND value = '1'") ?? 0
                 return count > 0
             }
@@ -100,20 +104,20 @@ final class SpatialDatabaseManager {
     }
     
     func setHydrationComplete() async throws {
-        try await dbPool.write { db in
+        try await dbWriter.write { db in
             try db.execute(sql: "INSERT OR REPLACE INTO meta (key, value) VALUES ('hydration_complete', '1')")
         }
     }
     
     func loadDiscoveredPOIs() async throws -> Set<String> {
-        return try await dbPool.read { db in
+        return try await dbWriter.read { db in
             let rows = try String.fetchAll(db, sql: "SELECT poi_id FROM discovered_pois")
             return Set(rows)
         }
     }
     
     func insertDiscoveredPOI(_ id: String) async throws {
-        try await dbPool.write { db in
+        try await dbWriter.write { db in
             try db.execute(sql: "INSERT OR IGNORE INTO discovered_pois (poi_id) VALUES (?)", arguments: [id])
         }
     }

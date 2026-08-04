@@ -2,6 +2,34 @@ import Foundation
 import CoreLocation
 import H3
 
+public protocol LocationProvider: Sendable {
+    var updates: AsyncStream<CLLocation> { get }
+}
+
+public struct LiveLocationProvider: LocationProvider {
+    public init() {}
+    public var updates: AsyncStream<CLLocation> {
+        AsyncStream { continuation in
+            let task = Task {
+                do {
+                    let updates = CLLocationUpdate.liveUpdates()
+                    for try await update in updates {
+                        if let loc = update.location {
+                            continuation.yield(loc)
+                        }
+                    }
+                } catch {
+                    print("Live updates failed: \(error)")
+                    continuation.finish()
+                }
+            }
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
+    }
+}
+
 @MainActor
 final class AmbientTrackingEngine: ObservableObject {
     private let locationManager = CLLocationManager()
@@ -17,7 +45,13 @@ final class AmbientTrackingEngine: ObservableObject {
     
     @Published var isTracking = false
     
-    init() {
+    private let locationProvider: any LocationProvider
+    private let databaseManager: SpatialDatabaseManager
+    
+    init(locationProvider: any LocationProvider = LiveLocationProvider(), databaseManager: SpatialDatabaseManager = .shared) {
+        self.locationProvider = locationProvider
+        self.databaseManager = databaseManager
+        
         locationManager.distanceFilter = 10.0
         locationManager.allowsBackgroundLocationUpdates = true
         // Note: pausesLocationUpdatesAutomatically doesn't apply to liveUpdates in iOS 17
@@ -37,16 +71,8 @@ final class AmbientTrackingEngine: ObservableObject {
         isTracking = true
         
         updatesTask = Task {
-            do {
-                let updates = CLLocationUpdate.liveUpdates()
-                
-                for try await update in updates {
-                    guard let location = update.location else { continue }
-                    processLocation(location)
-                }
-            } catch {
-                print("Live updates failed: \(error)")
-                stopTracking()
+            for await location in locationProvider.updates {
+                processLocation(location)
             }
         }
     }
@@ -84,7 +110,7 @@ final class AmbientTrackingEngine: ObservableObject {
         }
         
         // Convert to H3 string asynchronously to avoid blocking the actor
-        Task.detached {
+        Task.detached { [self] in
             do {
                 let index = try H3.latLngToCell(latitude: location.coordinate.latitude,
                                                 longitude: location.coordinate.longitude,
@@ -92,7 +118,7 @@ final class AmbientTrackingEngine: ObservableObject {
                 let indexString = String(index, radix: 16)
                 
                 // Hand off to the database
-                try await SpatialDatabaseManager.shared.insertDiscoveredHex(h3Index: indexString)
+                try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
                 print("Saved hex: \(indexString)")
             } catch {
                 print("Failed to convert or save hex: \(error)")

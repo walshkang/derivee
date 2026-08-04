@@ -11,3 +11,9 @@
 - **SwiftUI Exclusively:** All UI must be built with SwiftUI. No UIKit storyboards or `UIViewController` wrappers unless absolutely necessary for complex MapLibre integrations.
 - **Map Focus:** The map is the UI. Avoid heavy persistent HUDs, tab bars, or manual "Start/Stop Tracking" buttons.
 - **Aesthetics:** Follow the Day/Night cycle guidelines and use native materials (`.ultraThinMaterial`).
+
+## 3. Testing Mandates
+- **Staggered Rollout:** Adhere to the staggered testing rollout defined in `ROADMAP.MD` and `context.md`.
+- **Unit Tests (Phase 1 & 2):** Isolate core logic (H3 math, database hydration, ambient tracking) from the UI.
+- **Snapshot Testing (Phase 3):** Use `swift-snapshot-testing` for SwiftUI views (`StatsView`, `TransitRevealSheet`) to prevent visual regressions during rapid iteration.
+- **CI/CD Enforcement (Phase 4):** All tests must run headlessly (`xcodebuild test`) in CI (GitHub Actions or Xcode Cloud). Pull requests failing tests must be blocked.

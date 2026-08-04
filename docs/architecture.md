@@ -79,3 +79,24 @@ The visual map is rendered using MapLibre Native.
 - Custom vector styles are injected using Data-Driven Styling (DDS).
 - The volumetric fog is rendered as a dark overlay, and unlocked hexes are applied via a `fill-opacity` match expression against the `explored_hexes` dataset.
 - Because GRDB feeds the UI reactively via `SpatialStore`, MapLibre re-renders the fog layer immediately upon a new background hex discovery without requiring an app restart or manual refresh.
+
+---
+
+## 6. Testing Architecture
+
+Testing in Dérivée follows a staggered, specialized approach to ensure stability across both background execution and UI rendering.
+
+### 6.1 Unit Testing (Phases 1 & 2)
+The core engine and raw data components must be tested independently from the UI and background lifecycle.
+- **XCTest** is utilized to test the `AmbientTrackingEngine`, `SpatialDatabaseManager`, and background logic.
+- **H3 Math & Transit Data:** Dedicated tests isolate spatial hashing math (`swift-h3`) and `transit_delta.sqlite` hydration to ensure data integrity.
+
+### 6.2 Snapshot Testing (Phase 3)
+Because Dérivée relies heavily on rich, custom SwiftUI visual elements (like the MapLibre overlays, `ultraThinMaterial` backgrounds, and the Transit Reveal bottom sheet):
+- **swift-snapshot-testing** (Point-Free) is used to capture pixel-perfect snapshots of SwiftUI views loaded with mocked `@Observable` data.
+- This prevents visual regressions from going unnoticed during rapid AI/agent-driven iterations.
+
+### 6.3 CI/CD Enforcement (Phase 4)
+Because the native Xcode project is generated immutably via `xcodegen`:
+- **Headless Testing:** All unit and snapshot tests run via `xcodebuild test` on GitHub Actions or Xcode Cloud.
+- **Fast Deployment:** PRs must pass all tests to merge, enabling a safe and automated pipeline straight to TestFlight.

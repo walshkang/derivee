@@ -21,7 +21,10 @@ final class SpatialStore: @unchecked Sendable {
     private var previousCount: Int = 0
     private var previousHexes: Set<String> = []
     
+    private let dbManager: SpatialDatabaseManager
+    
     init(dbManager: SpatialDatabaseManager = .shared) {
+        self.dbManager = dbManager
         startObservation(dbManager: dbManager)
         
         Task {
@@ -43,7 +46,7 @@ final class SpatialStore: @unchecked Sendable {
         }
         
         observationTask = observation.start(
-            in: dbManager.dbPool,
+            in: dbManager.dbWriter,
             onError: { error in
                 print("SpatialStore Observation error: \(error)")
             },
@@ -148,7 +151,7 @@ final class SpatialStore: @unchecked Sendable {
     func insertHex(_ h3Index: String) {
         Task {
             do {
-                try await SpatialDatabaseManager.shared.insertDiscoveredHex(h3Index: h3Index)
+                try await self.dbManager.insertDiscoveredHex(h3Index: h3Index)
             } catch {
                 print("Failed to insert hex \(h3Index): \(error)")
             }
@@ -163,7 +166,7 @@ final class SpatialStore: @unchecked Sendable {
         
         Task {
             do {
-                try await SpatialDatabaseManager.shared.insertDiscoveredPOI(id)
+                try await self.dbManager.insertDiscoveredPOI(id)
             } catch {
                 print("Failed to save discovered POI \(id): \(error)")
             }
