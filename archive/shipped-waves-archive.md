@@ -144,3 +144,32 @@ Implement Dynamic Island and Live Activity support using `ActivityKit` to displa
 * Dynamic Island shows the compact tracking indicator when the app is backgrounded.
 * Unlocking a new hex dynamically updates the hex count on the Dynamic Island and Lock Screen without requiring the app to be foregrounded.
 * Stopping tracking smoothly ends the Live Activity.
+
+## Wave H.1 — Stats UI: Neighborhood Map Panning [Completed]
+
+**Task ID:** `WH.1-PANNING`
+**Depends on:** Wave H (Stats and Profile Rewire).
+
+### Goal
+Fulfill the design requirement from `docs/design.md` Section 3: "Tapping a neighborhood pans the background map (Screen 1) to that neighborhood's centroid coordinates."
+
+### Agent Directives
+
+1. **Database Schema Fetch:**
+   * Update the `NeighborhoodProgress` struct in `SpatialDatabaseManager` to include `centroidLat` and `centroidLng`.
+   * Modify `fetchNeighborhoodProgression()` to `SELECT ns.centroid_lat, ns.centroid_lng` from the existing `neighborhood.neighborhood_stats` table.
+
+2. **State Management:**
+   * Add a mechanism to trigger map panning (e.g., passing a binding or environmental state that tracks a target coordinate to `MapView`).
+   * Upon receiving a coordinate, the `MapView.Coordinator` should trigger `mapView.setCenter(coord, zoomLevel: 14.5, animated: true)` and temporarily turn off ambient follow mode.
+
+3. **UI Interaction:**
+   * Wrap the neighborhood rows in `StatsView.swift` with a `Button` or `.onTapGesture`.
+   * On tap: set the target coordinate, update the `isCentered` state to false, and dismiss the `StatsView` sheet.
+
+### Verification
+* Tapping a neighborhood in the leaderboard correctly updates the map's center.
+* The transition back to the map is smooth and frame-perfect.
+* Panning the map does not disrupt ambient background tracking.
+
+---

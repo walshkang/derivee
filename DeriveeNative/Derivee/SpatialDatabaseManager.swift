@@ -179,6 +179,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         let name: String
         let clearedHexes: Int
         let totalHexes: Int
+        let centroidLat: Double
+        let centroidLng: Double
         
         var percentage: Double {
             guard totalHexes > 0 else { return 0 }
@@ -193,11 +195,13 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 ns.id, 
                 ns.name, 
                 ns.total_hexes, 
+                ns.centroid_lat,
+                ns.centroid_lng,
                 COUNT(eh.h3_index) as cleared_hexes
             FROM neighborhood.neighborhood_stats ns
             LEFT JOIN neighborhood.neighborhood_hexes nh ON ns.id = nh.neighborhood_id
             LEFT JOIN explored_hexes eh ON nh.h3_index = eh.h3_index
-            GROUP BY ns.id, ns.name, ns.total_hexes
+            GROUP BY ns.id, ns.name, ns.total_hexes, ns.centroid_lat, ns.centroid_lng
             ORDER BY cleared_hexes * 1.0 / ns.total_hexes DESC, ns.name ASC
             """
             
@@ -207,7 +211,9 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     id: row["id"],
                     name: row["name"],
                     clearedHexes: row["cleared_hexes"],
-                    totalHexes: row["total_hexes"]
+                    totalHexes: row["total_hexes"],
+                    centroidLat: row["centroid_lat"],
+                    centroidLng: row["centroid_lng"]
                 )
             }
         }

@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 struct ContentView: View {
     @State private var isHydrationComplete = false
@@ -11,6 +12,7 @@ struct ContentView: View {
     @State private var recenterTrigger = false
     @State private var showStatsView = false
     @State private var userScreenPosition: CGPoint? = nil
+    @State private var targetCoordinate: CLLocationCoordinate2D? = nil
     
     @State private var glowScale: CGFloat = 1.0
     @State private var glowOpacity: Double = 0.0
@@ -35,6 +37,7 @@ struct ContentView: View {
                             isCentered: $isMapCentered,
                             recenterTrigger: $recenterTrigger,
                             userScreenPosition: $userScreenPosition,
+                            targetCoordinate: $targetCoordinate,
                             transientHexShape: spatialStore.transientHexShape)
                         .ignoresSafeArea()
                     
@@ -121,7 +124,7 @@ struct ContentView: View {
                     }
                 }
                 .sheet(isPresented: $showStatsView) {
-                    StatsView(trackingEngine: trackingEngine, spatialStore: spatialStore)
+                    StatsView(trackingEngine: trackingEngine, spatialStore: spatialStore, targetCoordinate: $targetCoordinate)
                 }
                 .onOpenURL { url in
                     guard url.scheme == "derivee" && url.host == "progress" else { return }

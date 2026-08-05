@@ -13,6 +13,7 @@ struct MapView: UIViewRepresentable {
     @Binding var isCentered: Bool
     @Binding var recenterTrigger: Bool
     @Binding var userScreenPosition: CGPoint?
+    @Binding var targetCoordinate: CLLocationCoordinate2D?
     var transientHexShape: MLNShape?
     
     // MapTiler Streets URL
@@ -48,6 +49,13 @@ struct MapView: UIViewRepresentable {
         context.coordinator.updateExploredHexes(in: uiView, with: fogShape)
         context.coordinator.updateTransientHex(shape: transientHexShape, in: uiView)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
+        
+        if let target = targetCoordinate {
+            uiView.setCenter(target, zoomLevel: 14.5, animated: true)
+            DispatchQueue.main.async {
+                self.targetCoordinate = nil
+            }
+        }
         
         if context.coordinator.lastRecenterTrigger != recenterTrigger {
             context.coordinator.lastRecenterTrigger = recenterTrigger

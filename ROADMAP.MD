@@ -83,6 +83,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **F.4** | **WF4-HEX-ANIMATION** | **Ambient Hex Unlock Animation** | **S** | ✅ Done |
 | **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | **S** | ✅ Done |
 | **H** | **WH-SHIP** | **Polish, Stats and Profile Rewire & Ship Prep** | **M** | ✅ Done |
+| **H.1** | **WH.1-PANNING** | **Stats UI: Neighborhood Map Panning** | **S** | ✅ Done |
 
 ### Post-Ship (Deferred)
 
@@ -322,6 +323,8 @@ Final integration pass. Rewire the Stats and Profile settings to use Nitro-backe
 * Native Xcode build compiles and runs on a physical device.
 
 ---
+
+
 
 ## Testing Strategy & Rollout
 

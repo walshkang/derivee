@@ -9,6 +9,8 @@ struct StatsView: View {
     @ObservedObject var trackingEngine: AmbientTrackingEngine
     var spatialStore: SpatialStore
     
+    @Binding var targetCoordinate: CLLocationCoordinate2D?
+    
     @State private var neighborhoods: [SpatialDatabaseManager.NeighborhoodProgress] = []
     @State private var isImporting = false
     @State private var importProgress: Double = 0.0
@@ -37,29 +39,65 @@ struct StatsView: View {
                     .frame(maxHeight: .infinity)
                 } else {
                     List {
+                        let totalCleared = neighborhoods.reduce(0) { $0 + $1.clearedHexes }
+                        let totalOverall = neighborhoods.reduce(0) { $0 + $1.totalHexes }
+                        let overallPercentage = totalOverall > 0 ? (Double(totalCleared) / Double(totalOverall)) * 100.0 : 0.0
+                        
+                        Section(header: Text("Macro Metrics")) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("City Explored")
+                                        .font(.headline)
+                                    Spacer()
+                                    Text("\(String(format: "%.1f", overallPercentage))%")
+                                        .font(.system(.headline, design: .monospaced))
+                                        .bold()
+                                }
+                                ProgressView(value: overallPercentage, total: 100)
+                                    .tint(colorScheme == .dark ? .white : .black)
+                                
+                                HStack {
+                                    Text("Total Hexes Unlocked")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(totalCleared)")
+                                        .font(.system(.subheadline, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 8)
+                        }
+                        
                         Section(header: Text("Neighborhood Progression")) {
                             ForEach(neighborhoods) { nbhd in
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(nbhd.name)
-                                            .font(.headline)
+                                Button(action: {
+                                    targetCoordinate = CLLocationCoordinate2D(latitude: nbhd.centroidLat, longitude: nbhd.centroidLng)
+                                    dismiss()
+                                }) {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(nbhd.name)
+                                                .font(.headline)
+                                            
+                                            ProgressView(value: nbhd.percentage, total: 100)
+                                                .tint(colorScheme == .dark ? .white : .black)
+                                        }
                                         
-                                        ProgressView(value: nbhd.percentage, total: 100)
-                                            .tint(colorScheme == .dark ? .white : .black)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    VStack(alignment: .trailing) {
-                                        Text("\(String(format: "%.1f", nbhd.percentage))%")
-                                            .font(.subheadline)
-                                            .fontWeight(.bold)
+                                        Spacer()
                                         
-                                        Text("\(nbhd.clearedHexes) / \(nbhd.totalHexes)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                        VStack(alignment: .trailing) {
+                                            Text("\(String(format: "%.1f", nbhd.percentage))%")
+                                                .font(.system(.subheadline, design: .monospaced))
+                                                .fontWeight(.bold)
+                                            
+                                            Text("\(nbhd.clearedHexes) / \(nbhd.totalHexes)")
+                                                .font(.system(.caption, design: .monospaced))
+                                                .foregroundColor(.secondary)
+                                        }
                                     }
                                 }
+                                .buttonStyle(.plain)
                                 .padding(.vertical, 4)
                             }
                         }
@@ -95,7 +133,7 @@ struct StatsView: View {
                 .padding()
                 .background(Color(UIColor.systemGroupedBackground))
             }
-            .navigationTitle("The Archive")
+            .navigationTitle("Exploration Stats")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
