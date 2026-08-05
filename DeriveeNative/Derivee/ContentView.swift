@@ -123,6 +123,18 @@ struct ContentView: View {
                 .sheet(isPresented: $showStatsView) {
                     StatsView(trackingEngine: trackingEngine, spatialStore: spatialStore)
                 }
+                .onOpenURL { url in
+                    guard url.scheme == "derivee" && url.host == "progress" else { return }
+                    
+                    // If the app was already actively running in the foreground, present the Stats sheet.
+                    // If it was tapped from the background/lock screen, the state will be .inactive or .background,
+                    // so we do nothing and let it default to the Map View (Screen 1).
+                    if UIApplication.shared.applicationState == .active {
+                        showStatsView = true
+                    } else {
+                        showStatsView = false
+                    }
+                }
             }
         }
     }

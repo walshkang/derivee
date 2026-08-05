@@ -40,7 +40,7 @@ This document is the single source of truth for all planned development waves.
 | 13 | W13-FOG-STYLE | MapLibre Dual-Layer & Temporal Interpolation | ✅ Archived |
 | 13 | W13-AMBIENT-TRACKING | Ambient Tracking & Start Button Removal | ✅ Archived |
 | 14 | W14-DATA-NEIGHBORHOODS | Neighborhood Denominators & Water Subtraction | ✅ Archived |
-| 14 | W14-UI-STATS | Progression Stats UI: Contextual Pill & Archive Screen | ✅ Archived |
+| 14 | W14-UI-STATS | Progression Stats UI: Contextual Pill & Stats and Profile Screen | ✅ Archived |
 | 14.5 | W14.5-BACKGROUND | Local Expo Module for iOS Background Assertions | 🔄 Superseded → Wave C |
 | 14.5 | W14.5-DB-MIGRATE | SQLite geojson_cache & Splash Screen Gate | ✅ Archived |
 | 14.5 | W14.5-STORE | AppState Delta-Buffer & Zustand Refactor | 🔄 Superseded → Wave D |
@@ -82,7 +82,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **F.3** | **WF3-POI-LIFECYCLE** | **Ghost POI 3-Phase Lifecycle** | **M** | ✅ Done |
 | **F.4** | **WF4-HEX-ANIMATION** | **Ambient Hex Unlock Animation** | **S** | ✅ Done |
 | **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | **S** | ✅ Done |
-| **H** | **WH-SHIP** | **Polish, Settings Rewire & Ship Prep** | **M** | ✅ Done |
+| **H** | **WH-SHIP** | **Polish, Stats and Profile Rewire & Ship Prep** | **M** | ✅ Done |
 
 ### Post-Ship (Deferred)
 
@@ -271,17 +271,17 @@ Enhance the existing Transit Bottom Sheet (`src/components/TransitBottomSheet.ts
 
 ---
 
-## Wave H — Polish, Settings Rewire & Ship Prep [Planned]
+## Wave H — Polish, Stats and Profile Rewire & Ship Prep [Planned]
 
 **Task ID:** `WH-SHIP`
 **Depends on:** Waves E, F, G all complete.
 
 ### Goal
-Final integration pass. Rewire the Settings screen to use Nitro-backed tracking controls, implement the GPX reveal animation, perform end-to-end testing on a physical device, and prepare App Store metadata.
+Final integration pass. Rewire the Stats and Profile settings to use Nitro-backed tracking controls, implement the GPX reveal animation, perform end-to-end testing on a physical device, and prepare App Store metadata.
 
 ### Agent Directives
 
-1. **Settings screen rewire (`app/settings.tsx`):**
+1. **Stats and Profile integration (`app/stats.tsx`):**
    * Replace all `expo-location` permission toggles with Nitro `startTracking()` / `stopTracking()` calls via `src/native/trackingBridge.ts`.
    * Show the current background location permission state (authorized/denied/undetermined).
    * **"Clear Local Cache":** Purge cached tiles and transit data files. Delete `hydration_complete` from `meta` table so the Onboarding Gate re-triggers on next launch.
@@ -297,7 +297,7 @@ Final integration pass. Rewire the Settings screen to use Nitro-backed tracking 
      * Must run at 60fps on the UI thread. The heavy bridge recalculation (parsing, deduping, bulk inserts) completes **before** the animation begins.
 
 3. **End-to-end integration test (physical device):**
-   * Full flow: Onboarding Gate → ambient walk → hex unlock → Ghost POI tap → Transit Reveal sheet with route line → Archive stats → GPX upload with reveal animation → Settings reset.
+   * Full flow: Onboarding Gate → ambient walk → hex unlock → Ghost POI tap → Transit Reveal sheet with route line → Stats and Profile → GPX upload with reveal animation → Exploration Data reset.
    * Verify on a physical iPhone (per AGENTS.MD §5 — never trust Simulator for MapLibre performance).
 
 4. **Performance profiling:**
@@ -313,7 +313,7 @@ Final integration pass. Rewire the Settings screen to use Nitro-backed tracking 
    * Verify the native Xcode build compiles successfully via `xcodebuild` or the Xcode GUI.
 
 ### Verification
-* Settings toggles correctly control Nitro `startTracking()` / `stopTracking()`.
+* Stats and Profile toggles correctly control Nitro `startTracking()` / `stopTracking()`.
 * Data reset clears all hexes and re-renders full fog.
 * Cache clear re-triggers the Onboarding Gate on next launch.
 * GPX reveal animation plays at 60fps with a satisfying radial dissolve.

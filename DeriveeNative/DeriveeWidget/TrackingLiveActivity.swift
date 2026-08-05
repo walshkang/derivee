@@ -70,6 +70,7 @@ struct TrackingLiveActivity: Widget {
                     .foregroundColor(.white)
             }
             .keylineTint(Color.white)
+            .widgetURL(URL(string: "derivee://progress"))
         }
     }
 }

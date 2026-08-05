@@ -41,7 +41,7 @@ We are currently debugging why the native MapLibre map is not visible. To avoid 
 
 **Phase 3: POI Layer & Database Binding**
 *   **Root Cause Identified:** POIs rely on precise coordinate math and layer ordering above the fog mask.
-*   **Action:** Verify POIs are rendering and responding to distance changes (Lure, Active, Archive phases) as the simulated location updates.
+*   **Action:** Verify POIs are rendering and responding to distance changes (Lure, Active, Explored phases) as the simulated location updates.
 
 ---
 
@@ -53,7 +53,7 @@ We are currently debugging why the native MapLibre map is not visible. To avoid 
 | **E** | **WE-ONBOARDING** | **Onboarding Gate & First-Launch Infrastructure** | ✅ Done |
 | **F** | **WF-MAP-OVERHAUL** | **Map UI Overhaul & Ghost POI Lifecycle** | Planned |
 | **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | Planned |
-| **H** | **WH-SHIP** | **Polish, Settings Rewire & Ship Prep** | Planned |
+| **H** | **WH-SHIP** | **Polish, Stats and Profile Rewire & Ship Prep** | Planned |
 
 ---
 

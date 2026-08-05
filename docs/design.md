@@ -92,7 +92,7 @@ The MapLibre layer stack **must** follow this exact Z-index order. See [architec
 
 ## 3. App Screen Hierarchy & Flows
 
-The app has exactly **five** screens. If a screen is not enumerated below, the agent **must not** build it.
+The app has exactly **four** screens. If a screen is not enumerated below, the agent **must not** build it.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -111,11 +111,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 │  └────────────────────────────────────────┼───────────┘  │
 │                                           │              │
 │  ┌────────────────────────────────────────▼───────────┐  │
-│  │  Screen 3: Exploration Stats  (Stats & GPX Upload)  │  │
-│  └────────────────────────────────────────────────────┘  │
-│                                                          │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │  Screen 4: Settings  (permissions & data reset)    │  │
+│  │  Screen 3: Stats and Profile                       │  │
 │  └────────────────────────────────────────────────────┘  │
 │                                                          │
 │  Screen 2: Transit Reveal  (bottom sheet overlay)        │
@@ -162,7 +158,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 * **Ghost POI Nodes:** Transit beacons visible **only** within the 200m Active Vicinity Bubble. Rendered as unbranded, glowing geometric nodes (dots, diamonds) — never as traditional teardrop map pins or icons with text labels.
 * **Floating Action Buttons (FABs):** Two minimalist, translucent circular buttons floating over the map:
   * **Recenter FAB** (bottom-right): Re-centers the camera on the user's current GPS position with a smooth 300ms ease animation.
-  * **Profile FAB** (top-right): Navigates to Screen 3 (Exploration Stats). Styled with `UltraThinMaterial` blur and a subtle shadow.
+  * **Profile FAB** (top-right): Navigates to Screen 3 (Stats and Profile). Styled with `UltraThinMaterial` blur and a subtle shadow.
 
 **Ambient Tracking:** Tracking begins silently and automatically via the native Swift `AmbientTrackingEngine` the moment Screen 1 mounts. There is **no** manual "Start/Stop Tracking" button. The app is always tracking.
 
@@ -216,9 +212,9 @@ When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top*
 
 ---
 
-### Screen 3: Exploration Stats (Stats & GPX Upload)
+### Screen 3: Stats and Profile
 
-**Trigger:** User taps the Profile FAB on the Ambient Map. Navigates to the Exploration Stats screen.
+**Trigger:** User taps the Profile FAB on the Ambient Map. Navigates to the Stats and Profile screen.
 
 **UI Elements:**
 A clean, native list view using SwiftUI `List` or `LazyVStack` for guaranteed 120fps scrolling.
@@ -240,6 +236,12 @@ A clean, native list view using SwiftUI `List` or `LazyVStack` for guaranteed 12
   * Processing: Native `XMLParser` (GPX) or lightweight FIT decoder. Parsing is chunked to prevent UI freezing, coordinate arrays downsampled (>10m deltas), and deduped hexes saved via bulk SQLite inserts.
   * On successful processing, the fog state on Screen 1 updates immediately.
 
+* **Settings & Data Management (Bottom Section):**
+  * **Background Location Toggle:** Controls the native `AmbientTrackingEngine` directly. Shows the current permission state.
+  * **Push Notification Toggle:** Standard notification permission control.
+  * "Clear Local Cache" — purges cached tiles and transit data (re-triggers Onboarding Gate on next launch).
+  * "Reset Exploration Data" — destructive action with a confirmation dialog. Drops all unlocked hexes from SQLite and resets the in-memory state.
+
 **Thread Yielding Rule:** The SwiftUI `List` should render smoothly. Complex data processing must occur off the main thread (`Task.detached`) before updating the `@Observable` store, preventing frame drops.
 
 **Definition of Done:**
@@ -249,28 +251,10 @@ A clean, native list view using SwiftUI `List` or `LazyVStack` for guaranteed 12
 - [ ] Tapping a neighborhood pans Screen 1's map camera to that neighborhood.
 - [ ] GPX/FIT upload processes chunked, does not freeze the UI.
 - [ ] Upload results correctly update the fog state on Screen 1.
-- [ ] Uses native iOS list styling — clean typography, simple progress bars. No heavy custom charts.
-
----
-
-### Screen 4: Settings
-
-**Trigger:** Accessible from Screen 3 (Archive) via a gear icon or list item.
-
-**UI Elements:**
-A standard native grouped list of toggles and actions.
-
-* **Background Location Toggle:** Controls the native `AmbientTrackingEngine` directly. Shows the current permission state.
-* **Push Notification Toggle:** Standard notification permission control.
-* **Data Management:**
-  * "Clear Local Cache" — purges cached tiles and transit data (re-triggers Onboarding Gate on next launch).
-  * "Reset Exploration Data" — destructive action with a confirmation dialog. Drops all unlocked hexes from SQLite and resets the in-memory state.
-
-**Definition of Done:**
-- [ ] Background Location toggle correctly invokes tracking state changes on the `AmbientTrackingEngine`.
+- [ ] Settings toggles (Background Location, Push Notifications) correctly invoke native handlers.
 - [ ] Destructive "Reset" action requires explicit user confirmation before executing.
 - [ ] Clearing cache correctly re-triggers the Onboarding Gate flow.
-- [ ] All toggles use native SwiftUI components.
+- [ ] Uses native iOS list styling — clean typography, simple progress bars. No heavy custom charts.
 
 ---
 
@@ -291,7 +275,7 @@ Ghost POIs are the primary discovery mechanic. They follow a strict 3-phase life
 * **Interaction:** Tappable. Triggers the Transit Reveal bottom sheet (Screen 2).
 * **Discovery Modal:** On first encounter with a previously unseen POI, a lightweight toast notification slides in from the top with contextual data (station name, fun fact). Auto-dismisses after 3 seconds.
 
-### Phase 3 — The Archive (Explored Territory)
+### Phase 3 — Explored Territory
 
 * **Visibility:** Once the user leaves the Active Vicinity, the node **fades to near-invisibility**. It does **not** render as a permanent, traditional map pin.
 * **Constraint (from AGENTS.MD):** Ghost POIs in Explored (non-Active) hexes must be **completely invisible at zoom levels ≤ 16**. At zoom 17+, they may render as ultra-faint, desaturated geometric marks (opacity ≤ 0.15) to preserve the clean, fog-dominant aesthetic.
@@ -348,7 +332,10 @@ Progression stats must eventually be accessible **outside** the app while the us
 
 * **Delivery:** A native Swift module pushes exploration progress to the iOS Dynamic Island and Lock Screen Live Activities (e.g., "5 hexes unlocked this walk").
 * **Update Frequency:** Batched — update the Live Activity only when a new hex cluster (≥ 3 hexes) is unlocked, not on every individual hex. This prevents excessive UI refreshes.
-* **Scope:** This is explicitly deferred to **Wave 15** (see [ROADMAP.MD](file:///Volumes/T7ssd/derivee/ROADMAP.MD)). Agents **must not** implement this until Wave 15 is active.
+* **Contextual Routing (Deep Linking):** Tapping the Dynamic Island or Live Activity passes a deep link (`derivee://progress`) to the app. The routing behavior depends on the context:
+  * **Background Tap:** If the app transitions from the background to the foreground, the app defaults to the Ambient Map (Screen 1) to restore spatial context.
+  * **Foreground Tap:** If the user taps the Dynamic Island while the app is actively running on-screen, the app presents the Stats and Profile sheet (Screen 3) as a context-aware shortcut.
+* **Scope:** This is explicitly deferred to **Wave 15** (see [ROADMAP.MD](file:///Volumes/T7ssd/derivee/ROADMAP.MD)). Agents **must not** implement this until Wave 15 is active, though deep link foundations are permitted.
 
 ---
 
@@ -367,13 +354,13 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 | G7 | **Thread Yielding for Lists:** Complex lists (Neighborhood Stats, Session History) must process data in background tasks before binding to `@Observable` UI. | Prevents frame drops during screen transitions. |
 | G8 | **No Serif Fonts:** Strictly modern geometric sans-serif (SF Pro / Inter). | Design system consistency. |
 | G9 | **Dynamic Day/Night Cycle:** Interface automatically shifts between Day Mode ("Clear Morning" — parchment whites, graphite fog) and Night Mode ("Midnight Grid" — midnight slate, OLED black fog) based on local First Light / Last Light. **Electric Amber (`#FFB300`)** is the universal accent color across both modes. | Brand identity: Dérivée calculates the rate of change of your presence across the city — the environment shifts with you. |
-| G10 | **Screen Enumeration is Exhaustive:** Screens 0–4 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. | Prevents scope creep and hallucinated features. |
+| G10 | **Screen Enumeration is Exhaustive:** Screens 0–3 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. | Prevents scope creep and hallucinated features. |
 
 ---
 
 ## 8. The "Backend" (Data Layer) — Progression Stats
 
-To support exploration percentages in Screen 3 (Exploration Stats) and any future contextual displays, the local database must maintain:
+To support exploration percentages in Screen 3 (Stats and Profile) and any future contextual displays, the local database must maintain:
 
 ### 8.1 The Denominator Problem
 
