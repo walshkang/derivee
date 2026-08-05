@@ -84,6 +84,12 @@ struct SettingsView: View {
                     Text("This will permanently delete all your explored hexes and discovered transit stops. The fog will return entirely.")
                 }
             }
+            
+            Section(header: Text("About")) {
+                NavigationLink(destination: PhilosophyView()) {
+                    Text("The Philosophy")
+                }
+            }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
