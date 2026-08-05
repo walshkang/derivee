@@ -15,35 +15,33 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             let neighborhoodDBURL = appSupportURL.appendingPathComponent("derivee_neighborhood.sqlite")
             
             if customTransitURL == nil {
-                if let bundleURL = Bundle.main.url(forResource: "transit_delta", withExtension: "sqlite") ?? Bundle.main.url(forResource: "derivee_transit", withExtension: "sqlite") {
-                    print("Found transit DB in bundle at \(bundleURL)")
-                    do {
-                        if fileManager.fileExists(atPath: transitDBURL.path) {
-                            try fileManager.removeItem(at: transitDBURL)
+                if !fileManager.fileExists(atPath: transitDBURL.path) {
+                    if let bundleURL = Bundle.main.url(forResource: "transit_delta", withExtension: "sqlite") ?? Bundle.main.url(forResource: "derivee_transit", withExtension: "sqlite") {
+                        print("Found transit DB in bundle at \(bundleURL)")
+                        do {
+                            try fileManager.copyItem(at: bundleURL, to: transitDBURL)
+                            print("Successfully copied transit DB to \(transitDBURL)")
+                        } catch {
+                            print("⚠️ Failed to copy transit DB: \(error)")
                         }
-                        try fileManager.copyItem(at: bundleURL, to: transitDBURL)
-                        print("Successfully copied transit DB to \(transitDBURL)")
-                    } catch {
-                        print("⚠️ Failed to copy transit DB: \(error)")
+                    } else {
+                        print("⚠️ Could not find transit_delta.sqlite in main bundle")
                     }
-                } else {
-                    print("⚠️ Could not find transit_delta.sqlite in main bundle")
                 }
             }
             
-            if let nbhdURL = Bundle.main.url(forResource: "neighborhood", withExtension: "sqlite") {
-                print("Found neighborhood DB in bundle at \(nbhdURL)")
-                do {
-                    if fileManager.fileExists(atPath: neighborhoodDBURL.path) {
-                        try fileManager.removeItem(at: neighborhoodDBURL)
+            if !fileManager.fileExists(atPath: neighborhoodDBURL.path) {
+                if let nbhdURL = Bundle.main.url(forResource: "neighborhood", withExtension: "sqlite") {
+                    print("Found neighborhood DB in bundle at \(nbhdURL)")
+                    do {
+                        try fileManager.copyItem(at: nbhdURL, to: neighborhoodDBURL)
+                        print("Successfully copied neighborhood DB to \(neighborhoodDBURL)")
+                    } catch {
+                        print("⚠️ Failed to copy neighborhood DB: \(error)")
                     }
-                    try fileManager.copyItem(at: nbhdURL, to: neighborhoodDBURL)
-                    print("Successfully copied neighborhood DB to \(neighborhoodDBURL)")
-                } catch {
-                    print("⚠️ Failed to copy neighborhood DB: \(error)")
+                } else {
+                    print("⚠️ Could not find neighborhood.sqlite in main bundle")
                 }
-            } else {
-                print("⚠️ Could not find neighborhood.sqlite in main bundle")
             }
             
             var configuration = Configuration()

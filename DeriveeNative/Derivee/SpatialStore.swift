@@ -97,7 +97,7 @@ final class SpatialStore: @unchecked Sendable {
                     let boundary = try H3.cellToBoundary(cell: cell)
                     var coords = boundary.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
                     
-                    // Force CCW winding order for MapLibre interior rings (holes)
+                    // Force CW winding order for MapLibre interior rings (holes)
                     coords.reverse()
                     
                     if coords.count > 0, let first = coords.first {

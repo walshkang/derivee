@@ -159,13 +159,8 @@ struct StatsView: View {
                 do {
                     guard let selectedFile = try result.get().first else { return }
                     
-                    // Gain access to the security-scoped resource if needed
-                    if selectedFile.startAccessingSecurityScopedResource() {
-                        importGPX(from: selectedFile)
-                        selectedFile.stopAccessingSecurityScopedResource()
-                    } else {
-                        importGPX(from: selectedFile)
-                    }
+                    let isSecurityScoped = selectedFile.startAccessingSecurityScopedResource()
+                    importGPX(from: selectedFile, isSecurityScoped: isSecurityScoped)
                 } catch {
                     print("Error selecting file: \(error)")
                 }
@@ -186,11 +181,16 @@ struct StatsView: View {
         }
     }
     
-    private func importGPX(from url: URL) {
+    private func importGPX(from url: URL, isSecurityScoped: Bool = false) {
         isImporting = true
         importProgress = 0.0
         
         Task.detached(priority: .userInitiated) {
+            defer {
+                if isSecurityScoped {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
             do {
                 let parser = GPXParser()
                 let coordinates = try parser.parse(url: url)

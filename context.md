@@ -1,8 +1,8 @@
 # Project Context
 
-## Current Status: 🚧 Design Alignment & Ship (Waves F–H)
+## Current Status: ✅ Design Alignment & Native Foundation Complete (Waves E–H.1, W15)
 
-**The project is now a 100% pure native iOS app written in Swift.** We have successfully completed the migration away from React Native / Expo (including the abandoned "Sleepy Hermes" hybrid architecture). The focus is now on implementing the final UI/UX polish according to `docs/design.md` and preparing for App Store submission.
+**The project is a 100% pure native iOS app written in Swift.** We have successfully completed the migration away from React Native / Expo. Waves E through H.1 and W15 Dynamic Island support are fully implemented and verified with unit/snapshot tests.
 
 ### What Changed
 
@@ -20,28 +20,8 @@ The app is now fully native:
 | --- | --- |
 | `docs/design.md` | Single source of truth for the native UI blueprint and interaction patterns |
 | `AGENTS.md` | AI guardrails: pure native Swift mandates, xcodegen requirements, and UI guidelines |
-| `ROADMAP.MD` | Master status for current waves (F–H) and shipped history |
+| `ROADMAP.MD` | Master status for current waves and shipped history |
 | `archive/shipped-waves-archive.md` | Preserved history of the old Expo / React Native waves |
-
----
-
-## 🔨 Immediate Next Step
-
-**Wave F Debugging: Systematic Map Restoration**
-
-We are currently debugging why the native MapLibre map is not visible. To avoid haphazard changes, we are executing a systematic 3-phase debugging plan:
-
-**Phase 1: Base Map & Network Isolation**
-*   **Root Cause Identified:** `Secrets.swift` uses a placeholder `"YOUR_MAPTILER_KEY"`. MapLibre's style fetch fails with network errors (401/403), which prevents `mapView(_:didFinishLoading:)` from firing. Since our custom layers (fog, POIs) are injected *after* the style loads, a failed style fetch means absolutely nothing renders.
-*   **Action:** Provide a valid MapTiler key (or swap to a public debug style temporarily) to confirm base satellite tiles load successfully.
-
-**Phase 2: Fog Mask Validation**
-*   **Root Cause Identified:** The fog mask covers the entire map with high opacity. If the geometry for the holes (explored hexes) is malformed or delayed, the mask will blanket the screen opaquely.
-*   **Action:** Once the base map loads, temporarily lower fog opacity to 0.5. Verify `spatialStore.currentFogShape` successfully applies interior rings to cut holes in the fog layer. 
-
-**Phase 3: POI Layer & Database Binding**
-*   **Root Cause Identified:** POIs rely on precise coordinate math and layer ordering above the fog mask.
-*   **Action:** Verify POIs are rendering and responding to distance changes (Lure, Active, Explored phases) as the simulated location updates.
 
 ---
 
@@ -51,19 +31,21 @@ We are currently debugging why the native MapLibre map is not visible. To avoid 
 |:---:|:---:|:---|:---:|
 | **N.1-3** | **WN-NATIVE** | **Pure Native Foundation (xcodegen, GRDB, Tracking)** | ✅ Done |
 | **E** | **WE-ONBOARDING** | **Onboarding Gate & First-Launch Infrastructure** | ✅ Done |
-| **F** | **WF-MAP-OVERHAUL** | **Map UI Overhaul & Ghost POI Lifecycle** | Planned |
-| **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | Planned |
-| **H** | **WH-SHIP** | **Polish, Stats and Profile Rewire & Ship Prep** | Planned |
+| **F** | **WF-MAP-OVERHAUL** | **Map UI Overhaul & Ghost POI Lifecycle** | ✅ Done |
+| **G** | **WG-TRANSIT-REVEAL** | **Transit Reveal Enhancements** | ✅ Done |
+| **H** | **WH-SHIP** | **Polish, Stats and Profile Rewire & Ship Prep** | ✅ Done |
+| **H.1** | **WH.1-PANNING** | **Stats UI: Neighborhood Map Panning** | ✅ Done |
+| **15** | **W15-DYNAMIC-ISLAND** | **Dynamic Island & Live Activities** | ✅ Done |
 
 ---
 
 ## Testing Rollout
 
-We are adopting a staggered testing strategy to ensure a solid foundation before building further UI:
-* **Phase 1 (Core Engine Tests):** Active and ready for execution.
-* **Phase 2 (Spatial & Data Tests):** MUST be completed **BEFORE** Wave G. Validates the transit data and spatial math that Wave G relies on.
-* **Phase 3 (Automated UI / Snapshot Testing):** To be implemented **DURING** Wave G and **BEFORE** Wave H to catch visual regressions in SwiftUI components.
-* **Phase 4 (CI/CD Pipeline):** To be set up at the **START** of Wave H (Ship Prep).
+We have adopted a staggered testing strategy:
+* **Phase 1 (Core Engine Tests):** ✅ Completed.
+* **Phase 2 (Spatial & Data Tests):** ✅ Completed.
+* **Phase 3 (Automated UI / Snapshot Testing):** ✅ Completed (`swift-snapshot-testing`).
+* **Phase 4 (CI/CD Pipeline):** Planned for automated PR builds.
 
 ---
 

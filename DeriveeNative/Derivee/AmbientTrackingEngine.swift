@@ -143,7 +143,8 @@ final class AmbientTrackingEngine: ObservableObject {
             guard indexString != lastSavedHex else { return }
             lastSavedHex = indexString
             
-            Task.detached { [self] in
+            Task.detached { [weak self] in
+                guard let self = self else { return }
                 do {
                     // Hand off to the database
                     let isNew = try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
