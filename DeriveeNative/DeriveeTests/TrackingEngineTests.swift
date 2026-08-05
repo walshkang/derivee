@@ -66,6 +66,15 @@ final class TrackingEngineTests: XCTestCase {
         }
         
         XCTAssertGreaterThan(count, 0, "Valid walk should unlock hexes in the database.")
+        
+        // ADDED: Test the reactive pipeline (SpatialStore)
+        let store = SpatialStore(dbManager: dbManager)
+        
+        // Wait for ValueObservation to fire
+        try await Task.sleep(nanoseconds: 500_000_000)
+        
+        XCTAssertGreaterThan(store.exploredHexes.count, 0, "SpatialStore should reactively update exploredHexes")
+        XCTAssertNotNil(store.currentFogShape, "SpatialStore should generate a new fog shape")
     }
     
     func testDriftGateRejectsNoise() async throws {

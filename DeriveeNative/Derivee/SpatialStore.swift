@@ -78,12 +78,16 @@ final class SpatialStore: @unchecked Sendable {
         polygonTask?.cancel()
         polygonTask = Task.detached(priority: .background) {
             // Clockwise winding order for exterior bounds
+            // JITTER APPLIED: MapLibre ignores updates to polygons if the exterior bounding box 
+            // hasn't changed. We jitter the top-left corner slightly to force a cache invalidation 
+            // and redraw the new holes.
+            let jitter = Double.random(in: 0...0.00001)
             let bounds = [
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5), // Top Left
+                CLLocationCoordinate2D(latitude: 41.5 + jitter, longitude: -74.5 - jitter), // Top Left
                 CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0), // Top Right
                 CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0), // Bottom Right
                 CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5), // Bottom Left
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5)  // Top Left (closed)
+                CLLocationCoordinate2D(latitude: 41.5 + jitter, longitude: -74.5 - jitter)  // Top Left (closed)
             ]
             
             var innerRings: [MLNPolygon] = []
