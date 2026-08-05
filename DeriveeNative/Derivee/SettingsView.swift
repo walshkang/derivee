@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
@@ -11,6 +12,7 @@ struct SettingsView: View {
     @State private var showCacheAlert = false
     @State private var showPauseTrackingAlert = false
     @State private var locationStatus: String = "Undetermined"
+    @State private var notificationsEnabled: Bool = false
     
     var body: some View {
         Form {
@@ -47,6 +49,19 @@ struct SettingsView: View {
                         updateLocationStatus()
                     }
                 }
+            }
+            
+            Section(header: Text("Notifications")) {
+                Toggle("Push Notifications", isOn: Binding(
+                    get: { notificationsEnabled },
+                    set: { newValue in
+                        if newValue {
+                            requestNotificationPermissions()
+                        } else {
+                            notificationsEnabled = false
+                        }
+                    }
+                ))
             }
             
             Section(header: Text("Data Management"), footer: Text("Clearing the cache will require downloading transit and tile data on the next launch.")) {
@@ -104,6 +119,7 @@ struct SettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             updateLocationStatus()
+            checkNotificationStatus()
         }
     }
     
@@ -116,6 +132,22 @@ struct SettingsView: View {
         case .authorizedAlways: locationStatus = "Authorized Always"
         case .authorizedWhenInUse: locationStatus = "Authorized When In Use"
         @unknown default: locationStatus = "Unknown"
+        }
+    }
+    
+    private func checkNotificationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                self.notificationsEnabled = (settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional)
+            }
+        }
+    }
+    
+    private func requestNotificationPermissions() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            DispatchQueue.main.async {
+                self.notificationsEnabled = granted
+            }
         }
     }
 }

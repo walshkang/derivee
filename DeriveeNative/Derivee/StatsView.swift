@@ -119,7 +119,7 @@ struct StatsView: View {
                         }) {
                             HStack {
                                 Image(systemName: "square.and.arrow.down")
-                                Text("Import Workout (.gpx)")
+                                Text("Upload Previous Workouts")
                             }
                             .font(.headline)
                             .foregroundColor(colorScheme == .dark ? .black : .white)
@@ -153,7 +153,11 @@ struct StatsView: View {
             }
             .fileImporter(
                 isPresented: $showFileImporter,
-                allowedContentTypes: [UTType.xml, UTType(filenameExtension: "gpx") ?? .xml],
+                allowedContentTypes: [
+                    UTType.xml,
+                    UTType(filenameExtension: "gpx") ?? .xml,
+                    UTType(filenameExtension: "fit") ?? .data
+                ],
                 allowsMultipleSelection: false
             ) { result in
                 do {

@@ -173,3 +173,147 @@ Fulfill the design requirement from `docs/design.md` Section 3: "Tapping a neigh
 * Panning the map does not disrupt ambient background tracking.
 
 ---
+
+## Wave E — Onboarding Gate & First-Launch Infrastructure [Shipped]
+
+**Task ID:** `WE-ONBOARDING`
+**Depends on:** Wave D (Nitro hydration pipeline), W11.6-DEVOPS (transit delta available on R2).
+
+### Goal
+Replace the decorative splash screen (`app/index.tsx`) with a functional first-launch Onboarding Gate that downloads the MapLibre offline tile region and the transit delta database before allowing the user to proceed to the map.
+
+### Agent Directives
+
+1. **Schema addition (`meta` table):**
+   * Add to the database initialization in `src/db/`:
+     ```sql
+     CREATE TABLE IF NOT EXISTS meta (
+         key TEXT PRIMARY KEY,
+         value TEXT
+     ) WITHOUT ROWID;
+     ```
+   * The hydration completion flag is stored as: `INSERT INTO meta (key, value) VALUES ('hydration_complete', '1');`
+
+2. **Screen 0: Onboarding Gate (`app/index.tsx` refactor):**
+   * On launch, synchronously query `meta` table via `@op-engineering/op-sqlite` for the `hydration_complete` key.
+   * **If flag exists:** Skip directly to `app/map.tsx` (Screen 1). No splash delay.
+   * **If flag is missing (first launch):**
+     * Mount a full-screen branded lock screen with atmospheric fog background animation, pulsing logo, and a translucent progress indicator.
+     * **No interactive buttons. No map mounted.**
+     * Check network connectivity.
+       * If offline: display a single-line prompt ("Connect to the internet to set up Dérivée"). Poll for connectivity via `NetInfo`; resume automatically when restored.
+       * If online: proceed to downloads.
+
+3. **MapLibre offline tile region download:**
+   * Use MapLibre's `OfflineManager` to create an offline pack for a 50km × 50km region centered on the device's current GPS coordinate.
+   * Request foreground location permission via `expo-location` if not already granted (this is the one valid foreground use of `expo-location`).
+   * Show download progress in the translucent indicator.
+
+4. **Transit delta download & attach:**
+   * Fetch `nyc_transit_delta.sqlite.zst` from the Cloudflare R2 URL.
+   * Decompress the Zstandard payload.
+   * Write the resulting `.sqlite` file to `Library/Application Support/`.
+   * Attach to the existing `@op-engineering/op-sqlite` connection via `ATTACH DATABASE`.
+
+5. **Completion:**
+   * Write `hydration_complete` flag to `meta` table.
+   * Fade out the lock screen over 400ms, revealing Screen 1 (the Ambient Map).
+
+### Verification
+* First launch shows the Onboarding Gate, downloads tiles and transit data, then transitions to the map.
+* Second launch skips directly to the map with no visible splash.
+* Offline first launch shows the connectivity prompt and resumes automatically when connected.
+* The transit delta is queryable via `@op-engineering/op-sqlite` after attachment (verify with a test `SELECT`).
+
+---
+
+## Wave G — Transit Reveal Enhancements [Shipped]
+
+**Task ID:** `WG-TRANSIT-REVEAL`
+**Depends on:** Wave E (transit delta database downloaded and attached).
+
+### Goal
+Enhance the existing Transit Bottom Sheet (`src/components/TransitBottomSheet.tsx`) with ephemeral route line visualization and historical reliability sparklines.
+
+### Agent Directives
+
+1. **Ephemeral route LineLayer:**
+   * When the Transit Reveal bottom sheet (Screen 2) opens:
+     * Inject a temporary GeoJSON `LineLayer` at the **top** of the MapLibre layer stack.
+     * The line traces the entire transit route across the map, cutting visually through the fog.
+     * Stroke color matches the transit line's official color (e.g., MTA L train gray `#A7A9AC`, G train light green `#6CBE45`).
+     * Semi-transparent stroke (`opacity: 0.7`), width 3–4px.
+     * Fade-in animation over 200ms.
+   * When the sheet is dismissed (swipe-down or map tap):
+     * **Immediately unmount** the route LineLayer. No persistent route artifacts.
+     * Map snaps back to the localized 200m Vicinity Bubble view.
+   * Route geometry: stored as static GeoJSON in the transit delta database or as a bundled asset keyed by route ID.
+
+2. **Historical reliability sparkline:**
+   * Query the transit delta SQLite database for 7-day headway data for the selected stop.
+   * Query must complete in < 12ms (synchronous read via `@op-engineering/op-sqlite`).
+   * Render a compact inline sparkline chart below the real-time arrivals list.
+   * Lightweight implementation — use a simple SVG path or `react-native-svg` line. **No heavy charting library** (no Victory, no Recharts).
+   * Sparkline shows headway variance over the past 7 days with a subtle area fill.
+
+3. **Bottom sheet animation tuning:**
+   * Spring configuration: `damping: 50`, `stiffness: 500`. No bounce.
+   * Add a dim backdrop overlay on the map (`opacity: 0.3` dark overlay) when the sheet reaches its expanded snap point.
+   * Verify the ephemeral route line unmounts at the exact frame the sheet reaches its dismissed position.
+
+### Verification
+* Ephemeral route line appears on sheet open and disappears on dismiss — no stale GeoJSON artifacts.
+* Route line colors match official MTA line colors.
+* Sparkline renders from local data in < 12ms (measure with `performance.now()`).
+* Bottom sheet spring animation feels native with no bounce.
+* Dim backdrop appears at expanded snap and clears on dismiss.
+
+---
+
+## Wave H — Polish, Stats and Profile Rewire & Ship Prep [Shipped]
+
+**Task ID:** `WH-SHIP`
+**Depends on:** Waves E, F, G all complete.
+
+### Goal
+Final integration pass. Wire the Stats and Profile settings in native Swift to use `AmbientTrackingEngine` tracking controls and `CLBackgroundActivitySession`, implement the GPX/FIT upload reveal animation, perform end-to-end testing, and prepare App Store metadata.
+
+### Agent Directives
+
+1. **Stats and Profile integration (`StatsView.swift` & `SettingsView.swift`):**
+   * Control `AmbientTrackingEngine` via native SwiftUI toggles directly (`startTracking()` / `stopTracking()`).
+   * Show friendly pause reminder alert (`"Pause Ambient Exploration?"`) when toggling off ambient tracking before invalidating `CLBackgroundActivitySession`.
+   * Add Push Notification toggle using `UNUserNotificationCenter` permission authorization handling.
+   * Show current background location permission state (authorized always/when in use/denied/not determined).
+   * **"Clear Local Cache":** Purge cached tiles and transit data files. Delete `hydration_complete` from `meta` table in GRDB so the Onboarding Gate re-triggers on next launch.
+   * **"Reset Exploration Data":** Destructive action with native `Alert` confirmation dialog. On confirm: `DELETE FROM explored_hexes` and `discovered_pois` via `SpatialDatabaseManager`, clear in-memory `SpatialStore`, and force MapLibre DDS to re-render full fog.
+
+2. **GPX/FIT reveal animation (`GPXProcessor.swift` / `StatsView.swift`):**
+   * Support `.gpx` and `.fit` workout imports via SwiftUI `.fileImporter`.
+   * When a file is uploaded and processed in background task (`Task.detached`):
+     * Calculate distance of each newly unlocked hex from the user's position.
+     * Sort hex clusters by distance (nearest first).
+     * Apply staggered batch inserts updating `SpatialStore` — fog "melts away" radially from the user outward.
+     * Total animation duration: 1.5–2.5 seconds depending on geographic spread.
+
+3. **End-to-end integration test (physical device / simulator):**
+   * Full flow: Onboarding Gate → ambient walk → hex unlock → Ghost POI tap → Transit Reveal sheet with route line → Stats and Profile → GPX upload with reveal animation → Exploration Data reset.
+
+4. **Performance profiling:**
+   * MapLibre fog rendering at 60fps during active exploration.
+   * Background battery drain target: < 5% per hour during ambient tracking.
+   * Transit delta query: < 12ms for sparkline reads.
+
+5. **App Store submission prep:**
+   * Verify all Xcode Info.plist permissions (location always, motion) are present.
+   * Verify native Xcode build compiles successfully via `xcodebuild` or the Xcode GUI.
+
+### Verification
+* Stats and Profile toggles correctly control `AmbientTrackingEngine` (`CLBackgroundActivitySession`).
+* Data reset clears all hexes and re-renders full fog.
+* Cache clear re-triggers the Onboarding Gate on next launch.
+* GPX reveal animation plays with radial dissolve.
+* Full end-to-end flow completes without crashes or stale state.
+* Native Xcode build compiles and runs.
+
+---
