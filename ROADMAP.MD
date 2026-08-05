@@ -90,7 +90,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 |:---:|:---:|:---|:---:|:---:|
 | — | W11.7-UI-MATRIX | Build Headway Matrix (Timetable) UI | L | Deferred |
 | — | W12-BOSTON | Multi-City Expansion: MBTA | L | Deferred |
-| — | W15-DYNAMIC-ISLAND | Dynamic Island Support for Stat Bar | S | Deferred |
+| — | W15-DYNAMIC-ISLAND | Dynamic Island Support for Stat Bar | S | ✅ Done |
 
 ---
 
@@ -357,3 +357,5 @@ To actually achieve "fast deployment," these tests cannot just live on the local
   2. The CI server checks out the code and runs `xcodegen` to generate the `.xcodeproj`.
   3. It runs `xcodebuild test` headlessly.
   4. If the Drift Gate tests or POI tests fail, the pull request is blocked. If it's green, it auto-merges or deploys to TestFlight.
+
+---

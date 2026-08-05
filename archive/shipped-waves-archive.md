@@ -109,3 +109,38 @@ Add ambient visual feedback when a user unlocks a new hex, enhancing the gamific
 * Hex unlock animation plays at 60fps without frame drops.
 * The transition from opaque to transparent feels natural.
 * A subtle pulse rings from the user location upon new hex discovery.
+
+## Wave 15 — Dynamic Island Support for Stat Bar [Shipped]
+
+**Task ID:** `W15-DYNAMIC-ISLAND`
+**Depends on:** Wave H (Ship complete)
+
+### Goal
+Implement Dynamic Island and Live Activity support using `ActivityKit` to display real-time ambient tracking metrics (session duration, hexes cleared, and active neighborhood) while the app is in the background.
+
+### Agent Directives
+
+1. **XcodeGen & Target Setup:**
+   * Update `DeriveeNative/project.yml` to include a new `app-extension` target for the Widget (e.g., `DeriveeWidget`).
+   * Set `NSSupportsLiveActivities: YES` in the main app's `Info.plist` properties.
+2. **ActivityKit Integration:**
+   * Define `TrackingAttributes` conforming to `ActivityAttributes`. 
+   * **Static state:** Session start time. 
+   * **Dynamic state:** Hexes cleared this session, current neighborhood name.
+3. **Live Activity UI (SwiftUI):**
+   * Build the Live Activity views within the Widget target.
+   * **Dynamic Island:**
+     * *Compact:* Show a pulsing tracking indicator and the number of hexes cleared.
+     * *Expanded:* Show session duration, hex count, and the active neighborhood.
+   * **Lock Screen:** Show a sleek, dark-themed persistent widget matching Dérivée's `.ultraThinMaterial` aesthetic.
+4. **Tracking Engine Rewire (`AmbientTrackingEngine`):**
+   * Import `ActivityKit`.
+   * On `startTracking()`: Request to start a new `Activity<TrackingAttributes>`.
+   * On new hex discovery (inside `processLocation`): Update the active `Activity` with the incremented hex count.
+   * On `stopTracking()`: End the activity with the final state.
+
+### Verification
+* Live Activity starts when tracking is enabled and appears on the Lock Screen.
+* Dynamic Island shows the compact tracking indicator when the app is backgrounded.
+* Unlocking a new hex dynamically updates the hex count on the Dynamic Island and Lock Screen without requiring the app to be foregrounded.
+* Stopping tracking smoothly ends the Live Activity.

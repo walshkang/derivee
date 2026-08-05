@@ -1,6 +1,7 @@
 import Foundation
 import CoreLocation
 import H3
+import ActivityKit
 
 public protocol LocationProvider: Sendable {
     var updates: AsyncStream<CLLocation> { get }
@@ -44,6 +45,10 @@ final class AmbientTrackingEngine: ObservableObject {
     private var lastLocation: CLLocation?
     private var lastSavedHex: String?
     
+    // Live Activity State
+    private var currentActivity: Activity<TrackingAttributes>?
+    private var sessionHexCount: Int = 0
+    
     @Published var isTracking = false
     
     private let locationProvider: any LocationProvider
@@ -71,6 +76,15 @@ final class AmbientTrackingEngine: ObservableObject {
         backgroundSession = CLBackgroundActivitySession()
         isTracking = true
         
+        sessionHexCount = 0
+        do {
+            let attributes = TrackingAttributes(sessionStartTime: Date())
+            let state = TrackingAttributes.ContentState(hexesCleared: 0, activeNeighborhood: nil)
+            currentActivity = try Activity.request(attributes: attributes, content: ActivityContent(state: state, staleDate: nil), pushType: nil)
+        } catch {
+            print("Failed to start Live Activity: \(error)")
+        }
+        
         updatesTask = Task {
             for await location in locationProvider.updates {
                 processLocation(location)
@@ -86,6 +100,14 @@ final class AmbientTrackingEngine: ObservableObject {
         // Invalidate the watchdog shield
         backgroundSession?.invalidate()
         backgroundSession = nil
+        
+        if let activity = currentActivity {
+            Task {
+                let state = TrackingAttributes.ContentState(hexesCleared: sessionHexCount, activeNeighborhood: nil)
+                await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .default)
+            }
+            currentActivity = nil
+        }
     }
     
     private func processLocation(_ location: CLLocation) {
@@ -124,10 +146,23 @@ final class AmbientTrackingEngine: ObservableObject {
             Task.detached { [self] in
                 do {
                     // Hand off to the database
-                    try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
-                    print("Saved hex: \(indexString)")
+                    let isNew = try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
+                    let nbhd = self.databaseManager.fetchNeighborhoodName(for: indexString)
+                    
+                    await MainActor.run {
+                        if isNew {
+                            self.sessionHexCount += 1
+                        }
+                        if let activity = self.currentActivity {
+                            let state = TrackingAttributes.ContentState(hexesCleared: self.sessionHexCount, activeNeighborhood: nbhd)
+                            Task {
+                                await activity.update(ActivityContent(state: state, staleDate: nil))
+                            }
+                        }
+                    }
+                    print("Processed hex: \(indexString) (New: \(isNew))")
                 } catch {
-                    print("Failed to save hex: \(error)")
+                    print("Failed to process hex: \(error)")
                 }
             }
         } catch {

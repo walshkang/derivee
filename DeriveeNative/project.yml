@@ -22,6 +22,7 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: "We need your location in the background to track explored hexes."
         UIBackgroundModes:
           - location
+        NSSupportsLiveActivities: YES
     dependencies:
       - package: swift-h3
         product: H3
@@ -43,6 +44,16 @@ targets:
       - target: Derivee
       - package: swift-snapshot-testing
         product: SnapshotTesting
+  DeriveeWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    sources:
+      - path: DeriveeWidget
+      - path: Derivee/TrackingAttributes.swift
 
 packages:
   swift-h3:
@@ -66,6 +77,7 @@ schemes:
     build:
       targets:
         Derivee: all
+        DeriveeWidget: all
         DeriveeTests: [test]
     run:
       config: Debug

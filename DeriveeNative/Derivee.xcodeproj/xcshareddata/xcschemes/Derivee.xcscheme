@@ -35,6 +35,20 @@
                ReferencedContainer = "container:Derivee.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "204226316687ED9BDDF5F493"
+               BuildableName = "DeriveeWidget.appex"
+               BlueprintName = "DeriveeWidget"
+               ReferencedContainer = "container:Derivee.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction

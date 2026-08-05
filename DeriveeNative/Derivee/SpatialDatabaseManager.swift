@@ -112,12 +112,14 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     // Asynchronous write
-    func insertDiscoveredHex(h3Index: String) async throws {
-        try await dbWriter.write { db in
+    @discardableResult
+    func insertDiscoveredHex(h3Index: String) async throws -> Bool {
+        return try await dbWriter.write { db in
             try db.execute(sql: """
                 INSERT OR IGNORE INTO explored_hexes (h3_index)
                 VALUES (?)
             """, arguments: [h3Index])
+            return db.changesCount > 0
         }
     }
     
@@ -208,6 +210,23 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     totalHexes: row["total_hexes"]
                 )
             }
+        }
+    }
+    
+    func fetchNeighborhoodName(for h3Index: String) -> String? {
+        do {
+            return try dbWriter.read { db in
+                let sql = """
+                SELECT ns.name
+                FROM neighborhood.neighborhood_hexes nh
+                JOIN neighborhood.neighborhood_stats ns ON nh.neighborhood_id = ns.id
+                WHERE nh.h3_index = ?
+                """
+                return try String.fetchOne(db, sql: sql, arguments: [h3Index])
+            }
+        } catch {
+            print("⚠️ Failed to fetch neighborhood name: \(error)")
+            return nil
         }
     }
     
