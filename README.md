@@ -62,6 +62,7 @@ Built as a **pure native iOS application** under the **Sleepy Hermes** paradigm 
 * **Reactive Observation:** The SwiftUI interface binds directly to the database via `@Observable` stores and GRDB's `ValueObservation`, ensuring the UI instantaneously reflects newly discovered territory.
 * **Battery & Drift Optimization:** CPU remains asleep until physical movement occurs. An implied speed filter ($\Delta d / \Delta t \leq 12$ m/s) aggressively discards urban canyon GPS multipath noise before it touches the H3 conversion step.
 * **Clean Project Generation:** The Xcode project is generated deterministically via `xcodegen`, eliminating merge conflicts in `.pbxproj` files and providing seamless Swift Package Manager integration.
+* **Unified CI/CD (GitHub Actions):** GitHub Actions orchestrates the test suite by dynamically running `xcodegen`, resolving SPM dependencies, and executing `xcodebuild test` headlessly to ensure the pure Swift foundation never regresses without the constraints of Xcode Cloud.
 
 ---
 
@@ -146,7 +147,7 @@ derivee/
 
 ## 📡 The Observer Daemon Operations Guide
 
-The Observer is a standalone persistent Go (Golang) daemon hosted on an Oracle Cloud VPS (`150.136.171.50`). It polls MTA GTFS-RT Protobuf feeds for both Subways and Buses every 3 minutes. To avoid memory bloat, it securely maintains a localized SQLite database of the massive static GTFS schedules (`static_gtfs.sqlite`). The daemon processes historical arrival reliability against these static schedules, compresses the daily stats table into a SQLite database using Zstandard (`transit_delta.sqlite.zst`), and uploads it to Cloudflare R2 (`fog-of-transit` bucket).
+The Observer is a standalone persistent Go (Golang) daemon hosted on an Oracle Cloud VPS (`150.136.171.50`). It polls MTA GTFS-RT Protobuf feeds for both Subways and Buses every 3 minutes. To avoid memory bloat and virtualized filesystem overhead, the daemon is compiled as a single, statically linked binary and run directly via `systemd` (no Docker). It securely maintains a localized SQLite database of the massive static GTFS schedules (`static_gtfs.sqlite`). The daemon processes historical arrival reliability against these static schedules, compresses the daily stats table into a SQLite database using Zstandard (`transit_delta.sqlite.zst`), and uploads it to Cloudflare R2 (`fog-of-transit` bucket).
 
 ### 1. Connecting to the VPS
 

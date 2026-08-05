@@ -16,4 +16,8 @@
 - **Staggered Rollout:** Adhere to the staggered testing rollout defined in `ROADMAP.MD` and `context.md`.
 - **Unit Tests (Phase 1 & 2):** Isolate core logic (H3 math, database hydration, ambient tracking) from the UI.
 - **Snapshot Testing (Phase 3):** Use `swift-snapshot-testing` for SwiftUI views (`StatsView`, `TransitRevealSheet`) to prevent visual regressions during rapid iteration.
-- **CI/CD Enforcement (Phase 4):** All tests must run headlessly (`xcodebuild test`) in CI (GitHub Actions or Xcode Cloud). Pull requests failing tests must be blocked.
+- **CI/CD Enforcement (Phase 4):** All tests must run headlessly (`xcodebuild test`) in CI using **GitHub Actions**. Do NOT use Xcode Cloud due to its rigid `.xcodeproj` expectations which conflict with our dynamic `xcodegen` setup. Pull requests failing tests must be blocked.
+
+## 4. Backend & Ecosystem Directives
+- **Go Observer Daemon:** Do NOT containerize/Dockerize the Observer daemon. Deploy the raw compiled Go binary directly to the Oracle Cloud ARM instance via `systemd` to avoid virtualized filesystem overhead and maximize SQLite write speeds.
+- **Web MVP Brand Sync:** The web app must mirror the iOS aesthetic exactly. Hardcode Day/Night hex colors (`#F9F9F6` / `#12121A`) in MapLibre, use Electric Amber (`#FFB300`) for sparklines, and pure black/white for text contrast.

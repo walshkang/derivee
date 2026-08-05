@@ -195,12 +195,12 @@ The app has exactly **four** screens. If a screen is not enumerated below, the a
 When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top** of the MapLibre layer stack, tracing the entire transit route across the map — cutting visually through the fog. This line:
 * Uses a vibrant, semi-transparent stroke matching the transit line's official color (e.g., MTA L train gray).
 * Animates in with a 200ms fade.
-* Is **immediately unmounted** when the sheet is dismissed — no persistent route artifacts.
+* Fades out with a 200ms opacity transition when the sheet is dismissed, rather than unmounting instantly, to dissolve gracefully matching the SwiftUI spring physics.
 
 **Dismissal:**
 * Swiping the sheet down.
 * Tapping the map outside the sheet.
-* Both actions instantly unmount the ephemeral route line, snapping the map back to the localized 200m view.
+* Both actions trigger the 200ms fade-out of the ephemeral route line, snapping the map back to the localized 200m view.
 
 **Definition of Done:**
 - [ ] Sheet triggers instantly upon tapping a Subway or Bus Ghost POI node (only when within 200m proximity).
@@ -307,7 +307,7 @@ When a user uploads a heavy GPX file containing hundreds of new hexes, the bridg
 ### 5.2 Bottom Sheet Transitions
 
 * **Entry:** Native SwiftUI `.spring` animation (e.g., `.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0)`). No bounce.
-* **Exit:** Smooth deceleration swipe-to-dismiss. Route line unmounts at the exact frame the sheet reaches its dismissed position.
+* **Exit:** Smooth deceleration swipe-to-dismiss. The ephemeral route `LineLayer` must fade out with a 200ms opacity transition so it dissolves gracefully (matching the bottom sheet's spring physics) rather than unmounting instantly.
 * **Backdrop:** Dim the map slightly (`opacity: 0.3` dark overlay) when the sheet is at its expanded snap point, creating focus hierarchy.
 
 ### 5.3 FAB Interactions

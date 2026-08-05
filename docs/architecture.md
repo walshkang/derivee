@@ -98,5 +98,21 @@ Because Dérivée relies heavily on rich, custom SwiftUI visual elements (like t
 
 ### 6.3 CI/CD Enforcement (Phase 4)
 Because the native Xcode project is generated immutably via `xcodegen`:
-- **Headless Testing:** All unit and snapshot tests run via `xcodebuild test` on GitHub Actions or Xcode Cloud.
+- **Headless Testing:** All unit and snapshot tests run via `xcodebuild test` exclusively on **GitHub Actions**. We explicitly avoid Xcode Cloud due to its rigid `.xcodeproj` requirements that conflict with our `xcodegen` setup.
 - **Fast Deployment:** PRs must pass all tests to merge, enabling a safe and automated pipeline straight to TestFlight.
+
+---
+
+## 7. Ecosystem & Backend Architecture
+
+While the primary mobile client is pure native iOS, the surrounding ecosystem supports offline-first data generation and web accessibility.
+
+### 7.1 Observer Daemon (Go)
+To provide users with offline-first historical transit reliability data, a standalone daemon aggregates live GTFS-RT feeds.
+- **Deployment:** The Go Observer is compiled as a single, statically linked binary and deployed directly to an Oracle Cloud ARM instance.
+- **No Docker:** Containerization is explicitly avoided. Running the raw binary via `systemd` eliminates virtualized filesystem overhead and maximizes SQLite write performance.
+- **Output:** A Zstandard-compressed SQLite database (`transit_delta.sqlite.zst`) containing 7-day headways, uploaded nightly to Cloudflare R2 for the mobile client to download.
+
+### 7.2 Web MVP
+A standalone web version of the transit map provides a lightweight alternative.
+- **Brand Synchronization:** The MapLibre configuration in the web app hardcodes the exact Day/Night iOS hex colors (`#F9F9F6` / `#12121A`) to ensure absolute visual consistency across platforms.

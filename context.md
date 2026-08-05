@@ -45,7 +45,7 @@ We have adopted a staggered testing strategy:
 * **Phase 1 (Core Engine Tests):** ✅ Completed.
 * **Phase 2 (Spatial & Data Tests):** ✅ Completed.
 * **Phase 3 (Automated UI / Snapshot Testing):** ✅ Completed (`swift-snapshot-testing`).
-* **Phase 4 (CI/CD Pipeline):** Planned for automated PR builds.
+* **Phase 4 (CI/CD Pipeline):** Planned for automated PR builds using GitHub Actions (raw `xcodegen` + headless `xcodebuild`).
 
 ---
 
