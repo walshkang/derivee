@@ -32,6 +32,7 @@ targets:
         product: MapLibre
       - package: swift-zstd
         product: SwiftZSTD
+      - target: DeriveeWidget
   DeriveeTests:
     type: bundle.unit-test
     platform: iOS
@@ -49,8 +50,13 @@ targets:
     platform: iOS
     deploymentTarget: "17.0"
     settings:
-      GENERATE_INFOPLIST_FILE: YES
-      INFOPLIST_KEY_NSExtensionPointIdentifier: com.apple.widgetkit-extension
+      PRODUCT_BUNDLE_IDENTIFIER: com.derivee.Derivee.DeriveeWidget
+      GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: DeriveeWidget/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
     sources:
       - path: DeriveeWidget
       - path: Derivee/TrackingAttributes.swift

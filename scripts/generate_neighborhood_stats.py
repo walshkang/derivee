@@ -104,10 +104,14 @@ def main():
         if total_hexes == 0:
             continue
             
+        centroid = land_geom.centroid
+        
         neighborhood_stats.append({
             "id": nta_id,
             "name": nta_name,
-            "total_hexes": total_hexes
+            "total_hexes": total_hexes,
+            "centroid_lat": centroid.y,
+            "centroid_lng": centroid.x
         })
         
         for h in hexes:
@@ -133,7 +137,9 @@ def main():
         CREATE TABLE IF NOT EXISTS neighborhood_stats (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
-            total_hexes INTEGER NOT NULL
+            total_hexes INTEGER NOT NULL,
+            centroid_lat REAL NOT NULL,
+            centroid_lng REAL NOT NULL
         ) WITHOUT ROWID;
     ''')
     
@@ -147,8 +153,8 @@ def main():
     # Insert stats
     for stat in neighborhood_stats:
         cursor.execute(
-            'INSERT INTO neighborhood_stats (id, name, total_hexes) VALUES (?, ?, ?)',
-            (stat['id'], stat['name'], stat['total_hexes'])
+            'INSERT INTO neighborhood_stats (id, name, total_hexes, centroid_lat, centroid_lng) VALUES (?, ?, ?, ?, ?)',
+            (stat['id'], stat['name'], stat['total_hexes'], stat['centroid_lat'], stat['centroid_lng'])
         )
         
     # Insert hexes in chunks for performance

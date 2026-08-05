@@ -9,6 +9,7 @@ struct SettingsView: View {
     
     @State private var showResetAlert = false
     @State private var showCacheAlert = false
+    @State private var showPauseTrackingAlert = false
     @State private var locationStatus: String = "Undetermined"
     
     var body: some View {
@@ -20,10 +21,18 @@ struct SettingsView: View {
                         if newValue {
                             trackingEngine.startTracking()
                         } else {
-                            trackingEngine.stopTracking()
+                            showPauseTrackingAlert = true
                         }
                     }
                 ))
+                .alert("Pause Ambient Exploration?", isPresented: $showPauseTrackingAlert) {
+                    Button("Keep Tracking On", role: .cancel) { }
+                    Button("Pause Tracking", role: .destructive) {
+                        trackingEngine.stopTracking()
+                    }
+                } message: {
+                    Text("Pausing tracking will stop discovering new hexes while your screen is off or the app is closed. Remember to re-enable tracking before your next drift.")
+                }
                 
                 HStack {
                     Text("Permission Status")

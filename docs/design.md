@@ -237,10 +237,14 @@ A clean, native list view using SwiftUI `List` or `LazyVStack` for guaranteed 12
   * On successful processing, the fog state on Screen 1 updates immediately.
 
 * **Settings & Data Management (Bottom Section):**
-  * **Background Location Toggle:** Controls the native `AmbientTrackingEngine` directly. Shows the current permission state.
+  * **Ambient Tracking Toggle & Dynamic Island Control:** Controls the native `AmbientTrackingEngine` directly (`CLBackgroundActivitySession`). Toggling off ambient tracking invalidates the background location session to immediately release the Dynamic Island location indicator.
+  * **Friendly Tracking Pause Reminder:** When the user toggles off Ambient Tracking, present a native confirmation alert:
+    * **Title:** `"Pause Ambient Exploration?"`
+    * **Message:** `"Pausing tracking will stop discovering new hexes while your screen is off or the app is closed. Remember to re-enable tracking before your next drift."`
+    * **Actions:** `"Pause Tracking"` (confirms pause and invalidates `CLBackgroundActivitySession`) and `"Keep Tracking On"` (cancels pause request, keeping tracking active).
   * **Push Notification Toggle:** Standard notification permission control.
-  * "Clear Local Cache" — purges cached tiles and transit data (re-triggers Onboarding Gate on next launch).
-  * "Reset Exploration Data" — destructive action with a confirmation dialog. Drops all unlocked hexes from SQLite and resets the in-memory state.
+  * **Clear Local Cache:** Purges cached tiles and transit data (re-triggers Onboarding Gate on next launch).
+  * **Reset Exploration Data:** Destructive action with a confirmation dialog. Drops all unlocked hexes from SQLite and resets the in-memory state.
 
 **Thread Yielding Rule:** The SwiftUI `List` should render smoothly. Complex data processing must occur off the main thread (`Task.detached`) before updating the `@Observable` store, preventing frame drops.
 
@@ -252,6 +256,7 @@ A clean, native list view using SwiftUI `List` or `LazyVStack` for guaranteed 12
 - [ ] GPX/FIT upload processes chunked, does not freeze the UI.
 - [ ] Upload results correctly update the fog state on Screen 1.
 - [ ] Settings toggles (Background Location, Push Notifications) correctly invoke native handlers.
+- [ ] Toggling off Ambient Tracking in Settings presents a friendly reminder alert before stopping tracking and releasing `CLBackgroundActivitySession`.
 - [ ] Destructive "Reset" action requires explicit user confirmation before executing.
 - [ ] Clearing cache correctly re-triggers the Onboarding Gate flow.
 - [ ] Uses native iOS list styling — clean typography, simple progress bars. No heavy custom charts.
@@ -348,7 +353,7 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 | G1 | **No Clutter:** Any map element outside the 200m Vicinity Bubble must be hidden. | Progressive disclosure. The map is the UI. |
 | G2 | **No Text on Map Nodes:** POI icons are geometric shapes with high negative space. Zero text or lettering inside icons. | Visual noise reduction. |
 | G3 | **No Permanent POI Pins:** Ghost POIs in Explored territory must be invisible at zoom ≤ 16 and near-invisible (opacity ≤ 0.15) at zoom 17+. | Per AGENTS.MD: "Never implement permanent map pins for POIs." |
-| G4 | **No Manual Tracking Controls:** No "Start/Stop Tracking" buttons. Tracking is ambient and automatic. | Per AGENTS.MD: "Never build manual Start/Stop Tracking UI elements." |
+| G4 | **No Map HUD Tracking Controls:** No "Start/Stop Tracking" buttons on the ambient map. Tracking is ambient and automatic, with pause/stop toggles restricted exclusively to Settings (Screen 3) along with a friendly reminder alert. | Per AGENTS.MD: "Never build manual Start/Stop Tracking UI elements on the main map interface." |
 | G5 | **No Heavy Persistent HUDs:** No persistent dashboard widgets, distance counters, or speed readouts overlaying the map. | Per AGENTS.MD: "Never build heavy, persistent HUDs." |
 | G6 | **Native UI Components Only:** All touchable elements use native SwiftUI buttons and gestures. | Prevents gesture conflicts with MapLibre and bottom sheets. |
 | G7 | **Thread Yielding for Lists:** Complex lists (Neighborhood Stats, Session History) must process data in background tasks before binding to `@Observable` UI. | Prevents frame drops during screen transitions. |
