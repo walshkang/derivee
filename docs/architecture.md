@@ -23,6 +23,7 @@ We use `GRDB.swift` to manage the database connection.
 - **DatabasePool:** Enables concurrent reads and writes, crucial for rendering the map on the main thread while the background tracking engine writes new locations.
 - **WAL (Write-Ahead Logging):** Configured via `PRAGMA journal_mode = WAL;`.
 - **Busy Timeout:** Configured via `PRAGMA busy_timeout = 5000;` to gracefully handle concurrent access without `SQLITE_BUSY` exceptions.
+- **QoS Configuration:** `Configuration.qos` is set to `.userInitiated` to prevent priority inversion. Without this, GRDB's internal `Pool` barrier and wait queues default to `.default` QoS, causing the main thread (`User-Interactive`) to hang on `Pool.get()` when background writes hold connections.
 
 ### 2.2 Schema Optimization (`WITHOUT ROWID`)
 The `explored_hexes` table tracks all discovered H3 indices.
@@ -35,6 +36,9 @@ Because the `h3_index` is the only column and acts as a primary key, `WITHOUT RO
 
 ### 2.3 Reactive Observation
 The `SpatialStore` (`@Observable`) acts as the bridge between GRDB and SwiftUI. It uses GRDB's `ValueObservation` to track changes in the `explored_hexes` table and automatically triggers a SwiftUI re-render when new hexes are discovered in the background.
+
+### 2.4 Async Read Mandate
+All `SpatialDatabaseManager` read methods exposed to callers **must** use `async`/`await` (`try await dbWriter.read`). Synchronous `dbWriter.read { }` calls on the main thread cause priority inversion hangs when the background `AmbientTrackingEngine` holds a pool connection. The only acceptable synchronous reads are internal to GRDB's `ValueObservation` callbacks, which manage their own threading.
 
 ---
 
@@ -79,6 +83,18 @@ The visual map is rendered using MapLibre Native.
 - Custom vector styles are injected using Data-Driven Styling (DDS).
 - The volumetric fog is rendered as a dark overlay, and unlocked hexes are applied via a `fill-opacity` match expression against the `explored_hexes` dataset.
 - Because GRDB feeds the UI reactively via `SpatialStore`, MapLibre re-renders the fog layer immediately upon a new background hex discovery without requiring an app restart or manual refresh.
+
+### 5.2 Fog Startup Synchronization
+On cold start, three systems race: `SpatialStore` fog computation, MapLibre style loading, and the first GPS fix. The architecture enforces:
+- **Priority Gate:** The initial `recomputeFogShape()` runs at `.userInitiated` priority (not `.background`) to complete before MapLibre's `didFinishLoading` fires.
+- **Map Ready Handshake:** A `isMapStyleLoaded` flag in the `MapView.Coordinator` ensures the computed fog shape is applied as soon as both the style and the shape are ready. If the shape is ready first, it's applied when the style loads. If the style loads first, it's applied when the shape arrives via the next `updateUIView` cycle.
+- **Bounding Box Jitter:** The initial fog source uses slightly offset coordinates from the `recomputeFogShape()` output to prevent MapLibre's shape cache from ignoring the first computed update.
+
+### 5.3 Polygon Winding Order Convention
+The fog polygon follows the MapLibre Native (iOS) convention:
+- **Exterior ring (50km bounding box):** Clockwise winding.
+- **Interior rings (hex holes):** Winding order is verified empirically per MapLibre version (see Wave I.2 audit). H3's `cellToBoundary` returns counterclockwise coordinates; these are reversed if required by the current MapLibre build.
+- A permanent comment in `SpatialStore.recomputeFogShape()` documents the verified convention.
 
 ---
 

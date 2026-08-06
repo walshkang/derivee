@@ -85,6 +85,16 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **H** | **WH-SHIP** | **Polish, Stats and Profile Rewire & Ship Prep** | **M** | ✅ Done |
 | **H.1** | **WH.1-PANNING** | **Stats UI: Neighborhood Map Panning** | **S** | ✅ Done |
 
+### 🐛 Fog Reliability & Startup Performance (Cold-Start Fix)
+
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **I.1** | **WI1-FOG-GATE** | **Fog Startup Gate: Synchronize Shape Computation with Map Ready** | **M** | Planned |
+| **I.2** | **WI2-WINDING** | **Winding Order Audit & Interior Ring Hardening** | **S** | Planned |
+| **I.3** | **WI3-FOG-TESTS** | **Cold-Start Fog Regression Tests** | **S** | Planned |
+| **I.4** | **WI4-ASYNC-READS** | **Eliminate Main-Thread DB Reads & Configure GRDB QoS** | **M** | Planned |
+| **I.5** | **WI5-HANG-TESTS** | **Priority Inversion Regression Tests** | **S** | Planned |
+
 ### Post-Ship (Deferred)
 
 | Wave | Task ID | Title | Size | Status |
@@ -208,3 +218,299 @@ To actually achieve "fast deployment," these tests cannot just live on the local
   4. If the Drift Gate tests or POI tests fail, the pull request is blocked. If it's green, it auto-merges or deploys to TestFlight.
 
 ---
+
+---
+
+## Wave I.1 — Fog Startup Gate: Synchronize Shape Computation with Map Ready [Planned]
+
+**Task ID:** `WI1-FOG-GATE`
+**Depends on:** None. This is a critical bugfix wave.
+
+### Problem Statement
+
+After a force-quit and cold relaunch, the user's previously explored hexes (including the current hex) are not visible — the fog layer renders as a solid opaque polygon with zero holes. The fog only corrects itself when the *next* database write (new hex discovery) triggers a `ValueObservation` cycle. This makes the app feel broken on every cold start.
+
+**Root Cause:** Three systems boot concurrently with no synchronization:
+1. `SpatialStore.init()` starts `ValueObservation` → fires `recomputeFogShape()` on `Task.detached(priority: .background)`.
+2. MapLibre's `didFinishLoading` fires on the main thread and calls `updateExploredHexes()` with `spatialStore.currentFogShape`.
+3. If `recomputeFogShape()` hasn't finished yet, `currentFogShape` is `nil` → the fog source keeps its initial solid polygon. There is no retry mechanism.
+
+### Agent Directives
+
+1. **Elevate initial fog computation priority:**
+   * In `SpatialStore.recomputeFogShape()`, change the initial `Task.detached(priority:)` from `.background` to `.userInitiated` **only for the first computation** (when `previousCount == 0`). Subsequent recomputations can remain `.background`. The first fog render must beat MapLibre's style load.
+
+2. **Add a "map ready" handshake in `MapView.Coordinator`:**
+   * Add a `var isMapStyleLoaded: Bool = false` flag to the Coordinator.
+   * In `didFinishLoading`: set the flag to `true`, then call `updateExploredHexes()`. If `currentFogShape` is `nil` at this point, the flag ensures the next `updateUIView` call will apply the shape.
+   * In `updateExploredHexes()`: remove the early `guard` that silently returns when `shape` is `nil`. Instead, if `shape` is `nil` **and** the map style is loaded, log a diagnostic message ("⚠️ Fog shape not yet ready, will apply on next update").
+
+3. **Add a deferred apply in `updateUIView`:**
+   * In the existing `updateExploredHexes()` call path within `updateUIView`, ensure that if `isMapStyleLoaded == true` and `shape` transitions from `nil` → non-nil, the fog source is updated immediately. The current code already does this implicitly via SwiftUI's `@Observable` tracking, but add a `print` log to confirm the path is exercised on cold start: `"✅ Deferred fog shape applied (\(innerRings) holes)"`.
+
+4. **Ensure the initial fog source in `setupLayers` uses a jittered bounding box:**
+   * The initial fog polygon created in `setupLayers()` currently uses static coordinates `(41.5, -74.5)` etc. Change these to include a small static offset (e.g., `41.500001, -74.500001`) so they never exactly match the `recomputeFogShape()` jittered bounds. This prevents MapLibre from caching the first shape and ignoring the computed replacement.
+
+5. **Do NOT change the fog opacity value** (`0.3`). Do NOT change the exterior bounding box dimensions. Do NOT modify the H3 resolution or any database schema.
+
+### Files to Modify
+
+* `DeriveeNative/Derivee/SpatialStore.swift` — priority elevation for first computation.
+* `DeriveeNative/Derivee/MapView.swift` — `isMapStyleLoaded` flag, deferred apply logic, jittered initial bounds.
+
+### Verification
+
+1. Build and run the app on a physical device.
+2. Walk around to accumulate ≥5 explored hexes.
+3. Force-quit the app (swipe up from app switcher).
+4. Relaunch the app.
+5. **Expected:** The fog layer renders with all previously explored hexes visible as holes **immediately** when the map finishes loading — no delay, no solid fog flash.
+6. Check Xcode console for: `"✅ Deferred fog shape applied"` log confirming the handshake path was exercised.
+7. Verify that real-time hex unlocking still works (walk to a new hex → fog melts away with the 300ms transition).
+
+---
+
+## Wave I.2 — Winding Order Audit & Interior Ring Hardening [Planned]
+
+**Task ID:** `WI2-WINDING`
+**Depends on:** Wave I.1 (the fog startup gate must be in place first so the winding order fix is testable on cold start).
+
+### Problem Statement
+
+The fog polygon construction in `SpatialStore.recomputeFogShape()` uses **clockwise** winding for both the exterior ring and interior rings (holes). The H3 boundary coordinates are explicitly reversed at line 101 (`coords.reverse()`), flipping them from CCW → CW. However, the GeoJSON/MapLibre convention for polygon holes is ambiguous across platforms:
+
+* **GeoJSON RFC 7946:** Exterior = CCW, Holes = CW.
+* **MapLibre Native (iOS):** Historically tolerant of both conventions, but documentation recommends exterior = CW, holes = CCW.
+
+The current code may be working by accident. This wave audits and hardens the winding order to eliminate a class of silent rendering bugs.
+
+### Agent Directives
+
+1. **Audit the current winding behavior:**
+   * Add temporary diagnostic logging inside `recomputeFogShape()` that prints the winding order of the first interior ring (compute the signed area — positive = CW, negative = CCW). Log: `"🔍 Interior ring winding: CW"` or `"🔍 Interior ring winding: CCW"`.
+   * Build and run. Record which winding order is currently producing visible holes.
+
+2. **Test the opposite winding order:**
+   * Remove the `coords.reverse()` call on the interior rings (leaving them as H3's default CCW).
+   * Build and run. Observe whether the holes still render correctly.
+   * **If holes disappear:** The current CW winding is correct for this MapLibre version. Restore `.reverse()` and add a permanent comment:
+     ```swift
+     // VERIFIED: MapLibre Native (iOS) requires CW winding for interior polygon rings.
+     // Tested in Wave I.2. Do NOT change without re-testing fog rendering.
+     ```
+   * **If holes still render:** CCW is also accepted. Prefer the convention that matches GeoJSON RFC 7946 (exterior CCW, holes CW) and document accordingly.
+
+3. **Standardize the exterior ring:**
+   * Verify the exterior bounding box coordinates are wound in the correct direction for the chosen convention. Add a permanent comment documenting the verified order.
+
+4. **Remove the diagnostic logging** added in step 1 after verification. Leave only the permanent convention comments.
+
+5. **Do NOT change** the bounding box dimensions, the H3 resolution, the fog opacity, or any database schema.
+
+### Files to Modify
+
+* `DeriveeNative/Derivee/SpatialStore.swift` — winding order audit, comments, and potential `.reverse()` change.
+
+### Verification
+
+1. Build and run on a physical device with ≥5 previously explored hexes.
+2. Confirm all hex holes render correctly in the fog layer.
+3. Force-quit and relaunch — holes still visible on cold start (depends on I.1).
+4. Verify the permanent winding order comments are present in the code.
+5. Ensure no diagnostic print statements remain in the final commit.
+
+---
+
+## Wave I.3 — Cold-Start Fog Regression Tests [Planned]
+
+**Task ID:** `WI3-FOG-TESTS`
+**Depends on:** Wave I.1 and I.2 (the fixes must be in place to write meaningful assertions).
+
+### Problem Statement
+
+The cold-start fog bug was not caught by the existing test suite because there are no tests covering the `SpatialStore` → `MapView` fog rendering pipeline. Without regression tests, future refactors (e.g., changing task priorities, modifying the `ValueObservation` query, or updating MapLibre) could silently reintroduce the race condition.
+
+### Agent Directives
+
+1. **Test: `SpatialStore` produces a non-nil fog shape on init with existing hexes:**
+   * Create a new test file: `DeriveeNative/DeriveeTests/SpatialStoreFogTests.swift`.
+   * Set up an **in-memory** `SpatialDatabaseManager` (using the existing `inMemory: Bool` init parameter).
+   * Pre-insert 5 hex indices into `explored_hexes` via direct SQL.
+   * Initialize a `SpatialStore` with this database manager.
+   * Use an `XCTestExpectation` with a reasonable timeout (2 seconds) to wait for `currentFogShape` to become non-nil.
+   * Assert that `currentFogShape` is an `MLNPolygon` (not just any `MLNShape`).
+   * Assert that the polygon has `interiorPolygons` with a count of exactly 5.
+
+2. **Test: Interior ring count matches explored hex count:**
+   * Pre-insert 1, 10, and 50 hexes (three separate test cases or a parameterized test).
+   * For each, wait for `currentFogShape` and assert `interiorPolygons?.count == expectedCount`.
+
+3. **Test: Newly inserted hex triggers fog shape update:**
+   * Initialize `SpatialStore` with 3 pre-existing hexes. Wait for `currentFogShape`.
+   * Insert a 4th hex via `SpatialDatabaseManager.insertDiscoveredHex()`.
+   * Wait for `currentFogShape` to update (the `interiorPolygons` count should change from 3 to 4).
+   * Assert the count is 4.
+
+4. **Test: `recomputeFogShape` produces valid coordinate bounds:**
+   * After fog shape computation, inspect the exterior ring coordinates of the resulting `MLNPolygon`.
+   * Assert all coordinates fall within the expected 50km bounding box (latitude 40.0–41.5, longitude -74.5–-73.0, with minor jitter tolerance of 0.0001).
+
+5. **Do NOT test MapLibre rendering directly** — that is a snapshot/UI test concern (Phase 3). These tests validate only the data pipeline: DB → `ValueObservation` → `recomputeFogShape()` → `currentFogShape` property.
+
+6. **Do NOT modify any production source files** in this wave. Only add test files.
+
+### Files to Create
+
+* `DeriveeNative/DeriveeTests/SpatialStoreFogTests.swift`
+
+### Verification
+
+1. Run `xcodebuild test` — all new tests pass.
+2. Temporarily break the fog pipeline (e.g., comment out `recomputeFogShape()` call) → tests fail. Restore.
+3. Ensure existing tests still pass (no regressions).
+
+---
+
+## Wave I.4 — Eliminate Main-Thread DB Reads & Configure GRDB QoS [Planned]
+
+**Task ID:** `WI4-ASYNC-READS`
+**Depends on:** Wave I.1 (the fog startup gate must exist so this wave doesn't introduce a new nil-shape race).
+
+### Problem Statement
+
+Multiple UI code paths perform **synchronous** `dbWriter.read { }` calls directly on the Main Thread (`User-Interactive` QoS). When the background `AmbientTrackingEngine` is simultaneously holding a `DatabasePool` connection for writes at `Default` QoS, the main thread blocks on `Pool.get()` — a textbook **priority inversion**.
+
+This hang risk compounds the cold-start fog bug: even after `recomputeFogShape()` produces a valid fog polygon, the main thread may be stalled on a DB pool semaphore and unable to run `updateUIView` to apply it.
+
+**Affected call sites:**
+
+| Location | Method | Caller QoS |
+|:---|:---|:---|
+| `ContentView.swift:25` | `isHydrationComplete()` — sync read | `User-Interactive` (Main) |
+| `TransitRevealSheet.swift:99-100` | `fetchStopDetails()` + `fetchHeadwayData()` — sync reads | `User-Interactive` (Main) |
+| `AmbientTrackingEngine.swift:151` | `fetchNeighborhoodName()` — sync read inside `Task.detached` | `Default` |
+
+**Underlying cause:** `SpatialDatabaseManager` initializes `Configuration()` without setting `configuration.qos`, leaving GRDB's internal pool barrier and wait queues at `.default` QoS.
+
+### Agent Directives
+
+1. **Set GRDB `Configuration.qos` to `.userInitiated`:**
+   * In `SpatialDatabaseManager.init()`, after creating `var configuration = Configuration()`, add:
+     ```swift
+     configuration.qos = .userInitiated
+     ```
+   * This ensures the internal pool dispatch queues run at a QoS that won't trigger priority inversion warnings when accessed from `User-Interactive` threads. `.userInitiated` is the correct choice — it's high enough to avoid inversion but lower than `.userInteractive` to avoid starving the UI thread.
+
+2. **Convert `isHydrationComplete()` to async:**
+   * Change the signature from `func isHydrationComplete() -> Bool` to `func isHydrationComplete() async throws -> Bool`.
+   * Replace `try dbWriter.read { }` with `try await dbWriter.read { }` (GRDB's async read).
+   * Update the call site in `ContentView.swift:25`:
+     ```swift
+     .onAppear {
+         Task {
+             isHydrationComplete = (try? await SpatialDatabaseManager.shared.isHydrationComplete()) ?? false
+             isCheckingHydration = false
+         }
+     }
+     ```
+   * Ensure the `isCheckingHydration` loading state (black screen) still displays while the async check runs.
+
+3. **Convert `TransitRevealSheet.loadData()` to async:**
+   * Change `fetchStopDetails(for:)` signature to `func fetchStopDetails(for stopId: String) async throws -> StopDetails`.
+   * Change `fetchHeadwayData(for:)` signature to `func fetchHeadwayData(for stopId: String) async throws -> [Double]`.
+   * Replace `try dbWriter.read { }` with `try await dbWriter.read { }` in both methods.
+   * Update `TransitRevealSheet.loadData()` to be async:
+     ```swift
+     private func loadData() {
+         Task {
+             let details = try? await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
+             let hw = try? await SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
+             self.stopDetails = details
+             self.headways = hw ?? []
+         }
+     }
+     ```
+   * The `TransitRevealSheet` already has a `ProgressView` fallback for when data is nil — this naturally handles the async loading state.
+
+4. **Convert `fetchNeighborhoodName(for:)` to async:**
+   * Change the signature to `func fetchNeighborhoodName(for h3Index: String) async throws -> String?`.
+   * Replace `try dbWriter.read { }` with `try await dbWriter.read { }`.
+   * Update the call site in `AmbientTrackingEngine.swift:151` — it's already inside a `Task.detached`, so just `await` the call.
+
+5. **Audit for any remaining synchronous `dbWriter.read` calls:**
+   * Search the codebase for `dbWriter.read` (without `await`) and convert any remaining synchronous call sites to async.
+   * The only sync reads that may remain are inside GRDB's own `ValueObservation` callbacks (these are internal to GRDB and cannot be changed).
+
+6. **Do NOT change:**
+   * The `dbWriter.write` calls — GRDB async writes are already used (`try await dbWriter.write`).
+   * The `ValueObservation` setup in `SpatialStore` — this is GRDB's managed observation and handles its own threading.
+   * Any database schema, fog opacity, or H3 resolution.
+   * The `MapView.Coordinator` methods that call `fetchStopDetails` inside `Task.detached` at `MapView.swift:331` — that call is already off the main thread and is fine.
+
+### Files to Modify
+
+* `DeriveeNative/Derivee/SpatialDatabaseManager.swift` — QoS config, async method signatures.
+* `DeriveeNative/Derivee/ContentView.swift` — async `isHydrationComplete` call.
+* `DeriveeNative/Derivee/TransitRevealSheet.swift` — async `loadData()`.
+* `DeriveeNative/Derivee/AmbientTrackingEngine.swift` — async `fetchNeighborhoodName` call.
+
+### Verification
+
+1. Build and run on a physical device. Xcode Instruments → Thread State Trace: confirm **zero `Pool.get()` waits** on the main thread.
+2. Open a Transit Reveal bottom sheet — data loads without a visible hang. The `ProgressView` spinner may flash briefly (acceptable).
+3. Force-quit and cold-start — the hydration check completes without blocking the main thread. The black loading screen still displays during the check.
+4. Walk to discover a new hex — the Live Activity update still fires correctly (neighborhood name still populates).
+5. Run all existing tests — no regressions.
+
+---
+
+## Wave I.5 — Priority Inversion Regression Tests [Planned]
+
+**Task ID:** `WI5-HANG-TESTS`
+**Depends on:** Wave I.4 (the async conversions must be in place to write meaningful assertions).
+
+### Problem Statement
+
+Without tests enforcing that database reads are never called synchronously on the main thread, future agents could reintroduce the priority inversion by adding a quick `dbWriter.read` call in a SwiftUI view body or `.onAppear` block.
+
+### Agent Directives
+
+1. **Test: `isHydrationComplete` does not block the calling thread:**
+   * Create a new test file: `DeriveeNative/DeriveeTests/DatabaseQoSTests.swift`.
+   * Set up an in-memory `SpatialDatabaseManager`.
+   * Call `isHydrationComplete()` and assert it returns via `async`/`await` — i.e., confirm the method signature is `async throws -> Bool`. If the method were synchronous, this test would fail to compile, acting as a compile-time guard.
+
+2. **Test: `fetchStopDetails` does not block the calling thread:**
+   * Call `fetchStopDetails(for: "test_stop")` via `await` and assert it returns a valid `StopDetails` (even if fallback data).
+   * Confirm the method signature is `async throws -> StopDetails`.
+
+3. **Test: `fetchHeadwayData` does not block the calling thread:**
+   * Call `fetchHeadwayData(for: "test_stop")` via `await` and assert it returns a non-empty `[Double]` array.
+   * Confirm the method signature is `async throws -> [Double]`.
+
+4. **Test: `fetchNeighborhoodName` does not block the calling thread:**
+   * Call `fetchNeighborhoodName(for: "8b2a100d2c9ffff")` via `await` and assert it returns `String?`.
+   * Confirm the method signature is `async throws -> String?`.
+
+5. **Test: GRDB Configuration QoS is set:**
+   * This is a structural test. Inspect the `SpatialDatabaseManager` to verify that `configuration.qos` is explicitly set. Since `Configuration` is private, the simplest approach is a code-level assertion:
+     * Add a computed property to `SpatialDatabaseManager`: `var configuredQoS: DispatchQoS { ... }` that exposes the configured QoS for testing.
+     * Assert `configuredQoS == .userInitiated`.
+   * **Alternative (if exposing internals is undesirable):** Write a grep-based test or simply include a comment-only assertion in the test file that documents the expectation, paired with a CI grep check.
+
+6. **Do NOT modify any production source files** in this wave beyond the minimal `configuredQoS` test hook if needed. Only add test files.
+
+### Files to Create
+
+* `DeriveeNative/DeriveeTests/DatabaseQoSTests.swift`
+
+### Files to Modify (minimal)
+
+* `DeriveeNative/Derivee/SpatialDatabaseManager.swift` — only if adding the `configuredQoS` test hook (one computed property).
+
+### Verification
+
+1. Run `xcodebuild test` — all new tests pass.
+2. Temporarily change `isHydrationComplete` back to a synchronous signature → test fails to compile. Restore.
+3. Temporarily remove `configuration.qos = .userInitiated` → QoS test fails. Restore.
+4. Ensure existing tests still pass (no regressions).

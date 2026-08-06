@@ -88,6 +88,9 @@ The MapLibre layer stack **must** follow this exact Z-index order. See [architec
 | 5 | The Holes (DDS) | Unlocked H3 hexes (Explored + Active) filtered via MapLibre `['match']` expression on `fill-opacity`. |
 | 6 | The Vicinity Bubble | Active 200m radius rendering street names, transit nodes, and Ghost POI geometry. |
 
+> [!IMPORTANT]
+> **Cold-Start Fog Contract:** On app launch after a force-quit, the Cloud Layer (Z-Index 4) must render with all previously explored hex holes visible **immediately** when the map finishes loading. The `SpatialStore` fog polygon computation must complete before or synchronize with MapLibre's `didFinishLoading` callback. A solid, hole-less fog flash on cold start is a rendering bug. See [architecture.md §5.2](file:///Volumes/T7ssd/derivee/docs/architecture.md) for the synchronization mechanism.
+
 ---
 
 ## 3. App Screen Hierarchy & Flows

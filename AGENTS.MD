@@ -5,6 +5,8 @@
 - **Project Generation:** The Xcode project is generated using `xcodegen`. Do NOT manually modify `.pbxproj` files or configure Xcode through the GUI. Instead, update `project.yml` and run `xcodegen`.
 - **Dependencies:** All dependencies (like `H3` and `GRDB`) are managed exclusively via Swift Package Manager (SPM) defined in `project.yml`. Do NOT use CocoaPods or Carthage.
 - **Data Layer:** Use `GRDB.swift` for SQLite interactions. Rely on `DatabasePool` with `WAL` mode and `WITHOUT ROWID` optimizations. Use `@Observable` classes with `ValueObservation` for reactive UI updates.
+- **Async DB Reads (No Main-Thread Blocking):** All `SpatialDatabaseManager` read methods (`fetchStopDetails`, `fetchHeadwayData`, `isHydrationComplete`, `fetchNeighborhoodName`) **must** use `async`/`await` (`try await dbWriter.read`). **Never** perform synchronous `dbWriter.read { }` on the main thread — this causes priority inversion hangs when the background tracking engine holds a pool connection. The GRDB `Configuration.qos` must be set to `.userInitiated`.
+- **Fog Startup Synchronization:** The `SpatialStore` fog polygon computation (`recomputeFogShape`) and MapLibre's `didFinishLoading` callback race on cold start. The initial fog computation must run at `.userInitiated` priority (not `.background`) to beat the style load. A "map ready" handshake flag in the `MapView.Coordinator` must ensure the fog shape is applied as soon as both the style and the shape are ready.
 - **Background Tracking:** The background engine relies on `CLLocationUpdate.liveUpdates()` within a detached `Task` and `CLBackgroundActivitySession` to prevent suspension. Do not use legacy `CLLocationManagerDelegate` methods for live updates.
 
 ## 2. Visual & UI Guidelines

@@ -1,8 +1,10 @@
 # Project Context
 
-## Current Status: ✅ Design Alignment & Native Foundation Complete (Waves E–H.1, W15)
+## Current Status: 🐛 Fog Reliability & Startup Performance (Waves I.1–I.5 Planned)
 
 **The project is a 100% pure native iOS app written in Swift.** We have successfully completed the migration away from React Native / Expo. Waves E through H.1 and W15 Dynamic Island support are fully implemented and verified with unit/snapshot tests.
+
+**Active focus:** Fixing a cold-start fog rendering race condition and a priority inversion hang risk discovered in the `SpatialStore` → `MapView` pipeline and `SpatialDatabaseManager` synchronous reads.
 
 ### What Changed
 
@@ -36,6 +38,11 @@ The app is now fully native:
 | **H** | **WH-SHIP** | **Polish, Stats and Profile Rewire & Ship Prep** | ✅ Done |
 | **H.1** | **WH.1-PANNING** | **Stats UI: Neighborhood Map Panning** | ✅ Done |
 | **15** | **W15-DYNAMIC-ISLAND** | **Dynamic Island & Live Activities** | ✅ Done |
+| **I.1** | **WI1-FOG-GATE** | **Fog Startup Gate: Synchronize Shape Computation with Map Ready** | Planned |
+| **I.2** | **WI2-WINDING** | **Winding Order Audit & Interior Ring Hardening** | Planned |
+| **I.3** | **WI3-FOG-TESTS** | **Cold-Start Fog Regression Tests** | Planned |
+| **I.4** | **WI4-ASYNC-READS** | **Eliminate Main-Thread DB Reads & Configure GRDB QoS** | Planned |
+| **I.5** | **WI5-HANG-TESTS** | **Priority Inversion Regression Tests** | Planned |
 
 ---
 
