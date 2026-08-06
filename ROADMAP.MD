@@ -89,7 +89,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
-| **I.1** | **WI1-FOG-GATE** | **Fog Startup Gate: Synchronize Shape Computation with Map Ready** | **M** | Planned |
+| **I.1** | **WI1-FOG-GATE** | **Fog Startup Gate: Synchronize Shape Computation with Map Ready** | **M** | ✅ Done |
 | **I.2** | **WI2-WINDING** | **Winding Order Audit & Interior Ring Hardening** | **S** | Planned |
 | **I.3** | **WI3-FOG-TESTS** | **Cold-Start Fog Regression Tests** | **S** | Planned |
 | **I.4** | **WI4-ASYNC-READS** | **Eliminate Main-Thread DB Reads & Configure GRDB QoS** | **M** | Planned |

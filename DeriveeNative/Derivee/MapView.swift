@@ -89,6 +89,7 @@ struct MapView: UIViewRepresentable {
         var lastRecenterTrigger: Bool = false
         var lastTransientHexShape: MLNShape? = nil
         var lastSelectedStop: String? = nil
+        var isMapStyleLoaded: Bool = false
         
         var compassHiddenObserver: NSKeyValueObservation?
         var compassAlphaObserver: NSKeyValueObservation?
@@ -172,6 +173,7 @@ struct MapView: UIViewRepresentable {
         }
         
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
+            isMapStyleLoaded = true
             let busDot = generateDotImage()
             let subwayDiamond = generateDiamondImage()
             style.setImage(busDot, forName: "poi-bus-3")
@@ -224,11 +226,11 @@ struct MapView: UIViewRepresentable {
         
         func setupLayers(in style: MLNStyle) {
             let bounds = [
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5),
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0),
+                CLLocationCoordinate2D(latitude: 41.500001, longitude: -74.500001),
+                CLLocationCoordinate2D(latitude: 41.500001, longitude: -73.0),
                 CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0),
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5),
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5)
+                CLLocationCoordinate2D(latitude: 40.0, longitude: -74.500001),
+                CLLocationCoordinate2D(latitude: 41.500001, longitude: -74.500001)
             ]
             let initialFogShape = MLNPolygon(coordinates: bounds, count: UInt(bounds.count))
             
@@ -286,8 +288,17 @@ struct MapView: UIViewRepresentable {
         
         func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {
             guard let style = mapView.style, let fogSource = style.source(withIdentifier: "fog-source") as? MLNShapeSource else { return }
+            let previousShape = fogSource.shape as? MLNPolygon
+            let isTransitioningFromInitial = previousShape?.interiorPolygons == nil
+            
             if let validShape = shape {
                 fogSource.shape = validShape
+                if isMapStyleLoaded, isTransitioningFromInitial, let poly = validShape as? MLNPolygon {
+                    let holes = poly.interiorPolygons?.count ?? 0
+                    print("✅ Deferred fog shape applied (\(holes) holes)")
+                }
+            } else if isMapStyleLoaded {
+                print("⚠️ Fog shape not yet ready, will apply on next update")
             }
         }
         

@@ -69,14 +69,15 @@ final class SpatialStore: @unchecked Sendable {
                 self.previousCount = newCount
                 self.previousHexes = newSet
                 
-                self.recomputeFogShape(hexes: newSet, newlyUnlockedCell: newlyUnlockedCell)
+                self.recomputeFogShape(hexes: newSet, newlyUnlockedCell: newlyUnlockedCell, isInitial: oldCount == 0)
             }
         )
     }
     
-    private func recomputeFogShape(hexes: Set<String>, newlyUnlockedCell: UInt64?) {
+    private func recomputeFogShape(hexes: Set<String>, newlyUnlockedCell: UInt64?, isInitial: Bool = false) {
         polygonTask?.cancel()
-        polygonTask = Task.detached(priority: .background) {
+        let taskPriority: TaskPriority = isInitial ? .userInitiated : .background
+        polygonTask = Task.detached(priority: taskPriority) {
             // Clockwise winding order for exterior bounds
             // JITTER APPLIED: MapLibre ignores updates to polygons if the exterior bounding box 
             // hasn't changed. We jitter the top-left corner slightly to force a cache invalidation 

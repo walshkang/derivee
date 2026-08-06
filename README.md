@@ -35,8 +35,8 @@ The app follows a strict visual identity defined in [`docs/design.md`](docs/desi
 * **3-Tier Fog Visibility:** Hidden (dense fog), Explored (dimmed satellite, no labels), and Active (full-color 200m vicinity bubble with street names and Ghost POIs).
 * **Ghost POI Lifecycle:** 3-phase system — faint beacon lures in the fog → crisp geometric nodes on proximity unlock → near-invisible archives when you leave.
 * **Typography:** SF Pro / Inter for UI text; **SF Mono** exclusively for all quantitative metrics (percentages, headways, H3 IDs). No serif fonts.
-* **Gesture Handling:** All interactive elements use `react-native-gesture-handler` exclusively to coexist with MapLibre pan/pinch and `@gorhom/bottom-sheet` gestures. No standard `TouchableOpacity` or `Pressable`.
-* **Ambient Tracking:** Always-on, no manual start/stop. The native Swift `CLLocationManager` begins tracking silently on app mount.
+* **Gesture Handling:** All interactive elements use native SwiftUI gesture modifiers (`.onTapGesture`, `Button`) to guarantee seamless coexistence with MapLibre pan/pinch gestures and native presentation sheets.
+* **Ambient Tracking:** Always-on, no manual start/stop. The native Swift `AmbientTrackingEngine` begins tracking silently via `CLLocationUpdate.liveUpdates()` on app mount.
 
 ---
 
@@ -52,14 +52,15 @@ Built as a **pure native iOS application** under the **Sleepy Hermes** paradigm 
 | **SwiftUI** | UI framework. Drives the declarative, reactive interface. |
 | **MapLibre Native** | Map engine — vector tiles, custom raster layers, Data-Driven Styling. |
 | **H3 (swift-h3)** | Native Swift Package wrapper for the Uber H3 spatial indexing C-library. Used for `latLngToCell` conversions at Resolution 11. |
-| **GRDB.swift** | SQLite toolkit for Swift. Runs in WAL mode with `WITHOUT ROWID` optimizations for microsecond-fast spatial queries and highly concurrent background writes. |
+| **GRDB.swift** | SQLite toolkit for Swift. Runs in WAL mode with `WITHOUT ROWID` optimizations for microsecond-fast spatial queries and highly concurrent background writes. `Configuration.qos` set to `.userInitiated` to prevent priority inversion. |
 | **CLLocationUpdate** | iOS 17's modern background location stream, kept alive by `CLBackgroundActivitySession`. |
 
 ### Architectural Highlights
 
 * **Pure Native Background Engine:** All background location processing runs in pure native Swift using `CLLocationUpdate.liveUpdates()` in a detached `Task`. This prevents iOS watchdog terminations and dramatically reduces battery drain.
-* **Concurrent SQLite (GRDB):** The database operates in WAL mode using `DatabasePool`, enabling simultaneous background writes (logging hexes) and foreground reads (UI rendering) with zero lock contention.
+* **Concurrent SQLite (GRDB):** The database operates in WAL mode using `DatabasePool`, enabling simultaneous background writes (logging hexes) and foreground reads (UI rendering) with zero lock contention. All read methods use `async`/`await` — synchronous reads on the main thread are prohibited to prevent priority inversion hangs.
 * **Reactive Observation:** The SwiftUI interface binds directly to the database via `@Observable` stores and GRDB's `ValueObservation`, ensuring the UI instantaneously reflects newly discovered territory.
+* **Fog Startup Synchronization:** On cold start, the fog polygon computation races MapLibre's style load. The initial computation runs at `.userInitiated` priority with a map-ready handshake flag to guarantee explored hexes are visible immediately — no solid fog flash.
 * **Battery & Drift Optimization:** CPU remains asleep until physical movement occurs. An implied speed filter ($\Delta d / \Delta t \leq 12$ m/s) aggressively discards urban canyon GPS multipath noise before it touches the H3 conversion step.
 * **Clean Project Generation:** The Xcode project is generated deterministically via `xcodegen`, eliminating merge conflicts in `.pbxproj` files and providing seamless Swift Package Manager integration.
 * **Unified CI/CD (GitHub Actions):** GitHub Actions orchestrates the test suite by dynamically running `xcodegen`, resolving SPM dependencies, and executing `xcodebuild test` headlessly to ensure the pure Swift foundation never regresses without the constraints of Xcode Cloud.
@@ -68,7 +69,7 @@ Built as a **pure native iOS application** under the **Sleepy Hermes** paradigm 
 
 ## 📍 Current Status
 
-The project has fully completed the **Pure Native iOS Migration**. All legacy JavaScript/React Native dependencies have been removed in favor of a clean Swift/SwiftUI architecture (`DeriveeNative/`).
+The project has fully completed the **Pure Native iOS Migration** and **Design Alignment** (Waves E–H.1, W15). All legacy JavaScript/React Native dependencies have been removed in favor of a clean Swift/SwiftUI architecture (`DeriveeNative/`). Current focus is on **Fog Reliability & Startup Performance** (Waves I.1–I.5).
 
 | Phase | Status |
 | --- | --- |
@@ -76,7 +77,9 @@ The project has fully completed the **Pure Native iOS Migration**. All legacy Ja
 | **Native Migration: H3 & Project Setup** | ✅ Done |
 | **Native Migration: GRDB Database Layer** | ✅ Done |
 | **Native Migration: Ambient Tracking Engine** | ✅ Done |
-| **SwiftUI Rendering & Polish** | Planned |
+| **Design Alignment & Ship Prep (Waves E–H.1)** | ✅ Done |
+| **Dynamic Island & Live Activities (W15)** | ✅ Done |
+| **Fog Reliability & Startup Performance (I.1–I.5)** | Planned |
 
 Full details in [`ROADMAP.MD`](ROADMAP.MD).
 
