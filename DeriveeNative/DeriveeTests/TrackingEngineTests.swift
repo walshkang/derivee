@@ -68,7 +68,11 @@ final class TrackingEngineTests: XCTestCase {
         XCTAssertGreaterThan(count, 0, "Valid walk should unlock hexes in the database.")
         
         // ADDED: Test the reactive pipeline (SpatialStore)
-        let store = SpatialStore(dbManager: dbManager)
+        let store = SpatialStore(
+            dbManager: dbManager,
+            liveUpdatePriority: .userInitiated,
+            observationScheduler: .immediate
+        )
         
         // Wait for ValueObservation to fire
         try await Task.sleep(nanoseconds: 500_000_000)
@@ -105,7 +109,11 @@ final class TrackingEngineTests: XCTestCase {
     
     func testPOIDiscovery() async throws {
         // As per the requirement to test POI Discovery
-        let store = SpatialStore(dbManager: dbManager)
+        let store = SpatialStore(
+            dbManager: dbManager,
+            liveUpdatePriority: .userInitiated,
+            observationScheduler: .immediate
+        )
         
         // Wait for SpatialStore init Task to finish loading from DB and overwriting discoveredPOIs
         try await Task.sleep(nanoseconds: 100_000_000)

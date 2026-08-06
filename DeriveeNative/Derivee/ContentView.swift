@@ -21,8 +21,8 @@ struct ContentView: View {
         Group {
             if isCheckingHydration {
                 Color.black.ignoresSafeArea()
-                    .onAppear {
-                        isHydrationComplete = SpatialDatabaseManager.shared.isHydrationComplete()
+                    .task {
+                        isHydrationComplete = (try? await SpatialDatabaseManager.shared.isHydrationComplete()) ?? false
                         isCheckingHydration = false
                     }
             } else if !isHydrationComplete {

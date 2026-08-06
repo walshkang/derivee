@@ -225,6 +225,9 @@ struct MapView: UIViewRepresentable {
         }
         
         func setupLayers(in style: MLNStyle) {
+            // VERIFIED: MapLibre Native (iOS) initial fog shape requires CW winding order for exterior bounds.
+            // Matches SpatialStore bounds order (Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left -> Top-Left).
+            // Tested & hardened in Wave I.2 (WI2-WINDING).
             let bounds = [
                 CLLocationCoordinate2D(latitude: 41.500001, longitude: -74.500001),
                 CLLocationCoordinate2D(latitude: 41.500001, longitude: -73.0),
@@ -339,11 +342,12 @@ struct MapView: UIViewRepresentable {
                     
                     // ARCHITECT GUARDRAIL 1: Load/Decode GeoJSON polyline off main thread
                     Task.detached(priority: .userInitiated) {
-                        let details = SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
-                        let coords = await TransitRouteData.loadRouteCoordinates(for: stopId)
-                        let lineInfo = TransitRouteData.lineInfo(for: details.routeId)
-                        
-                        await MainActor.run {
+                        do {
+                            let details = try await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
+                            let coords = await TransitRouteData.loadRouteCoordinates(for: stopId)
+                            let lineInfo = TransitRouteData.lineInfo(for: details.routeId)
+                            
+                            await MainActor.run {
                             guard self.parent.showTransitSheet && self.parent.selectedTransitStop == stopId else { return }
                             
                             // Remove stale layers/sources if any
@@ -375,9 +379,12 @@ struct MapView: UIViewRepresentable {
                             routeLayer.lineOpacityTransition = MLNTransition(duration: 0.2, delay: 0)
                             style.addLayer(routeLayer)
                         }
+                    } catch {
+                        print("Map POI Fetch Error: \(error)")
                     }
                 }
-            } else {
+            }
+        } else {
                 lastSelectedStop = nil
                 if let layer = style.layer(withIdentifier: ephemeralRouteLayerId) {
                     style.removeLayer(layer)

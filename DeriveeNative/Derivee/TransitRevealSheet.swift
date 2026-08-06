@@ -90,17 +90,20 @@ struct TransitRevealSheet: View {
             Spacer()
         }
         .padding(20)
-        .onAppear {
-            loadData()
+        .task {
+            await loadData()
         }
     }
     
-    private func loadData() {
-        let details = SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
-        let hw = SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
+    @MainActor
+    private func loadData() async {
+        let details = try? await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
+        let hw = try? await SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
         
         self.stopDetails = details
-        self.headways = hw
+        if let hw = hw {
+            self.headways = hw
+        }
     }
 }
 

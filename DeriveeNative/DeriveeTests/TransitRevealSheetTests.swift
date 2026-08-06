@@ -61,18 +61,18 @@ final class TransitRevealSheetTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    func testHeadwayDataQueryPerformanceUnder12ms() throws {
+    func testHeadwayDataQueryPerformanceUnder12ms() async throws {
         let startTime = CFAbsoluteTimeGetCurrent()
-        let headways = dbManager.fetchHeadwayData(for: "stop_bedford")
+        let headways = try await dbManager.fetchHeadwayData(for: "stop_bedford")
         let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
         
         XCTAssertEqual(headways.count, 7, "Headway query should return 7 historical data points.")
         XCTAssertLessThan(durationMs, 12.0, "Historical headway database query must complete in < 12ms (Actual: \(durationMs)ms).")
     }
 
-    func testStopDetailsQueryPerformanceUnder12ms() throws {
+    func testStopDetailsQueryPerformanceUnder12ms() async throws {
         let startTime = CFAbsoluteTimeGetCurrent()
-        let details = dbManager.fetchStopDetails(for: "stop_bedford")
+        let details = try await dbManager.fetchStopDetails(for: "stop_bedford")
         let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
         
         XCTAssertEqual(details.name, "Bedford Ave Station")

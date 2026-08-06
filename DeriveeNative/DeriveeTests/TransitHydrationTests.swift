@@ -75,13 +75,15 @@ final class TransitHydrationTests: XCTestCase {
 
     func testHydrationMetadataFlagOperations() async throws {
         // Initially incomplete
-        XCTAssertFalse(dbManager.isHydrationComplete(), "Hydration complete flag should default to false.")
+        let initialComplete = try await dbManager.isHydrationComplete()
+        XCTAssertFalse(initialComplete, "Hydration complete flag should default to false.")
         
         // Set hydration complete
         try await dbManager.setHydrationComplete()
         
         // Assert updated flag
-        XCTAssertTrue(dbManager.isHydrationComplete(), "Hydration complete flag should return true after setHydrationComplete().")
+        let updatedComplete = try await dbManager.isHydrationComplete()
+        XCTAssertTrue(updatedComplete, "Hydration complete flag should return true after setHydrationComplete().")
     }
 
     func testGracefulRecoveryWhenTransitDatabaseAbsent() async throws {

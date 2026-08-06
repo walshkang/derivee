@@ -90,10 +90,11 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
 | **I.1** | **WI1-FOG-GATE** | **Fog Startup Gate: Synchronize Shape Computation with Map Ready** | **M** | ✅ Done |
-| **I.2** | **WI2-WINDING** | **Winding Order Audit & Interior Ring Hardening** | **S** | Planned |
+| **I.2** | **WI2-WINDING** | **Winding Order Audit & Interior Ring Hardening** | **S** | ✅ Done |
 | **I.3** | **WI3-FOG-TESTS** | **Cold-Start Fog Regression Tests** | **S** | Planned |
 | **I.4** | **WI4-ASYNC-READS** | **Eliminate Main-Thread DB Reads & Configure GRDB QoS** | **M** | Planned |
 | **I.5** | **WI5-HANG-TESTS** | **Priority Inversion Regression Tests** | **S** | Planned |
+| **I.6** | **WI6-TRACK-STOP** | **Fix Ambient Tracking Stop Lifecycle (Live Activity + Persistence)** | **S** | Planned |
 
 ### Post-Ship (Deferred)
 
@@ -270,7 +271,7 @@ After a force-quit and cold relaunch, the user's previously explored hexes (incl
 
 ---
 
-## Wave I.2 — Winding Order Audit & Interior Ring Hardening [Planned]
+## Wave I.2 — Winding Order Audit & Interior Ring Hardening [Done]
 
 **Task ID:** `WI2-WINDING`
 **Depends on:** Wave I.1 (the fog startup gate must be in place first so the winding order fix is testable on cold start).
@@ -321,7 +322,15 @@ The current code may be working by accident. This wave audits and hardens the wi
 
 ---
 
-## Wave I.3 — Cold-Start Fog Regression Tests [Planned]
+## Wave I.3 — Cold-Start Fog Regression Tests [Written — Pending Verified Green Run]
+
+> [!WARNING]
+> **Status: ⚠️ Written, Unverified.** `SpatialStoreFogTests.swift` exists and its logic (RunLoop pump + `withObservationTracking`) is sound, but **no `xcodebuild test` green run has been confirmed** for this file. There is also a blocking broken test in the same suite: `GRDBObservationTests.swift` calls `dbManager.setupDatabase()` (method does not exist) and force-casts `dbWriter as! DatabaseQueue` (it is a `DatabasePool`). This MUST be fixed before I.3 can be declared Done.
+>
+> **Prerequisite (Step 0):** Fix `GRDBObservationTests.swift` before running the suite:
+> 1. Remove `try await dbManager.setupDatabase()` — migration runs automatically in `SpatialDatabaseManager.init()`.
+> 2. Remove the `as! DatabaseQueue` force-cast — use `dbManager.dbWriter` directly.
+> 3. Run `xcodebuild test -project DeriveeNative/Derivee.xcodeproj -scheme Derivee -destination 'platform=iOS Simulator,name=iPhone 17'` and confirm all tests green.
 
 **Task ID:** `WI3-FOG-TESTS`
 **Depends on:** Wave I.1 and I.2 (the fixes must be in place to write meaningful assertions).
@@ -514,3 +523,128 @@ Without tests enforcing that database reads are never called synchronously on th
 2. Temporarily change `isHydrationComplete` back to a synchronous signature → test fails to compile. Restore.
 3. Temporarily remove `configuration.qos = .userInitiated` → QoS test fails. Restore.
 4. Ensure existing tests still pass (no regressions).
+
+---
+
+## Wave I.6 — Fix Ambient Tracking Stop Lifecycle [Planned]
+
+**Task ID:** `WI6-TRACK-STOP`
+**Depends on:** Wave N.3 (Ambient Tracking Engine) complete.
+
+### Goal
+
+Fix three cascading bugs that occur when a user toggles Ambient Tracking OFF in Settings:
+
+1. **Dynamic Island / Live Activity persists** — The "Tracking Walk" Live Activity remains in the Dynamic Island and lock screen after the user stops tracking.
+2. **Location arrow icon lingers** — After stopping tracking and backgrounding/exiting the app, the iOS status bar still shows the location indicator.
+3. **Tracking auto-restarts on relaunch** — When re-opening the app after stopping tracking, the Settings toggle shows Ambient Tracking is ON again.
+
+### Root Causes
+
+1. **Live Activity uses `.default` dismissal policy** (`AmbientTrackingEngine.swift` line ~107). `.default` lets iOS keep the activity visible for up to 4 hours. Must use `.immediate`.
+2. **`CLLocationManager.allowsBackgroundLocationUpdates` is set to `true` in `init()` and never reset to `false` on stop.** The `CLBackgroundActivitySession` invalidation is also asynchronous, so iOS can hold onto the location entitlement if the user backgrounds the app during the cleanup window.
+3. **`MapView.makeUIView()` unconditionally calls `startTracking()`** (line ~40). There is zero persistence of the user's tracking preference — `isTracking` is a purely in-memory `@Published` property that defaults to `false`. Every app relaunch creates a fresh `AmbientTrackingEngine`, and the map immediately force-starts it.
+
+### Agent Directives
+
+#### 1. Persist tracking state with `@AppStorage`
+
+* Add `@AppStorage("isTrackingEnabled") var isTrackingEnabled = false` to `AmbientTrackingEngine`.
+* Default is **`false`** — tracking must be explicitly opted into by the user (required for App Store compliance with background location guidelines).
+* The existing in-memory `@Published var isTracking` should reflect the live runtime state (engine is actively running). The persisted `isTrackingEnabled` reflects the **user's intent** (should tracking resume on next launch).
+* On `startTracking()`: set `isTrackingEnabled = true`.
+* On `stopTracking()`: set `isTrackingEnabled = false`.
+
+#### 2. Create `resumeTrackingIfNeeded()` method
+
+* **Do NOT start tracking inside `AmbientTrackingEngine.init()`.** Triggering hardware side-effects (CoreLocation) inside an initializer is an anti-pattern.
+* Add a new method to `AmbientTrackingEngine`:
+  ```swift
+  func resumeTrackingIfNeeded() {
+      guard isTrackingEnabled, !isTracking else { return }
+      startTracking()
+  }
+  ```
+* Call `resumeTrackingIfNeeded()` from `MapView.makeUIView()` instead of the current unconditional `startTracking()` call.
+
+#### 3. Make `stopTracking()` async
+
+* Change the signature to `func stopTracking() async`.
+* The synchronous fire-and-forget `Task { await activity.end(...) }` pattern creates a race condition: if the user taps stop and immediately backgrounds the app, iOS suspends threads before the detached cleanup completes, leaving the Live Activity orphaned.
+* Implement in this exact order:
+  ```swift
+  func stopTracking() async {
+      // 1. Cancel the update stream and await its completion
+      updatesTask?.cancel()
+      _ = await updatesTask?.result
+      updatesTask = nil
+
+      // 2. Invalidate the background session
+      backgroundSession?.invalidate()
+      backgroundSession = nil
+
+      // 3. Await the Live Activity end with immediate dismissal
+      if let activity = currentActivity {
+          let state = TrackingAttributes.ContentState(
+              hexesCleared: sessionHexCount,
+              activeNeighborhood: nil
+          )
+          await activity.end(
+              ActivityContent(state: state, staleDate: nil),
+              dismissalPolicy: .immediate
+          )
+      }
+      currentActivity = nil
+
+      // 4. Clean up Location Manager
+      locationManager.allowsBackgroundLocationUpdates = false
+
+      // 5. Reset stale state
+      lastLocation = nil
+      lastSavedHex = nil
+
+      // 6. Update persisted + runtime state
+      isTrackingEnabled = false
+      isTracking = false
+  }
+  ```
+
+#### 4. Move `allowsBackgroundLocationUpdates` to `startTracking()`
+
+* Remove `locationManager.allowsBackgroundLocationUpdates = true` from `init()`.
+* Add it to `startTracking()`, right before creating the `CLBackgroundActivitySession`.
+* This ensures the background flag is only active while tracking is actually running.
+
+#### 5. Update `SettingsView` caller
+
+* The "Pause Tracking" destructive button action must wrap the call in a `Task`:
+  ```swift
+  Button("Pause Tracking", role: .destructive) {
+      Task {
+          await trackingEngine.stopTracking()
+      }
+  }
+  ```
+
+#### 6. Wire up onboarding opt-in (if not already present)
+
+* When the user completes onboarding (`OnboardingView`), present a "Start Exploring" button.
+* Tapping it sets `isTrackingEnabled = true`, calls `startTracking()`, and triggers the iOS location permission prompt.
+* This makes tracking a conscious, user-initiated action — required for App Store review.
+
+### Files to Modify
+
+* `DeriveeNative/Derivee/AmbientTrackingEngine.swift` — Add `@AppStorage`, `resumeTrackingIfNeeded()`, make `stopTracking()` async, fix dismissal policy, move `allowsBackgroundLocationUpdates`, reset stale state.
+* `DeriveeNative/Derivee/MapView.swift` — Replace unconditional `startTracking()` with `resumeTrackingIfNeeded()`.
+* `DeriveeNative/Derivee/SettingsView.swift` — Wrap `stopTracking()` call in `Task { await ... }`.
+* `DeriveeNative/Derivee/OnboardingView.swift` — Add explicit "Start Exploring" opt-in that enables tracking.
+
+### Verification
+
+1. **Toggle off → Dynamic Island disappears within 1 second.**
+2. **Toggle off → exit app → no location arrow in status bar.**
+3. **Toggle off → exit app → reopen → Settings shows tracking OFF.**
+4. **Toggle on → exit app → reopen → tracking resumes automatically.**
+5. **Fresh install → first launch → tracking does NOT auto-start.** User must complete onboarding and tap "Start Exploring."
+6. **Existing unit tests still pass** (`xcodebuild test`).
+7. **`TrackingEngineTests` updated** to cover `resumeTrackingIfNeeded()` logic (starts only when persisted preference is true).

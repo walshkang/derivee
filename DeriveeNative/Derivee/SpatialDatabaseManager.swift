@@ -22,6 +22,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
 
             
             var configuration = Configuration()
+            configuration.qos = .userInitiated
             // Setting pragmas as specified in the blueprint
             configuration.prepareDatabase { db in
                 try db.execute(sql: "PRAGMA synchronous = NORMAL;")
@@ -51,7 +52,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             }
             
             if inMemory {
-                dbWriter = try DatabaseQueue(configuration: configuration)
+                let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("derivee_test_\(UUID().uuidString).sqlite")
+                dbWriter = try DatabasePool(path: tempURL.path, configuration: configuration)
             } else {
                 dbWriter = try DatabasePool(path: databaseURL.path, configuration: configuration)
             }
@@ -163,14 +165,10 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    func isHydrationComplete() -> Bool {
-        do {
-            return try dbWriter.read { db in
-                let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM meta WHERE key = 'hydration_complete' AND value = '1'") ?? 0
-                return count > 0
-            }
-        } catch {
-            return false
+    func isHydrationComplete() async throws -> Bool {
+        return try await dbWriter.read { db in
+            let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM meta WHERE key = 'hydration_complete' AND value = '1'") ?? 0
+            return count > 0
         }
     }
     
@@ -259,20 +257,15 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    func fetchNeighborhoodName(for h3Index: String) -> String? {
-        do {
-            return try dbWriter.read { db in
-                let sql = """
-                SELECT ns.name
-                FROM neighborhood.neighborhood_hexes nh
-                JOIN neighborhood.neighborhood_stats ns ON nh.neighborhood_id = ns.id
-                WHERE nh.h3_index = ?
-                """
-                return try String.fetchOne(db, sql: sql, arguments: [h3Index])
-            }
-        } catch {
-            print("⚠️ Failed to fetch neighborhood name: \(error)")
-            return nil
+    func fetchNeighborhoodName(for h3Index: String) async throws -> String? {
+        return try await dbWriter.read { db in
+            let sql = """
+            SELECT ns.name
+            FROM neighborhood.neighborhood_hexes nh
+            JOIN neighborhood.neighborhood_stats ns ON nh.neighborhood_id = ns.id
+            WHERE nh.h3_index = ?
+            """
+            return try String.fetchOne(db, sql: sql, arguments: [h3Index])
         }
     }
     
@@ -291,69 +284,52 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         let minutes: Int
     }
     
-    func fetchStopDetails(for stopId: String) -> StopDetails {
+    func fetchStopDetails(for stopId: String) async throws -> StopDetails {
         let startTime = CFAbsoluteTimeGetCurrent()
         defer {
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
             print("⏱️ fetchStopDetails for \(stopId) executed in \(String(format: "%.2f", elapsed))ms")
         }
         
-        do {
-            return try dbWriter.read { db in
-                if let row = try Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
-                    let name = row["stop_name"] as? String ?? "Transit Station"
-                    let routeType = 1
-                    let routeId = inferRouteId(from: stopId, name: name)
-                    
-                    let arrivals = generateArrivals(for: routeId)
-                    return StopDetails(stopId: stopId, name: name, routeId: routeId, routeType: routeType, arrivals: arrivals)
-                }
+        return try await dbWriter.read { db in
+            if let row = try Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
+                let name = row["stop_name"] as? String ?? "Transit Station"
+                let routeType = 1
+                let routeId = self.inferRouteId(from: stopId, name: name)
                 
-                return StopDetails(
-                    stopId: stopId,
-                    name: "Transit Station (\(stopId))",
-                    routeId: "L",
-                    routeType: 1,
-                    arrivals: [
-                        ArrivalInfo(line: "L", destination: "Manhattan - 8th Ave", minutes: 3),
-                        ArrivalInfo(line: "L", destination: "Brooklyn - Rockaway Pkwy", minutes: 7)
-                    ]
-                )
+                let arrivals = self.generateArrivals(for: routeId)
+                return StopDetails(stopId: stopId, name: name, routeId: routeId, routeType: routeType, arrivals: arrivals)
             }
-        } catch {
+            
             return StopDetails(
                 stopId: stopId,
-                name: "Station \(stopId)",
+                name: "Transit Station (\(stopId))",
                 routeId: "L",
                 routeType: 1,
                 arrivals: [
-                    ArrivalInfo(line: "L", destination: "Manhattan - 8th Ave", minutes: 2),
-                    ArrivalInfo(line: "L", destination: "Canarsie", minutes: 8)
+                    ArrivalInfo(line: "L", destination: "Manhattan - 8th Ave", minutes: 3),
+                    ArrivalInfo(line: "L", destination: "Brooklyn - Rockaway Pkwy", minutes: 7)
                 ]
             )
         }
     }
     
-    func fetchHeadwayData(for stopId: String) -> [Double] {
+    func fetchHeadwayData(for stopId: String) async throws -> [Double] {
         let startTime = CFAbsoluteTimeGetCurrent()
         defer {
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
             print("⏱️ fetchHeadwayData for \(stopId) executed in \(String(format: "%.2f", elapsed))ms")
         }
         
-        do {
-            return try dbWriter.read { db in
-                // Attempt query against transit delta historical headway table if available
-                let sql = "SELECT headway_min FROM transit.headway_history WHERE stop_id = ? ORDER BY day_offset ASC LIMIT 7"
-                let rows = try Double.fetchAll(db, sql: sql, arguments: [stopId])
-                if !rows.isEmpty {
-                    return rows
-                }
-                // Fallback realistic headway variation series
-                return generateFallbackHeadways(for: stopId)
+        return try await dbWriter.read { db in
+            // Attempt query against transit delta historical headway table if available
+            let sql = "SELECT headway_min FROM transit.headway_history WHERE stop_id = ? ORDER BY day_offset ASC LIMIT 7"
+            let rows = try Double.fetchAll(db, sql: sql, arguments: [stopId])
+            if !rows.isEmpty {
+                return rows
             }
-        } catch {
-            return generateFallbackHeadways(for: stopId)
+            // Fallback realistic headway variation series
+            return self.generateFallbackHeadways(for: stopId)
         }
     }
     

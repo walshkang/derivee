@@ -22,9 +22,17 @@ final class SpatialStore: @unchecked Sendable {
     private var previousHexes: Set<String> = []
     
     private let dbManager: SpatialDatabaseManager
+    private let liveUpdatePriority: TaskPriority
+    private let observationScheduler: ValueObservationScheduler
     
-    init(dbManager: SpatialDatabaseManager = .shared) {
+    init(
+        dbManager: SpatialDatabaseManager = .shared, 
+        liveUpdatePriority: TaskPriority = .background,
+        observationScheduler: ValueObservationScheduler = .async(onQueue: .main)
+    ) {
         self.dbManager = dbManager
+        self.liveUpdatePriority = liveUpdatePriority
+        self.observationScheduler = observationScheduler
         startObservation(dbManager: dbManager)
         
         Task {
@@ -46,6 +54,7 @@ final class SpatialStore: @unchecked Sendable {
         
         observationTask = observation.start(
             in: dbManager.dbWriter,
+            scheduling: self.observationScheduler,
             onError: { error in
                 print("SpatialStore Observation error: \(error)")
             },
@@ -76,9 +85,10 @@ final class SpatialStore: @unchecked Sendable {
     
     private func recomputeFogShape(hexes: Set<String>, newlyUnlockedCell: UInt64?, isInitial: Bool = false) {
         polygonTask?.cancel()
-        let taskPriority: TaskPriority = isInitial ? .userInitiated : .background
+        let taskPriority: TaskPriority = isInitial ? .userInitiated : self.liveUpdatePriority
         polygonTask = Task.detached(priority: taskPriority) {
-            // Clockwise winding order for exterior bounds
+            // VERIFIED: MapLibre Native (iOS) requires Clockwise (CW) winding order for exterior bounds.
+            // Tested & hardened in Wave I.2 (WI2-WINDING).
             // JITTER APPLIED: MapLibre ignores updates to polygons if the exterior bounding box 
             // hasn't changed. We jitter the top-left corner slightly to force a cache invalidation 
             // and redraw the new holes.
@@ -98,7 +108,9 @@ final class SpatialStore: @unchecked Sendable {
                     let boundary = try H3.cellToBoundary(cell: cell)
                     var coords = boundary.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
                     
-                    // Force CW winding order for MapLibre interior rings (holes)
+                    // VERIFIED: MapLibre Native (iOS) interior polygon rings (holes) require CW winding order.
+                    // H3 cellToBoundary defaults to CCW; reversing produces CW order.
+                    // Tested & hardened in Wave I.2 (WI2-WINDING). Do NOT change without re-testing fog rendering.
                     coords.reverse()
                     
                     if coords.count > 0, let first = coords.first {

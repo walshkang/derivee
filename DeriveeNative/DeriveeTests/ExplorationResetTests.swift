@@ -42,7 +42,11 @@ final class ExplorationResetTests: XCTestCase {
     
     @MainActor
     func testSpatialStoreClearDataResetsState() async throws {
-        let store = SpatialStore(dbManager: dbManager)
+        let store = SpatialStore(
+            dbManager: dbManager,
+            liveUpdatePriority: .userInitiated,
+            observationScheduler: .immediate
+        )
         
         // 1. Inject mock state
         store.exploredHexes = ["8b2a10089081fff", "8b2a10089082fff"]

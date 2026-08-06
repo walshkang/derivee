@@ -148,7 +148,7 @@ final class AmbientTrackingEngine: ObservableObject {
                 do {
                     // Hand off to the database
                     let isNew = try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
-                    let nbhd = self.databaseManager.fetchNeighborhoodName(for: indexString)
+                    let nbhd = try? await self.databaseManager.fetchNeighborhoodName(for: indexString)
                     
                     await MainActor.run {
                         if isNew {

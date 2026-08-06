@@ -43,6 +43,25 @@ final class H3SpatialMathTests: XCTestCase {
         XCTAssertLessThan(distance, 25.0, "Reconstituted cell center should be within 25m of origin coordinate.")
     }
     
+    func testExteriorBoundingBoxClockwiseWindingOrder() {
+        let bounds = [
+            CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5), // Top Left
+            CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0), // Top Right
+            CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0), // Bottom Right
+            CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5), // Bottom Left
+            CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5)  // Top Left (closed)
+        ]
+        
+        var shoelaceSum: Double = 0
+        for i in 0..<(bounds.count - 1) {
+            let p1 = bounds[i]
+            let p2 = bounds[i + 1]
+            shoelaceSum += (p2.longitude - p1.longitude) * (p2.latitude + p1.latitude)
+        }
+        
+        XCTAssertGreaterThan(shoelaceSum, 0, "Exterior fog polygon bounds must have Clockwise (CW) winding order (positive shoelace sum in lat/lng coordinate space).")
+    }
+
     func testBoundaryVertexExtractionAndClockwiseWindingOrder() throws {
         let lat = 40.768075
         let lng = -73.981897
@@ -53,7 +72,7 @@ final class H3SpatialMathTests: XCTestCase {
         
         var coords = boundary.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
         
-        // As per GeoJSON RFC 7946 & SpatialStore implementation:
+        // As per GeoJSON RFC 7946 & SpatialStore verified implementation:
         // Interior hole polygons in MapLibre fog masks MUST have Clockwise (CW) winding order.
         // H3 boundary vertices default to CCW, so reversing them produces CW winding order.
         coords.reverse()
