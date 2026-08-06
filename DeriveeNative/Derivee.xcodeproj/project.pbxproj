@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		094712DE5F55C5A2F994A612 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1269ACE7C6346A1302459B0 /* MapView.swift */; };
+		09CDCC94B4DD8E0721584480 /* NeighborhoodTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966E6957AA78D74369F921CC /* NeighborhoodTests.swift */; };
 		0E79270F01B7B13F8D614A06 /* DeriveeWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7EC6A6941E06A9AA9C6D2A93 /* DeriveeWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0F8E9A49820BDF3E9FB0DBEC /* H3SpatialMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47A3E08CE2FC2E71A4F9EEA6 /* H3SpatialMathTests.swift */; };
 		1885A68AA306E0E442B71BBA /* TransitRouteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94F77B8E3EE24B3260000B62 /* TransitRouteData.swift */; };
@@ -104,6 +105,7 @@
 		919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientTrackingEngine.swift; sourceTree = "<group>"; };
 		9311BA9362F4F6C17ABFC046 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		94F77B8E3EE24B3260000B62 /* TransitRouteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRouteData.swift; sourceTree = "<group>"; };
+		966E6957AA78D74369F921CC /* NeighborhoodTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeighborhoodTests.swift; sourceTree = "<group>"; };
 		97F9405AD2F0493CF5ECB925 /* neighborhood.sqlite-shm */ = {isa = PBXFileReference; path = "neighborhood.sqlite-shm"; sourceTree = "<group>"; };
 		A3A37CA71EE44E8BDD205124 /* PhilosophyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhilosophyView.swift; sourceTree = "<group>"; };
 		AA1D089BD418F79AE29C57FC /* neighborhood.sqlite-wal */ = {isa = PBXFileReference; path = "neighborhood.sqlite-wal"; sourceTree = "<group>"; };
@@ -211,6 +213,7 @@
 			children = (
 				CFAC15B31EFF91C40E2E93EB /* ExplorationResetTests.swift */,
 				47A3E08CE2FC2E71A4F9EEA6 /* H3SpatialMathTests.swift */,
+				966E6957AA78D74369F921CC /* NeighborhoodTests.swift */,
 				8C620FF203F57ED5764A4BF7 /* TrackingEngineTests.swift */,
 				BD68697FCA0DA2827F0AFADC /* TransitHydrationTests.swift */,
 				21AD6FB3518E383909502845 /* TransitRevealSheetTests.swift */,
@@ -415,6 +418,7 @@
 			files = (
 				8BE08985845BB5107F48ECE4 /* ExplorationResetTests.swift in Sources */,
 				0F8E9A49820BDF3E9FB0DBEC /* H3SpatialMathTests.swift in Sources */,
+				09CDCC94B4DD8E0721584480 /* NeighborhoodTests.swift in Sources */,
 				9838261106ACCE6615BCBC25 /* TrackingEngineTests.swift in Sources */,
 				D7286ED979BEF692F2042730 /* TransitHydrationTests.swift in Sources */,
 				4D5F43EF102E37A074561599 /* TransitRevealSheetTests.swift in Sources */,

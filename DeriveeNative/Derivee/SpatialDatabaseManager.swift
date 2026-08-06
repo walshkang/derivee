@@ -15,34 +15,11 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             let neighborhoodDBURL = appSupportURL.appendingPathComponent("derivee_neighborhood.sqlite")
             
             if customTransitURL == nil {
-                if !fileManager.fileExists(atPath: transitDBURL.path) {
-                    if let bundleURL = Bundle.main.url(forResource: "transit_delta", withExtension: "sqlite") ?? Bundle.main.url(forResource: "derivee_transit", withExtension: "sqlite") {
-                        print("Found transit DB in bundle at \(bundleURL)")
-                        do {
-                            try fileManager.copyItem(at: bundleURL, to: transitDBURL)
-                            print("Successfully copied transit DB to \(transitDBURL)")
-                        } catch {
-                            print("⚠️ Failed to copy transit DB: \(error)")
-                        }
-                    } else {
-                        print("⚠️ Could not find transit_delta.sqlite in main bundle")
-                    }
-                }
+                Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["transit_delta", "derivee_transit"], targetURL: transitDBURL, fileManager: fileManager)
             }
             
-            if !fileManager.fileExists(atPath: neighborhoodDBURL.path) {
-                if let nbhdURL = Bundle.main.url(forResource: "neighborhood", withExtension: "sqlite") {
-                    print("Found neighborhood DB in bundle at \(nbhdURL)")
-                    do {
-                        try fileManager.copyItem(at: nbhdURL, to: neighborhoodDBURL)
-                        print("Successfully copied neighborhood DB to \(neighborhoodDBURL)")
-                    } catch {
-                        print("⚠️ Failed to copy neighborhood DB: \(error)")
-                    }
-                } else {
-                    print("⚠️ Could not find neighborhood.sqlite in main bundle")
-                }
-            }
+            Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["neighborhood"], targetURL: neighborhoodDBURL, fileManager: fileManager)
+
             
             var configuration = Configuration()
             // Setting pragmas as specified in the blueprint
@@ -83,6 +60,71 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             fatalError("Failed to initialize database: \(error)")
         }
     }
+    
+    private static func copyBundleDatabaseIfNeeded(bundleResourceNames: [String], targetURL: URL, fileManager: FileManager) {
+        var sourceURL: URL? = nil
+        for name in bundleResourceNames {
+            if let url = Bundle.main.url(forResource: name, withExtension: "sqlite") {
+                sourceURL = url
+                break
+            }
+        }
+        
+        guard let bundleURL = sourceURL else {
+            print("⚠️ Could not find \(bundleResourceNames.joined(separator: "/")).sqlite in main bundle")
+            return
+        }
+        
+        var shouldCopy = false
+        if !fileManager.fileExists(atPath: targetURL.path) {
+            shouldCopy = true
+        } else {
+            // 1. Compare modification dates between bundle asset and cached local file
+            do {
+                let bundleAttrs = try fileManager.attributesOfItem(atPath: bundleURL.path)
+                let targetAttrs = try fileManager.attributesOfItem(atPath: targetURL.path)
+                if let bundleDate = bundleAttrs[.modificationDate] as? Date,
+                   let targetDate = targetAttrs[.modificationDate] as? Date,
+                   bundleDate > targetDate {
+                    print("Bundle \(bundleURL.lastPathComponent) is newer than local copy (\(bundleDate) > \(targetDate)). Updating...")
+                    shouldCopy = true
+                }
+            } catch {
+                shouldCopy = true
+            }
+            
+            // 2. Schema integrity check for neighborhood database specifically
+            if !shouldCopy && bundleResourceNames.contains("neighborhood") {
+                do {
+                    let dbQueue = try DatabaseQueue(path: targetURL.path)
+                    let hasCentroid = try dbQueue.read { db in
+                        let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(neighborhood_stats)")
+                        return rows.contains { ($0["name"] as? String) == "centroid_lat" }
+                    }
+                    if !hasCentroid {
+                        print("Local neighborhood DB is missing centroid_lat column. Re-copying from bundle...")
+                        shouldCopy = true
+                    }
+                } catch {
+                    print("Failed to inspect local neighborhood DB schema: \(error). Re-copying...")
+                    shouldCopy = true
+                }
+            }
+        }
+        
+        if shouldCopy {
+            do {
+                if fileManager.fileExists(atPath: targetURL.path) {
+                    try fileManager.removeItem(at: targetURL)
+                }
+                try fileManager.copyItem(at: bundleURL, to: targetURL)
+                print("Successfully copied \(bundleURL.lastPathComponent) to \(targetURL)")
+            } catch {
+                print("⚠️ Failed to copy \(bundleURL.lastPathComponent): \(error)")
+            }
+        }
+    }
+
     
     private var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
