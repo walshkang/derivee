@@ -15,10 +15,11 @@
 - **Aesthetics:** Follow the Day/Night cycle guidelines and use native materials (`.ultraThinMaterial`).
 
 ## 3. Testing Mandates
-- **Staggered Rollout:** Adhere to the staggered testing rollout defined in `ROADMAP.MD` and `context.md`.
-- **Unit Tests (Phase 1 & 2):** Isolate core logic (H3 math, database hydration, ambient tracking) from the UI.
-- **Snapshot Testing (Phase 3):** Use `swift-snapshot-testing` for SwiftUI views (`StatsView`, `TransitRevealSheet`) to prevent visual regressions during rapid iteration.
-- **CI/CD Enforcement (Phase 4):** All tests must run headlessly (`xcodebuild test`) in CI using **GitHub Actions**. Do NOT use Xcode Cloud due to its rigid `.xcodeproj` expectations which conflict with our dynamic `xcodegen` setup. Pull requests failing tests must be blocked.
+- **Split-Target Architecture:**
+  - **`DeriveeCoreTests` (No App Host):** Tests core logic (GRDB SQLite transactions, Uber H3 spatial math, multipath GPS noise rejection, multi-threading deadlocks). Runs in milliseconds, completely headlessly without a simulator. Cooperative Task yield testing should be restricted purely to these core database logic tests.
+  - **`DeriveeSnapshotTests` (Requires App Host):** Tests SwiftUI layouts (`StatsView`, `TransitRevealSheet`, Day/Night color accuracy) using `swift-snapshot-testing`. Boots an iPhone simulator in the background on GitHub Actions to prevent visual UI regressions from agent vibe-coding.
+- **Data vs Snapshot Assertions:** Use `swift-snapshot-testing` exclusively for SwiftUI visual layers. Keep pure native data assertions (e.g. `interiorPolygons?.count`) for the MapLibre Fog Polygon Math—do not use snapshot/dump diffing for MapLibre structural objects or OpenGL renders.
+- **CI/CD Enforcement (Phase 4):** Both test targets must run in CI using **GitHub Actions**. Do NOT use Xcode Cloud due to its rigid `.xcodeproj` expectations which conflict with our dynamic `xcodegen` setup. Pull requests failing tests must be blocked.
 
 ## 4. Backend & Ecosystem Directives
 - **Go Observer Daemon:** Do NOT containerize/Dockerize the Observer daemon. Deploy the raw compiled Go binary directly to the Oracle Cloud ARM instance via `systemd` to avoid virtualized filesystem overhead and maximize SQLite write speeds.

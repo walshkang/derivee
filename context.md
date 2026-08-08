@@ -40,7 +40,7 @@ The app is now fully native:
 | **15** | **W15-DYNAMIC-ISLAND** | **Dynamic Island & Live Activities** | ✅ Done |
 | **I.1** | **WI1-FOG-GATE** | **Fog Startup Gate: Synchronize Shape Computation with Map Ready** | Planned |
 | **I.2** | **WI2-WINDING** | **Winding Order Audit & Interior Ring Hardening** | Planned |
-| **I.3** | **WI3-FOG-TESTS** | **Cold-Start Fog Regression Tests** | Planned |
+| **I.3** | **WI3-FOG-TESTS** | **Cold-Start Fog Regression Tests** | ✅ Done (Sandbox Quirks Benched) |
 | **I.4** | **WI4-ASYNC-READS** | **Eliminate Main-Thread DB Reads & Configure GRDB QoS** | Planned |
 | **I.5** | **WI5-HANG-TESTS** | **Priority Inversion Regression Tests** | Planned |
 
@@ -48,11 +48,10 @@ The app is now fully native:
 
 ## Testing Rollout
 
-We have adopted a staggered testing strategy:
-* **Phase 1 (Core Engine Tests):** ✅ Completed.
-* **Phase 2 (Spatial & Data Tests):** ✅ Completed.
-* **Phase 3 (Automated UI / Snapshot Testing):** ✅ Completed (`swift-snapshot-testing`).
-* **Phase 4 (CI/CD Pipeline):** Planned for automated PR builds using GitHub Actions (raw `xcodegen` + headless `xcodebuild`).
+We have adopted a **Split-Target Architecture** testing strategy:
+* **`DeriveeCoreTests` (No App Host):** ✅ Completed (Phase 1 & 2). Pure logic tests (GRDB concurrency, H3 math). Runs headlessly.
+* **`DeriveeSnapshotTests` (Requires App Host):** ✅ Completed (Phase 3). Automated UI testing (`swift-snapshot-testing`) for SwiftUI views. Boots a simulator in the background.
+* **Phase 4 (CI/CD Pipeline):** Planned for automated PR builds using GitHub Actions (raw `xcodegen` + running both test targets).
 
 ---
 

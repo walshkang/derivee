@@ -49,7 +49,9 @@ final class SpatialStore: @unchecked Sendable {
     
     private func startObservation(dbManager: SpatialDatabaseManager) {
         let observation = ValueObservation.tracking { db in
-            try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes")
+            let hexes = try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes")
+            print("🔍 [GRDB Pipeline] ValueObservation fetched \(hexes.count) hexes on Thread: \(Thread.current)")
+            return hexes
         }
         
         observationTask = observation.start(
@@ -59,7 +61,7 @@ final class SpatialStore: @unchecked Sendable {
                 print("SpatialStore Observation error: \(error)")
             },
             onChange: { [weak self] hexesArray in
-                print("ValueObservation fired with \(hexesArray.count) hexes")
+                print("🚀 [GRDB Pipeline] onChange fired with \(hexesArray.count) hexes on Thread: \(Thread.current)")
                 guard let self = self else { return }
                 
                 let newSet = Set(hexesArray)
@@ -155,7 +157,7 @@ final class SpatialStore: @unchecked Sendable {
             let capturedRingsCount = innerRings.count
             await MainActor.run { [weak self] in
                 if Task.isCancelled { return }
-                print("Rendering \(capturedRingsCount) interior rings")
+                print("DEBUG: Rendering \(capturedRingsCount) interior rings, setting currentFogShape")
                 self?.currentFogShape = fogPolygon
                 self?.transientHexShape = capturedTransientShape
                 if let loc = capturedNewHexLocation {

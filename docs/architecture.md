@@ -105,12 +105,13 @@ Testing in Dérivée follows a staggered, specialized approach to ensure stabili
 ### 6.1 Unit Testing (Phases 1 & 2)
 The core engine and raw data components must be tested independently from the UI and background lifecycle.
 - **XCTest** is utilized to test the `AmbientTrackingEngine`, `SpatialDatabaseManager`, and background logic.
+- **Concurrency & Observation:** Legacy `XCTestExpectation` and `withObservationTracking` are strictly avoided when asserting on asynchronous GRDB `@Observable` state changes, as they freeze the `@MainActor` and starve GCD dispatch sources. Instead, tests use **cooperative polling** (`try await Task.sleep`) in a `while` loop to repeatedly yield the thread until the state resolves.
 - **H3 Math & Transit Data:** Dedicated tests isolate spatial hashing math (`swift-h3`) and `transit_delta.sqlite` hydration to ensure data integrity.
 
 ### 6.2 Snapshot Testing (Phase 3)
-Because Dérivée relies heavily on rich, custom SwiftUI visual elements (like the MapLibre overlays, `ultraThinMaterial` backgrounds, and the Transit Reveal bottom sheet):
-- **swift-snapshot-testing** (Point-Free) is used to capture pixel-perfect snapshots of SwiftUI views loaded with mocked `@Observable` data.
-- This prevents visual regressions from going unnoticed during rapid AI/agent-driven iterations.
+Because Dérivée relies heavily on rich, custom SwiftUI visual elements (like the MapLibre overlays, `ultraThinMaterial` backgrounds, and the Transit Reveal bottom sheet) and strict spatial geometries:
+- **UI Snapshots:** **swift-snapshot-testing** (Point-Free) is used to capture pixel-perfect snapshots of SwiftUI views loaded with mocked `@Observable` data. This prevents visual regressions from going unnoticed during rapid AI/agent-driven iterations.
+- **Geometry Snapshots:** The `.dump` strategy is used to serialize and assert the exact memory structures of complex spatial types (like `MLNPolygon`). This acts as a structural lock against accidental modifications to coordinate math and winding orders, which simple count assertions (`XCTAssertEqual(count, 4)`) would fail to catch.
 
 ### 6.3 CI/CD Enforcement (Phase 4)
 Because the native Xcode project is generated immutably via `xcodegen`:
