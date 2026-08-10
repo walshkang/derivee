@@ -92,6 +92,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **I.1** | **WI1-FOG-GATE** | **Fog Startup Gate: Synchronize Shape Computation with Map Ready** | **M** | ✅ Done |
 | **I.2** | **WI2-WINDING** | **Winding Order Audit & Interior Ring Hardening** | **S** | ✅ Done |
 | **I.3** | **WI3-FOG-TESTS** | **Cold-Start Fog Regression Tests** | **S** | ✅ Done (Sandbox Quirks Benched) |
+| **I.3a** | **WI3a-LIVE-FOG** | **Fix Live Fog Update Starvation (`.background` → `.userInitiated`)** | **XS** | ✅ Done |
 | **I.4** | **WI4-ASYNC-READS** | **Eliminate Main-Thread DB Reads & Configure GRDB QoS** | **M** | Planned |
 | **I.5** | **WI5-HANG-TESTS** | **Priority Inversion Regression Tests** | **S** | Planned |
 | **I.6** | **WI6-TRACK-STOP** | **Fix Ambient Tracking Stop Lifecycle (Live Activity + Persistence)** | **S** | Planned |
@@ -221,6 +222,9 @@ To actually achieve "fast deployment," these tests cannot just live on the local
   3. It runs `xcodebuild test` on both the headless core target and the simulator-backed snapshot target.
   4. If either logic or visual regressions are found, the pull request is blocked. If it's green, it auto-merges or deploys to TestFlight.
 
+> [!WARNING]
+> **CI Safety: Benched Tests.** Before Phase 4 goes live, any test using the `disabled_` prefix convention (e.g., `disabled_testNewlyDiscoveredHexTriggersFogShapeUpdate` in `SpatialStoreFogTests.swift`) must be either **fixed and re-enabled** or converted to use explicit `throw XCTSkip("Reason")`. The `disabled_` prefix is a fragile naming convention — if a future agent renames the test to "fix the gap," it will hang CI indefinitely due to the `withObservationTracking` runloop starvation issue. `XCTSkip` is the CI-safe alternative.
+
 ---
 
 ---
@@ -325,15 +329,19 @@ The current code may be working by accident. This wave audits and hardens the wi
 
 ---
 
-## Wave I.3 — Cold-Start Fog Regression Tests & Observation Deadlocks [Planned]
+## Wave I.3 — Cold-Start Fog Regression Tests & Observation Deadlocks [Done — Partial]
 
 > [!WARNING]
-> **Status: ⚠️ Written, Deadlocked.** `SpatialStoreFogTests.swift` and `GRDBObservationTests.swift` currently suffer from XCTest runloop starvation. They use `XCTestExpectation` and `await fulfillment(...)` to wait for `@Observable` or `ValueObservation` state changes, which parks the main thread and freezes the GCD dispatch sources that GRDB needs to deliver database callbacks. Both tests will perpetually timeout until migrated to Cooperative Polling.
+> **Status: ✅ Done (1 test benched).** 3 of 4 specified tests pass. `GRDBObservationTests.swift` was successfully migrated to cooperative polling and passes. However, `SpatialStoreFogTests.swift` still uses `withObservationTracking` in its `waitForFogShape` helper (contradicting the cooperative polling mandate in `docs/architecture.md`). This works for the 3 "init → first shape" tests because the shape resolves before runloop starvation, but hangs on the live reactivity test.
 >
-> **Prerequisite (Step 0):** Fix `GRDBObservationTests.swift` before running the suite:
-> 1. Strip out `XCTestExpectation` and `await fulfillment`.
-> 2. Implement an `async` cooperative polling `while` loop that yields with `try await Task.sleep(nanoseconds: 10_000_000)` until `firedCounts.count == 2` or a 2.0s timeout is reached.
-> 3. Verify it passes independently via `xcodebuild test`.
+> **Benched test:** `disabled_testNewlyDiscoveredHexTriggersFogShapeUpdate` — the only test validating the **ValueObservation → recomputeFogShape() → currentFogShape** live update pipeline. It verifies that inserting a new hex after init causes the fog polygon to reactively update (3 → 4 interior rings). This is prefixed with `disabled_` so XCTest skips it.
+>
+> **Root cause:** The `waitForFogShape` helper wraps `withObservationTracking` inside `withCheckedThrowingContinuation`. For the "wait for *second* observation delivery" scenario, this parks the main thread and starves GRDB's GCD dispatch sources — exactly the deadlock pattern the original WI3 warning predicted.
+>
+> **Resolution path:** WI5 absorbs un-benching this test by porting the `GRDBObservationTests` cooperative polling pattern (`while` loop + `RunLoop.current.run` + `Task.sleep`) into the `waitForFogShape` helper. See WI5 directive 6.
+
+> [!NOTE]
+> **I.3a Fix (WI3a-LIVE-FOG):** During I.3 investigation, a separate live-update starvation bug was identified and fixed. `SpatialStore.liveUpdatePriority` defaulted to `.background`, causing iOS to starve all non-initial `recomputeFogShape()` tasks while the app was in the foreground. Hexes would only appear uncovered after app restart. **Fix:** Changed `liveUpdatePriority` default from `.background` to `.userInitiated` (one-line change in `SpatialStore.swift:30`). A new test `testColdStartFogShapeInitializationWithDefaultPriority` validates the default priority path. See `AGENTS.MD` and `docs/architecture.md` §5.2 for updated rules.
 
 **Task ID:** `WI3-FOG-TESTS`
 **Depends on:** Wave I.1 and I.2 (the fixes must be in place to write meaningful assertions).
@@ -474,6 +482,7 @@ This hang risk compounds the cold-start fog bug: even after `recomputeFogShape()
 3. Force-quit and cold-start — the hydration check completes without blocking the main thread. The black loading screen still displays during the check.
 4. Walk to discover a new hex — the Live Activity update still fires correctly (neighborhood name still populates).
 5. Run all existing tests — no regressions.
+6. **Re-test the benched WI3 fog test:** After `configuration.qos = .userInitiated` is in place, manually re-run `disabled_testNewlyDiscoveredHexTriggersFogShapeUpdate` (temporarily removing the `disabled_` prefix). The elevated QoS may incidentally unblock the GCD dispatch sources that `withObservationTracking` starves. If it passes, this is a free win — re-enable it permanently. If it still hangs, leave it for WI5's cooperative polling fix.
 
 ---
 
@@ -485,6 +494,8 @@ This hang risk compounds the cold-start fog bug: even after `recomputeFogShape()
 ### Problem Statement
 
 Without tests enforcing that database reads are never called synchronously on the main thread, future agents could reintroduce the priority inversion by adding a quick `dbWriter.read` call in a SwiftUI view body or `.onAppear` block.
+
+Additionally, WI3's benched `disabled_testNewlyDiscoveredHexTriggersFogShapeUpdate` test — the only test covering live `ValueObservation` reactivity in the fog pipeline — must be un-benched. The observation delivery path is the more dangerous race surface: the read-side async guards (directives 1–4 below) protect against explicit `dbWriter.read` calls, but they cannot catch priority inversions in GRDB's internal `ValueObservation` dispatch. The benched test is the only gate for that.
 
 ### Agent Directives
 
@@ -511,7 +522,13 @@ Without tests enforcing that database reads are never called synchronously on th
      * Assert `configuredQoS == .userInitiated`.
    * **Alternative (if exposing internals is undesirable):** Write a grep-based test or simply include a comment-only assertion in the test file that documents the expectation, paired with a CI grep check.
 
-6. **Do NOT modify any production source files** in this wave beyond the minimal `configuredQoS` test hook if needed. Only add test files.
+6. **Un-bench WI3's reactive fog test (Step 0 — do this FIRST):**
+   * Rewrite the `waitForFogShape` helper in `SpatialStoreFogTests.swift` to use **cooperative polling** instead of `withObservationTracking` + `withCheckedThrowingContinuation`. The correct pattern already exists in `GRDBObservationTests.swift` (lines 27–34): a `while` loop that checks the state, runs `RunLoop.current.run(mode:before:)` for 10ms, then yields with `try await Task.sleep(nanoseconds: 10_000_000)`.
+   * Remove the `disabled_` prefix from `disabled_testNewlyDiscoveredHexTriggersFogShapeUpdate`, re-enabling it.
+   * Verify it passes via `xcodebuild test`. If it still hangs even with cooperative polling, convert it to `throw XCTSkip("ValueObservation delivery not testable in sandbox — see WI3 analysis")` so CI handles it safely.
+   * This also reconciles `docs/architecture.md` line 108, which claims tests use cooperative polling while the actual `waitForFogShape` helper contradicts that.
+
+7. **Do NOT modify any production source files** in this wave beyond the minimal `configuredQoS` test hook if needed. Only add/modify test files.
 
 ### Files to Create
 

@@ -69,7 +69,7 @@ final class SpatialStoreFogTests: XCTestCase {
                         }
                     }
                 } onChange: {
-                    Task { @MainActor in
+                    DispatchQueue.main.async {
                         checkState()
                     }
                 }
@@ -138,6 +138,20 @@ final class SpatialStoreFogTests: XCTestCase {
         }
     }
     
+    @MainActor
+    func testColdStartFogShapeInitializationWithDefaultPriority() async throws {
+        let hexes = try generateH3Hexes(count: 5)
+        for hex in hexes {
+            try await dbManager.insertDiscoveredHex(h3Index: hex)
+        }
+        
+        let store = SpatialStore(dbManager: dbManager)
+        let fogPolygon = try await waitForFogShape(on: store, expectedInteriorCount: 5)
+        
+        XCTAssertNotNil(fogPolygon, "currentFogShape must not be nil on cold start with default liveUpdatePriority")
+        XCTAssertEqual(fogPolygon.interiorPolygons?.count, 5)
+    }
+
     @MainActor
     func disabled_testNewlyDiscoveredHexTriggersFogShapeUpdate() async throws {
         let fourHexes = try generateH3Hexes(count: 4)

@@ -35,7 +35,7 @@ CREATE TABLE explored_hexes (
 Because the `h3_index` is the only column and acts as a primary key, `WITHOUT ROWID` clusters the index strings together in the B-Tree, significantly reducing storage size and improving sequential read performance during map hydration.
 
 ### 2.3 Reactive Observation
-The `SpatialStore` (`@Observable`) acts as the bridge between GRDB and SwiftUI. It uses GRDB's `ValueObservation` to track changes in the `explored_hexes` table and automatically triggers a SwiftUI re-render when new hexes are discovered in the background.
+The `SpatialStore` (`@Observable`) acts as the bridge between GRDB and SwiftUI. It uses GRDB's `ValueObservation` to track changes in the `explored_hexes` table. When new hexes are written by the background `AmbientTrackingEngine`, `ValueObservation` fires `onChange`, which calls `recomputeFogShape()` inside a `Task.detached(priority: .userInitiated)`. The resulting `MLNPolygon` is set on `currentFogShape` on `MainActor`, which SwiftUI observes via `@Observable`, triggering `MapView.updateUIView()` to push the new shape into the MapLibre fog source.
 
 ### 2.4 Async Read Mandate
 All `SpatialDatabaseManager` read methods exposed to callers **must** use `async`/`await` (`try await dbWriter.read`). Synchronous `dbWriter.read { }` calls on the main thread cause priority inversion hangs when the background `AmbientTrackingEngine` holds a pool connection. The only acceptable synchronous reads are internal to GRDB's `ValueObservation` callbacks, which manage their own threading.
@@ -81,12 +81,16 @@ All hexes are calculated at **Resolution 11**.
 ### 5.1 MapLibre Native
 The visual map is rendered using MapLibre Native.
 - Custom vector styles are injected using Data-Driven Styling (DDS).
-- The volumetric fog is rendered as a dark overlay, and unlocked hexes are applied via a `fill-opacity` match expression against the `explored_hexes` dataset.
-- Because GRDB feeds the UI reactively via `SpatialStore`, MapLibre re-renders the fog layer immediately upon a new background hex discovery without requiring an app restart or manual refresh.
+- The volumetric fog is rendered as a dark overlay. The `fog-source` (`MLNShapeSource`) holds a single `MLNPolygon` whose exterior ring is a 50km bounding box and whose interior rings are hex-shaped holes. `SpatialStore.currentFogShape` is passed through `ContentView` → `MapView.fogShape` → `Coordinator.updateExploredHexes()`, which sets `fogSource.shape = validShape` to update the map.
+- The full reactive chain is: `insertDiscoveredHex()` → GRDB `ValueObservation` fires → `recomputeFogShape()` at `.userInitiated` priority → `currentFogShape` set on `MainActor` → SwiftUI detects `@Observable` change → `updateUIView()` → MapLibre source update. This renders new hex holes in real-time without app restart.
 
-### 5.2 Fog Startup Synchronization
+### 5.2 Fog Computation Priority
+All `recomputeFogShape()` invocations run inside `Task.detached(priority: .userInitiated)`. This applies to both the initial cold-start computation and all subsequent live updates triggered by `ValueObservation`.
+- **Why not `.background`:** iOS aggressively deprioritizes `.background` QoS tasks while the app is in the foreground. A `.background` priority fog recomputation gets queued but may not execute for seconds or minutes, causing the `MainActor.run` block (which sets `currentFogShape`) to never fire. This manifests as hexes appearing uncovered only after app restart. This was the root cause of the live-update starvation bug fixed in the `.background` → `.userInitiated` priority change.
+- **Why `.userInitiated` and not synchronous:** The polygon math (building `MLNPolygon` interior rings from H3 boundaries) completes in <1ms for typical hex counts, but running it off the main thread avoids any risk of jank at high hex counts (1000+).
+
+### 5.3 Fog Startup Synchronization
 On cold start, three systems race: `SpatialStore` fog computation, MapLibre style loading, and the first GPS fix. The architecture enforces:
-- **Priority Gate:** The initial `recomputeFogShape()` runs at `.userInitiated` priority (not `.background`) to complete before MapLibre's `didFinishLoading` fires.
 - **Map Ready Handshake:** A `isMapStyleLoaded` flag in the `MapView.Coordinator` ensures the computed fog shape is applied as soon as both the style and the shape are ready. If the shape is ready first, it's applied when the style loads. If the style loads first, it's applied when the shape arrives via the next `updateUIView` cycle.
 - **Bounding Box Jitter:** The initial fog source uses slightly offset coordinates from the `recomputeFogShape()` output to prevent MapLibre's shape cache from ignoring the first computed update.
 

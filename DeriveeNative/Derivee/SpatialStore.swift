@@ -27,7 +27,7 @@ final class SpatialStore: @unchecked Sendable {
     
     init(
         dbManager: SpatialDatabaseManager = .shared, 
-        liveUpdatePriority: TaskPriority = .background,
+        liveUpdatePriority: TaskPriority = .userInitiated,
         observationScheduler: ValueObservationScheduler = .async(onQueue: .main)
     ) {
         self.dbManager = dbManager
@@ -49,7 +49,7 @@ final class SpatialStore: @unchecked Sendable {
     
     private func startObservation(dbManager: SpatialDatabaseManager) {
         let observation = ValueObservation.tracking { db in
-            let hexes = try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes")
+            let hexes = try SQLRequest<String>(sql: "SELECT h3_index FROM explored_hexes").fetchAll(db)
             print("🔍 [GRDB Pipeline] ValueObservation fetched \(hexes.count) hexes on Thread: \(Thread.current)")
             return hexes
         }
@@ -89,6 +89,7 @@ final class SpatialStore: @unchecked Sendable {
         polygonTask?.cancel()
         let taskPriority: TaskPriority = isInitial ? .userInitiated : self.liveUpdatePriority
         polygonTask = Task.detached(priority: taskPriority) {
+            print("⏳ recomputeFogShape ENTER at \(Date()) priority=\(taskPriority)")
             // VERIFIED: MapLibre Native (iOS) requires Clockwise (CW) winding order for exterior bounds.
             // Tested & hardened in Wave I.2 (WI2-WINDING).
             // JITTER APPLIED: MapLibre ignores updates to polygons if the exterior bounding box 
@@ -155,6 +156,7 @@ final class SpatialStore: @unchecked Sendable {
             let capturedNewHexLocation = newHexLocation
             let capturedTransientShape = transientHexPolygon
             let capturedRingsCount = innerRings.count
+            print("✅ recomputeFogShape EXIT at \(Date())")
             await MainActor.run { [weak self] in
                 if Task.isCancelled { return }
                 print("DEBUG: Rendering \(capturedRingsCount) interior rings, setting currentFogShape")
