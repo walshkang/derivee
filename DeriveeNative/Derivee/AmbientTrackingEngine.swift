@@ -1,3 +1,4 @@
+import SwiftUI
 import Foundation
 import CoreLocation
 import H3
@@ -49,6 +50,7 @@ final class AmbientTrackingEngine: ObservableObject {
     private var currentActivity: Activity<TrackingAttributes>?
     private var sessionHexCount: Int = 0
     
+    @AppStorage("isTrackingEnabled") var isTrackingEnabled = false
     @Published var isTracking = false
     
     private let locationProvider: any LocationProvider
@@ -59,7 +61,6 @@ final class AmbientTrackingEngine: ObservableObject {
         self.databaseManager = databaseManager
         
         locationManager.distanceFilter = 10.0
-        locationManager.allowsBackgroundLocationUpdates = true
         // Note: pausesLocationUpdatesAutomatically doesn't apply to liveUpdates in iOS 17
         // but we can still set it just in case of fallback
         locationManager.pausesLocationUpdatesAutomatically = true
@@ -69,12 +70,20 @@ final class AmbientTrackingEngine: ObservableObject {
         locationManager.requestAlwaysAuthorization()
     }
     
+    func resumeTrackingIfNeeded() {
+        guard isTrackingEnabled, !isTracking else { return }
+        startTracking()
+    }
+    
     func startTracking() {
         guard !isTracking else { return }
         
+        isTrackingEnabled = true
+        isTracking = true
+        locationManager.allowsBackgroundLocationUpdates = true
+        
         // Instantiate the watchdog shield
         backgroundSession = CLBackgroundActivitySession()
-        isTracking = true
         
         sessionHexCount = 0
         do {
@@ -92,9 +101,9 @@ final class AmbientTrackingEngine: ObservableObject {
         }
     }
     
-    func stopTracking() {
-        isTracking = false
+    func stopTracking() async {
         updatesTask?.cancel()
+        _ = await updatesTask?.result
         updatesTask = nil
         
         // Invalidate the watchdog shield
@@ -102,12 +111,18 @@ final class AmbientTrackingEngine: ObservableObject {
         backgroundSession = nil
         
         if let activity = currentActivity {
-            Task {
-                let state = TrackingAttributes.ContentState(hexesCleared: sessionHexCount, activeNeighborhood: nil)
-                await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .default)
-            }
+            let state = TrackingAttributes.ContentState(hexesCleared: sessionHexCount, activeNeighborhood: nil)
+            await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
             currentActivity = nil
         }
+        
+        locationManager.allowsBackgroundLocationUpdates = false
+        
+        lastLocation = nil
+        lastSavedHex = nil
+        
+        isTrackingEnabled = false
+        isTracking = false
     }
     
     private func processLocation(_ location: CLLocation) {

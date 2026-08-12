@@ -317,3 +317,96 @@ Final integration pass. Wire the Stats and Profile settings in native Swift to u
 * Native Xcode build compiles and runs.
 
 ---
+
+## Wave I.4 — Eliminate Main-Thread DB Reads & Configure GRDB QoS [Shipped]
+
+**Task ID:** `WI4-ASYNC-READS`
+**Depends on:** Wave I.1 (the fog startup gate must exist so this wave doesn't introduce a new nil-shape race).
+
+### Problem Statement
+
+Multiple UI code paths perform **synchronous** `dbWriter.read { }` calls directly on the Main Thread (`User-Interactive` QoS). When the background `AmbientTrackingEngine` is simultaneously holding a `DatabasePool` connection for writes at `Default` QoS, the main thread blocks on `Pool.get()` — a textbook **priority inversion**.
+
+This hang risk compounds the cold-start fog bug: even after `recomputeFogShape()` produces a valid fog polygon, the main thread may be stalled on a DB pool semaphore and unable to run `updateUIView` to apply it.
+
+**Affected call sites:**
+
+| Location | Method | Caller QoS |
+|:---|:---|:---|
+| `ContentView.swift:25` | `isHydrationComplete()` — sync read | `User-Interactive` (Main) |
+| `TransitRevealSheet.swift:99-100` | `fetchStopDetails()` + `fetchHeadwayData()` — sync reads | `User-Interactive` (Main) |
+| `AmbientTrackingEngine.swift:151` | `fetchNeighborhoodName()` — sync read inside `Task.detached` | `Default` |
+
+**Underlying cause:** `SpatialDatabaseManager` initializes `Configuration()` without setting `configuration.qos`, leaving GRDB's internal pool barrier and wait queues at `.default` QoS.
+
+### Agent Directives
+
+1. **Set GRDB `Configuration.qos` to `.userInitiated`:**
+   * In `SpatialDatabaseManager.init()`, after creating `var configuration = Configuration()`, add:
+     ```swift
+     configuration.qos = .userInitiated
+     ```
+   * This ensures the internal pool dispatch queues run at a QoS that won't trigger priority inversion warnings when accessed from `User-Interactive` threads. `.userInitiated` is the correct choice — it's high enough to avoid inversion but lower than `.userInteractive` to avoid starving the UI thread.
+
+2. **Convert `isHydrationComplete()` to async:**
+   * Change the signature from `func isHydrationComplete() -> Bool` to `func isHydrationComplete() async throws -> Bool`.
+   * Replace `try dbWriter.read { }` with `try await dbWriter.read { }` (GRDB's async read).
+   * Update the call site in `ContentView.swift:25`:
+     ```swift
+     .onAppear {
+         Task {
+             isHydrationComplete = (try? await SpatialDatabaseManager.shared.isHydrationComplete()) ?? false
+             isCheckingHydration = false
+         }
+     }
+     ```
+   * Ensure the `isCheckingHydration` loading state (black screen) still displays while the async check runs.
+
+3. **Convert `TransitRevealSheet.loadData()` to async:**
+   * Change `fetchStopDetails(for:)` signature to `func fetchStopDetails(for stopId: String) async throws -> StopDetails`.
+   * Change `fetchHeadwayData(for:)` signature to `func fetchHeadwayData(for stopId: String) async throws -> [Double]`.
+   * Replace `try dbWriter.read { }` with `try await dbWriter.read { }` in both methods.
+   * Update `TransitRevealSheet.loadData()` to be async:
+     ```swift
+     private func loadData() {
+         Task {
+             let details = try? await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
+             let hw = try? await SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
+             self.stopDetails = details
+             self.headways = hw ?? []
+         }
+     }
+     ```
+   * The `TransitRevealSheet` already has a `ProgressView` fallback for when data is nil — this naturally handles the async loading state.
+
+4. **Convert `fetchNeighborhoodName(for:)` to async:**
+   * Change the signature to `func fetchNeighborhoodName(for h3Index: String) async throws -> String?`.
+   * Replace `try dbWriter.read { }` with `try await dbWriter.read { }`.
+   * Update the call site in `AmbientTrackingEngine.swift:151` — it's already inside a `Task.detached`, so just `await` the call.
+
+5. **Audit for any remaining synchronous `dbWriter.read` calls:**
+   * Search the codebase for `dbWriter.read` (without `await`) and convert any remaining synchronous call sites to async.
+   * The only sync reads that may remain are inside GRDB's own `ValueObservation` callbacks (these are internal to GRDB and cannot be changed).
+
+6. **Do NOT change:**
+   * The `dbWriter.write` calls — GRDB async writes are already used (`try await dbWriter.write`).
+   * The `ValueObservation` setup in `SpatialStore` — this is GRDB's managed observation and handles its own threading.
+   * Any database schema, fog opacity, or H3 resolution.
+   * The `MapView.Coordinator` methods that call `fetchStopDetails` inside `Task.detached` at `MapView.swift:331` — that call is already off the main thread and is fine.
+
+### Files to Modify
+
+* `DeriveeNative/Derivee/SpatialDatabaseManager.swift` — QoS config, async method signatures.
+* `DeriveeNative/Derivee/ContentView.swift` — async `isHydrationComplete` call.
+* `DeriveeNative/Derivee/TransitRevealSheet.swift` — async `loadData()`.
+* `DeriveeNative/Derivee/AmbientTrackingEngine.swift` — async `fetchNeighborhoodName` call.
+
+### Verification
+
+1. Build and run on a physical device. Xcode Instruments → Thread State Trace: confirm **zero `Pool.get()` waits** on the main thread.
+2. Open a Transit Reveal bottom sheet — data loads without a visible hang. The `ProgressView` spinner may flash briefly (acceptable).
+3. Force-quit and cold-start — the hydration check completes without blocking the main thread. The black loading screen still displays during the check.
+4. Walk to discover a new hex — the Live Activity update still fires correctly (neighborhood name still populates).
+5. Run all existing tests — no regressions.
+6. **Re-test the benched WI3 fog test:** After `configuration.qos = .userInitiated` is in place, manually re-run `disabled_testNewlyDiscoveredHexTriggersFogShapeUpdate` (temporarily removing the `disabled_` prefix). The elevated QoS may incidentally unblock the GCD dispatch sources that `withObservationTracking` starves. If it passes, this is a free win — re-enable it permanently. If it still hangs, leave it for WI5's cooperative polling fix.
+

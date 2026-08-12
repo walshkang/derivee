@@ -30,7 +30,9 @@ struct SettingsView: View {
                 .alert("Pause Ambient Exploration?", isPresented: $showPauseTrackingAlert) {
                     Button("Keep Tracking On", role: .cancel) { }
                     Button("Pause Tracking", role: .destructive) {
-                        trackingEngine.stopTracking()
+                        Task {
+                            await trackingEngine.stopTracking()
+                        }
                     }
                 } message: {
                     Text("Pausing tracking will stop discovering new hexes while your screen is off or the app is closed. Remember to re-enable tracking before your next drift.")

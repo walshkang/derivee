@@ -2,6 +2,7 @@ import SwiftUI
 import Network
 
 struct OnboardingView: View {
+    @ObservedObject var trackingEngine: AmbientTrackingEngine
     @State private var hydrationManager = HydrationManager()
     @State private var networkStatus: NWPath.Status = .requiresConnection
     @Binding var isHydrationComplete: Bool
@@ -39,6 +40,20 @@ struct OnboardingView: View {
                             Task { await startHydration() }
                         }
                         .buttonStyle(.borderedProminent)
+                    } else if hydrationManager.progress >= 1.0 {
+                        Button("Start Exploring") {
+                            trackingEngine.requestPermissions()
+                            trackingEngine.startTracking()
+                            withAnimation {
+                                isHydrationComplete = true
+                            }
+                        }
+                        .font(.headline)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color.white)
+                        .foregroundColor(.black)
+                        .cornerRadius(24)
                     } else {
                         ProgressView()
                             .tint(.white)
@@ -65,11 +80,6 @@ struct OnboardingView: View {
     
     private func startHydration() async {
         await hydrationManager.hydrate()
-        if hydrationManager.progress == 1.0 {
-            withAnimation {
-                isHydrationComplete = true
-            }
-        }
     }
     
     private func monitorNetwork() async {

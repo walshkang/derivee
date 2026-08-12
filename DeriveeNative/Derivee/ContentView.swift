@@ -26,7 +26,7 @@ struct ContentView: View {
                         isCheckingHydration = false
                     }
             } else if !isHydrationComplete {
-                OnboardingView(isHydrationComplete: $isHydrationComplete)
+                OnboardingView(trackingEngine: trackingEngine, isHydrationComplete: $isHydrationComplete)
             } else {
                 ZStack {
                     MapView(trackingEngine: trackingEngine,

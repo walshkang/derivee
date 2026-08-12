@@ -6,6 +6,10 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     
     let dbWriter: any DatabaseWriter
     
+    var configuredQoS: DispatchQoS {
+        dbWriter.configuration.qos
+    }
+    
     init(inMemory: Bool = false, customTransitURL: URL? = nil) {
         do {
             let fileManager = FileManager.default
@@ -292,13 +296,19 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
         
         return try await dbWriter.read { db in
-            if let row = try Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
-                let name = row["stop_name"] as? String ?? "Transit Station"
-                let routeType = 1
-                let routeId = self.inferRouteId(from: stopId, name: name)
-                
-                let arrivals = self.generateArrivals(for: routeId)
-                return StopDetails(stopId: stopId, name: name, routeId: routeId, routeType: routeType, arrivals: arrivals)
+            do {
+                if let row = try Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
+                    let name = row["stop_name"] as? String ?? "Transit Station"
+                    let routeType = 1
+                    let routeId = self.inferRouteId(from: stopId, name: name)
+                    
+                    let arrivals = self.generateArrivals(for: routeId)
+                    return StopDetails(stopId: stopId, name: name, routeId: routeId, routeType: routeType, arrivals: arrivals)
+                }
+            } catch let error as DatabaseError {
+                print("⚠️ Transit DB table missing or unattached: \(error.message). Using fallback.")
+            } catch {
+                throw error
             }
             
             return StopDetails(
@@ -322,11 +332,17 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
         
         return try await dbWriter.read { db in
-            // Attempt query against transit delta historical headway table if available
-            let sql = "SELECT headway_min FROM transit.headway_history WHERE stop_id = ? ORDER BY day_offset ASC LIMIT 7"
-            let rows = try Double.fetchAll(db, sql: sql, arguments: [stopId])
-            if !rows.isEmpty {
-                return rows
+            do {
+                // Attempt query against transit delta historical headway table if available
+                let sql = "SELECT headway_min FROM transit.headway_history WHERE stop_id = ? ORDER BY day_offset ASC LIMIT 7"
+                let rows = try Double.fetchAll(db, sql: sql, arguments: [stopId])
+                if !rows.isEmpty {
+                    return rows
+                }
+            } catch let error as DatabaseError {
+                print("⚠️ Transit headway query failed: \(error.message). Returning fallback headways.")
+            } catch {
+                throw error
             }
             // Fallback realistic headway variation series
             return self.generateFallbackHeadways(for: stopId)

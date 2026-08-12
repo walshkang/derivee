@@ -34,8 +34,8 @@ final class TrackingEngineTests: XCTestCase {
         engine = AmbientTrackingEngine(locationProvider: locationProvider, databaseManager: dbManager)
     }
     
-    override func tearDownWithError() throws {
-        engine.stopTracking()
+    override func tearDown() async throws {
+        await engine.stopTracking()
         locationProvider.finish()
     }
     
@@ -130,5 +130,33 @@ final class TrackingEngineTests: XCTestCase {
         
         XCTAssertTrue(dbPOIs.contains("test_stop"), "POI should transition and be persisted to the database.")
         XCTAssertTrue(store.discoveredPOIs.contains("test_stop"), "SpatialStore should hold the discovered POI.")
+    }
+    
+    func testResumeTrackingIfNeeded() async throws {
+        XCTAssertFalse(engine.isTracking)
+        XCTAssertFalse(engine.isTrackingEnabled)
+        
+        // Calling resumeTrackingIfNeeded when isTrackingEnabled is false should do nothing
+        engine.resumeTrackingIfNeeded()
+        XCTAssertFalse(engine.isTracking)
+        
+        // Setting isTrackingEnabled to true and calling resumeTrackingIfNeeded should start tracking
+        engine.isTrackingEnabled = true
+        engine.resumeTrackingIfNeeded()
+        XCTAssertTrue(engine.isTracking)
+        
+        await engine.stopTracking()
+        XCTAssertFalse(engine.isTracking)
+        XCTAssertFalse(engine.isTrackingEnabled)
+    }
+    
+    func testStopTrackingCleansUpStateAndPersistsDisabledPreference() async throws {
+        engine.startTracking()
+        XCTAssertTrue(engine.isTracking)
+        XCTAssertTrue(engine.isTrackingEnabled)
+        
+        await engine.stopTracking()
+        XCTAssertFalse(engine.isTracking)
+        XCTAssertFalse(engine.isTrackingEnabled)
     }
 }

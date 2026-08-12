@@ -35,9 +35,9 @@ struct MapView: UIViewRepresentable {
         context.coordinator.mapView = mapView
         context.coordinator.setupCompassObservation()
         
-        // Start tracking
+        // Resume tracking if enabled
         DispatchQueue.main.async {
-            self.trackingEngine.startTracking()
+            self.trackingEngine.resumeTrackingIfNeeded()
         }
         
         return mapView
