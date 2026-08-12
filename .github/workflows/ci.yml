@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    name: Build and Test
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache SPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+            ~/.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('DeriveeNative/project.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: DeriveeNative
+        run: xcodegen generate
+
+      - name: Resolve packages
+        working-directory: DeriveeNative
+        run: xcodebuild -resolvePackageDependencies -project Derivee.xcodeproj -scheme Derivee
+
+      - name: Run tests
+        working-directory: DeriveeNative
+        run: |
+          xcodebuild test \
+            -project Derivee.xcodeproj \
+            -scheme Derivee \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            | xcpretty --color
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: DeriveeNative/TestResults.xcresult
