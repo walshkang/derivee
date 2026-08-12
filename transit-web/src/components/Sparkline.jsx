@@ -33,7 +33,7 @@ export default function Sparkline({ data, routeId }) {
   const pathD = points.map((p, i) => (i === 0 ? `M ${p.x},${p.y}` : `L ${p.x},${p.y}`)).join(' ');
   const areaD = `${pathD} L ${points[points.length - 1].x},${svgHeight} L ${points[0].x},${svgHeight} Z`;
 
-  const color = getRouteColor(routeId);
+  const color = '#FFB300';
 
   return (
     <div className="sparkline-container">

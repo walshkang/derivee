@@ -15,12 +15,13 @@ const INITIAL_VIEW_STATE = {
   bearing: 0
 };
 
-const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+const MAP_STYLE = '/map-style.json';
 
 
 
 export default function TransitMap({ activeMode, onNodeTap }) {
   const [activeVehicles, setActiveVehicles] = useState([]);
+  const [currentZoom, setCurrentZoom] = useState(INITIAL_VIEW_STATE.zoom);
 
   const fetchLiveTransit = useCallback(async () => {
     try {
@@ -71,6 +72,9 @@ export default function TransitMap({ activeMode, onNodeTap }) {
     }
   });
 
+  // TODO(Data Pipeline): Parallel subway lines for shared corridors (e.g. 4/5/6)
+  // should be pre-offset on the backend by the Go Observer to avoid brittle 
+  // client-side rendering complexity.
   const subwayLinesLayer = new GeoJsonLayer({
     id: 'subway-lines',
     data: '/subway-lines.geojson',
@@ -109,12 +113,47 @@ export default function TransitMap({ activeMode, onNodeTap }) {
     }
   });
 
+  const busLinesLayer = new GeoJsonLayer({
+    id: 'bus-lines',
+    data: '/bus-lines.geojson',
+    stroked: true,
+    filled: false,
+    lineWidthMinPixels: 3,
+    getLineColor: [0, 122, 255, 180],
+    visible: activeMode === 'bus'
+  });
+
+  const busStopsLayer = new GeoJsonLayer({
+    id: 'bus-stops',
+    data: '/bus-stops.geojson',
+    pointRadiusMinPixels: 4,
+    getFillColor: [255, 255, 255],
+    getLineColor: [0, 122, 255],
+    stroked: true,
+    lineWidthMinPixels: 2,
+    pickable: true,
+    // Zoom < 13: Hide bus stops
+    // Zoom 13-15: Show high-ridership stops (showing all for now as placeholder)
+    // Zoom > 15: Show all bus stops
+    visible: activeMode === 'bus' && currentZoom >= 13,
+    onClick: (info) => {
+      if (info.object && onNodeTap) {
+        onNodeTap({
+          stopId: info.object.properties.stop_id,
+          name: info.object.properties.stop_name,
+          route: 'bus'
+        });
+      }
+    }
+  });
+
   return (
     <div className="transit-map-wrapper">
       <DeckGL
         initialViewState={INITIAL_VIEW_STATE}
         controller={true}
-        layers={[subwayLinesLayer, subwayStopsLayer, vehicleLayer]}
+        onViewStateChange={({ viewState }) => setCurrentZoom(viewState.zoom)}
+        layers={[subwayLinesLayer, subwayStopsLayer, busLinesLayer, busStopsLayer, vehicleLayer]}
         style={{ width: '100%', height: '100%' }}
       >
         <Map

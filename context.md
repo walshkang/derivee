@@ -51,7 +51,7 @@ The app is now fully native:
 We have adopted a **Split-Target Architecture** testing strategy:
 * **`DeriveeCoreTests` (No App Host):** ✅ Completed (Phase 1 & 2). Pure logic tests (GRDB concurrency, H3 math). Runs headlessly.
 * **`DeriveeSnapshotTests` (Requires App Host):** ✅ Completed (Phase 3). Automated UI testing (`swift-snapshot-testing`) for SwiftUI views. Boots a simulator in the background.
-* **Phase 4 (CI/CD Pipeline):** Planned for automated PR builds using GitHub Actions (raw `xcodegen` + running both test targets).
+* **Phase 4 (CI/CD Pipeline):** ✅ Completed. Automated builds run on GitHub Actions using `xcodegen`. We use a fast solo-dev "vibe coding" workflow: pushes are made directly to `main` without PRs, and CI acts as a post-push safety net.
 
 ---
 

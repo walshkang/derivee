@@ -75,7 +75,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
 | **11.6** | **W11.6-DEVOPS** | **Deploy Go Observer to Oracle Cloud & Seed R2** | **M** | ✅ Done |
-| **11.8** | **W11.8-WEB-FIXES** | **Transit Web MVP Bugfixes & Polish** | **M** | Planned |
+| **11.8** | **W11.8-WEB-FIXES** | **Transit Web MVP Bugfixes & Polish** | **M** | ✅ Done |
 | **E** | **WE-ONBOARDING** | **Onboarding Gate & First-Launch Infrastructure** | **M** | ✅ Done |
 | **F.1** | **WF1-FAB** | **Map UI: Floating Action Buttons** | **S** | ✅ Done |
 | **F.2** | **WF2-TOAST** | **Discovery Toast Overlay** | **S** | ✅ Done |
@@ -117,81 +117,12 @@ All core engine, spatial math, transit hydration, and snapshot tests are impleme
 
 **One `XCTSkip`:** `testNewlyDiscoveredHexTriggersFogShapeUpdate` in `SpatialStoreFogTests.swift` — the only test covering live `ValueObservation` → `recomputeFogShape()` reactivity. Skipped because GRDB's `ValueObservation` dispatch sources are not reliably deliverable in the XCTest sandbox. This is the riskiest untested path. Manual testing on-device remains the only validation for this pipeline.
 
-### Phase 4: CI/CD Pipeline — see TEST-PHASE4 prompt below.
+### Phase 4: CI/CD Pipeline (Complete ✅)
+
+The GitHub Actions CI/CD pipeline is active on `main`. The project embraces a solo "vibe coding" workflow: commits are pushed directly to `main` without Pull Requests, and the CI acts as a post-push safety net to prevent regressions, rather than a strict pre-merge blocker.
 
 > [!WARNING]
 > **CI Safety: `XCTSkip` Convention.** All sandbox-limited tests must use explicit `throw XCTSkip("Reason")`. The `disabled_` prefix convention is banned — if a future agent renames a test to "fix the gap," it will hang CI indefinitely. The `XCTSkip` convention is enforced and verified (see `SpatialStoreFogTests.swift:131`).
 
-## Wave 11.8 — Transit Web MVP Bugfixes & Polish [Planned]
 
-**Task ID:** `W11.8-WEB-FIXES`
-**Depends on:** Wave 11.5 (Transit Web MVP Launch).
-
-### Goal
-Address visual and functional bugs in the `transit-web/` app to bring it to brand parity with the iOS client. This is a React + Vite + deck.gl + MapLibre web app.
-
-### Current State
-
-* **Map style:** Uses the generic CARTO Positron basemap (`https://basemaps.cartocdn.com/gl/positron-gl-style/style.json`) — does NOT use the Dérivée Day/Night hex colors yet.
-* **Subway lines:** Rendered as a single `GeoJsonLayer` from `/subway-lines.geojson` — lines share corridors as merged trunks, not individual parallel tracks.
-* **Stop color matching:** Uses `stop_id.charAt(0)` to infer route (line 93 of `TransitMap.jsx`) — works for most stops but fails for multi-route transfer stations.
-* **Sparkline color:** `Sparkline.jsx` calls `getRouteColor(routeId)` which returns the MTA route color, not the brand Electric Amber. The `transitConfig.js` default fallback is `#FFB300` but route-specific sparklines use the route color.
-* **Arrivals text:** Directionality already shows (`arr.direction`). Contrast is inherited from the bottom sheet CSS — needs explicit black/white override.
-* **Bus layer:** No zoom-based filtering — renders all stops at all zoom levels.
-* **iOS Transit Dissolve:** `TransitRevealSheet.swift` dismisses the ephemeral MapLibre `LineLayer` instantly on sheet close — no opacity fade.
-
-### Agent Directives
-
-#### 1. Map Style: Dérivée Day/Night Base Map
-
-* Replace the CARTO Positron basemap URL in `TransitMap.jsx` (line 18) with a self-hosted or inline MapLibre style JSON that uses:
-  * Background: `#F9F9F6` (Day / parchment white)
-  * Roads/labels: dark grays matching the iOS palette
-* **Do NOT implement a toggle** — hardcode Day mode for now.
-* The simplest approach: fork the Positron style JSON into `transit-web/public/map-style.json`, override the `background-color` and key layer paint properties, and point `mapStyle` to `/map-style.json`.
-
-#### 2. Parallel Subway Lines for Shared Corridors
-
-* The current `subway-lines.geojson` merges trunk lines. To render individual parallel lines:
-  * If the GeoJSON has per-route features (check `route_id` property), offset each line laterally using deck.gl's `getLineOffset` or by duplicating the `GeoJsonLayer` per route group with a small pixel offset (`getOffset: [N, 0]` where N varies per route).
-  * If the GeoJSON is trunk-merged, this requires re-generating the GeoJSON with per-route linestrings — document this as a data pipeline task and skip for now.
-
-#### 3. Sparkline Color: Force Electric Amber
-
-* In `Sparkline.jsx` (line 36): replace `const color = getRouteColor(routeId)` with `const color = '#FFB300'` (Electric Amber).
-* The sparkline should always be amber regardless of route — this is a brand element, not a data visualization.
-
-#### 4. Arrivals Text Contrast
-
-* In `TransitBottomSheet.css`: add explicit `color: #000000` (or `#FFFFFF` for dark mode, when implemented) to `.arrival-time`, `.arrival-route`, and `.arrival-direction` selectors to override any inherited low-contrast colors.
-
-#### 5. Bus Map Zoom-Based Loading
-
-* In `TransitMap.jsx`: add a `minZoom` / visibility filter to the bus stops layer (when `activeMode === 'bus'`):
-  * At zoom < 13: hide all bus stops, show only bus routes as lines.
-  * At zoom 13–15: show only stops with high ridership (filter by a `ridership` or `rank` property if available in the GeoJSON, otherwise show all).
-  * At zoom > 15: show all bus stops.
-* This requires tracking the current viewport zoom via deck.gl's `onViewStateChange` callback.
-
-#### 6. iOS Transit Reveal Dissolve (Separate PR)
-
-* In `TransitRevealSheet.swift`: when the sheet is dismissed (`.onDisappear` or `.onChange(of: isPresented)`), animate the ephemeral MapLibre `LineLayer`'s opacity from 1.0 → 0.0 over 200ms using `mapView.style?.setStyleLayerProperty(forLayerId:, property: "line-opacity", value: 0.0)` inside a `CATransaction` with 0.2s duration, **then** remove the layer and source after the animation completes.
-* **Constraint:** This is a MapLibre Native API call, not a SwiftUI animation. Use `DispatchQueue.main.asyncAfter(deadline: .now() + 0.2)` for the cleanup delay.
-
-### Files to Modify
-
-* `transit-web/src/components/TransitMap.jsx` — style URL, parallel lines, bus zoom filter
-* `transit-web/src/components/TransitMap.css` — any style adjustments for parallel lines
-* `transit-web/src/components/Sparkline.jsx` — force Electric Amber color
-* `transit-web/src/components/TransitBottomSheet.css` — arrivals text contrast
-* `transit-web/public/map-style.json` — [NEW] forked Positron style with Dérivée colors
-* `DeriveeNative/Derivee/TransitRevealSheet.swift` — dissolve animation (iOS, separate PR)
-
-### Verification
-
-* Map background renders as `#F9F9F6` parchment white, not CARTO's default off-white.
-* Sparklines are consistently Electric Amber (`#FFB300`) regardless of route.
-* Arrival times text is legible (high-contrast black on light background).
-* Bus stops appear/disappear based on zoom level without performance regression.
-* iOS: Dismissing the Transit Reveal bottom sheet causes the train route line to fade out over ~200ms before disappearing.
 
