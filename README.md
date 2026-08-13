@@ -23,7 +23,7 @@ Dérivée features a Naver Maps-style transit integration built on a strictly "m
 
 1. **Live Protocol Buffers:** Tapping a transit node in your Vicinity Bubble decodes the transit authority's binary GTFS-RT feeds on the fly, delivering crisp, real-time arrival countdowns and dynamic vector route previews.
 2. **The Observer Pipeline:** Historical reliability (average headways, arrival sparklines) is powered by a custom, standalone Go (Golang) daemon hosted on a lightweight VPS. This persistent pipeline crunches raw GTFS data 24/7, generates a Zstandard-compressed SQLite delta database (`.sqlite.zst`), and pushes it to Cloudflare R2.
-3. **Offline-First Sync:** The mobile app silently fetches this compressed SQLite file every morning, allowing instantaneous, offline rendering of historical charts directly from native memory using `@op-engineering/op-sqlite`'s `ATTACH DATABASE` JSI driver.
+3. **Offline-First Sync:** The mobile app silently fetches this compressed SQLite file every morning, allowing instantaneous, offline rendering of historical charts directly from native memory using GRDB's `DatabasePool` and `ATTACH DATABASE`.
 
 ---
 
@@ -52,7 +52,7 @@ Built as a **pure native iOS application** under the **Sleepy Hermes** paradigm 
 | **SwiftUI** | UI framework. Drives the declarative, reactive interface. |
 | **MapLibre Native** | Map engine — vector tiles, custom raster layers, Data-Driven Styling. |
 | **H3 (swift-h3)** | Native Swift Package wrapper for the Uber H3 spatial indexing C-library. Used for `latLngToCell` conversions at Resolution 11. |
-| **GRDB.swift** | SQLite toolkit for Swift. Runs in WAL mode with `WITHOUT ROWID` optimizations for microsecond-fast spatial queries and highly concurrent background writes. `Configuration.qos` set to `.userInitiated` to prevent priority inversion. |
+| **GRDB.swift** | SQLite toolkit for Swift. Runs in WAL mode with standard ROWID tables for microsecond-fast spatial queries, reliable `ValueObservation` region tracking, and highly concurrent background writes. `Configuration.qos` set to `.userInitiated` to prevent priority inversion. |
 | **CLLocationUpdate** | iOS 17's modern background location stream, kept alive by `CLBackgroundActivitySession`. |
 
 ### Architectural Highlights
@@ -69,7 +69,7 @@ Built as a **pure native iOS application** under the **Sleepy Hermes** paradigm 
 
 ## 📍 Current Status
 
-The project has fully completed the **Pure Native iOS Migration** and **Design Alignment** (Waves E–H.1, W15). All legacy JavaScript/React Native dependencies have been removed in favor of a clean Swift/SwiftUI architecture (`DeriveeNative/`). Current focus is on **Fog Reliability & Startup Performance** (Waves I.1–I.5).
+The project has fully completed the **Pure Native iOS Migration**, **Design Alignment** (Waves E–H.1, W15), and **Fog Reliability Hardening** (Waves I.1–I.10a). Current focus is on **Untethered On-Device Field Walk Testing** (Wave I.10b) followed by **Exploration, Performance & Map Customization** (Wave J).
 
 | Phase | Status |
 | --- | --- |
@@ -79,7 +79,9 @@ The project has fully completed the **Pure Native iOS Migration** and **Design A
 | **Native Migration: Ambient Tracking Engine** | ✅ Done |
 | **Design Alignment & Ship Prep (Waves E–H.1)** | ✅ Done |
 | **Dynamic Island & Live Activities (W15)** | ✅ Done |
-| **Fog Reliability & Startup Performance (I.1–I.5)** | Planned |
+| **Fog Reliability & Startup Performance (I.1–I.10a)** | ✅ Done |
+| **Untethered Field Walk Diagnostics (I.10b–I.10c)** | Planned (Ready) |
+| **Exploration, Performance & Map Customization (Wave J)** | Planned |
 
 Full details in [`ROADMAP.MD`](ROADMAP.MD).
 

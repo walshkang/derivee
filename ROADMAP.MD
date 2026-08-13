@@ -103,6 +103,18 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **I.10b** | **WI10b-ONDEVICE-WALK** | **🧑‍💻 Human-only task (no agent). Build I.10a on physical iPhone. Force-close the app. Reopen. Walk across 3+ hex boundaries untethered. Open iOS **Files** app → **On My iPhone** → **Dérivée** → AirDrop `pipeline_debug.log` (or copy console logs). Paste logs into a new conversation for I.10c to interpret.** | **XS** | Planned (Ready for Walk) |
 | **I.10c** | **WI10c-LOG-INTERPRET** | **Read the on-device logs from I.10b (`pipeline_debug.log`) and identify which pipeline stage breaks. Decision tree: If S2 never fires → `CLLocationUpdate.liveUpdates()` warm-up delay. If S2 fires but S3 shows `isNew=false` → `INSERT OR IGNORE` dedup (user still on same hex). If S3 shows `isNew=true` but S4 doesn't fire → GRDB `ValueObservation` issue. If S4 fires but S5 shows `cancelled=true` → `recomputeFogShape` cancellation race. If S5 completes but S6 doesn't fire → SwiftUI `@Observable` → `UIViewRepresentable` bridge issue. File findings and the targeted fix as I.11.** | **XS** | Blocked on I.10b |
 
+### 🚀 Exploration, Performance & Map Customization (Wave J — Post-Debugging)
+
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **J.1** | **WJ1-CAMERA-BOUNDS** | **Camera Clamping & Rubber-Band Damping:** Clamp map camera using `mapView(_:shouldChangeFrom:to:reason:)` delegate with asynchronous `.easeOut` boundary rollback to eliminate viewport lockups on pinch/zoom. | **S** | Planned |
+| **J.2** | **WJ2-PERF-OPTIMIZATION** | **120Hz Spatial Unioning & Render Optimization:** Implement `h3.cellsToMultiPolygon` dissolution in detached Tasks to avoid $O(N^2)$ `earcut.hpp` triangulation degradation, targeting <1.5ms `@MainActor` shape assignment. | **M** | Planned |
+| **J.3** | **WJ3-FOG-POI-MASKING** | **Vector Tile POI Masking via `mgl_distanceFrom:`:** Suppress underlying commercial POIs/labels using GPU-accelerated 200m distance predicate filters to preserve exploration mystery under fog. | **S** | Planned |
+| **J.4** | **WJ4-BASEMAP-SWITCHER** | **Unified Composite Style Basemap Switcher:** Seamlessly crossfade map themes (Standard Day/Night, OLED Ultra Dark, Transit Networks) using `MLNTransition` on GPU without unmounting runtime sources. | **M** | Planned |
+| **J.5** | **WJ5-CUSTOMIZATION-SETTINGS** | **Zero-Geometry Customization Settings:** Real-time user fog opacity slider (`0.60`–`0.98`) and hex border toggling applied directly via fragment shader alpha without polygon recomputation. | **S** | Planned |
+| **J.6** | **WJ6-TRANSIT-NODE-TRACKING** | **Direct SwiftProtobuf Transit Sheet & High-Contrast Overlay:** Ingest binary `.pb` GTFS-RT feeds directly into SwiftUI presentation sheets with dual-layer high-contrast vector route rendering. | **M** | Planned |
+| **J.7** | **WJ7-POI-GAMIFICATION** | **Dual-Sensory Discovery Loop & Exploration Journal:** Instant `UIImpactFeedbackGenerator(.light)` on GRDB insert + transient expanding pulse overlay on the map, with categorized milestone tracking in Profile. | **M** | Planned |
+
 ### Post-Ship (Deferred)
 
 | Wave | Task ID | Title | Size | Status |

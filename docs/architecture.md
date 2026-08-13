@@ -125,7 +125,7 @@ Because Dérivée relies heavily on rich, custom SwiftUI visual elements (like t
 ### 6.3 CI/CD Enforcement (Phase 4)
 Because the native Xcode project is generated immutably via `xcodegen`:
 - **Headless Testing:** All unit and snapshot tests run via `xcodebuild test` exclusively on **GitHub Actions**. We explicitly avoid Xcode Cloud due to its rigid `.xcodeproj` requirements that conflict with our `xcodegen` setup.
-- **Fast Deployment:** PRs must pass all tests to merge, enabling a safe and automated pipeline straight to TestFlight.
+- **Fast Post-Push CI:** We embrace a solo-dev "vibe coding" workflow: commits are pushed directly to `main` without requiring PRs, and GitHub Actions acts as an automated safety net to catch regressions immediately.
 
 ---
 
@@ -142,3 +142,53 @@ To provide users with offline-first historical transit reliability data, a stand
 ### 7.2 Web MVP
 A standalone web version of the transit map provides a lightweight alternative.
 - **Brand Synchronization:** The MapLibre configuration in the web app hardcodes the exact Day/Night iOS hex colors (`#F9F9F6` / `#12121A`) to ensure absolute visual consistency across platforms.
+
+---
+
+## 8. Exploration, Customization & Performance Architecture (Wave J)
+
+This section defines the implementation parameters and algorithmic constraints established by targeted deep research to sustain a 120Hz ProMotion budget (<8.33ms/frame) while executing continuous geospatial processing:
+
+### 8.1 Camera Bounding & Viewport Clamping (`WJ1-CAMERA-BOUNDS`)
+- **Prohibited Approaches:**
+  - *`MLNMapView.setCameraTargetBounds` / `restrictedCoordinateBounds`:* Banned. Acts as a hard wall at the Metal layer, abruptly halting momentum and causing violent jitter / lockups during high-velocity pinch-to-zoom near boundaries.
+  - *`UIGestureRecognizerDelegate` Swizzling:* Banned. Disrupts MapLibre's internal gesture decay and velocity interpolation algorithms.
+- **Mandated Implementation:** Intercept camera changes via `MLNMapViewDelegate.mapView(_:shouldChangeFrom:to:reason:)`.
+  - Mathematically evaluate if the projected `newCamera.centerCoordinate` falls outside the active `MLNCoordinateBounds`.
+  - For gesture reasons (`.gesturePan`, `.gesturePinch`), allow temporary rubber-band overflow during continuous touch, then asynchronously animate a smooth corrective rollback using `mapView.setCamera(correctedCamera, withDuration: 0.4, animationTimingFunction: .easeOut)`.
+
+### 8.2 The Spatial Unioning Imperative for 120Hz ProMotion (`WJ2-PERF-OPTIMIZATION`)
+- **The Bottleneck:** Passing raw, un-dissolved H3 hexagons as individual interior rings to `MLNPolygon` causes MapLibre's underlying `earcut.hpp` triangulation to degrade from $O(N \log N)$ to $O(N^2)$. Pushing thousands of disconnected micro-holes freezes the `@MainActor` render loop and causes severe thermal throttling.
+- **Mandated Implementation:**
+  - Preprocess the active hex set using Uber H3's `cellsToMultiPolygon` / `H3Engine.dissolveToBoundaries` in a `Task.detached(priority: .userInitiated)`.
+  - Dissolves shared internal edges of contiguous hex clusters into single macro-polygon boundaries, reducing vertex counts by >85%.
+  - Enforce counter-clockwise winding order on interior rings (`points.reversed()`) to match MapLibre's clockwise exterior ring convention.
+- **Performance Budgets (Xcode Instruments):**
+  - Time Profiler: `@MainActor` execution of `shapeSource.shape = fogPolygon` must complete in **< 1.5ms**.
+  - Metal System Trace: Geometry allocation must remain flat without triangulation pipeline spikes.
+  - Core Animation: Commit times must consistently align with the 120Hz VSync interval (8.33ms).
+
+### 8.3 Vector Tile POI Masking via `mgl_distanceFrom:` (`WJ3-FOG-POI-MASKING`)
+- **Prohibited Approaches:**
+  - *Layer Z-Ordering Alone:* Ineffective. High-contrast text halos and bold geometries still bleed through 0.85 opacity fog.
+  - *Dynamic `['within', polygon]` Expressions:* Banned. Evaluating complex multi-polygon geometries against every vector tile feature on map pan saturates the CPU.
+- **Mandated Implementation:**
+  - Suppress unrevealed POIs using MapLibre's GPU-accelerated `mgl_distanceFrom:` expression tied to the user's active `CLLocationCoordinate2D`.
+  - Apply `mgl_distanceFrom:(userPoint) <= 200` predicate filters to target symbol layers (`poi_label`, `transit_stop_label`, `park_label`, `place_label`).
+  - Set `textIgnoresPlacement = true` and `textAllowsOverlap = true` to prevent hidden labels from altering visible layout collisions.
+
+### 8.4 The Unified Composite Style Pattern (`WJ4-BASEMAP-SWITCHER`)
+- **Prohibited Approach:** Swapping `MLNMapView.styleURL` at runtime. Banned because destroying `MLNStyle` tears down all runtime data sources (`MLNShapeSource`, fog geometry) and causes a multi-second freeze while re-hydrating.
+- **Mandated Implementation:** Load a single **Unified Composite Style** JSON containing all base vectors, dark mode styling, and transit network layers.
+  - Transition themes (Standard Day, Night, Transit) by interpolating layer properties (`fillColorTransition`, `lineOpacityTransition`) using `MLNTransition(duration: 0.6)` directly on the GPU.
+
+### 8.5 Direct SwiftProtobuf GTFS-RT Ingestion (`WJ6-TRANSIT-NODE-TRACKING`)
+- **Mandated Implementation:** Ingest binary `.pb` vehicle position and trip update feeds directly via `SwiftProtobuf` (`TransitRealtime_FeedMessage(serializedData:)`), completely avoiding JSON conversion overhead.
+  - Map entities directly into lightweight Swift coordinate dictionaries and immediately release the `FeedMessage` buffer.
+  - Render ephemeral route overlays using a dual-layer approach (6px light casing + 4px route line) so dark transit lines remain legible over dark fog.
+
+### 8.6 Zero-Geometry Customization Parameterization (`WJ5-CUSTOMIZATION-SETTINGS`)
+- Changing user preferences (fog opacity `0.60` to `0.98`, hex borders) must **never** trigger polygon recomputation or database queries.
+- Update `fogLayer.fillOpacity` directly via `NSExpression(forConstantValue: targetOpacity)` with `fillOpacityTransition = MLNTransition(duration: 0)` for immediate 120Hz slider responsiveness.
+
+
