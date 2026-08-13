@@ -16,14 +16,14 @@ final class SpatialStore: @unchecked Sendable {
     var newlyDiscoveredPOIName: String? = nil
     
     // We retain the cancellable observation so it stays alive
-    private var observationTask: AnyDatabaseCancellable?
-    private var polygonTask: Task<Void, Never>?
-    private var previousCount: Int = 0
-    private var previousHexes: Set<String> = []
+    @ObservationIgnored private var observationTask: AnyDatabaseCancellable?
+    @ObservationIgnored private var polygonTask: Task<Void, Never>?
+    @ObservationIgnored private var previousCount: Int = 0
+    @ObservationIgnored private var previousHexes: Set<String> = []
     
-    private let dbManager: SpatialDatabaseManager
-    private let liveUpdatePriority: TaskPriority
-    private let observationScheduler: ValueObservationScheduler
+    @ObservationIgnored private let dbManager: SpatialDatabaseManager
+    @ObservationIgnored private let liveUpdatePriority: TaskPriority
+    @ObservationIgnored private let observationScheduler: ValueObservationScheduler
     
     init(
         dbManager: SpatialDatabaseManager = .shared, 
@@ -47,12 +47,30 @@ final class SpatialStore: @unchecked Sendable {
         }
     }
     
+    deinit {
+        print("🔴 [SpatialStore] deinit fired! Instance deallocated: \(ObjectIdentifier(self))")
+    }
+    
+    private struct ExploredHex: TableRecord, FetchableRecord {
+        static let databaseTableName = "explored_hexes"
+        let h3_index: String
+        
+        init(row: GRDB.Row) {
+            h3_index = row["h3_index"]
+        }
+    }
+    
     private func startObservation(dbManager: SpatialDatabaseManager) {
+        print("🔍 [SpatialStore] startObservation attaching to dbWriter pool: \(ObjectIdentifier(dbManager.dbWriter as AnyObject))")
         let observation = ValueObservation.tracking { db in
-            let hexes = try SQLRequest<String>(sql: "SELECT h3_index FROM explored_hexes").fetchAll(db)
+            let hexes = try ExploredHex.fetchAll(db).map { $0.h3_index }
             print("🔍 [GRDB Pipeline] ValueObservation fetched \(hexes.count) hexes on Thread: \(Thread.current)")
             return hexes
         }
+        .handleEvents(
+            willTrackRegion: { region in print("🔍 [GRDB Pipeline] willTrackRegion: \(region)") },
+            databaseDidChange: { print("🔍 [GRDB Pipeline] databaseDidChange fired!") }
+        )
         
         observationTask = observation.start(
             in: dbManager.dbWriter,

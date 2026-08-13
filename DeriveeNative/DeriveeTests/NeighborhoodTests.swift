@@ -11,7 +11,7 @@ final class NeighborhoodTests: XCTestCase {
         try super.setUpWithError()
         tempDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectoryURL, withIntermediateDirectories: true)
-        dbManager = SpatialDatabaseManager(inMemory: true)
+        dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
     }
 
     override func tearDownWithError() throws {

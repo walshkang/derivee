@@ -64,6 +64,22 @@ final class AmbientTrackingEngine: ObservableObject {
         // Note: pausesLocationUpdatesAutomatically doesn't apply to liveUpdates in iOS 17
         // but we can still set it just in case of fallback
         locationManager.pausesLocationUpdatesAutomatically = true
+        
+        cleanUpOrphanedLiveActivities()
+    }
+    
+    func cleanUpOrphanedLiveActivities() {
+        let activities = Activity<TrackingAttributes>.activities
+        guard !activities.isEmpty else { return }
+        
+        let activeId = currentActivity?.id
+        Task {
+            for activity in activities {
+                if activity.id != activeId {
+                    await activity.end(dismissalPolicy: .immediate)
+                }
+            }
+        }
     }
     
     func requestPermissions() {
@@ -77,6 +93,8 @@ final class AmbientTrackingEngine: ObservableObject {
     
     func startTracking() {
         guard !isTracking else { return }
+        
+        cleanUpOrphanedLiveActivities()
         
         isTrackingEnabled = true
         isTracking = true
@@ -115,6 +133,8 @@ final class AmbientTrackingEngine: ObservableObject {
             await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
             currentActivity = nil
         }
+        
+        cleanUpOrphanedLiveActivities()
         
         locationManager.allowsBackgroundLocationUpdates = false
         
@@ -161,6 +181,7 @@ final class AmbientTrackingEngine: ObservableObject {
             Task.detached { [weak self] in
                 guard let self = self else { return }
                 do {
+                    print("⚡️ [AmbientTrackingEngine] processLocation inserting hex \(indexString) using dbWriter pool: \(ObjectIdentifier(self.databaseManager.dbWriter as AnyObject))")
                     // Hand off to the database
                     let isNew = try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
                     let nbhd = try? await self.databaseManager.fetchNeighborhoodName(for: indexString)

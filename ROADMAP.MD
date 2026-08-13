@@ -96,6 +96,12 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **I.4** | **WI4-ASYNC-READS** | **Eliminate Main-Thread DB Reads & Configure GRDB QoS** | **M** | ✅ Done |
 | **I.5** | **WI5-HANG-TESTS** | **Priority Inversion Regression Tests** | **S** | ✅ Done |
 | **I.6** | **WI6-TRACK-STOP** | **Fix Ambient Tracking Stop Lifecycle (Live Activity + Persistence)** | **S** | ✅ Done |
+| **I.7** | **WI7-LA-CLEANUP** | **Clean up Orphaned Live Activities (Dynamic Island) on App Force-Quit / Cold Start** | **S** | ✅ Done |
+| **I.8** | **WI8-OBS-DIAG** | **GRDB ValueObservation Diagnostic Instrumentation: Add `deinit` log to `SpatialStore`, pool `ObjectIdentifier` logs to `SpatialStore.startObservation` + `AmbientTrackingEngine.processLocation` + `SpatialDatabaseManager.init`. Logging only — zero logic changes. Build on physical iPhone, walk until hex insert, read logs to confirm observation alive + pool identity match.** | **XS** | ✅ Done |
+| **I.9** | **WI9-OBS-FIX** | **GRDB ValueObservation Pipeline Hardening: Diagnostic testing revealed a silent `ValueObservation` failure in GRDB. An isolated minimal test confirmed that even when `insertDiscoveredHex` successfully writes to the `DatabasePool` (changesCount > 0), the `onChange` closure never fires for the update. Root cause hypotheses: (1) `ATTACH DATABASE` confusing region tracking, (2) Raw SQL `String.fetchAll` missing updates compared to `TableRecord`, (3) `.withoutRowID` table tracking limitations. Next Steps: Fix the observation query (e.g., use standard `TableRecord` or verify `.observing(DatabaseRegion(table: "explored_hexes"))` syntax for GRDB 6.29.3) so the minimal test passes, then apply to `SpatialStore` and fix `generateH3Hexes` non-determinism.** | **S** | ✅ Done |
+| **I.10a** | **WI10a-PIPELINE-LOGS** | **Add 6-stage diagnostic logging to the live hex unlock pipeline. Zero logic changes — print statements only. [S1] In `AmbientTrackingEngine.resumeTrackingIfNeeded`, log entry + `isTrackingEnabled` value. [S2] In `AmbientTrackingEngine.processLocation`, log entry + hex string + timestamp (before the `lastSavedHex` guard). [S3] After `insertDiscoveredHex` call in `processLocation`, log the `isNew` return value. [S4] Already exists (`onChange` log at `SpatialStore.swift:69`). [S5] In `SpatialStore.recomputeFogShape`, log `Task.isCancelled` at each cancellation checkpoint. [S6] In `MapView.Coordinator.updateExploredHexes`, log entry + interior polygon count of the incoming shape. Build on simulator to verify it compiles.** | **XS** | Planned |
+| **I.10b** | **WI10b-ONDEVICE-WALK** | **🧑‍💻 Human-only task (no agent). Build I.10a on physical iPhone. Force-close the app. Reopen. Walk across 3+ hex boundaries. Capture Xcode console logs. Paste logs into a new conversation for I.10c to interpret.** | **XS** | Blocked on I.10a |
+| **I.10c** | **WI10c-LOG-INTERPRET** | **Read the on-device logs from I.10b and identify which pipeline stage breaks. Decision tree: If S2 never fires → `CLLocationUpdate.liveUpdates()` warm-up delay. If S2 fires but S3 shows `isNew=false` → `INSERT OR IGNORE` dedup (user still on same hex). If S3 shows `isNew=true` but S4 doesn't fire → GRDB `ValueObservation` issue. If S4 fires but S5 shows `cancelled=true` → `recomputeFogShape` cancellation race. If S5 completes but S6 doesn't fire → SwiftUI `@Observable` → `UIViewRepresentable` bridge issue. File findings and the targeted fix as I.11.** | **XS** | Blocked on I.10b |
 
 ### Post-Ship (Deferred)
 
@@ -115,7 +121,7 @@ Broadening the overall testing strategy across upcoming waves. We are adopting a
 
 All core engine, spatial math, transit hydration, and snapshot tests are implemented and passing across 9 test files (33 tests total). Test architecture uses cooperative polling (`while` loop + `RunLoop.current.run` + `Task.sleep`) for all `@Observable` assertions — legacy `XCTestExpectation` and `withObservationTracking` are banned.
 
-**One `XCTSkip`:** `testNewlyDiscoveredHexTriggersFogShapeUpdate` in `SpatialStoreFogTests.swift` — the only test covering live `ValueObservation` → `recomputeFogShape()` reactivity. Skipped because GRDB's `ValueObservation` dispatch sources are not reliably deliverable in the XCTest sandbox. This is the riskiest untested path. Manual testing on-device remains the only validation for this pipeline.
+**One `XCTSkip`:** `testNewlyDiscoveredHexTriggersFogShapeUpdate` in `SpatialStoreFogTests.swift` — the only test covering live `ValueObservation` → `recomputeFogShape()` reactivity. Root cause diagnosed in I.9: the test helper `generateH3Hexes` returns `Array(Set)` with non-deterministic iteration order, causing `newHexes.last!` to select an already-inserted hex 2/3 of the time → `INSERT OR IGNORE` no-op → GRDB correctly skips `onChange`. Fix scheduled for I.9 (deterministic novel-hex selection).
 
 ### Phase 4: CI/CD Pipeline (Complete ✅)
 
@@ -123,6 +129,3 @@ The GitHub Actions CI/CD pipeline is active on `main`. The project embraces a so
 
 > [!WARNING]
 > **CI Safety: `XCTSkip` Convention.** All sandbox-limited tests must use explicit `throw XCTSkip("Reason")`. The `disabled_` prefix convention is banned — if a future agent renames a test to "fix the gap," it will hang CI indefinitely. The `XCTSkip` convention is enforced and verified (see `SpatialStoreFogTests.swift:131`).
-
-
-

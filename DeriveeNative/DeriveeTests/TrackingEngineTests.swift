@@ -29,7 +29,7 @@ final class TrackingEngineTests: XCTestCase {
     var engine: AmbientTrackingEngine!
     
     override func setUpWithError() throws {
-        dbManager = SpatialDatabaseManager(inMemory: true)
+        dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
         locationProvider = MockLocationProvider()
         engine = AmbientTrackingEngine(locationProvider: locationProvider, databaseManager: dbManager)
     }
@@ -158,5 +158,16 @@ final class TrackingEngineTests: XCTestCase {
         await engine.stopTracking()
         XCTAssertFalse(engine.isTracking)
         XCTAssertFalse(engine.isTrackingEnabled)
+    }
+    
+    func testOrphanedLiveActivityCleanup() async throws {
+        // Calling cleanUpOrphanedLiveActivities on cold start or engine transitions should execute safely
+        engine.cleanUpOrphanedLiveActivities()
+        
+        engine.startTracking()
+        XCTAssertTrue(engine.isTracking)
+        
+        await engine.stopTracking()
+        XCTAssertFalse(engine.isTracking)
     }
 }

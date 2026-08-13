@@ -10,7 +10,13 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         dbWriter.configuration.qos
     }
     
-    init(inMemory: Bool = false, customTransitURL: URL? = nil) {
+#if DEBUG
+    static func makeForTesting(inMemory: Bool = true, customTransitURL: URL? = nil) -> SpatialDatabaseManager {
+        SpatialDatabaseManager(inMemory: inMemory, customTransitURL: customTransitURL)
+    }
+#endif
+
+    private init(inMemory: Bool = false, customTransitURL: URL? = nil) {
         do {
             let fileManager = FileManager.default
             let appSupportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
@@ -62,6 +68,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 dbWriter = try DatabasePool(path: databaseURL.path, configuration: configuration)
             }
             try migrator.migrate(dbWriter)
+            print("🏦 [SpatialDatabaseManager] init complete for pool: \(ObjectIdentifier(dbWriter as AnyObject))")
         } catch {
             fatalError("Failed to initialize database: \(error)")
         }
@@ -136,7 +143,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         var migrator = DatabaseMigrator()
         
         migrator.registerMigration("v1") { db in
-            try db.create(table: "explored_hexes", options: .withoutRowID) { t in
+            try db.create(table: "explored_hexes") { t in
                 t.column("h3_index", .text).primaryKey()
             }
         }
@@ -152,6 +159,16 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             try db.create(table: "discovered_pois", options: .withoutRowID) { t in
                 t.column("poi_id", .text).primaryKey()
             }
+        }
+        
+        migrator.registerMigration("v4") { db in
+            // Rebuild explored_hexes to remove WITHOUT ROWID (fixes GRDB tracking bug)
+            try db.create(table: "explored_hexes_new") { t in
+                t.column("h3_index", .text).primaryKey()
+            }
+            try db.execute(sql: "INSERT INTO explored_hexes_new SELECT * FROM explored_hexes")
+            try db.drop(table: "explored_hexes")
+            try db.rename(table: "explored_hexes_new", to: "explored_hexes")
         }
         
         return migrator

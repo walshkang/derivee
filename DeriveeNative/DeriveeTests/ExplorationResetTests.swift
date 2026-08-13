@@ -11,7 +11,7 @@ final class ExplorationResetTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         // Initialize an in-memory database for fresh isolated tests
-        dbManager = SpatialDatabaseManager(inMemory: true)
+        dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
     }
 
     override func tearDownWithError() throws {

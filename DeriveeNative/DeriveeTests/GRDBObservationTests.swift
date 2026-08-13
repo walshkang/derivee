@@ -3,38 +3,37 @@ import GRDB
 @testable import Derivee
 
 final class GRDBObservationTests: XCTestCase {
+    
     @MainActor
-    func testRawGRDBValueObservation() async throws {
-        let dbManager = SpatialDatabaseManager(inMemory: true)
-        let writer = dbManager.dbWriter
-        
-        var firedCounts: [Int] = []
+    func testValueObservationFiresOnInsert() async throws {
+        let dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
         
         let observation = ValueObservation.tracking { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes")
         }
         
-        let cancellable = observation.start(in: writer, onError: { error in
-            XCTFail("Observation error: \(error)")
-        }, onChange: { count in
-            firedCounts.append(count)
-        })
+        let expectation = XCTestExpectation(description: "Observation fired")
+        expectation.expectedFulfillmentCount = 2 // 1 for initial fetch, 1 for insert
         
-        try await dbManager.insertDiscoveredHex(h3Index: "8b2a10089081fff")
-        
-        let timeout = 2.0
-        let start = Date()
-        while Date().timeIntervalSince(start) < timeout {
-            if firedCounts.contains(1) {
-                break
+        let cancellable = observation.start(
+            in: dbManager.dbWriter,
+            scheduling: .async(onQueue: .main),
+            onError: { error in
+                XCTFail("Error: \(error)")
+            },
+            onChange: { hexes in
+                print("🧪 [MINIMAL TEST] onChange fired with \(hexes.count) hexes")
+                expectation.fulfill()
             }
-            
-            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
-            
-            try await Task.sleep(nanoseconds: 10_000_000)
-        }
+        )
         
-        XCTAssertTrue(firedCounts.contains(1))
-        _ = cancellable
+        try await Task.sleep(nanoseconds: 100_000_000) // Wait for initial fetch
+        
+        print("🧪 [MINIMAL TEST] Inserting hex...")
+        let inserted = try await dbManager.insertDiscoveredHex(h3Index: "testhex")
+        print("🧪 [MINIMAL TEST] Insert returned: \(inserted)")
+        
+        await fulfillment(of: [expectation], timeout: 2.0)
+        cancellable.cancel()
     }
 }

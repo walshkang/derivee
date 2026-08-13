@@ -7,7 +7,7 @@ final class DatabaseQoSTests: XCTestCase {
     
     override func setUpWithError() throws {
         try super.setUpWithError()
-        dbManager = SpatialDatabaseManager(inMemory: true)
+        dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
     }
     
     override func tearDownWithError() throws {

@@ -50,7 +50,7 @@ final class TransitRevealSheetTests: XCTestCase {
         }
         
         // Initialize SpatialDatabaseManager with attached transit DB
-        dbManager = SpatialDatabaseManager(inMemory: true, customTransitURL: mockTransitURL)
+        dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true, customTransitURL: mockTransitURL)
     }
 
     override func tearDownWithError() throws {

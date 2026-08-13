@@ -699,3 +699,28 @@ Address visual and functional bugs in the `transit-web/` app to bring it to bran
 * Arrival times text is legible (high-contrast black on light background).
 * Bus stops appear/disappear based on zoom level without performance regression.
 * iOS: Dismissing the Transit Reveal bottom sheet causes the train route line to fade out over ~200ms before disappearing.
+
+## Wave I.9 — Fix GRDB Observation Issue (WI9-OBS-FIX)
+
+**Task ID:** `WI9-OBS-FIX`
+
+**Context:**
+We are working on an iOS Swift project (`iOS 17+`, `GRDB 6.29.3`, `MapLibre`, `SwiftUI @Observable`). We have a `SpatialStore` class that observes changes to a `DatabasePool` using GRDB's `ValueObservation`. 
+
+**The Bug:**
+When new hexes are inserted via `insertDiscoveredHex` (which executes `INSERT OR IGNORE INTO explored_hexes`), the database write succeeds (`db.changesCount > 0`), but the `ValueObservation`'s `onChange` block **never fires**. 
+Diagnostic testing confirmed that this is a silent tracking failure in GRDB, not a SwiftUI, XCTest, or cooperative polling concurrency issue. 
+
+**Root Cause Hypotheses:**
+1. **Raw SQL Tracking:** We are currently observing using raw SQL (`try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes")`). This may fail to robustly track updates for `WITHOUT ROWID` tables, or might be missing the appropriate explicit region configuration.
+2. **Database Attachment:** Our pool attaches `transit` and `neighborhood` schemas on every connection start. This could confuse the implicit region tracking for `main.explored_hexes`.
+
+**Your Task (I.9):**
+1. Review `SpatialStore.swift`, `SpatialDatabaseManager.swift`, and `SpatialStoreFogTests.swift`.
+2. Fix the observation query in `SpatialStore.startObservation` so that GRDB reliably tracks changes to the `explored_hexes` table. 
+   - *Option A:* Switch from `String.fetchAll` raw SQL to explicit `TableRecord` usage (you may need to define `struct ExploredHex: TableRecord, FetchableRecord`).
+   - *Option B:* Explicitly define the tracking region using `.observing(DatabaseRegion(table: "explored_hexes"))`. (Note: Make sure the syntax is correct for GRDB 6.29.3 to avoid compilation errors).
+3. Validate the fix by running the test:
+   `xcodebuild test -project DeriveeNative/Derivee.xcodeproj -scheme Derivee -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' -only-testing:DeriveeTests/SpatialStoreFogTests/testNewlyDiscoveredHexTriggersFogShapeUpdate`
+   The test must pass without timing out.
+4. Make `SpatialDatabaseManager.init` private and add `@ObservationIgnored` to properties in `SpatialStore` as originally specced in I.9.

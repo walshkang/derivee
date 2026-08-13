@@ -33,7 +33,7 @@ final class TransitHydrationTests: XCTestCase {
         }
         
         // 3. Initialize SpatialDatabaseManager with custom transit URL
-        dbManager = SpatialDatabaseManager(inMemory: true, customTransitURL: mockTransitURL)
+        dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true, customTransitURL: mockTransitURL)
     }
 
     override func tearDownWithError() throws {
@@ -88,7 +88,7 @@ final class TransitHydrationTests: XCTestCase {
 
     func testGracefulRecoveryWhenTransitDatabaseAbsent() async throws {
         let nonExistentURL = tempDirectoryURL.appendingPathComponent("non_existent.sqlite")
-        let fallbackDBManager = SpatialDatabaseManager(inMemory: true, customTransitURL: nonExistentURL)
+        let fallbackDBManager = SpatialDatabaseManager.makeForTesting(inMemory: true, customTransitURL: nonExistentURL)
         
         // Should initialize without crashing
         try await fallbackDBManager.insertDiscoveredHex(h3Index: "8b2a10089081fff")

@@ -8,13 +8,16 @@ import GRDB
 final class SpatialStoreFogTests: XCTestCase {
     
     private var dbManager: SpatialDatabaseManager!
+    private var retainedStores: [SpatialStore] = []
     
     override func setUpWithError() throws {
         try super.setUpWithError()
-        dbManager = SpatialDatabaseManager(inMemory: true)
+        dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
+        retainedStores = []
     }
     
     override func tearDownWithError() throws {
+        retainedStores.removeAll()
         dbManager = nil
         try super.tearDownWithError()
     }
@@ -23,7 +26,7 @@ final class SpatialStoreFogTests: XCTestCase {
     
     /// Generates `count` distinct valid Res 11 H3 hex strings in the NYC region.
     private func generateH3Hexes(count: Int) throws -> [String] {
-        var hexes = Set<String>()
+        var hexes: [String] = []
         var offset: Double = 0.0
         let baseLat = 40.768075
         let baseLng = -73.981897
@@ -31,11 +34,13 @@ final class SpatialStoreFogTests: XCTestCase {
         while hexes.count < count {
             let cell = try H3.latLngToCell(latitude: baseLat + offset, longitude: baseLng + (offset * 0.5), resolution: 11)
             let hexStr = String(cell, radix: 16)
-            hexes.insert(hexStr)
+            if !hexes.contains(hexStr) {
+                hexes.append(hexStr)
+            }
             offset += 0.005
         }
         
-        return Array(hexes)
+        return hexes
     }
     
     /// Waits reactively for `store.currentFogShape` to match the expected interior ring count using cooperative polling.
@@ -92,7 +97,7 @@ final class SpatialStoreFogTests: XCTestCase {
         let testCounts = [1, 10, 50]
         
         for count in testCounts {
-            let testDb = SpatialDatabaseManager(inMemory: true)
+            let testDb = SpatialDatabaseManager.makeForTesting(inMemory: true)
             let hexes = try generateH3Hexes(count: count)
             for hex in hexes {
                 try await testDb.insertDiscoveredHex(h3Index: hex)
@@ -128,7 +133,30 @@ final class SpatialStoreFogTests: XCTestCase {
 
     @MainActor
     func testNewlyDiscoveredHexTriggersFogShapeUpdate() async throws {
-        throw XCTSkip("ValueObservation delivery not testable in sandbox — see WI3 analysis")
+        let initialHexes = try generateH3Hexes(count: 2)
+        for hex in initialHexes {
+            try await dbManager.insertDiscoveredHex(h3Index: hex)
+        }
+        
+        let store = SpatialStore(
+            dbManager: dbManager,
+            liveUpdatePriority: .userInitiated
+        )
+        retainedStores.append(store)
+        
+        let initialFogPolygon = try await waitForFogShape(on: store, expectedInteriorCount: 2)
+        XCTAssertEqual(initialFogPolygon.interiorPolygons?.count, 2, "Initial fog polygon should contain 2 interior rings")
+        
+        let newHexes = try generateH3Hexes(count: 3)
+        print("🧪 [TEST DEBUG] Initial hexes: \(initialHexes)")
+        print("🧪 [TEST DEBUG] New hexes generated: \(newHexes)")
+        let newHex = newHexes.last!
+        print("🧪 [TEST DEBUG] Inserting new hex: \(newHex)")
+        let inserted = try await dbManager.insertDiscoveredHex(h3Index: newHex)
+        print("🧪 [TEST DEBUG] insertDiscoveredHex returned: \(inserted)")
+        
+        let updatedFogPolygon = try await waitForFogShape(on: store, expectedInteriorCount: 3)
+        XCTAssertEqual(updatedFogPolygon.interiorPolygons?.count, 3, "Updated fog polygon should contain 3 interior rings after live insertion")
     }
     
     @MainActor
