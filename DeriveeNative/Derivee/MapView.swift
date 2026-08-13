@@ -290,7 +290,12 @@ struct MapView: UIViewRepresentable {
         }
         
         func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {
-            guard let style = mapView.style, let fogSource = style.source(withIdentifier: "fog-source") as? MLNShapeSource else { return }
+            let interiorCount = (shape as? MLNPolygon)?.interiorPolygons?.count ?? 0
+            logPipeline("📍 [S6 - updateExploredHexes] ENTER shape=\(shape != nil ? "present" : "nil"), interiorCount=\(interiorCount), isMapStyleLoaded=\(isMapStyleLoaded)")
+            guard let style = mapView.style, let fogSource = style.source(withIdentifier: "fog-source") as? MLNShapeSource else {
+                logPipeline("📍 [S6 - updateExploredHexes] fog-source or style not ready yet")
+                return
+            }
             let previousShape = fogSource.shape as? MLNPolygon
             let isTransitioningFromInitial = previousShape?.interiorPolygons == nil
             

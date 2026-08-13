@@ -33,6 +33,10 @@
 	<array>
 		<string>location</string>
 	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

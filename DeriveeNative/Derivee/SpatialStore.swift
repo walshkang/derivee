@@ -79,7 +79,7 @@ final class SpatialStore: @unchecked Sendable {
                 print("SpatialStore Observation error: \(error)")
             },
             onChange: { [weak self] hexesArray in
-                print("🚀 [GRDB Pipeline] onChange fired with \(hexesArray.count) hexes on Thread: \(Thread.current)")
+                logPipeline("📍 [S4 - onChange] fired with \(hexesArray.count) hexes on Thread: \(Thread.current)")
                 guard let self = self else { return }
                 
                 let newSet = Set(hexesArray)
@@ -107,7 +107,7 @@ final class SpatialStore: @unchecked Sendable {
         polygonTask?.cancel()
         let taskPriority: TaskPriority = isInitial ? .userInitiated : self.liveUpdatePriority
         polygonTask = Task.detached(priority: taskPriority) {
-            print("⏳ recomputeFogShape ENTER at \(Date()) priority=\(taskPriority)")
+            logPipeline("📍 [S5 - recomputeFogShape ENTER] at \(Date()), priority=\(taskPriority), hexCount=\(hexes.count), isCancelled=\(Task.isCancelled)")
             // VERIFIED: MapLibre Native (iOS) requires Clockwise (CW) winding order for exterior bounds.
             // Tested & hardened in Wave I.2 (WI2-WINDING).
             // JITTER APPLIED: MapLibre ignores updates to polygons if the exterior bounding box 
@@ -145,7 +145,10 @@ final class SpatialStore: @unchecked Sendable {
                 }
             }
             
-            if Task.isCancelled { return }
+            if Task.isCancelled {
+                logPipeline("📍 [S5 - recomputeFogShape CANCELLED] before polygon construction, hexCount=\(hexes.count)")
+                return
+            }
             print("Generated \(innerRings.count) interior rings for the fog mask")
             
             let fogPolygon = MLNPolygon(coordinates: bounds, count: UInt(bounds.count), interiorPolygons: innerRings.isEmpty ? nil : innerRings)
@@ -176,8 +179,11 @@ final class SpatialStore: @unchecked Sendable {
             let capturedRingsCount = innerRings.count
             print("✅ recomputeFogShape EXIT at \(Date())")
             await MainActor.run { [weak self] in
-                if Task.isCancelled { return }
-                print("DEBUG: Rendering \(capturedRingsCount) interior rings, setting currentFogShape")
+                if Task.isCancelled {
+                    logPipeline("📍 [S5 - recomputeFogShape CANCELLED] inside MainActor.run, hexCount=\(hexes.count)")
+                    return
+                }
+                logPipeline("📍 [S5 - recomputeFogShape COMPLETE] Rendering \(capturedRingsCount) interior rings, setting currentFogShape")
                 self?.currentFogShape = fogPolygon
                 self?.transientHexShape = capturedTransientShape
                 if let loc = capturedNewHexLocation {

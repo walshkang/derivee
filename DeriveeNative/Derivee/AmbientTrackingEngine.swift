@@ -87,12 +87,14 @@ final class AmbientTrackingEngine: ObservableObject {
     }
     
     func resumeTrackingIfNeeded() {
+        logPipeline("📍 [S1 - resumeTrackingIfNeeded] ENTER isTrackingEnabled=\(isTrackingEnabled), isTracking=\(isTracking)")
         guard isTrackingEnabled, !isTracking else { return }
         startTracking()
     }
     
     func startTracking() {
         guard !isTracking else { return }
+        logPipeline("▶️ [AmbientTrackingEngine] startTracking called")
         
         cleanUpOrphanedLiveActivities()
         
@@ -120,6 +122,7 @@ final class AmbientTrackingEngine: ObservableObject {
     }
     
     func stopTracking() async {
+        logPipeline("⏹️ [AmbientTrackingEngine] stopTracking called")
         updatesTask?.cancel()
         _ = await updatesTask?.result
         updatesTask = nil
@@ -163,7 +166,7 @@ final class AmbientTrackingEngine: ObservableObject {
         
         // Discard if speed is > 12 m/s (approx 27 mph)
         if speed > 12.0 {
-            print("Drift gate triggered: Dropping point due to speed (\(speed) m/s)")
+            logPipeline("⚠️ Drift gate triggered: Dropping point due to speed (\(speed) m/s)")
             return
         }
         
@@ -173,6 +176,8 @@ final class AmbientTrackingEngine: ObservableObject {
                                             longitude: location.coordinate.longitude,
                                             resolution: 11)
             let indexString = String(index, radix: 16)
+            
+            logPipeline("📍 [S2 - processLocation] hex=\(indexString), timestamp=\(location.timestamp), lastSavedHex=\(lastSavedHex ?? "nil"), speed=\(speed)")
             
             // Only hit the database if the hex has changed
             guard indexString != lastSavedHex else { return }
@@ -184,6 +189,7 @@ final class AmbientTrackingEngine: ObservableObject {
                     print("⚡️ [AmbientTrackingEngine] processLocation inserting hex \(indexString) using dbWriter pool: \(ObjectIdentifier(self.databaseManager.dbWriter as AnyObject))")
                     // Hand off to the database
                     let isNew = try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
+                    logPipeline("📍 [S3 - insertDiscoveredHex] hex=\(indexString), isNew=\(isNew)")
                     let nbhd = try? await self.databaseManager.fetchNeighborhoodName(for: indexString)
                     
                     await MainActor.run {
@@ -199,7 +205,7 @@ final class AmbientTrackingEngine: ObservableObject {
                     }
                     print("Processed hex: \(indexString) (New: \(isNew))")
                 } catch {
-                    print("Failed to process hex: \(error)")
+                    logPipeline("❌ Failed to process hex: \(error)")
                 }
             }
         } catch {

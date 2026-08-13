@@ -25,17 +25,17 @@ We use `GRDB.swift` to manage the database connection.
 - **Busy Timeout:** Configured via `PRAGMA busy_timeout = 5000;` to gracefully handle concurrent access without `SQLITE_BUSY` exceptions.
 - **QoS Configuration:** `Configuration.qos` is set to `.userInitiated` to prevent priority inversion. Without this, GRDB's internal `Pool` barrier and wait queues default to `.default` QoS, causing the main thread (`User-Interactive`) to hang on `Pool.get()` when background writes hold connections.
 
-### 2.2 Schema Optimization (`WITHOUT ROWID`)
+### 2.2 Schema & Region Tracking
 The `explored_hexes` table tracks all discovered H3 indices.
 ```sql
 CREATE TABLE explored_hexes (
     h3_index TEXT PRIMARY KEY
-) WITHOUT ROWID;
+);
 ```
-Because the `h3_index` is the only column and acts as a primary key, `WITHOUT ROWID` clusters the index strings together in the B-Tree, significantly reducing storage size and improving sequential read performance during map hydration.
+Standard SQLite ROWID tables ensure that SQLite update hooks and GRDB `ValueObservation` region tracking reliably detect every row insertion across threads.
 
 ### 2.3 Reactive Observation
-The `SpatialStore` (`@Observable`) acts as the bridge between GRDB and SwiftUI. It uses GRDB's `ValueObservation` to track changes in the `explored_hexes` table. When new hexes are written by the background `AmbientTrackingEngine`, `ValueObservation` fires `onChange`, which calls `recomputeFogShape()` inside a `Task.detached(priority: .userInitiated)`. The resulting `MLNPolygon` is set on `currentFogShape` on `MainActor`, which SwiftUI observes via `@Observable`, triggering `MapView.updateUIView()` to push the new shape into the MapLibre fog source.
+The `SpatialStore` (`@Observable`) acts as the bridge between GRDB and SwiftUI. It uses GRDB's `ValueObservation` with `ExploredHex: TableRecord, FetchableRecord` to track changes in the `explored_hexes` table. When new hexes are written by the background `AmbientTrackingEngine`, `ValueObservation` fires `onChange`, which calls `recomputeFogShape()` inside a `Task.detached(priority: .userInitiated)`. The resulting `MLNPolygon` is set on `currentFogShape` on `MainActor`, which SwiftUI observes via `@Observable`, triggering `MapView.updateUIView()` to push the new shape into the MapLibre fog source.
 
 ### 2.4 Async Read Mandate
 All `SpatialDatabaseManager` read methods exposed to callers **must** use `async`/`await` (`try await dbWriter.read`). Synchronous `dbWriter.read { }` calls on the main thread cause priority inversion hangs when the background `AmbientTrackingEngine` holds a pool connection. The only acceptable synchronous reads are internal to GRDB's `ValueObservation` callbacks, which manage their own threading.
@@ -59,6 +59,11 @@ To prevent "GPS drift" or multipath errors in urban canyons from unlocking false
 - Speed is calculated as $\Delta d / \Delta t$ using `update.location`.
 - If speed exceeds **12 m/s** (approx. 27 mph), the point is discarded.
 - This ensures hexes are only unlocked at walking/biking speeds.
+
+### 3.4 Pipeline Diagnostic Logging & Untethered Field Testing
+To diagnose real-world GPS and fog update lifecycle events on physical devices disconnected from Xcode:
+- `PipelineLogger` multiplexes all 6 stages of pipeline telemetry (`[S1]` through `[S6]`) across stdout, Apple Unified Logging (`os.Logger`), and a persistent sandbox file (`Documents/pipeline_debug.log`).
+- `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` are enabled in `project.yml` so users can inspect or AirDrop `pipeline_debug.log` straight from the iOS Files app after field walks.
 
 ---
 

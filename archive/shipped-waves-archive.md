@@ -724,3 +724,18 @@ Diagnostic testing confirmed that this is a silent tracking failure in GRDB, not
    `xcodebuild test -project DeriveeNative/Derivee.xcodeproj -scheme Derivee -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' -only-testing:DeriveeTests/SpatialStoreFogTests/testNewlyDiscoveredHexTriggersFogShapeUpdate`
    The test must pass without timing out.
 4. Make `SpatialDatabaseManager.init` private and add `@ObservationIgnored` to properties in `SpatialStore` as originally specced in I.9.
+
+## Wave I.10a — Live Hex Unlock Pipeline Diagnostic Logging (WI10a-PIPELINE-LOGS)
+
+**Task ID:** `WI10a-PIPELINE-LOGS`
+
+**Context:**
+Add 6-stage diagnostic logging to the live hex unlock pipeline to support on-device walk testing (I.10b) and log analysis (I.10c). Zero logic changes — print statements only.
+
+**Stages Instrumented:**
+1. **[S1]** `AmbientTrackingEngine.resumeTrackingIfNeeded`: Log entry, `isTrackingEnabled`, and `isTracking`.
+2. **[S2]** `AmbientTrackingEngine.processLocation`: Log entry, hex string, timestamp, speed, and `lastSavedHex` (before deduplication guard).
+3. **[S3]** `AmbientTrackingEngine.processLocation` (in Task): Log `insertDiscoveredHex` result (`isNew: Bool`).
+4. **[S4]** `SpatialStore.startObservation`: Log `onChange` event with hex count and executing thread.
+5. **[S5]** `SpatialStore.recomputeFogShape`: Log `Task.isCancelled` status at entry, pre-polygon build, and MainActor publish checkpoints.
+6. **[S6]** `MapView.Coordinator.updateExploredHexes`: Log entry, presence of shape, interior polygon count, and `isMapStyleLoaded` flag.

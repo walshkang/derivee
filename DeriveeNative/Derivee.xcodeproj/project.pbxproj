@@ -16,6 +16,7 @@
 		20EE44C349BA7287D539F085 /* SpatialDatabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */; };
 		251F343B49766CAB12CA3411 /* transit_delta.sqlite in Resources */ = {isa = PBXBuildFile; fileRef = 199B3BD0E20EFB91632E8F30 /* transit_delta.sqlite */; };
 		327375399AC87B0C9BBC32BA /* PhilosophyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A37CA71EE44E8BDD205124 /* PhilosophyView.swift */; };
+		41ADE683C5AC463D6213BCBD /* PipelineLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8714A86D95B5C35D2A6F8AA /* PipelineLogger.swift */; };
 		42FD08C669B75AB9B3559199 /* TransitSparklineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F9718A0C6F19BF050A52A38 /* TransitSparklineView.swift */; };
 		44846034DC3956691503AD6B /* HydrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08C048FE60010DC495C1C7AB /* HydrationManager.swift */; };
 		44F838BC32769B876A0FE448 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863A532D137F91C7E2021C95 /* OnboardingView.swift */; };
@@ -111,6 +112,7 @@
 		966E6957AA78D74369F921CC /* NeighborhoodTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeighborhoodTests.swift; sourceTree = "<group>"; };
 		97F9405AD2F0493CF5ECB925 /* neighborhood.sqlite-shm */ = {isa = PBXFileReference; path = "neighborhood.sqlite-shm"; sourceTree = "<group>"; };
 		A3A37CA71EE44E8BDD205124 /* PhilosophyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhilosophyView.swift; sourceTree = "<group>"; };
+		A8714A86D95B5C35D2A6F8AA /* PipelineLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineLogger.swift; sourceTree = "<group>"; };
 		AA1D089BD418F79AE29C57FC /* neighborhood.sqlite-wal */ = {isa = PBXFileReference; path = "neighborhood.sqlite-wal"; sourceTree = "<group>"; };
 		AF626E8EA1D36226174C6F8E /* DeriveeWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeriveeWidgetBundle.swift; sourceTree = "<group>"; };
 		AF81045CC27721884C49C776 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -201,6 +203,7 @@
 				AA1D089BD418F79AE29C57FC /* neighborhood.sqlite-wal */,
 				863A532D137F91C7E2021C95 /* OnboardingView.swift */,
 				A3A37CA71EE44E8BDD205124 /* PhilosophyView.swift */,
+				A8714A86D95B5C35D2A6F8AA /* PipelineLogger.swift */,
 				F85968E07BB90EBA8E2B9F0D /* Secrets.swift */,
 				482E45C732819866B4B63747 /* SettingsView.swift */,
 				75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */,
@@ -399,6 +402,7 @@
 				094712DE5F55C5A2F994A612 /* MapView.swift in Sources */,
 				44F838BC32769B876A0FE448 /* OnboardingView.swift in Sources */,
 				327375399AC87B0C9BBC32BA /* PhilosophyView.swift in Sources */,
+				41ADE683C5AC463D6213BCBD /* PipelineLogger.swift in Sources */,
 				55031B6D0543C31F17B09277 /* Secrets.swift in Sources */,
 				A9725147E4D56FCC9789CF14 /* SettingsView.swift in Sources */,
 				20EE44C349BA7287D539F085 /* SpatialDatabaseManager.swift in Sources */,

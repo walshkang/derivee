@@ -23,6 +23,8 @@ targets:
         UIBackgroundModes:
           - location
         NSSupportsLiveActivities: YES
+        UIFileSharingEnabled: YES
+        LSSupportsOpeningDocumentsInPlace: YES
     dependencies:
       - package: swift-h3
         product: H3
