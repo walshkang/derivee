@@ -8,6 +8,10 @@ struct SettingsView: View {
     @ObservedObject var trackingEngine: AmbientTrackingEngine
     var spatialStore: SpatialStore
     
+    @AppStorage(AppStorageKeys.selectedBasemapTheme) private var storedTheme: String = BasemapTheme.night.rawValue
+    @AppStorage(AppStorageKeys.fogOpacity) private var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
+    @AppStorage(AppStorageKeys.showBoundaryBorders) private var showBoundaryBorders: Bool = MapCustomizationDefaults.defaultShowBoundaryBorders
+    
     @State private var showResetAlert = false
     @State private var showCacheAlert = false
     @State private var showPauseTrackingAlert = false
@@ -16,6 +20,33 @@ struct SettingsView: View {
     
     var body: some View {
         Form {
+            Section(header: Text("Map Aesthetics & Exploration"), footer: Text("Visual styles and boundary highlights update instantly on the GPU with zero database overhead.")) {
+                Picker("Basemap Theme", selection: $storedTheme) {
+                    ForEach(BasemapTheme.allCases) { theme in
+                        Text(theme.displayName).tag(theme.rawValue)
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Fog Density")
+                        Spacer()
+                        Text("\(Int(round(fogOpacity * 100)))%")
+                            .font(.system(.subheadline, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                    Slider(
+                        value: $fogOpacity,
+                        in: MapCustomizationDefaults.minFogOpacity...MapCustomizationDefaults.maxFogOpacity,
+                        step: 0.01
+                    )
+                    .tint(colorScheme == .dark ? .white : .black)
+                }
+                .padding(.vertical, 4)
+                
+                Toggle("Exploration Boundary Borders", isOn: $showBoundaryBorders)
+            }
+            
             Section(header: Text("Tracking")) {
                 Toggle("Ambient Tracking", isOn: Binding(
                     get: { trackingEngine.isTracking },

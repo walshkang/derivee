@@ -32,6 +32,7 @@
 		627FBB1DB0AE46A09D866580 /* CameraBoundsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78DE3D729CFDDAA29570FF6 /* CameraBoundsTests.swift */; };
 		64957D178FDC5E68FA993DB7 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = DF080F7BA7E8F484792D0F31 /* MapLibre */; };
 		6F7AFB2044DA5AE96EB8CFB8 /* SpatialStoreFogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3018C4BA13CF89BEBFCCBA /* SpatialStoreFogTests.swift */; };
+		78FFDF58074BF1E4F27CA0F7 /* MapCustomization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587DBC0D7259B1BDC19D0323 /* MapCustomization.swift */; };
 		79F5841560521971FD651E75 /* SpatialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5C593BBD5275D900632F1B /* SpatialStore.swift */; };
 		8BE08985845BB5107F48ECE4 /* ExplorationResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAC15B31EFF91C40E2E93EB /* ExplorationResetTests.swift */; };
 		946BAB1A7ABBFCA5CAC702B4 /* GRDBObservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8AA6177CA7C6527DAE09E18 /* GRDBObservationTests.swift */; };
@@ -56,6 +57,7 @@
 		D7286ED979BEF692F2042730 /* TransitHydrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD68697FCA0DA2827F0AFADC /* TransitHydrationTests.swift */; };
 		D8D7EBB0C03160723270DA6E /* POIMaskManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34154FDD24C6585667198AC4 /* POIMaskManager.swift */; };
 		DC34AAB9BFF466868C17558C /* TrackingAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D9DCD362FB2ADD8F63B6B2 /* TrackingAttributes.swift */; };
+		E3078940A363E6D4FB910728 /* CustomizationSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71BEB9554F5F1D158F380826 /* CustomizationSettingsTests.swift */; };
 		E5AC07B09045A40A8F83388F /* derivee_transit.sqlite in Resources */ = {isa = PBXBuildFile; fileRef = 86B2FFDED57A84490398B9F8 /* derivee_transit.sqlite */; };
 		F5E76E643AE8FE5415701241 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF81045CC27721884C49C776 /* ContentView.swift */; };
 		F78124BCD272DAA1481ADD7E /* BasemapThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FB4C332314C5F363AC5BFB /* BasemapThemeTests.swift */; };
@@ -106,10 +108,12 @@
 		47A3E08CE2FC2E71A4F9EEA6 /* H3SpatialMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H3SpatialMathTests.swift; sourceTree = "<group>"; };
 		482E45C732819866B4B63747 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		506C0DF82966A6FB7304C38D /* BasemapStyleLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BasemapStyleLoader.swift; sourceTree = "<group>"; };
+		587DBC0D7259B1BDC19D0323 /* MapCustomization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapCustomization.swift; sourceTree = "<group>"; };
 		5AFFB73189473060ADA73222 /* Derivee.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Derivee.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5FA1E40A44F1C7D276AEF000 /* testTransitSparklineViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testTransitSparklineViewSnapshot.1.png; sourceTree = "<group>"; };
 		6830B225EF5E701084FB4FC5 /* GPXProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXProcessor.swift; sourceTree = "<group>"; };
 		69DD2D8BDDA6A03164A4A524 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		71BEB9554F5F1D158F380826 /* CustomizationSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomizationSettingsTests.swift; sourceTree = "<group>"; };
 		75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialDatabaseManager.swift; sourceTree = "<group>"; };
 		7EC6A6941E06A9AA9C6D2A93 /* DeriveeWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = DeriveeWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7F9718A0C6F19BF050A52A38 /* TransitSparklineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitSparklineView.swift; sourceTree = "<group>"; };
@@ -222,6 +226,7 @@
 				6830B225EF5E701084FB4FC5 /* GPXProcessor.swift */,
 				08C048FE60010DC495C1C7AB /* HydrationManager.swift */,
 				69DD2D8BDDA6A03164A4A524 /* Info.plist */,
+				587DBC0D7259B1BDC19D0323 /* MapCustomization.swift */,
 				878744028003B6170BB298EA /* MapFAB.swift */,
 				C1269ACE7C6346A1302459B0 /* MapView.swift */,
 				80384B383FEE2FACF5DEF57F /* neighborhood.sqlite */,
@@ -249,6 +254,7 @@
 			children = (
 				E6FB4C332314C5F363AC5BFB /* BasemapThemeTests.swift */,
 				B78DE3D729CFDDAA29570FF6 /* CameraBoundsTests.swift */,
+				71BEB9554F5F1D158F380826 /* CustomizationSettingsTests.swift */,
 				E514583F05E73B9238D552A8 /* DatabaseQoSTests.swift */,
 				CFAC15B31EFF91C40E2E93EB /* ExplorationResetTests.swift */,
 				D8AA6177CA7C6527DAE09E18 /* GRDBObservationTests.swift */,
@@ -434,6 +440,7 @@
 				600370C96B86CEC7F065C5E0 /* GPXParser.swift in Sources */,
 				FE7D801EB046B06F75E2B93D /* GPXProcessor.swift in Sources */,
 				44846034DC3956691503AD6B /* HydrationManager.swift in Sources */,
+				78FFDF58074BF1E4F27CA0F7 /* MapCustomization.swift in Sources */,
 				9E18AE610A3DB924C58DD4DF /* MapFAB.swift in Sources */,
 				094712DE5F55C5A2F994A612 /* MapView.swift in Sources */,
 				44F838BC32769B876A0FE448 /* OnboardingView.swift in Sources */,
@@ -468,6 +475,7 @@
 			files = (
 				F78124BCD272DAA1481ADD7E /* BasemapThemeTests.swift in Sources */,
 				627FBB1DB0AE46A09D866580 /* CameraBoundsTests.swift in Sources */,
+				E3078940A363E6D4FB910728 /* CustomizationSettingsTests.swift in Sources */,
 				57CC762930DAE5C3E2C5210C /* DatabaseQoSTests.swift in Sources */,
 				8BE08985845BB5107F48ECE4 /* ExplorationResetTests.swift in Sources */,
 				946BAB1A7ABBFCA5CAC702B4 /* GRDBObservationTests.swift in Sources */,

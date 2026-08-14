@@ -459,8 +459,9 @@ The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/
 │   └── transient-hex-layer (FillLayer: 0.3 -> 0.0 opacity flash on new hex unlock)
 │
 ├── Layer 2: The Fog Mask (fog-source)
-│   └── cloud-layer (FillLayer: 50km CW Bounding Box with CW H3 hex interior hole cutouts)
-│       └── Day: #1C1C1E (opacity 0.3) | Night: #000000 (opacity 0.3)
+│   ├── [Z: 2b] fog-border-layer (LineLayer: 1.5pt #FFB300 amber boundary outline, opacity 0.0 or 0.75)
+│   └── [Z: 2a] cloud-layer      (FillLayer: 50km CW Bounding Box with CW H3 hex interior hole cutouts)
+│       └── Opacity: 0.60..0.98 (@AppStorage) | Day: #1C1C1E | Night/OLED: #000000 | Transit: #0A0C10
 │
 └── Layer 1: Base Vector Style
     └── MapTiler Streets v2 (Coastlines, water, street grid, typography)

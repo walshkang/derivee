@@ -17,6 +17,8 @@ struct MapView: UIViewRepresentable {
     @Binding var targetCoordinate: CLLocationCoordinate2D?
     var transientHexShape: MLNShape?
     var selectedTheme: BasemapTheme = .night
+    var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
+    var showBoundaryBorders: Bool = MapCustomizationDefaults.defaultShowBoundaryBorders
     
     // Bundled Composite Style URL with runtime key injection
     let styleURL = BasemapStyleLoader.styleURL
@@ -52,6 +54,8 @@ struct MapView: UIViewRepresentable {
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
         if let style = uiView.style {
             context.coordinator.updateTheme(selectedTheme, in: style)
+            context.coordinator.updateFogOpacity(fogOpacity, in: style)
+            context.coordinator.updateBoundaryBorders(showBoundaryBorders, in: style)
             context.coordinator.updatePOIs(in: style)
         }
         
@@ -78,6 +82,7 @@ struct MapView: UIViewRepresentable {
         
         // Layer Identifiers
         let fogLayerId = "cloud-layer"
+        let fogBorderLayerId = MapCustomizationDefaults.fogBorderLayerId
         let hexHolesLayerId = "hex-holes-layer"
         let poiSourceId = "poi-source"
         let lureLayerId = "poi-lure-layer"
@@ -195,6 +200,8 @@ struct MapView: UIViewRepresentable {
             BasemapThemeManager.applyTheme(initialTheme, in: style, animated: false)
             lastAppliedTheme = initialTheme
             
+            updateFogOpacity(parent.fogOpacity, in: style)
+            updateBoundaryBorders(parent.showBoundaryBorders, in: style)
             updatePOIs(in: style)
             updateExploredHexes(in: mapView, with: parent.spatialStore.currentFogShape)
             startLureTimer()
@@ -291,8 +298,16 @@ struct MapView: UIViewRepresentable {
             let fogLayer = MLNFillStyleLayer(identifier: fogLayerId, source: fogSource)
             let colorHex = parent.colorScheme == .dark ? "#000000" : "#1C1C1E"
             fogLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
-            fogLayer.fillOpacity = NSExpression(forConstantValue: 0.3)
+            fogLayer.fillOpacity = NSExpression(forConstantValue: parent.fogOpacity)
             style.addLayer(fogLayer)
+            
+            let borderLayer = MLNLineStyleLayer(identifier: fogBorderLayerId, source: fogSource)
+            borderLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: MapCustomizationDefaults.boundaryBorderColorHex))
+            borderLayer.lineWidth = NSExpression(forConstantValue: MapCustomizationDefaults.boundaryBorderWidth)
+            borderLayer.lineOpacity = NSExpression(forConstantValue: parent.showBoundaryBorders ? MapCustomizationDefaults.boundaryBorderOpacity : 0.0)
+            borderLayer.lineJoin = NSExpression(forConstantValue: "round")
+            borderLayer.lineCap = NSExpression(forConstantValue: "round")
+            style.insertLayer(borderLayer, above: fogLayer)
             
             let transientHexSource = MLNShapeSource(identifier: transientHexSourceId, shape: nil, options: nil)
             style.addSource(transientHexSource)
@@ -339,6 +354,22 @@ struct MapView: UIViewRepresentable {
             if lastAppliedTheme != theme {
                 lastAppliedTheme = theme
                 BasemapThemeManager.applyTheme(theme, in: style, animated: true)
+            }
+        }
+        
+        func updateFogOpacity(_ opacity: Double, in style: MLNStyle) {
+            guard isMapStyleLoaded else { return }
+            if let fogLayer = style.layer(withIdentifier: fogLayerId) as? MLNFillStyleLayer {
+                fogLayer.fillOpacityTransition = MLNTransition(duration: 0, delay: 0)
+                fogLayer.fillOpacity = NSExpression(forConstantValue: opacity)
+            }
+        }
+        
+        func updateBoundaryBorders(_ show: Bool, in style: MLNStyle) {
+            guard isMapStyleLoaded else { return }
+            if let borderLayer = style.layer(withIdentifier: fogBorderLayerId) as? MLNLineStyleLayer {
+                borderLayer.lineOpacityTransition = MLNTransition(duration: 0, delay: 0)
+                borderLayer.lineOpacity = NSExpression(forConstantValue: show ? MapCustomizationDefaults.boundaryBorderOpacity : 0.0)
             }
         }
         

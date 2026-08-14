@@ -18,7 +18,9 @@ struct ContentView: View {
     @State private var glowOpacity: Double = 0.0
     
     @Environment(\.colorScheme) var colorScheme
-    @AppStorage("selectedBasemapTheme") private var storedTheme: String = ""
+    @AppStorage(AppStorageKeys.selectedBasemapTheme) private var storedTheme: String = ""
+    @AppStorage(AppStorageKeys.fogOpacity) private var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
+    @AppStorage(AppStorageKeys.showBoundaryBorders) private var showBoundaryBorders: Bool = MapCustomizationDefaults.defaultShowBoundaryBorders
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
@@ -49,7 +51,9 @@ struct ContentView: View {
                             userScreenPosition: $userScreenPosition,
                             targetCoordinate: $targetCoordinate,
                             transientHexShape: spatialStore.transientHexShape,
-                            selectedTheme: currentTheme)
+                            selectedTheme: currentTheme,
+                            fogOpacity: fogOpacity,
+                            showBoundaryBorders: showBoundaryBorders)
                         .ignoresSafeArea()
                     
                     GeometryReader { geo in
