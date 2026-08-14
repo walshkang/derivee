@@ -20,16 +20,16 @@ struct TransitRevealSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             // Header: Line Badge + Station Name
             if let details = stopDetails {
+                let routeInfo = TransitRouteData.lineInfo(for: details.routeId)
+                
                 HStack(alignment: .center, spacing: 12) {
-                    let info = TransitRouteData.lineInfo(for: details.routeId)
-                    
                     Circle()
-                        .fill(info.color)
+                        .fill(routeInfo.color)
                         .frame(width: 38, height: 38)
                         .overlay(
-                            Text(info.name)
+                            Text(routeInfo.name)
                                 .font(.system(size: 18, weight: .bold, design: .rounded))
-                                .foregroundColor(Color(hex: info.textColorHex))
+                                .foregroundColor(Color(hex: routeInfo.textColorHex))
                         )
                     
                     VStack(alignment: .leading, spacing: 2) {
@@ -118,7 +118,7 @@ struct TransitRevealSheet: View {
                 Divider()
                 
                 // Historical Reliability Sparkline
-                TransitSparklineView(headways: headways, title: "7-Day Headway Reliability (min)")
+                TransitSparklineView(headways: headways, title: "7-Day Headway Reliability (min)", tintColor: routeInfo.color)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 180)

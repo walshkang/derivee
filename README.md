@@ -15,7 +15,7 @@ An ambient, offline-first iOS application that transforms your daily commute and
 * **Pristine History:** When you pan the camera to view an area you cleared weeks ago, you see only clean, beautiful satellite terrain. The map gets out of your way.
 * **Ghost POIs:** Points of interest and transit nodes do not permanently clutter the map with pins. Once an area is cleared, they become invisible. They are only revealed if you are physically standing in that hex and tap your location to pull up a minimalist data sheet.
 * **Exploration Stats:** While the main map abandons gamified HUDs, a dedicated profile screen tracks your macro-level progress (e.g., "Williamsburg: 14% Cleared") and houses a beautiful grid of your discovered Ghost POIs, satisfying the completionist itch without the anxiety.
-* **Dynamic Day/Night Cycle:** The interface automatically shifts between Day Mode ("Clear Morning" — parchment whites `#F9F9F6`, graphite fog `#1C1C1E`) and Night Mode ("Midnight Grid" — midnight slate `#12121A`, OLED black fog `#000000`) based on local sunrise and sunset. **Electric Amber (`#FFB300`)** is the universal accent color — used for the live GPS dot, active transit routes, and Ghost POI glows.
+* **Dynamic Day/Night Cycle:** The interface automatically shifts between Day Mode ("Clear Morning" — parchment whites `#F9F9F6`, graphite fog `#1C1C1E`) and Night Mode ("Midnight Grid" — midnight slate `#12121A`, OLED black fog `#000000`) based on local sunrise and sunset. **Electric Amber (`#FFB300`)** serves as the primary accent for the live GPS indicator and milestone glows, while subway routes proudly display their **official MTA line colors**.
 
 ## 🚇 Commuter-Grade Transit (Raw GTFS)
 

@@ -32,7 +32,9 @@ The interface automatically transitions between Light and Dark modes based on lo
   * **UI Materials:** Apple's native `.ultraThinMaterial` (Dark). Text and icons rendered in clean, crisp white (`#FFFFFF`).
 
 * **The Universal Accent Color (`#FFB300` — Electric Amber):**
-  * Shared across both modes. Used strictly for the live GPS indicator dot, active transit vector routes, and glowing "Ghost POIs" in the fog. It mimics the aesthetic of vintage LED transit arrival boards.
+  * Shared across both modes. Used for the live GPS indicator dot, boundary borders, exploration milestone glows, and active vicinity bubbles.
+* **Transit & Subway Network Palette (Official Line Colors):**
+  * Subway lines and route polylines are rendered in their true official MTA colors (e.g. Red `#EE352E` for 1/2/3, Green `#00933C` for 4/5/6, Purple `#B933AD` for 7, Blue `#0039A6` for A/C/E, Orange `#FF6319` for B/D/F/M, Lime `#6CBE45` for G, Brown `#996633` for J/Z, Silver `#A7A9AC` for L, Yellow `#FCCC0A` for N/Q/R/W) across map tracks, ephemeral route overlays, and station reliability sparklines.
 
 ### 1.2 Typography & Micro-Interference
 

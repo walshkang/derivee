@@ -27,6 +27,8 @@ public struct BasemapPalette: Equatable {
     public let parkColor: UIColor
     public let landuseColor: UIColor
     public let buildingColor: UIColor
+    public let building3DColor: UIColor
+    public let building3DOpacity: Double
     public let roadColor: UIColor
     public let roadCasingColor: UIColor
     public let railColor: UIColor
@@ -42,6 +44,8 @@ public struct BasemapPalette: Equatable {
         parkColor: UIColor(hex: "#E3ECD9"),
         landuseColor: UIColor(hex: "#EDEDE9"),
         buildingColor: UIColor(hex: "#DCDCD6"),
+        building3DColor: UIColor(hex: "#DCDCD6"),
+        building3DOpacity: 0.6,
         roadColor: UIColor(hex: "#FFFFFF"),
         roadCasingColor: UIColor(hex: "#D6D6D0"),
         railColor: UIColor(hex: "#7A7D84"),
@@ -58,6 +62,8 @@ public struct BasemapPalette: Equatable {
         parkColor: UIColor(hex: "#151B18"),
         landuseColor: UIColor(hex: "#14141E"),
         buildingColor: UIColor(hex: "#181822"),
+        building3DColor: UIColor(hex: "#242436"),
+        building3DOpacity: 0.75,
         roadColor: UIColor(hex: "#222433"),
         roadCasingColor: UIColor(hex: "#161722"),
         railColor: UIColor(hex: "#4E5366"),
@@ -74,6 +80,8 @@ public struct BasemapPalette: Equatable {
         parkColor: UIColor(hex: "#080D0A"),
         landuseColor: UIColor(hex: "#06060A"),
         buildingColor: UIColor(hex: "#0A0A10"),
+        building3DColor: UIColor(hex: "#161622"),
+        building3DOpacity: 0.8,
         roadColor: UIColor(hex: "#1C1C24"),
         roadCasingColor: UIColor(hex: "#0D0D12"),
         railColor: UIColor(hex: "#3A3A4A"),
@@ -90,6 +98,8 @@ public struct BasemapPalette: Equatable {
         parkColor: UIColor(hex: "#0E1410"),
         landuseColor: UIColor(hex: "#101318"),
         buildingColor: UIColor(hex: "#13161D"),
+        building3DColor: UIColor(hex: "#1A1F2B"),
+        building3DOpacity: 0.7,
         roadColor: UIColor(hex: "#181B22"),
         roadCasingColor: UIColor(hex: "#0F1116"),
         railColor: UIColor(hex: "#FFB300"),
@@ -115,10 +125,11 @@ public enum BasemapThemeManager {
     
     // Layer Group IDs matching composite_style.json
     static let waterFillLayerIds = ["Water", "Water intermittent"]
-    static let waterLineLayerIds = ["River", "River tunnel"]
+    static let waterLineLayerIds = ["River", "River tunnel", "Ferry line"]
     static let natureLayerIds = ["Park", "Meadow", "Scrub", "Crop", "Forest", "Sand", "Wood", "Grass", "Glacier"]
     static let landuseLayerIds = ["Residential", "Industrial", "Cemetery", "Hospital", "Stadium", "School", "Airport zone"]
-    static let buildingLayerIds = ["Building", "Building 3D"]
+    static let buildingLayerIds = ["Building"]
+    static let building3DLayerId = "Building 3D"
     static let roadOutlineLayerIds = [
         "Minor road outline", "Major road outline", "Highway outline",
         "Tunnel outline", "Bridge outline", "Footway tunnel outline",
@@ -132,7 +143,7 @@ public enum BasemapThemeManager {
     static let railLayerIds = [
         "Major rail", "Minor rail", "Railway tunnel",
         "Major rail hatching", "Minor rail hatching", "Railway tunnel hatching",
-        "Cablecar", "Cablecar dash", "Ferry line"
+        "Cablecar", "Cablecar dash"
     ]
     static let labelLayerIds = [
         "Road labels", "City labels", "Town labels", "State labels",
@@ -185,12 +196,18 @@ public enum BasemapThemeManager {
             }
         }
         
-        // 5. Buildings
+        // 5. Buildings (2D Footprints & 3D Extrusions)
         for layerId in buildingLayerIds {
             if let fillLayer = style.layer(withIdentifier: layerId) as? MLNFillStyleLayer {
                 fillLayer.fillColorTransition = transition
                 fillLayer.fillColor = NSExpression(forConstantValue: palette.buildingColor)
             }
+        }
+        if let extrusionLayer = style.layer(withIdentifier: building3DLayerId) as? MLNFillExtrusionStyleLayer {
+            extrusionLayer.fillExtrusionColorTransition = transition
+            extrusionLayer.fillExtrusionColor = NSExpression(forConstantValue: palette.building3DColor)
+            extrusionLayer.fillExtrusionOpacityTransition = transition
+            extrusionLayer.fillExtrusionOpacity = NSExpression(forConstantValue: palette.building3DOpacity)
         }
         
         // 6. Road Outlines

@@ -27,15 +27,12 @@ enum POIMaskManager {
     /// Maximum distance in meters for the ambient lure glow in unexplored fog
     static let lureMaxRadius: CLLocationDistance = 1000.0
     
-    /// Configures overlap and placement flags on MapTiler base vector POI layers so hidden labels do not disrupt collisions,
-    /// and suppresses base vector stations in favor of Dérivée's native SQLite-backed station layer.
+    /// Configures base vector layers by suppressing all commercial/retail/park POIs and stations
+    /// in favor of Dérivée's subway station runtime layer.
     static func configureBaseVectorLayers(in style: MLNStyle) {
         for layerId in baseVectorPOILayerIds {
-            if let symbolLayer = style.layer(withIdentifier: layerId) as? MLNSymbolStyleLayer {
-                symbolLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
-                symbolLayer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
-                symbolLayer.textAllowsOverlap = NSExpression(forConstantValue: true)
-                symbolLayer.textIgnoresPlacement = NSExpression(forConstantValue: true)
+            if let layer = style.layer(withIdentifier: layerId) {
+                layer.isVisible = false
             }
         }
         
@@ -45,28 +42,15 @@ enum POIMaskManager {
         }
     }
     
-    /// Updates GPU distance predicates on base MapTiler vector POI layers based on the user's active coordinate.
+    /// Updates base vector POI layer visibility. Commercial/retail base POIs remain suppressed.
     static func updateVectorPOIMasks(in style: MLNStyle, userLocation: CLLocation?) {
-        guard let location = userLocation else {
-            for layerId in baseVectorPOILayerIds {
-                if let layer = style.layer(withIdentifier: layerId) {
-                    layer.isVisible = false
-                }
-            }
-            return
-        }
-        
-        let userPoint = MLNPointAnnotation()
-        userPoint.coordinate = location.coordinate
-        let predicate = NSPredicate(format: "mgl_distanceFrom(%@) <= %f", userPoint, activeVicinityRadius)
-        
         for layerId in baseVectorPOILayerIds {
             if let layer = style.layer(withIdentifier: layerId) {
-                layer.isVisible = true
-                if let vectorLayer = layer as? MLNVectorStyleLayer {
-                    vectorLayer.predicate = predicate
-                }
+                layer.isVisible = false
             }
+        }
+        if let stationLayer = style.layer(withIdentifier: baseStationLayerId) {
+            stationLayer.isVisible = false
         }
     }
     

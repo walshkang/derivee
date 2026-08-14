@@ -3,10 +3,12 @@ import SwiftUI
 struct TransitSparklineView: View {
     let headways: [Double]
     let title: String
+    let tintColor: Color
     
-    init(headways: [Double] = [4.5, 5.0, 4.2, 6.1, 4.8, 5.5, 4.3], title: String = "7-Day Headway Reliability (min)") {
+    init(headways: [Double] = [4.5, 5.0, 4.2, 6.1, 4.8, 5.5, 4.3], title: String = "7-Day Headway Reliability (min)", tintColor: Color = Color(hex: "#FFB300")) {
         self.headways = headways.isEmpty ? [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0] : headways
         self.title = title
+        self.tintColor = tintColor
     }
     
     private var minVal: Double {
@@ -30,7 +32,7 @@ struct TransitSparklineView: View {
                 Spacer()
                 Text(String(format: "Avg: %.1f m", avgHeadway))
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(Color(hex: "#FFB300"))
+                    .foregroundColor(tintColor)
             }
             
             GeometryReader { geo in
@@ -62,7 +64,7 @@ struct TransitSparklineView: View {
                     }
                     .fill(
                         LinearGradient(
-                            colors: [Color(hex: "#FFB300").opacity(0.35), Color(hex: "#FFB300").opacity(0.0)],
+                            colors: [tintColor.opacity(0.35), tintColor.opacity(0.0)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -79,15 +81,15 @@ struct TransitSparklineView: View {
                             path.addCurve(to: p2, control1: CGPoint(x: midX, y: p1.y), control2: CGPoint(x: midX, y: p2.y))
                         }
                     }
-                    .stroke(Color(hex: "#FFB300"), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    .stroke(tintColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                     
                     // Latest Data Point Dot
                     if let lastPoint = points.last {
                         Circle()
-                            .fill(Color(hex: "#FFB300"))
+                            .fill(tintColor)
                             .frame(width: 6, height: 6)
                             .position(lastPoint)
-                            .shadow(color: Color(hex: "#FFB300").opacity(0.8), radius: 4)
+                            .shadow(color: tintColor.opacity(0.8), radius: 4)
                     }
                 }
             }

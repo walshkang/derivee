@@ -194,6 +194,9 @@ final class AmbientTrackingEngine: ObservableObject {
                     
                     await MainActor.run {
                         if isNew {
+                            let generator = UIImpactFeedbackGenerator(style: .light)
+                            generator.prepare()
+                            generator.impactOccurred()
                             self.sessionHexCount += 1
                         }
                         if let activity = self.currentActivity {

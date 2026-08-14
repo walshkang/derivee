@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import CoreLocation
+import H3
 
 final class SpatialDatabaseManager: @unchecked Sendable {
     static let shared = SpatialDatabaseManager()
@@ -250,31 +251,43 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     
     func fetchNeighborhoodProgression() async throws -> [NeighborhoodProgress] {
         return try await dbWriter.read { db in
-            let sql = """
-            SELECT 
-                ns.id, 
-                ns.name, 
-                ns.total_hexes, 
-                ns.centroid_lat,
-                ns.centroid_lng,
-                COUNT(eh.h3_index) as cleared_hexes
-            FROM neighborhood.neighborhood_stats ns
-            LEFT JOIN neighborhood.neighborhood_hexes nh ON ns.id = nh.neighborhood_id
-            LEFT JOIN explored_hexes eh ON nh.h3_index = eh.h3_index
-            GROUP BY ns.id, ns.name, ns.total_hexes, ns.centroid_lat, ns.centroid_lng
-            ORDER BY cleared_hexes * 1.0 / ns.total_hexes DESC, ns.name ASC
-            """
+            let statsRows = try Row.fetchAll(db, sql: "SELECT id, name, total_hexes, centroid_lat, centroid_lng FROM neighborhood.neighborhood_stats")
+            let clearedRows = try Row.fetchAll(db, sql: """
+            SELECT nh.neighborhood_id, COUNT(eh.h3_index) as cleared_hexes
+            FROM explored_hexes eh
+            CROSS JOIN neighborhood.neighborhood_hexes nh ON eh.h3_index = nh.h3_index
+            GROUP BY nh.neighborhood_id
+            """)
             
-            let rows = try Row.fetchAll(db, sql: sql)
-            return rows.map { row in
-                NeighborhoodProgress(
-                    id: row["id"],
-                    name: row["name"],
-                    clearedHexes: row["cleared_hexes"],
-                    totalHexes: row["total_hexes"],
-                    centroidLat: row["centroid_lat"],
-                    centroidLng: row["centroid_lng"]
+            var clearedMap: [String: Int] = [:]
+            for row in clearedRows {
+                let nid: String = row["neighborhood_id"]
+                let count: Int = row["cleared_hexes"]
+                clearedMap[nid] = count
+            }
+            
+            let list = statsRows.map { row -> NeighborhoodProgress in
+                let nid: String = row["id"]
+                let total: Int = row["total_hexes"]
+                let name: String = row["name"]
+                let lat: Double = row["centroid_lat"]
+                let lng: Double = row["centroid_lng"]
+                let cleared = clearedMap[nid] ?? 0
+                return NeighborhoodProgress(
+                    id: nid,
+                    name: name,
+                    clearedHexes: cleared,
+                    totalHexes: max(1, total),
+                    centroidLat: lat,
+                    centroidLng: lng
                 )
+            }
+            
+            return list.sorted {
+                let p1 = Double($0.clearedHexes) / Double($0.totalHexes)
+                let p2 = Double($1.clearedHexes) / Double($1.totalHexes)
+                if p1 != p2 { return p1 > p2 }
+                return $0.name < $1.name
             }
         }
     }
@@ -288,6 +301,209 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             WHERE nh.h3_index = ?
             """
             return try String.fetchOne(db, sql: sql, arguments: [h3Index])
+        }
+    }
+    
+    func fetchExplorationJournalData() async throws -> ExplorationJournalData {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        defer {
+            let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+            print("⏱️ fetchExplorationJournalData executed in \(String(format: "%.2f", elapsed))ms")
+        }
+        
+        return try await dbWriter.read { db in
+            // 1. Fetch all explored hexes and discovered POIs
+            let exploredHexes = Set(try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes"))
+            let discoveredPOIs = Set(try String.fetchAll(db, sql: "SELECT poi_id FROM discovered_pois"))
+            
+            // 2. Fetch neighborhood stats and cleared counts via fast indexed join
+            let statsRows = try Row.fetchAll(db, sql: "SELECT id, name, total_hexes FROM neighborhood.neighborhood_stats")
+            let clearedRows = try Row.fetchAll(db, sql: """
+            SELECT nh.neighborhood_id, COUNT(eh.h3_index) as cleared_hexes
+            FROM explored_hexes eh
+            CROSS JOIN neighborhood.neighborhood_hexes nh ON eh.h3_index = nh.h3_index
+            GROUP BY nh.neighborhood_id
+            """)
+            
+            var clearedMap: [String: Int] = [:]
+            for row in clearedRows {
+                let nid: String = row["neighborhood_id"]
+                let count: Int = row["cleared_hexes"]
+                clearedMap[nid] = count
+            }
+            
+            var boroughClearedMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
+            var boroughTotalMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
+            var boroughNbhdCountMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
+            var boroughExploredNbhdCountMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
+            
+            var totalCityHexes = 0
+            var totalExploredNbhdsCount = 0
+            var totalNbhdsCount = 0
+            
+            for row in statsRows {
+                let id: String = row["id"]
+                let total: Int = row["total_hexes"]
+                let bCode = String(id.prefix(2)).uppercased()
+                let cleared = clearedMap[id] ?? 0
+                
+                boroughTotalMap[bCode, default: 0] += total
+                boroughClearedMap[bCode, default: 0] += cleared
+                boroughNbhdCountMap[bCode, default: 0] += 1
+                totalNbhdsCount += 1
+                
+                if cleared > 0 {
+                    boroughExploredNbhdCountMap[bCode, default: 0] += 1
+                    totalExploredNbhdsCount += 1
+                }
+                
+                totalCityHexes += total
+            }
+            
+            if totalCityHexes == 0 {
+                totalCityHexes = 362118 // Fallback total NYC walkable landmass hex count
+            }
+            
+            let boroughNames: [(code: String, name: String)] = [
+                ("MN", "Manhattan"),
+                ("BK", "Brooklyn"),
+                ("QN", "Queens"),
+                ("BX", "Bronx"),
+                ("SI", "Staten Island")
+            ]
+            
+            let boroughProgressList: [BoroughProgress] = boroughNames.map { item in
+                BoroughProgress(
+                    id: item.code,
+                    name: item.name,
+                    clearedHexes: boroughClearedMap[item.code] ?? 0,
+                    totalHexes: max(1, boroughTotalMap[item.code] ?? 1),
+                    neighborhoodCount: boroughNbhdCountMap[item.code] ?? 0,
+                    exploredNeighborhoodCount: boroughExploredNbhdCountMap[item.code] ?? 0
+                )
+            }
+            
+            let totalClearedHexes = exploredHexes.count
+            let overallCityPercentage = totalCityHexes > 0 ? min(100.0, (Double(totalClearedHexes) / Double(totalCityHexes)) * 100.0) : 0.0
+            
+            // 3. Transit Hubs milestone computation
+            var totalTransitStations = 496
+            var unlockedTransitStations = 0
+            
+            do {
+                let stopsSQL = "SELECT stop_id, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1"
+                let stopRows = try Row.fetchAll(db, sql: stopsSQL)
+                if !stopRows.isEmpty {
+                    totalTransitStations = stopRows.count
+                    
+                    // Precompute coordinates of explored hexes for ultra-fast spatial bounding-box filtering
+                    var exploredCoords: [(lat: Double, lon: Double)] = []
+                    for hStr in exploredHexes {
+                        if let cell = UInt64(hStr, radix: 16), let coord = try? H3.cellToLatLng(cell: cell) {
+                            exploredCoords.append((lat: coord.latitude, lon: coord.longitude))
+                        }
+                    }
+                    
+                    for stopRow in stopRows {
+                        let stopId: String = stopRow["stop_id"]
+                        let lat: Double = stopRow["stop_lat"]
+                        let lon: Double = stopRow["stop_lon"]
+                        if discoveredPOIs.contains(stopId) {
+                            unlockedTransitStations += 1
+                        } else if !exploredCoords.isEmpty {
+                            // Fast bounding-box pre-filter (~50m delta) to avoid hundreds of expensive H3 conversions
+                            let isNearExploredHex = exploredCoords.contains { abs(lat - $0.lat) < 0.0006 && abs(lon - $0.lon) < 0.0006 }
+                            if isNearExploredHex {
+                                let h3 = POIMaskManager.computeH3Index(latitude: lat, longitude: lon)
+                                if exploredHexes.contains(h3) {
+                                    unlockedTransitStations += 1
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch {
+                unlockedTransitStations = discoveredPOIs.count
+            }
+            
+            let transitTiers: [MilestoneTier] = [
+                MilestoneTier(category: .transitHubs, tierNumber: 1, title: "First Connection", requirementDescription: "Discover your first rail or subway station", targetCount: 1, badgeIconName: "tram.fill", isUnlocked: unlockedTransitStations >= 1),
+                MilestoneTier(category: .transitHubs, tierNumber: 2, title: "Commuter", requirementDescription: "Connect 10 transit stations to the explored grid", targetCount: 10, badgeIconName: "figure.walk.arrival", isUnlocked: unlockedTransitStations >= 10),
+                MilestoneTier(category: .transitHubs, tierNumber: 3, title: "Metro Explorer", requirementDescription: "Unlock 50 stations across multiple lines", targetCount: 50, badgeIconName: "map.fill", isUnlocked: unlockedTransitStations >= 50),
+                MilestoneTier(category: .transitHubs, tierNumber: 4, title: "Transit Navigator", requirementDescription: "Discover 100 stations across the rail network", targetCount: 100, badgeIconName: "arrow.triangle.swap", isUnlocked: unlockedTransitStations >= 100),
+                MilestoneTier(category: .transitHubs, tierNumber: 5, title: "Subway Maestro", requirementDescription: "Unlock 250 stations across New York City", targetCount: 250, badgeIconName: "star.fill", isUnlocked: unlockedTransitStations >= 250)
+            ]
+            
+            let transitProgress = MilestoneProgress(
+                category: .transitHubs,
+                currentCount: unlockedTransitStations,
+                totalCount: totalTransitStations,
+                tiers: transitTiers
+            )
+            
+            // 4. Neighborhood Voyager milestone computation
+            let totalBoroughsVisited = boroughProgressList.filter { $0.exploredNeighborhoodCount > 0 }.count
+            let voyagerTiers: [MilestoneTier] = [
+                MilestoneTier(category: .neighborhoodVoyager, tierNumber: 1, title: "Local Drifter", requirementDescription: "Explore your very first neighborhood", targetCount: 1, badgeIconName: "location.fill", isUnlocked: totalExploredNbhdsCount >= 1),
+                MilestoneTier(category: .neighborhoodVoyager, tierNumber: 2, title: "Borough Stepper", requirementDescription: "Explore neighborhoods in at least 3 boroughs", targetCount: 3, badgeIconName: "signpost.right.and.left.fill", isUnlocked: totalBoroughsVisited >= 3),
+                MilestoneTier(category: .neighborhoodVoyager, tierNumber: 3, title: "Urban Cartographer", requirementDescription: "Map out 10 unique neighborhoods", targetCount: 10, badgeIconName: "square.grid.3x3.fill", isUnlocked: totalExploredNbhdsCount >= 10),
+                MilestoneTier(category: .neighborhoodVoyager, tierNumber: 4, title: "Borough Master", requirementDescription: "Explore 25 neighborhoods across the city", targetCount: 25, badgeIconName: "globe.americas.fill", isUnlocked: totalExploredNbhdsCount >= 25),
+                MilestoneTier(category: .neighborhoodVoyager, tierNumber: 5, title: "Metropolis Legend", requirementDescription: "Discover 50+ neighborhoods across all 5 boroughs", targetCount: 50, badgeIconName: "crown.fill", isUnlocked: totalExploredNbhdsCount >= 50 && totalBoroughsVisited == 5)
+            ]
+            
+            let voyagerProgress = MilestoneProgress(
+                category: .neighborhoodVoyager,
+                currentCount: totalExploredNbhdsCount,
+                totalCount: max(1, totalNbhdsCount),
+                tiers: voyagerTiers
+            )
+            
+            // 5. Historic Landmarks milestone computation
+            let landmarkCatalog = HistoricLandmarkCatalog.landmarks
+            var landmarksList: [LandmarkDiscovery] = []
+            var unlockedLandmarksCount = 0
+            
+            for item in landmarkCatalog {
+                let h3 = item.h3Index
+                let isDiscovered = exploredHexes.contains(h3) || discoveredPOIs.contains(item.id)
+                if isDiscovered {
+                    unlockedLandmarksCount += 1
+                }
+                landmarksList.append(LandmarkDiscovery(
+                    id: item.id,
+                    name: item.name,
+                    borough: item.borough,
+                    category: item.category,
+                    landmarkDescription: item.description,
+                    h3Index: h3,
+                    coordinate: item.coordinate,
+                    isDiscovered: isDiscovered
+                ))
+            }
+            
+            let landmarkTiers: [MilestoneTier] = [
+                MilestoneTier(category: .historicLandmarks, tierNumber: 1, title: "Sightseer", requirementDescription: "Discover your first historic NYC landmark", targetCount: 1, badgeIconName: "camera.fill", isUnlocked: unlockedLandmarksCount >= 1),
+                MilestoneTier(category: .historicLandmarks, tierNumber: 2, title: "Cultural Wanderer", requirementDescription: "Uncover 3 architectural or cultural anchors", targetCount: 3, badgeIconName: "paintpalette.fill", isUnlocked: unlockedLandmarksCount >= 3),
+                MilestoneTier(category: .historicLandmarks, tierNumber: 3, title: "Urban Historian", requirementDescription: "Map out 7 iconic city monuments", targetCount: 7, badgeIconName: "books.vertical.fill", isUnlocked: unlockedLandmarksCount >= 7),
+                MilestoneTier(category: .historicLandmarks, tierNumber: 4, title: "Master Archivist", requirementDescription: "Discover 12 historic landmarks across the boroughs", targetCount: 12, badgeIconName: "scroll.fill", isUnlocked: unlockedLandmarksCount >= 12),
+                MilestoneTier(category: .historicLandmarks, tierNumber: 5, title: "Living Monument", requirementDescription: "Discover all 20 curated landmarks in the city", targetCount: 20, badgeIconName: "sparkles", isUnlocked: unlockedLandmarksCount >= 20)
+            ]
+            
+            let landmarkProgress = MilestoneProgress(
+                category: .historicLandmarks,
+                currentCount: unlockedLandmarksCount,
+                totalCount: landmarkCatalog.count,
+                tiers: landmarkTiers
+            )
+            
+            return ExplorationJournalData(
+                totalClearedHexes: totalClearedHexes,
+                totalCityHexes: totalCityHexes,
+                cityPercentage: overallCityPercentage,
+                milestoneCards: [transitProgress, voyagerProgress, landmarkProgress],
+                boroughProgress: boroughProgressList,
+                landmarks: landmarksList
+            )
         }
     }
     
@@ -316,7 +532,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         return try await dbWriter.read { db in
             do {
                 if let row = try Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
-                    let name = row["stop_name"] as? String ?? "Transit Station"
+                    let name: String = row["stop_name"]
                     let routeType = 1
                     let routeId = self.inferRouteId(from: stopId, name: name)
                     
@@ -374,8 +590,10 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 let rows = try Row.fetchAll(db, sql: sql, arguments: [routeId])
                 if !rows.isEmpty {
                     let coords = rows.compactMap { row -> CLLocationCoordinate2D? in
-                        guard let lat = row["lat"] as? Double, let lon = row["lon"] as? Double else { return nil }
-                        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                        let lat: Double? = row["lat"]
+                        let lon: Double? = row["lon"]
+                        guard let validLat = lat, let validLon = lon else { return nil }
+                        return CLLocationCoordinate2D(latitude: validLat, longitude: validLon)
                     }
                     if !coords.isEmpty {
                         return coords

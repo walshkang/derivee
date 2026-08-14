@@ -51,6 +51,7 @@ struct MapView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.updateExploredHexes(in: uiView, with: fogShape)
         context.coordinator.updateTransientHex(shape: transientHexShape, in: uiView)
+        context.coordinator.updateTransientPulse(at: spatialStore.newlyUnlockedHexLocation, in: uiView)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
         if let style = uiView.style {
             context.coordinator.updateTheme(selectedTheme, in: style)
@@ -93,11 +94,15 @@ struct MapView: UIViewRepresentable {
         let ephemeralRouteSourceId = "ephemeral-route-source"
         let transientHexSourceId = "transient-hex-source"
         let transientHexLayerId = "transient-hex-layer"
+        let pulseSourceId = "transient-pulse-source"
+        let pulseLayerId = "transient-pulse-layer"
         
         var pois: [GhostPOI] = []
         var lastLocation: CLLocation?
         var lastRecenterTrigger: Bool = false
         var lastTransientHexShape: MLNShape? = nil
+        var lastPulseLocation: CLLocationCoordinate2D? = nil
+        var pulseTimer: DispatchWorkItem? = nil
         var lastSelectedStop: String? = nil
         var isMapStyleLoaded: Bool = false
         var lastAppliedTheme: BasemapTheme?
@@ -119,6 +124,7 @@ struct MapView: UIViewRepresentable {
         }
         
         deinit {
+            pulseTimer?.cancel()
             lureTimer?.invalidate()
             compassHiddenObserver?.invalidate()
             compassAlphaObserver?.invalidate()
@@ -168,14 +174,16 @@ struct MapView: UIViewRepresentable {
             Task {
                 do {
                     pois = try await SpatialDatabaseManager.shared.dbWriter.read { db in
-                        let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1 OR location_type = 0")
+                        let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1")
                         return rows.map { row in
-                            let lat = row["stop_lat"] as? Double ?? 0
-                            let lon = row["stop_lon"] as? Double ?? 0
+                            let lat: Double = row["stop_lat"]
+                            let lon: Double = row["stop_lon"]
+                            let id: String = row["stop_id"]
+                            let name: String = row["stop_name"]
                             let h3 = POIMaskManager.computeH3Index(latitude: lat, longitude: lon)
                             return GhostPOI(
-                                id: row["stop_id"] as? String ?? "",
-                                name: row["stop_name"] as? String ?? "",
+                                id: id,
+                                name: name,
                                 coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
                                 type: 1,
                                 h3Index: h3
@@ -236,7 +244,6 @@ struct MapView: UIViewRepresentable {
             guard let location = userLocation?.location else { return }
             lastLocation = location
             if let style = mapView.style {
-                POIMaskManager.updateVectorPOIMasks(in: style, userLocation: location)
                 updatePOIs(in: style)
             }
         }
@@ -317,6 +324,16 @@ struct MapView: UIViewRepresentable {
             transientHexLayer.fillOpacity = NSExpression(forConstantValue: 0.0)
             style.insertLayer(transientHexLayer, above: fogLayer)
             
+            let pulseSource = MLNShapeSource(identifier: pulseSourceId, shape: nil, options: nil)
+            style.addSource(pulseSource)
+            
+            let pulseLayer = MLNCircleStyleLayer(identifier: pulseLayerId, source: pulseSource)
+            pulseLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
+            pulseLayer.circleRadius = NSExpression(forConstantValue: 0.0)
+            pulseLayer.circleOpacity = NSExpression(forConstantValue: 0.0)
+            pulseLayer.circlePitchAlignment = NSExpression(forConstantValue: "map")
+            style.insertLayer(pulseLayer, above: fogLayer)
+            
             let source = MLNShapeSource(identifier: poiSourceId, features: [], options: nil)
             style.addSource(source)
             
@@ -344,9 +361,8 @@ struct MapView: UIViewRepresentable {
             archiveLayer.minimumZoomLevel = 16.5
             style.insertLayer(archiveLayer, above: activeLayer)
             
-            // Mask commercial/park vector POIs & suppress base stations
+            // Suppress commercial/park vector POIs & base stations in favor of subway POIs
             POIMaskManager.configureBaseVectorLayers(in: style)
-            POIMaskManager.updateVectorPOIMasks(in: style, userLocation: lastLocation)
         }
         
         func updateTheme(_ theme: BasemapTheme, in style: MLNStyle) {
@@ -419,6 +435,44 @@ struct MapView: UIViewRepresentable {
                         layer.fillOpacity = NSExpression(forConstantValue: 0.0)
                     }
                 }
+            }
+        }
+        
+        func updateTransientPulse(at location: CLLocationCoordinate2D?, in mapView: MLNMapView) {
+            guard let coord = location else { return }
+            guard let style = mapView.style,
+                  let source = style.source(withIdentifier: pulseSourceId) as? MLNShapeSource,
+                  let layer = style.layer(withIdentifier: pulseLayerId) as? MLNCircleStyleLayer else { return }
+            
+            if lastPulseLocation?.latitude != coord.latitude || lastPulseLocation?.longitude != coord.longitude {
+                lastPulseLocation = coord
+                
+                let feature = MLNPointFeature()
+                feature.coordinate = coord
+                source.shape = feature
+                
+                layer.circleRadiusTransition = MLNTransition(duration: 0, delay: 0)
+                layer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)
+                layer.circleRadius = NSExpression(forConstantValue: 0.0)
+                layer.circleOpacity = NSExpression(forConstantValue: 0.8)
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak mapView, weak self] in
+                    guard let activeStyle = mapView?.style,
+                          let activeLayer = activeStyle.layer(withIdentifier: self?.pulseLayerId ?? "") as? MLNCircleStyleLayer else { return }
+                    activeLayer.circleRadiusTransition = MLNTransition(duration: 1.2, delay: 0)
+                    activeLayer.circleOpacityTransition = MLNTransition(duration: 1.2, delay: 0)
+                    activeLayer.circleRadius = NSExpression(forConstantValue: 80.0)
+                    activeLayer.circleOpacity = NSExpression(forConstantValue: 0.0)
+                }
+                
+                pulseTimer?.cancel()
+                let workItem = DispatchWorkItem { [weak mapView, weak self] in
+                    guard let activeStyle = mapView?.style,
+                          let activeSource = activeStyle.source(withIdentifier: self?.pulseSourceId ?? "") as? MLNShapeSource else { return }
+                    activeSource.shape = nil
+                }
+                pulseTimer = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.3, execute: workItem)
             }
         }
         

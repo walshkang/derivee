@@ -45,16 +45,19 @@ final class BasemapThemeTests: XCTestCase {
         XCTAssertEqual(day.backgroundColor, UIColor(hex: "#F9F9F6"), "Day background should be parchment white #F9F9F6")
         XCTAssertEqual(day.fogColor, UIColor(hex: "#1C1C1E"), "Day fog should be graphite #1C1C1E")
         XCTAssertEqual(day.labelTextColor, UIColor(hex: "#1C1C1E"), "Day label should be dark")
+        XCTAssertEqual(day.building3DColor, UIColor(hex: "#DCDCD6"), "Day 3D buildings should match building color")
         
         // Night Palette Assertions
         XCTAssertEqual(night.backgroundColor, UIColor(hex: "#12121A"), "Night background should be midnight slate #12121A")
         XCTAssertEqual(night.fogColor, UIColor(hex: "#000000"), "Night fog should be pure black #000000")
         XCTAssertEqual(night.labelTextColor, UIColor(hex: "#FFFFFF"), "Night label should be white")
+        XCTAssertEqual(night.building3DColor, UIColor(hex: "#242436"), "Night 3D buildings should have high visual contrast against dark fog")
         
         // OLED Palette Assertions
         XCTAssertEqual(oled.backgroundColor, UIColor(hex: "#000000"), "OLED background should be pure black #000000")
         XCTAssertEqual(oled.fogColor, UIColor(hex: "#000000"), "OLED fog should be pure black #000000")
         XCTAssertEqual(oled.buildingColor, UIColor(hex: "#0A0A10"), "OLED buildings should be deep charcoal #0A0A10")
+        XCTAssertEqual(oled.building3DColor, UIColor(hex: "#161622"), "OLED 3D buildings should be visible above pure black base")
         
         // Transit Palette Assertions
         XCTAssertEqual(transit.railColor, UIColor(hex: "#FFB300"), "Transit rail color should be Electric Amber #FFB300")

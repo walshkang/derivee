@@ -134,6 +134,7 @@ classDiagram
         +resetExplorationData() async
         +fetchNeighborhoodProgression() async
         +fetchNeighborhoodName() async
+        +fetchExplorationJournalData() async
         +fetchStopDetails() async
         +fetchHeadwayData() async
         +loadDiscoveredPOIs() async
