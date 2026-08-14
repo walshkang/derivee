@@ -739,3 +739,27 @@ Add 6-stage diagnostic logging to the live hex unlock pipeline to support on-dev
 4. **[S4]** `SpatialStore.startObservation`: Log `onChange` event with hex count and executing thread.
 5. **[S5]** `SpatialStore.recomputeFogShape`: Log `Task.isCancelled` status at entry, pre-polygon build, and MainActor publish checkpoints.
 6. **[S6]** `MapView.Coordinator.updateExploredHexes`: Log entry, presence of shape, interior polygon count, and `isMapStyleLoaded` flag.
+
+## Wave I.10b — On-Device Field Walk (WI10b-ONDEVICE-WALK) [Shipped]
+
+**Task ID:** `WI10b-ONDEVICE-WALK`
+
+**Context & Execution:**
+Physical iPhone field walk executed untethered across 8+ new H3 hex boundaries. Exported `pipeline_debug.log` from on-device `Documents/` directory via iOS Files app.
+
+## Wave I.10c — Pipeline Log Interpretation & Verification (WI10c-LOG-INTERPRET) [Shipped]
+
+**Task ID:** `WI10c-LOG-INTERPRET`
+
+**Diagnosis & Interpretation:**
+Analysis of the on-device `pipeline_debug.log` from the untethered field walk:
+1. **[S1] Tracking Resumption:** Verified `resumeTrackingIfNeeded` starts tracking when enabled.
+2. **[S2] Location Processing:** Real GPS coordinates ingested continuously; drift gate successfully dropped multi-path speed spikes (up to 15,376 m/s) while preserving walking velocities (0.5–2.5 m/s).
+3. **[S3] Hex Insertion:** Correctly differentiated new hexes (`isNew=true`) from revisits (`isNew=false`), discovering 8 new hexes (1 → 9 total).
+4. **[S4] GRDB ValueObservation:** Main-thread `onChange` fired immediately upon each new hex write.
+5. **[S5] Fog Polygon Math:** `recomputeFogShape` ran at `.userInitiated` (`TaskPriority.high`), zero task cancellations, computing up to 9 interior rings in milliseconds.
+6. **[S6] MapLibre Fog Render:** Shape seamlessly published to `MapView.Coordinator.updateExploredHexes` with `isMapStyleLoaded=true`.
+7. **Cold Restart Persistence:** On app reboot, hydrated all 9 unlocked hexes on launch and re-rendered the fog mask immediately.
+
+**Conclusion:**
+All 6 stages of the live GPS-to-fog pipeline are verified 100% operational in real-world untethered conditions. Wave I is fully complete with no I.11 hotfix needed. Ready to advance to Wave J.
