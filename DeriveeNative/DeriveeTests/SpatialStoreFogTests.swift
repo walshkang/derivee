@@ -187,4 +187,49 @@ final class SpatialStoreFogTests: XCTestCase {
             XCTAssertLessThanOrEqual(coord.longitude, -72.999, "Longitude \(coord.longitude) above expected -73.0 bound")
         }
     }
+    
+    @MainActor
+    func testContiguousHexExplorationDissolvesIntoSingleInteriorRing() async throws {
+        // Generate a 7-cell contiguous k-ring around Columbus Circle
+        let centerCell = try H3.latLngToCell(latitude: 40.768075, longitude: -73.981897, resolution: 11)
+        let ringCells = try H3.gridDisk(origin: centerCell, distance: 1)
+        XCTAssertEqual(ringCells.count, 7)
+        
+        for cell in ringCells {
+            try await dbManager.insertDiscoveredHex(h3Index: String(cell, radix: 16))
+        }
+        
+        let store = SpatialStore(
+            dbManager: dbManager,
+            liveUpdatePriority: .userInitiated
+        )
+        retainedStores.append(store)
+        
+        // 7 contiguous hexes must dissolve into exactly 1 interior macro-polygon
+        let fogPolygon = try await waitForFogShape(on: store, expectedInteriorCount: 1)
+        XCTAssertEqual(fogPolygon.interiorPolygons?.count, 1, "7 contiguous hexes must dissolve into 1 single interior ring.")
+        
+        guard let hole = fogPolygon.interiorPolygons?.first else {
+            XCTFail("Missing interior hole")
+            return
+        }
+        
+        // 18 perimeter vertices + 1 closed point = 19 points
+        XCTAssertEqual(hole.pointCount, 19, "Dissolved 7-cell cluster must contain 19 boundary points.")
+    }
+    
+    func testDissolutionPerformanceUnder5ms() throws {
+        // Generate 100 cells across NYC
+        let centerCell = try H3.latLngToCell(latitude: 40.768075, longitude: -73.981897, resolution: 11)
+        let diskCells = try H3.gridDisk(origin: centerCell, distance: 5) // 91 cells in radius 5
+        let hexSet = Set(diskCells.map { String($0, radix: 16) })
+        
+        let start = CFAbsoluteTimeGetCurrent()
+        let dissolved = FogPolygonMath.dissolveHexesToInteriorPolygons(hexes: hexSet)
+        let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000.0 // ms
+        
+        print("⏱️ Dissolution of \(hexSet.count) cells completed in \(String(format: "%.3f", elapsed))ms")
+        XCTAssertEqual(dissolved.count, 1, "Connected k-ring of radius 5 must dissolve into 1 macro-polygon.")
+        XCTAssertLessThan(elapsed, 15.0, "Dissolution of 91 Res-11 hexes must complete in <15ms (target <5ms).")
+    }
 }

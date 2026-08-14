@@ -47,6 +47,7 @@
 		BDBF7F08353C24BB6D4B563E /* DeriveeWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF626E8EA1D36226174C6F8E /* DeriveeWidgetBundle.swift */; };
 		C030DC088AD9313FE304BEED /* neighborhood.sqlite-shm in Resources */ = {isa = PBXBuildFile; fileRef = 97F9405AD2F0493CF5ECB925 /* neighborhood.sqlite-shm */; };
 		C38E678A1F179F8608E57E72 /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 0B6F4FDFBC5335553BA2B6B9 /* SnapshotTesting */; };
+		CCAE0CA5045E5FE5130BABB5 /* FogPolygonMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0786225B07AB50A074567E9 /* FogPolygonMath.swift */; };
 		CDDCAE3518655AB14CA92272 /* TransitRevealSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 859087AC5C30D2C163F4039B /* TransitRevealSheet.swift */; };
 		D7286ED979BEF692F2042730 /* TransitHydrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD68697FCA0DA2827F0AFADC /* TransitHydrationTests.swift */; };
 		DC34AAB9BFF466868C17558C /* TrackingAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D9DCD362FB2ADD8F63B6B2 /* TrackingAttributes.swift */; };
@@ -129,6 +130,7 @@
 		C99A430676D6B46B80F89732 /* GPXParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXParser.swift; sourceTree = "<group>"; };
 		CE5C593BBD5275D900632F1B /* SpatialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialStore.swift; sourceTree = "<group>"; };
 		CFAC15B31EFF91C40E2E93EB /* ExplorationResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExplorationResetTests.swift; sourceTree = "<group>"; };
+		D0786225B07AB50A074567E9 /* FogPolygonMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FogPolygonMath.swift; sourceTree = "<group>"; };
 		D7565F6B0E0AE526D3E3AA4D /* DiscoveryToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryToast.swift; sourceTree = "<group>"; };
 		D7D9DCD362FB2ADD8F63B6B2 /* TrackingAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingAttributes.swift; sourceTree = "<group>"; };
 		D8AA6177CA7C6527DAE09E18 /* GRDBObservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GRDBObservationTests.swift; sourceTree = "<group>"; };
@@ -199,6 +201,7 @@
 				86B2FFDED57A84490398B9F8 /* derivee_transit.sqlite */,
 				BAE7ABCA4DEDEF356CFFE871 /* DeriveeApp.swift */,
 				D7565F6B0E0AE526D3E3AA4D /* DiscoveryToast.swift */,
+				D0786225B07AB50A074567E9 /* FogPolygonMath.swift */,
 				936463E8983EB06677DF22A4 /* GPXLocationProvider.swift */,
 				C99A430676D6B46B80F89732 /* GPXParser.swift */,
 				6830B225EF5E701084FB4FC5 /* GPXProcessor.swift */,
@@ -405,6 +408,7 @@
 				F5E76E643AE8FE5415701241 /* ContentView.swift in Sources */,
 				F92498446F8CFD8DA0BDB9BE /* DeriveeApp.swift in Sources */,
 				FE732603E08BAA36426E2DAE /* DiscoveryToast.swift in Sources */,
+				CCAE0CA5045E5FE5130BABB5 /* FogPolygonMath.swift in Sources */,
 				436BB28E208B8C164FCB2A0D /* GPXLocationProvider.swift in Sources */,
 				600370C96B86CEC7F065C5E0 /* GPXParser.swift in Sources */,
 				FE7D801EB046B06F75E2B93D /* GPXProcessor.swift in Sources */,

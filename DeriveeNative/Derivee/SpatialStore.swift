@@ -122,28 +122,7 @@ final class SpatialStore: @unchecked Sendable {
                 CLLocationCoordinate2D(latitude: 41.5 + jitter, longitude: -74.5 - jitter)  // Top Left (closed)
             ]
             
-            var innerRings: [MLNPolygon] = []
-            for hexString in hexes {
-                guard let cell = UInt64(hexString, radix: 16) else { continue }
-                do {
-                    let boundary = try H3.cellToBoundary(cell: cell)
-                    var coords = boundary.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-                    
-                    // VERIFIED: MapLibre Native (iOS) interior polygon rings (holes) require CW winding order.
-                    // H3 cellToBoundary defaults to CCW; reversing produces CW order.
-                    // Tested & hardened in Wave I.2 (WI2-WINDING). Do NOT change without re-testing fog rendering.
-                    coords.reverse()
-                    
-                    if coords.count > 0, let first = coords.first {
-                        coords.append(first)
-                    }
-                    if coords.count >= 4 {
-                        innerRings.append(MLNPolygon(coordinates: coords, count: UInt(coords.count)))
-                    }
-                } catch {
-                    // Ignore errors for individual hexes
-                }
-            }
+            let innerRings = FogPolygonMath.dissolveHexesToInteriorPolygons(hexes: hexes)
             
             if Task.isCancelled {
                 logPipeline("📍 [S5 - recomputeFogShape CANCELLED] before polygon construction, hexCount=\(hexes.count)")

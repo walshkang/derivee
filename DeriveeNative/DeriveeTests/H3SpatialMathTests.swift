@@ -112,4 +112,91 @@ final class H3SpatialMathTests: XCTestCase {
         let cell = UInt64(invalidHex, radix: 16)
         XCTAssertNil(cell, "Invalid hex string parsing should return nil safely.")
     }
+    
+    // MARK: - FogPolygonMath Dissolution Tests (Wave J.2)
+    
+    func testContiguousHexDissolutionReducesInteriorRingAndVertexCount() throws {
+        // Columbus Circle center cell
+        let centerCell = try H3.latLngToCell(latitude: 40.768075, longitude: -73.981897, resolution: 11)
+        let diskCells = try H3.gridDisk(origin: centerCell, distance: 1)
+        XCTAssertGreaterThanOrEqual(diskCells.count, 2)
+        
+        let contiguousTwo = Array(diskCells.prefix(2))
+        let dissolvedPolygons = FogPolygonMath.dissolveCellsToInteriorPolygons(cells: contiguousTwo)
+        
+        // 2 contiguous hexagons must dissolve into 1 single polygon
+        XCTAssertEqual(dissolvedPolygons.count, 1, "2 contiguous hexes must dissolve into exactly 1 interior ring.")
+        
+        // 2 individual hexes have 2 * 6 = 12 boundary vertices (14 closed).
+        // Merged together, they share 1 edge (2 vertices), producing 10 unique boundary vertices (11 closed).
+        let pointCount = dissolvedPolygons[0].pointCount
+        XCTAssertEqual(pointCount, 11, "Dissolved 2-hex boundary must contain exactly 11 points (10 distinct vertices + 1 closed).")
+    }
+    
+    func testSevenCellRingDissolutionMath() throws {
+        let centerCell = try H3.latLngToCell(latitude: 40.768075, longitude: -73.981897, resolution: 11)
+        let ringCells = try H3.gridDisk(origin: centerCell, distance: 1)
+        XCTAssertEqual(ringCells.count, 7, "Res 11 k-ring (distance 1) must contain exactly 7 cells.")
+        
+        let hexStrings = Set(ringCells.map { String($0, radix: 16) })
+        let dissolvedPolygons = FogPolygonMath.dissolveHexesToInteriorPolygons(hexes: hexStrings)
+        
+        XCTAssertEqual(dissolvedPolygons.count, 1, "7 contiguous hexes in a k-ring must dissolve into exactly 1 interior ring.")
+        
+        // 7 individual hexes = 7 * 7 = 49 un-dissolved points.
+        // Dissolved 7-cell k-ring perimeter has 18 perimeter vertices (19 closed points), an >60% vertex reduction.
+        let pointCount = dissolvedPolygons[0].pointCount
+        XCTAssertEqual(pointCount, 19, "Dissolved 7-cell k-ring must contain exactly 19 points (18 perimeter vertices + 1 closed).")
+    }
+    
+    func testDisjointHexClustersProduceDistinctInteriorPolygons() throws {
+        // Columbus Circle (Manhattan)
+        let cell1 = try H3.latLngToCell(latitude: 40.768075, longitude: -73.981897, resolution: 11)
+        // Wall Street (Lower Manhattan, ~7km away)
+        let cell2 = try H3.latLngToCell(latitude: 40.706000, longitude: -74.008800, resolution: 11)
+        // Flushing (Queens, ~14km away)
+        let cell3 = try H3.latLngToCell(latitude: 40.758000, longitude: -73.830000, resolution: 11)
+        
+        let hexSet: Set<String> = [
+            String(cell1, radix: 16),
+            String(cell2, radix: 16),
+            String(cell3, radix: 16)
+        ]
+        
+        let dissolvedPolygons = FogPolygonMath.dissolveHexesToInteriorPolygons(hexes: hexSet)
+        XCTAssertEqual(dissolvedPolygons.count, 3, "3 disjoint non-contiguous hexes must produce 3 distinct interior rings.")
+    }
+    
+    func testDissolvedPolygonClockwiseWindingOrder() throws {
+        let centerCell = try H3.latLngToCell(latitude: 40.768075, longitude: -73.981897, resolution: 11)
+        let ringCells = try H3.gridDisk(origin: centerCell, distance: 1)
+        let dissolvedPolygons = FogPolygonMath.dissolveCellsToInteriorPolygons(cells: ringCells)
+        
+        XCTAssertEqual(dissolvedPolygons.count, 1)
+        let poly = dissolvedPolygons[0]
+        
+        var coords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: Int(poly.pointCount))
+        poly.getCoordinates(&coords, range: NSRange(location: 0, length: Int(poly.pointCount)))
+        
+        // Compute shoelace sum in lat/lng coordinate space to verify CW winding order
+        var shoelaceSum: Double = 0
+        for i in 0..<(coords.count - 1) {
+            let p1 = coords[i]
+            let p2 = coords[i + 1]
+            shoelaceSum += (p2.longitude - p1.longitude) * (p2.latitude + p1.latitude)
+        }
+        
+        XCTAssertGreaterThan(shoelaceSum, 0, "Dissolved interior polygon ring must have Clockwise (CW) winding order (positive shoelace sum).")
+    }
+    
+    func testEmptyAndInvalidHexInputs() {
+        let emptyResult = FogPolygonMath.dissolveHexesToInteriorPolygons(hexes: [])
+        XCTAssertTrue(emptyResult.isEmpty, "Empty hex set must produce empty interior rings.")
+        
+        let invalidResult = FogPolygonMath.dissolveHexesToInteriorPolygons(hexes: ["invalid_hex_string"])
+        XCTAssertTrue(invalidResult.isEmpty, "Invalid hex string set must produce empty interior rings safely.")
+        
+        let fogPoly = FogPolygonMath.generateFogPolygon(hexes: [])
+        XCTAssertNil(fogPoly.interiorPolygons, "Empty hex set must generate a fog polygon with nil interior rings.")
+    }
 }
