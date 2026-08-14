@@ -193,5 +193,19 @@ final class TrackingEngineTests: XCTestCase {
         XCTAssertGreaterThan(count, 0, "GPXLocationProvider should stream coordinates through the engine to unlock hexes.")
         await gpxEngine.stopTracking()
     }
+    
+    func testAppTerminationCleanup() async throws {
+        engine.startTracking()
+        XCTAssertTrue(engine.isTracking)
+        
+        // Simulating UIApplication.willTerminateNotification lifecycle execution
+        engine.handleAppTermination()
+        
+        // Calling cleanUpOrphanedLiveActivities should run safely
+        engine.cleanUpOrphanedLiveActivities()
+        
+        await engine.stopTracking()
+        XCTAssertFalse(engine.isTracking)
+    }
 }
 

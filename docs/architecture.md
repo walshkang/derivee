@@ -71,6 +71,12 @@ To cleanly decouple location ingestion from hardware GPS:
 - `LiveLocationProvider` wraps `CLLocationUpdate.liveUpdates()` for device movement.
 - `GPXLocationProvider` parses GPX tracks and streams coordinates into `AmbientTrackingEngine` at immediate or simulated intervals. This unifies workout imports and test replays across the exact same drift gate, reactive observation, and fog recomputation pipelines.
 
+### 3.6 Dynamic Island & Live Activity Lifecycle Hardening
+To prevent orphaned Live Activities and persistent location notifications when the user force-closes the app:
+- **Termination Observer (`UIApplication.willTerminateNotification`):** `AmbientTrackingEngine` registers an observer to immediately invalidate `backgroundSession` and terminate all active `Activity<TrackingAttributes>` instances with `.immediate` dismissal policy upon receiving a system termination signal.
+- **Rolling `staleDate` Fail-Safe (2 Minutes):** Every `ActivityContent` update sets a rolling `staleDate` (`Date().addingTimeInterval(120)`). If an app is hard-killed while suspended without receiving `willTerminateNotification`, iOS's `chronod`/SpringBoard automatically cleans up and expires the Dynamic Island / Lock Screen presentation after 2 minutes of silence.
+- **Distance Heartbeat Refresh:** Raw location updates refresh the Live Activity distance and rolling `staleDate` even within the same hex boundary, ensuring stationary exploration at crosswalks/cafes does not cause premature expiration while tracking is active.
+
 ---
 
 ## 4. Geospatial Hashing (H3)

@@ -797,3 +797,35 @@ Standard MapLibre bounds-locking via `mapView.restrictedCoordinateBounds` or `se
 * `DeriveeNative/DeriveeTests/CameraBoundsTests.swift` (New)
 * `ROADMAP.MD` (Status updated to `✅ Done`)
 
+---
+
+## Wave J.9 — Dynamic Island & Location Lifecycle Hardening on Force-Close [Shipped]
+
+**Task ID:** `WJ9-LIFECYCLE-HARDENING`  
+**Depends on:** Wave J.8 (Unified Crystalline Aperture Rollout).
+
+### Problem Statement
+When an iPhone user force-closed Dérivée from the App Switcher while ambient tracking was active, the Live Activity and CoreLocation background indicator persisted in the Dynamic Island / Lock Screen. Tapping the Dynamic Island delivered the `derivee://progress` URL scheme, causing iOS to resurrect the app process. Upon launch, persistent `@AppStorage("isTrackingEnabled")` triggered `resumeTrackingIfNeeded()`, immediately re-engaging tracking and requesting another Live Activity in an endless cycle.
+
+### What Shipped
+1. **Termination Observer (`AmbientTrackingEngine.swift`):**
+   * Registered `setupTerminationObserver()` listening for `UIApplication.willTerminateNotification`.
+   * On termination, synchronously invalidates `CLBackgroundActivitySession` and terminates all active `Activity<TrackingAttributes>` with `.immediate` dismissal policy.
+2. **Rolling 2-Minute `staleDate` Fail-Safe (`AmbientTrackingEngine.swift`):**
+   * Configured `staleDate: Date().addingTimeInterval(120)` on all `ActivityContent` updates.
+   * If the app is killed abruptly without `willTerminateNotification` delivering (e.g. suspended app kill), iOS's `chronod`/SpringBoard automatically cleans up the Dynamic Island after 2 minutes of silence.
+3. **Continuous Intra-Hex Heartbeat Refresh (`AmbientTrackingEngine.swift`):**
+   * Refreshes distance metrics and the rolling `staleDate` on incoming GPS updates even within the same hex boundary, ensuring stationary exploration (e.g., waiting at crosswalks) does not expire while tracking is active.
+4. **Test Suite (`TrackingEngineTests.swift`):**
+   * Added `testAppTerminationCleanup()` validating termination handling and orphaned activity sweeps.
+5. **Documentation (`docs/architecture.md`, `docs/design.md`, `ROADMAP.MD`):**
+   * Documented Section 3.6 in `architecture.md` and Section 6 in `design.md`.
+
+### Files Modified
+* `DeriveeNative/Derivee/AmbientTrackingEngine.swift`
+* `DeriveeNative/DeriveeTests/TrackingEngineTests.swift`
+* `docs/architecture.md`
+* `docs/design.md`
+* `ROADMAP.MD`
+
+

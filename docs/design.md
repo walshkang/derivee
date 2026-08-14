@@ -447,7 +447,10 @@ Progression stats must eventually be accessible **outside** the app while the us
 * **Contextual Routing (Deep Linking):** Tapping the Dynamic Island or Live Activity passes a deep link (`derivee://progress`) to the app. The routing behavior depends on the context:
   * **Background Tap:** If the app transitions from the background to the foreground, the app defaults to the Ambient Map (Screen 1) to restore spatial context.
   * **Foreground Tap:** If the user taps the Dynamic Island while the app is actively running on-screen, the app presents the Stats and Profile sheet (Screen 3) as a context-aware shortcut.
-* **Scope:** This is explicitly deferred to **Wave 15** (see [ROADMAP.MD](file:///Volumes/T7ssd/derivee/ROADMAP.MD)). Agents **must not** implement this until Wave 15 is active, though deep link foundations are permitted.
+* **Lifecycle & Termination Hardening:**
+  * **Graceful Termination:** Listens for `UIApplication.willTerminateNotification` to immediately invalidate `CLBackgroundActivitySession` and dismiss active Live Activities with `.immediate` dismissal policy.
+  * **Fail-Safe Expiry:** Employs a rolling 2-minute `staleDate` on `ActivityContent`. If the app is killed abruptly while suspended in the background, the Dynamic Island automatically clears after 2 minutes of inactivity.
+  * **Heartbeat Refresh:** Location updates refresh distance metrics and the rolling `staleDate` so stationary pauses at crosswalks do not trigger premature expiration while tracking.
 
 ---
 

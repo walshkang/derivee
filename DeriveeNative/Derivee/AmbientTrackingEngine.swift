@@ -45,6 +45,10 @@ final class AmbientTrackingEngine: ObservableObject {
     // State for tracking previous location to calculate speed if speed is invalid
     private var lastLocation: CLLocation?
     private var lastSavedHex: String?
+    private var currentNeighborhood: String?
+    
+    // Termination Observer
+    private var terminationObserver: NSObjectProtocol?
     
     // Live Activity State
     private var currentActivity: Activity<TrackingAttributes>?
@@ -66,7 +70,37 @@ final class AmbientTrackingEngine: ObservableObject {
         // but we can still set it just in case of fallback
         locationManager.pausesLocationUpdatesAutomatically = true
         
+        setupTerminationObserver()
         cleanUpOrphanedLiveActivities()
+    }
+    
+    private func setupTerminationObserver() {
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            logPipeline("🛑 [AmbientTrackingEngine] willTerminateNotification received — cleaning up background session and Live Activities")
+            self?.handleAppTermination()
+        }
+    }
+    
+    func handleAppTermination() {
+        backgroundSession?.invalidate()
+        backgroundSession = nil
+        
+        let activities = Activity<TrackingAttributes>.activities
+        for activity in activities {
+            Task {
+                await activity.end(dismissalPolicy: .immediate)
+            }
+        }
+    }
+    
+    deinit {
+        if let observer = terminationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
     
     func cleanUpOrphanedLiveActivities() {
@@ -111,7 +145,11 @@ final class AmbientTrackingEngine: ObservableObject {
         do {
             let attributes = TrackingAttributes(sessionStartTime: Date())
             let state = TrackingAttributes.ContentState(hexesCleared: 0, activeNeighborhood: nil, distanceMeters: 0.0)
-            currentActivity = try Activity.request(attributes: attributes, content: ActivityContent(state: state, staleDate: nil), pushType: nil)
+            currentActivity = try Activity.request(
+                attributes: attributes,
+                content: ActivityContent(state: state, staleDate: Date().addingTimeInterval(120)),
+                pushType: nil
+            )
         } catch {
             print("Failed to start Live Activity: \(error)")
         }
@@ -145,6 +183,7 @@ final class AmbientTrackingEngine: ObservableObject {
         
         lastLocation = nil
         lastSavedHex = nil
+        currentNeighborhood = nil
         
         isTrackingEnabled = false
         isTracking = false
@@ -184,8 +223,21 @@ final class AmbientTrackingEngine: ObservableObject {
             
             logPipeline("📍 [S2 - processLocation] hex=\(indexString), timestamp=\(location.timestamp), lastSavedHex=\(lastSavedHex ?? "nil"), speed=\(speed)")
             
-            // Only hit the database if the hex has changed
-            guard indexString != lastSavedHex else { return }
+            // If still within the same hex, refresh rolling stale date & distance metrics
+            if indexString == lastSavedHex {
+                if let activity = currentActivity {
+                    let state = TrackingAttributes.ContentState(
+                        hexesCleared: sessionHexCount,
+                        activeNeighborhood: currentNeighborhood,
+                        distanceMeters: sessionDistanceMeters
+                    )
+                    Task {
+                        await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(120)))
+                    }
+                }
+                return
+            }
+            
             lastSavedHex = indexString
             
             Task.detached { [weak self] in
@@ -198,6 +250,9 @@ final class AmbientTrackingEngine: ObservableObject {
                     let nbhd = try? await self.databaseManager.fetchNeighborhoodName(for: indexString)
                     
                     await MainActor.run {
+                        if let nbhd = nbhd {
+                            self.currentNeighborhood = nbhd
+                        }
                         if isNew {
                             let generator = UIImpactFeedbackGenerator(style: .light)
                             generator.prepare()
@@ -205,9 +260,13 @@ final class AmbientTrackingEngine: ObservableObject {
                             self.sessionHexCount += 1
                         }
                         if let activity = self.currentActivity {
-                            let state = TrackingAttributes.ContentState(hexesCleared: self.sessionHexCount, activeNeighborhood: nbhd, distanceMeters: self.sessionDistanceMeters)
+                            let state = TrackingAttributes.ContentState(
+                                hexesCleared: self.sessionHexCount,
+                                activeNeighborhood: self.currentNeighborhood,
+                                distanceMeters: self.sessionDistanceMeters
+                            )
                             Task {
-                                await activity.update(ActivityContent(state: state, staleDate: nil))
+                                await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(120)))
                             }
                         }
                     }
