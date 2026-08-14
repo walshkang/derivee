@@ -6,6 +6,8 @@ public enum AppStorageKeys {
     public static let selectedBasemapTheme = "selectedBasemapTheme"
     public static let fogOpacity = "fogOpacity"
     public static let showBoundaryBorders = "showBoundaryBorders"
+    public static let isTrackingEnabled = "isTrackingEnabled"
+    public static let isLiveActivityEnabled = "isLiveActivityEnabled"
 }
 
 /// Constants and defaults for map visual customization (Wave J.5)

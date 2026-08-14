@@ -11,7 +11,9 @@ final class CustomizationSettingsTests: XCTestCase {
         let keys = [
             AppStorageKeys.selectedBasemapTheme,
             AppStorageKeys.fogOpacity,
-            AppStorageKeys.showBoundaryBorders
+            AppStorageKeys.showBoundaryBorders,
+            AppStorageKeys.isTrackingEnabled,
+            AppStorageKeys.isLiveActivityEnabled
         ]
         
         for key in keys {

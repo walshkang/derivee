@@ -71,11 +71,13 @@ To cleanly decouple location ingestion from hardware GPS:
 - `LiveLocationProvider` wraps `CLLocationUpdate.liveUpdates()` for device movement.
 - `GPXLocationProvider` parses GPX tracks and streams coordinates into `AmbientTrackingEngine` at immediate or simulated intervals. This unifies workout imports and test replays across the exact same drift gate, reactive observation, and fog recomputation pipelines.
 
-### 3.6 Dynamic Island & Live Activity Lifecycle Hardening
+### 3.6 Dynamic Island & Live Activity Lifecycle Hardening (Wave J.10)
 To prevent orphaned Live Activities and persistent location notifications when the user force-closes the app:
-- **Termination Observer (`UIApplication.willTerminateNotification`):** `AmbientTrackingEngine` registers an observer to immediately invalidate `backgroundSession` and terminate all active `Activity<TrackingAttributes>` instances with `.immediate` dismissal policy upon receiving a system termination signal.
-- **Rolling `staleDate` Fail-Safe (2 Minutes):** Every `ActivityContent` update sets a rolling `staleDate` (`Date().addingTimeInterval(120)`). If an app is hard-killed while suspended without receiving `willTerminateNotification`, iOS's `chronod`/SpringBoard automatically cleans up and expires the Dynamic Island / Lock Screen presentation after 2 minutes of silence.
-- **Distance Heartbeat Refresh:** Raw location updates refresh the Live Activity distance and rolling `staleDate` even within the same hex boundary, ensuring stationary exploration at crosswalks/cafes does not cause premature expiration while tracking is active.
+- **Decoupled Settings Control (`isLiveActivityEnabled`):** Live Activities are decoupled from background CoreLocation tracking. Users can enable silent ambient tracking without any Dynamic Island widget, or toggle the Dynamic Island HUD on demand.
+- **Rolling `staleDate` Fail-Safe (45 Seconds):** Every `ActivityContent` update sets a tight rolling `staleDate` (`Date().addingTimeInterval(45)`). If an app is hard-killed (`SIGKILL`) while suspended without finishing asynchronous IPC teardown, iOS's `chronod`/SpringBoard automatically cleans up and expires the Dynamic Island / Lock Screen presentation within 45 seconds of silence.
+- **Distance Heartbeat Refresh:** Raw location updates refresh the Live Activity distance and rolling 45s `staleDate` even within the same hex boundary, ensuring stationary exploration at crosswalks/cafes does not cause premature expiration while tracking is active.
+- **Termination Observer (`UIApplication.willTerminateNotification`):** `AmbientTrackingEngine` registers an observer to immediately invalidate `backgroundSession` and synchronously drain active `Activity<TrackingAttributes>` instances with `.immediate` dismissal policy upon receiving a system termination signal.
+- **Deep Link Snap (`derivee://progress`):** Tapping the Dynamic Island widget dismisses sheets, recenters the MapLibre camera onto the user coordinate, and triggers the aperture pulse glow animation.
 
 ---
 

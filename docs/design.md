@@ -438,19 +438,17 @@ When a new hex is discovered in real-time (via Nitro callback during active use)
 
 ---
 
-## 6. Dynamic Island & Live Activities (Deferred — Wave 15)
+## 6. Dynamic Island & Live Activities (Wave J.10)
 
-Progression stats must eventually be accessible **outside** the app while the user walks with their phone locked.
+Progression stats are accessible **outside** the app while the user walks with their phone locked.
 
 * **Delivery:** A native Swift module pushes exploration progress to the iOS Dynamic Island and Lock Screen Live Activities (e.g., "5 hexes unlocked this walk").
-* **Update Frequency:** Batched — update the Live Activity only when a new hex cluster (≥ 3 hexes) is unlocked, not on every individual hex. This prevents excessive UI refreshes.
-* **Contextual Routing (Deep Linking):** Tapping the Dynamic Island or Live Activity passes a deep link (`derivee://progress`) to the app. The routing behavior depends on the context:
-  * **Background Tap:** If the app transitions from the background to the foreground, the app defaults to the Ambient Map (Screen 1) to restore spatial context.
-  * **Foreground Tap:** If the user taps the Dynamic Island while the app is actively running on-screen, the app presents the Stats and Profile sheet (Screen 3) as a context-aware shortcut.
+* **Decoupled Settings Control:** Independent `Dynamic Island Glance` sub-toggle under Settings > Tracking allows users to choose between silent ambient tracking and visible Dynamic Island HUD.
+* **Contextual Routing (Deep Linking):** Tapping the Dynamic Island or Live Activity passes a deep link (`derivee://progress`) to the app. Tapping dismisses active sheets, recenters the MapLibre viewport to the user coordinates, and triggers an aperture pulse glow.
 * **Lifecycle & Termination Hardening:**
   * **Graceful Termination:** Listens for `UIApplication.willTerminateNotification` to immediately invalidate `CLBackgroundActivitySession` and dismiss active Live Activities with `.immediate` dismissal policy.
-  * **Fail-Safe Expiry:** Employs a rolling 2-minute `staleDate` on `ActivityContent`. If the app is killed abruptly while suspended in the background, the Dynamic Island automatically clears after 2 minutes of inactivity.
-  * **Heartbeat Refresh:** Location updates refresh distance metrics and the rolling `staleDate` so stationary pauses at crosswalks do not trigger premature expiration while tracking.
+  * **Fail-Safe Expiry:** Employs a rolling 45-second `staleDate` on `ActivityContent`. If the app is killed abruptly (`SIGKILL`) while suspended in the background, the Dynamic Island automatically clears within 45 seconds of inactivity.
+  * **Heartbeat Refresh:** Location updates refresh distance metrics and the rolling 45s `staleDate` so stationary pauses at crosswalks do not trigger premature expiration while tracking.
 
 ---
 

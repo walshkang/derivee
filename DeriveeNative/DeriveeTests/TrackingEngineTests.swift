@@ -207,5 +207,27 @@ final class TrackingEngineTests: XCTestCase {
         await engine.stopTracking()
         XCTAssertFalse(engine.isTracking)
     }
+    
+    func testLiveActivityDecoupledPreference() async throws {
+        // 1. Disable Live Activity but keep Ambient Tracking enabled
+        engine.isLiveActivityEnabled = false
+        engine.startTracking()
+        XCTAssertTrue(engine.isTracking)
+        XCTAssertTrue(engine.isTrackingEnabled)
+        XCTAssertFalse(engine.isLiveActivityEnabled)
+        
+        // 2. Dynamically enable Live Activity during tracking
+        engine.updateLiveActivityPreference(enabled: true)
+        XCTAssertTrue(engine.isLiveActivityEnabled)
+        
+        // 3. Dynamically disable Live Activity during tracking
+        engine.updateLiveActivityPreference(enabled: false)
+        XCTAssertFalse(engine.isLiveActivityEnabled)
+        XCTAssertTrue(engine.isTracking, "Tracking must remain active when Live Activity is toggled off.")
+        
+        // 4. Stop tracking
+        await engine.stopTracking()
+        XCTAssertFalse(engine.isTracking)
+    }
 }
 

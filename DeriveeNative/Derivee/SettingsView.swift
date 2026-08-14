@@ -69,6 +69,13 @@ struct SettingsView: View {
                     Text("Pausing tracking will stop discovering new hexes while your screen is off or the app is closed. Remember to re-enable tracking before your next drift.")
                 }
                 
+                Toggle("Dynamic Island Glance", isOn: Binding(
+                    get: { trackingEngine.isLiveActivityEnabled },
+                    set: { newValue in
+                        trackingEngine.updateLiveActivityPreference(enabled: newValue)
+                    }
+                ))
+                
                 HStack {
                     Text("Permission Status")
                     Spacer()

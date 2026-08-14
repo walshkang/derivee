@@ -16,6 +16,7 @@ public struct LiveLocationProvider: LocationProvider {
                 do {
                     let updates = CLLocationUpdate.liveUpdates()
                     for try await update in updates {
+                        if Task.isCancelled { break }
                         if let loc = update.location {
                             continuation.yield(loc)
                         }
@@ -55,7 +56,8 @@ final class AmbientTrackingEngine: ObservableObject {
     private var sessionHexCount: Int = 0
     private var sessionDistanceMeters: Double = 0.0
     
-    @AppStorage("isTrackingEnabled") var isTrackingEnabled = false
+    @AppStorage(AppStorageKeys.isTrackingEnabled) var isTrackingEnabled = false
+    @AppStorage(AppStorageKeys.isLiveActivityEnabled) var isLiveActivityEnabled = true
     @Published var isTracking = false
     
     private let locationProvider: any LocationProvider
@@ -75,6 +77,9 @@ final class AmbientTrackingEngine: ObservableObject {
     }
     
     private func setupTerminationObserver() {
+        if let observer = terminationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
         terminationObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.willTerminateNotification,
             object: nil,
@@ -86,15 +91,39 @@ final class AmbientTrackingEngine: ObservableObject {
     }
     
     func handleAppTermination() {
+        logPipeline("🛑 [AmbientTrackingEngine] handleAppTermination executing synchronous full location tear down")
+        
+        // 1. Cancel location updates task
+        updatesTask?.cancel()
+        updatesTask = nil
+        
+        // 2. Invalidate background activity session
         backgroundSession?.invalidate()
         backgroundSession = nil
         
+        // 3. Completely shut down CoreLocation background assertions & updates
+        locationManager.stopUpdatingLocation()
+        locationManager.allowsBackgroundLocationUpdates = false
+        
+        // 4. Synchronously drain Live Activity termination before process SIGKILL
         let activities = Activity<TrackingAttributes>.activities
-        for activity in activities {
-            Task {
-                await activity.end(dismissalPolicy: .immediate)
+        if !activities.isEmpty {
+            let semaphore = DispatchSemaphore(value: 0)
+            Task.detached(priority: .userInteractive) {
+                for activity in activities {
+                    await activity.end(ActivityContent(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate)
+                }
+                semaphore.signal()
             }
+            // Wait up to 250ms for IPC delivery to SpringBoard/chronod
+            _ = semaphore.wait(timeout: .now() + 0.25)
         }
+        
+        // 5. Persist disabled tracking preference so cold boot / wakes do not auto-start
+        isTrackingEnabled = false
+        isTracking = false
+        
+        logPipeline("🛑 [AmbientTrackingEngine] handleAppTermination complete — all location sessions killed")
     }
     
     deinit {
@@ -112,6 +141,53 @@ final class AmbientTrackingEngine: ObservableObject {
             for activity in activities {
                 if activity.id != activeId {
                     await activity.end(dismissalPolicy: .immediate)
+                }
+            }
+        }
+    }
+    
+    func startLiveActivity() {
+        guard isLiveActivityEnabled, currentActivity == nil else { return }
+        do {
+            let attributes = TrackingAttributes(sessionStartTime: Date())
+            let state = TrackingAttributes.ContentState(
+                hexesCleared: sessionHexCount,
+                activeNeighborhood: currentNeighborhood,
+                distanceMeters: sessionDistanceMeters
+            )
+            currentActivity = try Activity.request(
+                attributes: attributes,
+                content: ActivityContent(state: state, staleDate: Date().addingTimeInterval(45)),
+                pushType: nil
+            )
+            logPipeline("✨ [AmbientTrackingEngine] Live Activity started successfully")
+        } catch {
+            print("Failed to start Live Activity: \(error)")
+        }
+    }
+    
+    func stopLiveActivity() async {
+        guard let activity = currentActivity else { return }
+        let state = TrackingAttributes.ContentState(
+            hexesCleared: sessionHexCount,
+            activeNeighborhood: currentNeighborhood,
+            distanceMeters: sessionDistanceMeters
+        )
+        await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
+        currentActivity = nil
+        logPipeline("⏹️ [AmbientTrackingEngine] Live Activity ended")
+    }
+    
+    func updateLiveActivityPreference(enabled: Bool) {
+        isLiveActivityEnabled = enabled
+        if enabled {
+            if isTracking && currentActivity == nil {
+                startLiveActivity()
+            }
+        } else {
+            if currentActivity != nil {
+                Task {
+                    await stopLiveActivity()
                 }
             }
         }
@@ -142,16 +218,9 @@ final class AmbientTrackingEngine: ObservableObject {
         
         sessionHexCount = 0
         sessionDistanceMeters = 0.0
-        do {
-            let attributes = TrackingAttributes(sessionStartTime: Date())
-            let state = TrackingAttributes.ContentState(hexesCleared: 0, activeNeighborhood: nil, distanceMeters: 0.0)
-            currentActivity = try Activity.request(
-                attributes: attributes,
-                content: ActivityContent(state: state, staleDate: Date().addingTimeInterval(120)),
-                pushType: nil
-            )
-        } catch {
-            print("Failed to start Live Activity: \(error)")
+        
+        if isLiveActivityEnabled {
+            startLiveActivity()
         }
         
         updatesTask = Task {
@@ -171,14 +240,10 @@ final class AmbientTrackingEngine: ObservableObject {
         backgroundSession?.invalidate()
         backgroundSession = nil
         
-        if let activity = currentActivity {
-            let state = TrackingAttributes.ContentState(hexesCleared: sessionHexCount, activeNeighborhood: nil, distanceMeters: sessionDistanceMeters)
-            await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
-            currentActivity = nil
-        }
-        
+        await stopLiveActivity()
         cleanUpOrphanedLiveActivities()
         
+        locationManager.stopUpdatingLocation()
         locationManager.allowsBackgroundLocationUpdates = false
         
         lastLocation = nil
@@ -232,7 +297,7 @@ final class AmbientTrackingEngine: ObservableObject {
                         distanceMeters: sessionDistanceMeters
                     )
                     Task {
-                        await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(120)))
+                        await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(45)))
                     }
                 }
                 return
@@ -266,7 +331,7 @@ final class AmbientTrackingEngine: ObservableObject {
                                 distanceMeters: self.sessionDistanceMeters
                             )
                             Task {
-                                await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(120)))
+                                await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(45)))
                             }
                         }
                     }
