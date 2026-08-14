@@ -17,6 +17,16 @@ struct ContentView: View {
     @State private var glowScale: CGFloat = 1.0
     @State private var glowOpacity: Double = 0.0
     
+    @Environment(\.colorScheme) var colorScheme
+    @AppStorage("selectedBasemapTheme") private var storedTheme: String = ""
+    
+    private var currentTheme: BasemapTheme {
+        if let theme = BasemapTheme(rawValue: storedTheme) {
+            return theme
+        }
+        return colorScheme == .dark ? .night : .day
+    }
+    
     var body: some View {
         Group {
             if isCheckingHydration {
@@ -38,7 +48,8 @@ struct ContentView: View {
                             recenterTrigger: $recenterTrigger,
                             userScreenPosition: $userScreenPosition,
                             targetCoordinate: $targetCoordinate,
-                            transientHexShape: spatialStore.transientHexShape)
+                            transientHexShape: spatialStore.transientHexShape,
+                            selectedTheme: currentTheme)
                         .ignoresSafeArea()
                     
                     GeometryReader { geo in

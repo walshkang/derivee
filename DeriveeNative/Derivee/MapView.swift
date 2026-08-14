@@ -16,9 +16,10 @@ struct MapView: UIViewRepresentable {
     @Binding var userScreenPosition: CGPoint?
     @Binding var targetCoordinate: CLLocationCoordinate2D?
     var transientHexShape: MLNShape?
+    var selectedTheme: BasemapTheme = .night
     
-    // MapTiler Streets URL
-    let styleURL = URL(string: "https://api.maptiler.com/maps/streets-v2/style.json?key=\(Secrets.mapTilerKey)")!
+    // Bundled Composite Style URL with runtime key injection
+    let styleURL = BasemapStyleLoader.styleURL
     
     func makeUIView(context: Context) -> MLNMapView {
         let mapView = MLNMapView(frame: .zero, styleURL: styleURL)
@@ -46,11 +47,11 @@ struct MapView: UIViewRepresentable {
     
     func updateUIView(_ uiView: MLNMapView, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.updateFogColor(for: colorScheme, in: uiView)
         context.coordinator.updateExploredHexes(in: uiView, with: fogShape)
         context.coordinator.updateTransientHex(shape: transientHexShape, in: uiView)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
         if let style = uiView.style {
+            context.coordinator.updateTheme(selectedTheme, in: style)
             context.coordinator.updatePOIs(in: style)
         }
         
@@ -94,6 +95,7 @@ struct MapView: UIViewRepresentable {
         var lastTransientHexShape: MLNShape? = nil
         var lastSelectedStop: String? = nil
         var isMapStyleLoaded: Bool = false
+        var lastAppliedTheme: BasemapTheme?
         
         var compassHiddenObserver: NSKeyValueObservation?
         var compassAlphaObserver: NSKeyValueObservation?
@@ -189,6 +191,10 @@ struct MapView: UIViewRepresentable {
             style.setImage(subwayDiamond, forName: "poi-subway-1")
             
             setupLayers(in: style)
+            let initialTheme = parent.selectedTheme
+            BasemapThemeManager.applyTheme(initialTheme, in: style, animated: false)
+            lastAppliedTheme = initialTheme
+            
             updatePOIs(in: style)
             updateExploredHexes(in: mapView, with: parent.spatialStore.currentFogShape)
             startLureTimer()
@@ -328,11 +334,12 @@ struct MapView: UIViewRepresentable {
             POIMaskManager.updateVectorPOIMasks(in: style, userLocation: lastLocation)
         }
         
-        func updateFogColor(for colorScheme: ColorScheme, in mapView: MLNMapView) {
-            guard let style = mapView.style, let fogLayer = style.layer(withIdentifier: fogLayerId) as? MLNFillStyleLayer else { return }
-            let colorHex = colorScheme == .dark ? "#000000" : "#1C1C1E"
-            fogLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
-            fogLayer.fillOpacity = NSExpression(forConstantValue: 0.3)
+        func updateTheme(_ theme: BasemapTheme, in style: MLNStyle) {
+            guard isMapStyleLoaded else { return }
+            if lastAppliedTheme != theme {
+                lastAppliedTheme = theme
+                BasemapThemeManager.applyTheme(theme, in: style, animated: true)
+            }
         }
         
         func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {
