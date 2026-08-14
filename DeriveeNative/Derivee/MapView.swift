@@ -28,6 +28,7 @@ struct MapView: UIViewRepresentable {
         mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mapView.showsUserLocation = true
         mapView.showsUserHeadingIndicator = true
+        mapView.allowsTilting = false
         mapView.minimumZoomLevel = 10.5
         mapView.setCenter(CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060), zoomLevel: 15.5, animated: false)
         mapView.userTrackingMode = .followWithHeading
@@ -273,7 +274,7 @@ struct MapView: UIViewRepresentable {
                 let rollbackCamera = MLNMapCamera(
                     lookingAtCenter: clampedCoord,
                     altitude: currentCam.altitude,
-                    pitch: currentCam.pitch,
+                    pitch: 0.0,
                     heading: currentCam.heading
                 )
                 

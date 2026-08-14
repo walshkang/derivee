@@ -135,4 +135,34 @@ final class CameraBoundsTests: XCTestCase {
         let allowed = CameraBounds.shouldAllowCameraChange(from: oldCam, to: rollbackCam, reason: .programmatic, isRollingBack: true)
         XCTAssertTrue(allowed, "Rollback movements must always be permitted")
     }
+    
+    // MARK: - 2D Top-Down Pitch & Tilt Locking
+    
+    func testShouldRejectPitchedCameraChange() {
+        let oldCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 40.7, longitude: -74.0), altitude: 1000, pitch: 0, heading: 0)
+        let pitchedCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 40.7, longitude: -74.0), altitude: 1000, pitch: 45.0, heading: 0)
+        
+        let allowed = CameraBounds.shouldAllowCameraChange(from: oldCam, to: pitchedCam, reason: .gesturePan)
+        XCTAssertFalse(allowed, "Any camera transition with pitch > 0 must be rejected to enforce strict 2D top-down view")
+    }
+    
+    func testShouldRejectTiltGesture() {
+        let oldCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 40.7, longitude: -74.0), altitude: 1000, pitch: 0, heading: 0)
+        let newCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 40.7, longitude: -74.0), altitude: 1000, pitch: 0, heading: 0)
+        
+        let allowed = CameraBounds.shouldAllowCameraChange(from: oldCam, to: newCam, reason: .gestureTilt)
+        XCTAssertFalse(allowed, "GestureTilt must be rejected unconditionally")
+    }
+    
+    func testShouldAllowRotationAndPanZeroPitch() {
+        let oldCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 40.7, longitude: -74.0), altitude: 1000, pitch: 0, heading: 0)
+        let rotatedCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 40.71, longitude: -74.01), altitude: 1000, pitch: 0, heading: 90.0)
+        
+        let allowedRotate = CameraBounds.shouldAllowCameraChange(from: oldCam, to: rotatedCam, reason: .gestureRotate)
+        XCTAssertTrue(allowedRotate, "2D rotation gestures with zero pitch must be permitted")
+        
+        let allowedPan = CameraBounds.shouldAllowCameraChange(from: oldCam, to: rotatedCam, reason: .gesturePan)
+        XCTAssertTrue(allowedPan, "2D pan gestures with zero pitch must be permitted")
+    }
 }
+

@@ -53,13 +53,14 @@ The app is now fully native:
 | **I.10a** | **WI10a-PIPELINE-LOGS** | **6-Stage Diagnostic Pipeline Logging & Files App Export** | ✅ Done |
 | **I.10b** | **WI10b-ONDEVICE-WALK** | **On-Device Untethered Walk (3+ Hexes)** | Planned (Ready) |
 | **I.10c** | **WI10c-LOG-INTERPRET** | **Diagnostic Log Interpretation & Targeted Fix** | Blocked on I.10b |
-| **J.1** | **WJ1-CAMERA-BOUNDS** | **Map Camera Bounds & Fog Viewport Clamping** | Planned |
-| **J.2** | **WJ2-PERF-OPTIMIZATION** | **Map & Render Performance Optimization** | Planned |
-| **J.3** | **WJ3-FOG-POI-MASKING** | **MapLibre Style POI & Label Masking Under Fog** | Planned |
-| **J.4** | **WJ4-BASEMAP-SWITCHER** | **Map Base Layer Switcher (Dark / Transit / Standard)** | Planned |
-| **J.5** | **WJ5-CUSTOMIZATION-SETTINGS** | **Visual Customization Settings (Opacity, Hex Size, Theme)** | Planned |
-| **J.6** | **WJ6-TRANSIT-NODE-TRACKING** | **Dedicated Transit Node View & Live Tracking** | Planned |
-| **J.7** | **WJ7-POI-GAMIFICATION** | **Enhanced Gamification & POI Discovery Milestones** | Planned |
+| **J.1** | **WJ1-CAMERA-BOUNDS** | **Map Camera Bounds, 2D Top-Down Lock (`pitch = 0`) & Rubber-Band Clamping** | ✅ Done |
+| **J.2** | **WJ2-PERF-OPTIMIZATION** | **120Hz Spatial Unioning & Render Optimization** | ✅ Done |
+| **J.3** | **WJ3-FOG-POI-MASKING** | **MapLibre Style POI & Label Masking Under Fog** | ✅ Done |
+| **J.4** | **WJ4-BASEMAP-SWITCHER** | **Bundled Composite Style Basemap Switcher (Day / Night / OLED / Transit)** | ✅ Done |
+| **J.5** | **WJ5-CUSTOMIZATION-SETTINGS** | **Visual Customization Settings (Fog Opacity Slider & Hex Borders)** | ✅ Done |
+| **J.6** | **WJ6-TRANSIT-NODE-TRACKING** | **Dedicated Transit Node View, Live GTFS-RT Arrivals & Route Tracing** | ✅ Done |
+| **J.7** | **WJ7-POI-GAMIFICATION** | **Sensory Discovery Feedback & Categorized Milestone Journal** | ✅ Done |
+| **J.8** | **WJ8-APERTURE-BRANDING** | **Unified Crystalline Aperture Rollout (AppIcon, FAB, Milestones & Live Activity)** | Planned |
 
 ---
 

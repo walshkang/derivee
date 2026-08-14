@@ -473,7 +473,7 @@ The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/
 │       └── Opacity: 0.60..0.98 (@AppStorage) | Day: #1C1C1E | Night/OLED: #000000 | Transit: #0A0C10
 │
 └── Layer 1: Base Vector Style
-    └── MapTiler Streets v2 (Coastlines, water, street grid, typography)
+    └── MapTiler Streets v2 (Coastlines, water, street grid, typography, and full-zoom 2D building footprints; 3D extrusions suppressed for coplanar 2D fog alignment)
 ▼ Bottom of Z-Stack
 ```
 

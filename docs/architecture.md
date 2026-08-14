@@ -155,13 +155,15 @@ A standalone web version of the transit map provides a lightweight alternative.
 
 This section defines the implementation parameters and algorithmic constraints established by targeted deep research to sustain a 120Hz ProMotion budget (<8.33ms/frame) while executing continuous geospatial processing. Sub-waves execute in **strict sequential order** (J.2 → J.7) to prevent cascading style/shader regressions:
 
-### 8.1 Camera Bounding & Viewport Clamping (`WJ1-CAMERA-BOUNDS`)
+### 8.1 Camera Bounding, 2D Top-Down Lock & Viewport Clamping (`WJ1-CAMERA-BOUNDS`)
 - **Prohibited Approaches:**
   - *`MLNMapView.setCameraTargetBounds` / `restrictedCoordinateBounds`:* Banned. Acts as a hard wall at the Metal layer, abruptly halting momentum and causing violent jitter / lockups during high-velocity pinch-to-zoom near boundaries.
   - *`UIGestureRecognizerDelegate` Swizzling:* Banned. Disrupts MapLibre's internal gesture decay and velocity interpolation algorithms.
-- **Mandated Implementation:** Intercept camera changes via `MLNMapViewDelegate.mapView(_:shouldChangeFrom:to:reason:)`.
-  - Mathematically evaluate if the projected `newCamera.centerCoordinate` falls outside the active `MLNCoordinateBounds`.
-  - For gesture reasons (`.gesturePan`, `.gesturePinch`), allow temporary rubber-band overflow during continuous touch, then asynchronously animate a smooth corrective rollback using `mapView.setCamera(correctedCamera, withDuration: 0.4, animationTimingFunction: .easeOut)`.
+  - *3D Camera Pitching & Extrusion Layers:* Prohibited. Tilting the camera down (pitch > 0) creates 3D parallax drift and causes tall building extrusions to clip/poke through the 2D ground-level Fog of War polygon mask ($Z=0$).
+- **Mandated Implementation:**
+  - **Zero-Pitch Hard-Lock:** `mapView.allowsTilting = false` on `MLNMapView`. In `MLNMapViewDelegate.mapView(_:shouldChangeFrom:to:reason:)`, reject any camera transition where `reason.contains(.gestureTilt)` or `newCamera.pitch > 0.001`.
+  - **Architectural Flat Footprints:** Buildings render strictly as flat 2D polygons across all zoom levels ($z = 13..24$) via the `Building` fill layer in `composite_style.json`. The `Building 3D` extrusion layer is disabled (`visibility: "none"`).
+  - **Boundary Damping & Rollback:** Intercept camera changes via `CameraBounds.shouldAllowCameraChange`. Mathematically evaluate if the projected `newCamera.centerCoordinate` falls outside the active NYC envelope ($40.0^\circ\text{N} \le \text{lat} \le 41.5^\circ\text{N}$, $-74.5^\circ\text{W} \le \text{lon} \le -73.0^\circ\text{W}$). For gestures (`.gesturePan`, `.gesturePinch`, `.gestureRotate`), allow temporary rubber-band overflow up to $0.35^\circ$ (~38km), then asynchronously animate a smooth corrective rollback to hard bounds using `mapView.setCamera(correctedCamera, withDuration: 0.4, animationTimingFunction: .easeOut)` enforcing `pitch: 0.0`.
 
 ### 8.2 The Spatial Unioning Imperative for 120Hz ProMotion (`WJ2-PERF-OPTIMIZATION`)
 - **The Bottleneck:** Passing raw, un-dissolved H3 hexagons as individual interior rings to `MLNPolygon` causes MapLibre's underlying `earcut.hpp` triangulation to degrade from $O(N \log N)$ to $O(N^2)$. Pushing thousands of disconnected micro-holes freezes the `@MainActor` render loop and causes severe thermal throttling.

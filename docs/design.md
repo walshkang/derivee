@@ -17,6 +17,106 @@ For backend data flows, native constraints, and library stacks, see [architectur
 
 "Dérivée" is an ambient, offline-first location explorer and transit utility. The map **is** the app. All controls, floating sheets, and metrics exist only to serve the map without cluttering it.
 
+### 1.0.1 Unified Iconography & Logo System: The Crystalline Aperture
+
+* **Primary Mark:** A stepped 7-hex H3 aperture punching through a matte graphite / OLED black fog layer to reveal high-contrast cartography beneath, anchored by an Electric Amber (`#FFB300`) live coordinate node.
+* **Philosophy Alignment:** The mark serves as an understated system signature and progression symbol. It avoids over-saturation, preserves cartographic utility, and respects Dérivée’s *"quiet harness"* persona.
+
+#### System Placements & Placement Boundaries
+
+| Surface | Visual Element | Treatment |
+|:---|:---|:---|
+| **App Store & Home Screen** | `AppIcon.appiconset` | **3 Adaptive Variants:**<br>• *Light Mode:* Soft Parchment base (`#F9F9F6`) under Graphite fog (`#1C1C1E`) with Electric Amber node.<br>• *Dark Mode:* Midnight Slate base (`#12121A`) under OLED black (`#000000`) with glowing Amber aperture rim.<br>• *iOS 18 Tinted:* Dedicated high-contrast monochrome alpha stencil. |
+| **Screen 0 (Onboarding Gate)** | Splash Hydration Gate | Centered full-vector Crystalline Aperture with subtly pulsing Amber node during SQLite hydration. |
+| **Screen 1 (Ambient Map)** | Stats FAB (Top-Right) | Houses **Variation A (Micro-Glyph)** in `.primary` over `.ultraThinMaterial` (replaces generic `person.crop.circle`). |
+| **Screen 1 (Ambient Map)** | Live GPS Puck & Heading | **Pure Utilitarian:** Native Electric Amber pulsing coordinate dot + heading cone. **No brand badge overlays on the live puck.** |
+| **Screen 1 (Ambient Map)** | Hex Unlock Animation | Stepped hex wave expansion (1.0 → 3.5 scale, 1.2s ease-out opacity fade `0.8` → `0.0`) + light haptic (`UIImpactFeedbackGenerator(.light)`). |
+| **Screen 2 (Transit Reveal)** | Bottom Sheet & Sparklines | **Pure Legibility:** Fast, un-watermarked 7-day headway sparkline canvas. |
+| **Screen 3 (Stats & Milestones)** | Hero Metric & Milestone Cards | Standalone high-negative-space aperture rings framing category artwork (Transit tracks, Street grids, Landmark diamonds). **No medieval shield containers.** |
+| **Screen 3 (Settings Section)** | System Signature | Flat monochrome etched aperture + build signature at bottom of settings. |
+| **Dynamic Island & WidgetKit** | Live Activities | 16×16px aperture micro-glyph leading + SF Mono hex delta trailing + walk timer & distance covered. Zero internal diagnostic telemetry. |
+
+#### SVG Asset Specifications
+
+1. **Variation A: The Micro-Glyph (FABs, Dynamic Island & Navigation)**
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="100%" height="100%">
+  <path d="
+    M 16,3 
+    L 20,5.5 L 24,3 L 28,5.5 L 28,10.5 L 31.5,12.5 L 31.5,17.5 L 31.5,22.5 L 28,24.5 L 28,29.5 L 24,32 
+    L 20,29.5 L 16,32 L 12,29.5 L 8,32 L 4,29.5 L 4,24.5 L 0.5,22.5 L 0.5,17.5 L 0.5,12.5 L 4,10.5 
+    L 4,5.5 L 8,3 L 12,5.5 Z" 
+    fill="none" 
+    stroke="currentColor" 
+    stroke-width="2" 
+    stroke-linejoin="round" />
+  <circle cx="16" cy="17.5" r="3.2" fill="#FFB300" />
+</svg>
+```
+
+2. **Variation B: Dark Mode Environmental Shift (App Icon / Splash Gate)**
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <clipPath id="squircleDark">
+      <rect width="512" height="512" rx="115" ry="115" />
+    </clipPath>
+    <pattern id="darkModeMapPattern" patternUnits="userSpaceOnUse" width="128" height="128">
+      <rect width="128" height="128" fill="#12121A" />
+      <path d="M 0 64 Q 64 50, 128 64" fill="none" stroke="#252538" stroke-width="2.5" />
+      <path d="M 64 0 Q 75 64, 64 128" fill="none" stroke="#252538" stroke-width="2.5" />
+      <path d="M 20 0 L 108 128" fill="none" stroke="#1A1A26" stroke-width="1.2" />
+      <path d="M 0 115 C 30 110, 60 125, 128 118" fill="none" stroke="#182232" stroke-width="3" />
+    </pattern>
+    <radialGradient id="nightGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFB300" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#FFB300" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <g clip-path="url(#squircleDark)">
+    <rect width="512" height="512" fill="#09090D" />
+    <g stroke="#181822" stroke-width="1.5" fill="none" opacity="0.4">
+      <polygon points="256,56 312,88 312,152 256,184 200,152 200,88" />
+      <polygon points="368,120 424,152 424,216 368,248 312,216 312,152" />
+      <polygon points="144,120 200,152 200,216 144,248 88,216 88,152" />
+      <polygon points="368,248 424,280 424,344 368,376 312,344 312,280" />
+      <polygon points="144,248 200,280 200,344 144,376 88,344 88,280" />
+      <polygon points="256,312 312,344 312,408 256,440 200,408 200,344" />
+    </g>
+    <path d="
+      M 256,104 
+      L 300,129 L 344,104 L 388,129 L 388,180 L 432,205 L 432,256 L 432,307 L 388,332 L 388,383 L 344,408 
+      L 300,383 L 256,408 L 212,383 L 168,408 L 124,383 L 124,332 L 80,307 L 80,256 L 80,205 L 124,180 
+      L 124,129 L 168,104 L 212,129 Z" 
+      fill="url(#darkModeMapPattern)" 
+      stroke="#FFB300" 
+      stroke-width="1.5" 
+      stroke-opacity="0.6" />
+    <circle cx="256" cy="256" r="64" fill="url(#nightGlow)" />
+    <circle cx="256" cy="256" r="32" fill="none" stroke="#FFB300" stroke-width="1.5" stroke-dasharray="2 3" opacity="0.8" />
+    <circle cx="256" cy="256" r="14" fill="#FFB300" />
+    <circle cx="256" cy="256" r="14" fill="none" stroke="#FFFFFF" stroke-width="2.5" />
+  </g>
+</svg>
+```
+
+3. **Variation C: Standalone Milestone Apertures (Screen 3 Journal)**
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <path d="
+    M 60,20 
+    L 70,26 L 80,20 L 90,26 L 90,38 L 100,44 L 100,56 L 100,68 L 90,74 L 90,86 L 80,92 
+    L 70,86 L 60,92 L 50,86 L 40,92 L 30,86 L 30,74 L 20,68 L 20,56 L 20,44 L 30,38 
+    L 30,26 L 40,20 L 50,26 Z" 
+    fill="none" 
+    stroke="currentColor" 
+    stroke-width="2" 
+    stroke-linejoin="round" />
+  <polygon points="60,47 68,55 60,63 52,55" fill="#FFB300" />
+  <circle cx="60" cy="55" r="2" fill="#FFFFFF" />
+</svg>
+```
+
 ### 1.1 The Dynamic Environmental Shift (Day/Night Cycle)
 
 The interface automatically transitions between Light and Dark modes based on local **First Light (Sunrise)** and **Last Light (Sunset)** calculated via the background GPS coordinate, eliminating screen glare on dark street corners or inside subway cars.
@@ -164,12 +264,14 @@ The app has exactly **four** screens. If a screen is not enumerated below, the a
 * **Floating Action Buttons (FABs):** Two minimalist, translucent circular buttons floating over the map:
   * **Recenter FAB** (bottom-right): Re-centers the camera on the user's current GPS position with a smooth 300ms ease animation.
   * **Profile FAB** (top-right): Navigates to Screen 3 (Stats and Profile). Styled with `UltraThinMaterial` blur and a subtle shadow.
+* **Camera Model (Strict 2D Orthographic Top-Down):** The camera is hard-locked to nadir view (`pitch = 0.0`). Two-finger tilt gestures are disabled (`allowsTilting = false`), and `CameraBounds.shouldAllowCameraChange` rejects any `.gestureTilt` or `pitch > 0` transition. Buildings render as crisp flat 2D footprints across all close zoom levels ($z = 13..24$), eliminating 3D perspective distortion, depth-buffer z-fighting, or building extrusions clipping through the ground-level Fog of War polygon.
 
 **Ambient Tracking:** Tracking begins silently and automatically via the native Swift `AmbientTrackingEngine` the moment Screen 1 mounts. There is **no** manual "Start/Stop Tracking" button. The app is always tracking.
 
 **Interactions:**
 * **Tap Ghost POI:** Triggers a geospatial Point-in-Polygon (PiP) check. If the user is within physical proximity (200m), query `GRDB` synchronously and open Screen 2 (Transit Reveal native `.sheet`).
-* **Tap Recenter FAB:** Smooth camera animation to user location.
+* **Tap Recenter FAB:** Smooth camera animation to user location (enforcing `pitch: 0.0`).
+* **Pan & Zoom:** Smooth 2D panning and pinch-to-zoom bounded by the NYC envelope ($40.0^\circ\text{N} \le \text{lat} \le 41.5^\circ\text{N}$, $-74.5^\circ\text{W} \le \text{lon} \le -73.0^\circ\text{W}$) with $0.35^\circ$ elastic rubber-band margin and automatic `.easeOut` rollback.
 * **Tap Profile FAB:** Navigate to Screen 3.
 * **Long-press map:** Reserved for future use. No action.
 

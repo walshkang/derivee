@@ -41,6 +41,11 @@ public struct CameraBounds {
         reason: MLNCameraChangeReason,
         isRollingBack: Bool = false
     ) -> Bool {
+        // Enforce strict 2D top-down view: reject tilt gestures and any pitched camera states
+        if reason.contains(.gestureTilt) || newCamera.pitch > 0.001 {
+            return false
+        }
+        
         // If an automated rollback is underway, always allow it to complete.
         if isRollingBack {
             return true
@@ -57,7 +62,6 @@ public struct CameraBounds {
         let isGesture = reason.contains(.gesturePan) ||
                         reason.contains(.gesturePinch) ||
                         reason.contains(.gestureRotate) ||
-                        reason.contains(.gestureTilt) ||
                         reason.contains(.gestureZoomIn) ||
                         reason.contains(.gestureZoomOut)
         
