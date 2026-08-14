@@ -168,23 +168,25 @@ This section defines the implementation parameters and algorithmic constraints e
 - **Rejected Alternatives:**
   - *Incremental Graph / Cluster Cache:* Rejected. Maintaining an in-memory spatial graph of connected components adds state management complexity disproportionate to the gains. Res-11 NYC exploration hex counts (hundreds to low thousands) dissolve in <5ms in C/Swift H3.
   - *Zoom-Tiered Level-of-Detail Dissolution (`h3Compact`):* Rejected. Res-9/Res-8 compaction at low zoom levels introduces visual pop-in artifacts at zoom transitions and adds a secondary code path with independent winding order bugs.
-- **Mandated Implementation:** Full Res-11 dissolution on every hex change — no incremental caching.
-  - Preprocess the entire active hex `Set<String>` using Uber H3's `cellsToMultiPolygon` in a `Task.detached(priority: .userInitiated)`.
+  - *Nested Donut Hole/Island Support:* Rejected for MVP. Real-world walking drifts produce contiguous corridors or clumps. Traversing nested inner holes inside cluster loops introduces complex non-convex polygon triangulation edge cases without meaningful user benefit.
+- **Mandated Implementation:** Full Res-11 dissolution on every hex change via `cellsToLinkedMultiPolygon` in `Task.detached(priority: .userInitiated)`.
+  - Traverse the linked list of `LinkedGeoPolygon` clusters produced by H3.
+  - For each cluster, extract its primary outer boundary loop (`loop.pointee.first`), convert coordinates to `CLLocationCoordinate2D`, and enforce counter-clockwise vertex order (`coords.reversed()`) to match MapLibre's clockwise exterior ring convention.
+  - Inject each cluster's outer boundary as an interior hole (`interiorPolygons`) in the master NYC bounding box `MLNPolygon`.
   - Dissolves shared internal edges of contiguous hex clusters into single macro-polygon boundaries, reducing vertex counts by >85%.
-  - Enforce counter-clockwise winding order on interior rings (`points.reversed()`) to match MapLibre's clockwise exterior ring convention.
 - **Performance Budgets (Xcode Instruments):**
   - Time Profiler: `@MainActor` execution of `shapeSource.shape = fogPolygon` must complete in **< 1.5ms**.
   - Metal System Trace: Geometry allocation must remain flat without triangulation pipeline spikes.
   - Core Animation: Commit times must consistently align with the 120Hz VSync interval (8.33ms).
 
-### 8.3 Dual-Model Vector Tile POI Masking (`WJ3-FOG-POI-MASKING`)
+### 8.3 Dual-Model Vector Tile POI Masking (Pure Separation) (`WJ3-FOG-POI-MASKING`)
 - **Prohibited Approaches:**
   - *Layer Z-Ordering Alone:* Ineffective. High-contrast text halos and bold geometries still bleed through 0.85 opacity fog.
   - *Dynamic `['within', polygon]` Expressions:* Banned. Evaluating complex multi-polygon geometries against every vector tile feature on map pan saturates the CPU.
-  - *Uniform 200m Bubble for All POI Types:* Rejected. Transit stations and historic landmarks are high-value orientation anchors; hiding them when the user walks away degrades spatial awareness.
-- **Mandated Implementation (Dual Model):**
-  - **Commercial/Retail POIs (Ephemeral 200m Bubble):** Suppress commercial POIs (`poi_label`, `park_label`) using MapLibre's GPU-accelerated `mgl_distanceFrom:` expression tied to the user's active `CLLocationCoordinate2D`. Apply `mgl_distanceFrom:(userPoint) <= 200` predicate filters. POIs fade out when the user leaves the 200m radius, preserving exploration mystery.
-  - **Transit Stations & Historic Landmarks (Permanent Discovery):** Major transit hubs (`transit_stop_label`) and landmark POIs remain permanently unmasked once the hex containing them is recorded in `explored_hexes`. These serve as permanent anchor points on the user's mental and physical map.
+  - *Predicate Filtering on MapTiler Layers for Transit/Landmarks:* Rejected. Injecting dynamic stop ID arrays into vector tile symbol layers is fragile and fights MapTiler's vector tile schema.
+- **Mandated Implementation (Pure Separation):**
+  - **Commercial/Retail POIs (Ephemeral 200m Bubble):** Suppress base MapTiler commercial and park symbol layers (`poi_label`, `park_label`) using MapLibre's GPU-accelerated `mgl_distanceFrom:` expression tied to the user's active `CLLocationCoordinate2D`. Apply `mgl_distanceFrom:(userPoint) <= 200` predicate filters. Labels fade out smoothly on the GPU when the user moves away.
+  - **Transit Stations & Landmarks (Native Runtime Layer):** All interactive transit stops and landmark discoveries are rendered exclusively via Dérivée's custom SQLite-backed `poiSourceId` runtime layer (`MLNSymbolStyleLayer` + `MLNCircleStyleLayer`). Stations located within any hex in `explored_hexes` remain permanently visible across app sessions.
   - Set `textIgnoresPlacement = true` and `textAllowsOverlap = true` to prevent hidden labels from altering visible layout collisions.
 
 ### 8.4 Bundled Composite Style Pattern (`WJ4-BASEMAP-SWITCHER`)
@@ -193,26 +195,42 @@ This section defines the implementation parameters and algorithmic constraints e
   - *Remote Custom Style Endpoint (R2 / MapTiler Cloud):* Rejected. Introduces cold-start network latency, HTTP 429 rate limit risk, and offline fragility.
   - *Dynamic Swift Runtime Layer Injection:* Rejected. Programmatically injecting dozens of style layers via MapLibre runtime APIs is fragile, verbose, and difficult to maintain compared to a declarative JSON definition.
 - **Mandated Implementation:** Bundle a single **`composite_style.json`** in the iOS app bundle containing all layer definitions for Standard Day, Night, OLED Ultra Dark, and Transit Network themes.
-  - Inject the MapTiler API key at runtime via `bundle.url(forResource:)` + string interpolation before passing to `MLNMapView`.
-  - Transition themes by interpolating layer properties (`fillColorTransition`, `lineOpacityTransition`) using `MLNTransition(duration: 0.6)` directly on the GPU. Zero style destruction, zero `MLNShapeSource` unmounting.
+  - **Layer Hierarchy:** Shared `maptiler_streets` vector source with dedicated layer groups for Day, Night, OLED, and Transit.
+  - **Runtime Key Injection:** Inject the MapTiler API key at runtime via `bundle.url(forResource:)` + string interpolation before passing to `MLNMapView`.
+  - **GPU Transitions:** Transition themes by interpolating layer properties (`fillColorTransition`, `lineOpacityTransition`, `backgroundColorTransition`) using `MLNTransition(duration: 0.6)` directly on the GPU. Zero style destruction, zero `MLNShapeSource` unmounting.
 
-### 8.5 Hybrid SwiftProtobuf + Local SQLite Transit Architecture (`WJ6-TRANSIT-NODE-TRACKING`)
+### 8.5 Zero-Geometry Customization Parameterization (`WJ5-CUSTOMIZATION-SETTINGS`)
+- **Rejected Alternatives:**
+  - *Quick-Access Map Overlay Panel / FAB:* Rejected. Adding settings controls directly to the primary map screen violates the "map is the UI" philosophy and clutters the immersive exploration interface.
+  - *Pre-Generated Hex Mesh Line Source:* Rejected. Maintaining a secondary line shape source for individual hex edges doubles memory and CPU unioning cost.
+- **Mandated Implementation:** Dedicated "Map Aesthetics & Exploration" section in `SettingsView` (Screen 3).
+  - Persist all preferences via `@AppStorage` keys for instant reactivity and cross-launch persistence.
+  - **Fog Opacity:** Update `fogLayer.fillOpacity` directly via `NSExpression(forConstantValue: targetOpacity)` with `fillOpacityTransition = MLNTransition(duration: 0)` for immediate 120Hz slider responsiveness (`0.60` to `0.98`).
+  - **Hex / Boundary Borders:** Rendered via an `MLNLineStyleLayer` attached directly to the existing `fog-source` geometry. Toggling `lineOpacity` and `lineWidth` updates fragment shaders with `MLNTransition(duration: 0)` — zero polygon recomputation, zero DB queries.
+  - **Basemap Selector:** Picker for Day, Night, OLED Ultra Dark, and Transit Network themes, triggering the GPU crossfade defined in §8.4.
+
+### 8.6 Hybrid SwiftProtobuf + Local SQLite Transit Architecture (`WJ6-TRANSIT-NODE-TRACKING`)
 - **Rejected Alternatives:**
   - *Pure Direct MTA Binary Feeds (Real-Time + Shapes):* Rejected. Downloading full route shape GeoJSON over cellular for every stop tap wastes bandwidth and introduces latency.
   - *Observer Daemon / R2 Relayed Stream:* Rejected. Adds load to custom backend infrastructure for data the device can source locally.
+  - *Continuous Background Polling:* Rejected. Polling GTFS-RT while the transit sheet is closed wastes cellular battery and bandwidth.
 - **Mandated Implementation (Hybrid):**
-  - **Real-Time Arrivals:** Ingest binary `.pb` vehicle position and trip update feeds directly via `SwiftProtobuf` (`TransitRealtime_FeedMessage(serializedData:)`) for sub-second arrival countdowns. Map entities into lightweight Swift dictionaries and immediately release the `FeedMessage` buffer.
-  - **Route Shapes (Local SQLite):** Source physical track/route geometries from the pre-hydrated local `derivee_transit.sqlite` database — no large geo-payload downloads over cellular.
+  - **Dependency:** Add `apple/swift-protobuf` to `project.yml` and check in pre-compiled `gtfs-realtime.pb.swift` models generated from official GTFS-RT protobuf definitions.
+  - **Sheet-Scoped Polling:** Ingest binary `.pb` vehicle positions and trip updates directly via `TransitRealtime_FeedMessage(serializedData:)` in a detached `Task` polling every 15s. The polling loop lifecycle is strictly bound to `showTransitSheet` presentation, cancelling immediately on sheet dismissal.
+  - **Local Route Shapes:** Physical track/route geometries are queried on-demand from the pre-hydrated local `derivee_transit.sqlite` database.
   - **Rendering:** Ephemeral dual-layer route overlays (6px light silver casing + 4px agency-colored line) so dark transit lines remain legible over dark fog.
 
-### 8.6 Zero-Geometry Customization Parameterization (`WJ5-CUSTOMIZATION-SETTINGS`)
+### 8.7 Dual-Sensory Discovery Loop & Exploration Journal (`WJ7-POI-GAMIFICATION`)
 - **Rejected Alternatives:**
-  - *Quick-Access Map Overlay Panel / FAB:* Rejected. Adding settings controls directly to the primary map screen violates the "map is the UI" philosophy and clutters the immersive exploration interface.
-  - *Combined Settings + Profile Screen Customizer:* Rejected. A full theme picker embedded in the Profile tab conflates navigation concerns.
-- **Mandated Implementation:** Dedicated "Map Aesthetics & Exploration" section in `SettingsView` (Screen 3).
-  - Persist all preferences via `@AppStorage` keys for instant reactivity and cross-launch persistence.
-  - Changing fog opacity (`0.60` to `0.98`) or hex border toggles must **never** trigger polygon recomputation or database queries.
-  - Update `fogLayer.fillOpacity` directly via `NSExpression(forConstantValue: targetOpacity)` with `fillOpacityTransition = MLNTransition(duration: 0)` for immediate 120Hz slider responsiveness.
-  - Basemap theme selection (Day, Night, OLED Ultra Dark, Transit) also lives in this section, triggering the GPU crossfade defined in §8.4.
+  - *Pre-Computed Milestone Counters Table in SQLite:* Rejected. Maintaining duplicate counter tables on every hex write adds transaction overhead to `insertDiscoveredHex` and risks state desynchronization.
+  - *Client-Side In-Memory Cache in `SpatialStore`:* Rejected. Calculating aggregate milestones in memory on every tracking tick bloats the `@Observable` state container.
+- **Mandated Implementation:**
+  - **Tactile & Visual Feedback:** Fire `UIImpactFeedbackGenerator(style: .light)` immediately upon successful `insertDiscoveredHex` write. Trigger an ephemeral `MLNCircleStyleLayer` expanding from radius 0 to 80 with a 1.2s opacity fade (`0.8` to `0.0`), auto-removed on completion.
+  - **On-Demand Asynchronous GRDB Aggregation:** Screen 3 (Exploration Journal) queries milestone progress on-demand via `dbWriter.read { db in ... }` joining `explored_hexes` with `derivee_transit.sqlite` and `neighborhood.sqlite`.
+  - **Milestone Categories:**
+    1. *Transit Hubs:* Number of distinct subway/rail stations unlocked out of total network stops.
+    2. *Neighborhood Voyager:* Exploration percentage per NYC borough and neighborhood boundary.
+    3. *Historic Landmarks:* Curated cultural and historic landmark POIs discovered.
+  - Preserves lightning-fast hex inserts (<0.5ms) while keeping the primary map interface minimal and free of gamified clutter.
 
 
