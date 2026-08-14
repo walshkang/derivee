@@ -1,6 +1,7 @@
 # Agent Operational Rules (Pure Native iOS)
 
 ## 1. Core Architecture
+- **Reference Documentation:** For visual architecture diagrams (class ownership, the reactive GPS-to-fog pipeline, screen flow state machine, MapLibre layer stack, and database topology), see [docs/diagrams.md](file:///Volumes/T7ssd/derivee/docs/diagrams.md). For prose UI specifications, see [docs/design.md](file:///Volumes/T7ssd/derivee/docs/design.md). For implementation details, see [docs/architecture.md](file:///Volumes/T7ssd/derivee/docs/architecture.md).
 - **Pure Native Swift:** The project has migrated away from React Native / Expo. The app is a pure native iOS application written in Swift (iOS 17.0+).
 - **Project Generation:** The Xcode project is generated using `xcodegen`. Do NOT manually modify `.pbxproj` files or configure Xcode through the GUI. Instead, update `project.yml` and run `xcodegen`.
 - **Dependencies:** All dependencies (like `H3` and `GRDB`) are managed exclusively via Swift Package Manager (SPM) defined in `project.yml`. Do NOT use CocoaPods or Carthage.

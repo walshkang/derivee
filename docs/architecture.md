@@ -65,6 +65,12 @@ To diagnose real-world GPS and fog update lifecycle events on physical devices d
 - `PipelineLogger` multiplexes all 6 stages of pipeline telemetry (`[S1]` through `[S6]`) across stdout, Apple Unified Logging (`os.Logger`), and a persistent sandbox file (`Documents/pipeline_debug.log`).
 - `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` are enabled in `project.yml` so users can inspect or AirDrop `pipeline_debug.log` straight from the iOS Files app after field walks.
 
+### 3.5 The Unified LocationProvider Protocol & Simulation Replay
+To cleanly decouple location ingestion from hardware GPS:
+- The `LocationProvider` protocol exposes `var updates: AsyncStream<CLLocation> { get }`.
+- `LiveLocationProvider` wraps `CLLocationUpdate.liveUpdates()` for device movement.
+- `GPXLocationProvider` parses GPX tracks and streams coordinates into `AmbientTrackingEngine` at immediate or simulated intervals. This unifies workout imports and test replays across the exact same drift gate, reactive observation, and fog recomputation pipelines.
+
 ---
 
 ## 4. Geospatial Hashing (H3)

@@ -170,4 +170,28 @@ final class TrackingEngineTests: XCTestCase {
         await engine.stopTracking()
         XCTAssertFalse(engine.isTracking)
     }
+    
+    func testGPXLocationProviderStreamsLocationsToEngine() async throws {
+        let coords = [
+            GPXCoordinate(latitude: 40.768075, longitude: -73.981897, timestamp: Date()),
+            GPXCoordinate(latitude: 40.768344, longitude: -73.981581, timestamp: Date().addingTimeInterval(5)),
+            GPXCoordinate(latitude: 40.768614, longitude: -73.981266, timestamp: Date().addingTimeInterval(10))
+        ]
+        
+        let gpxProvider = GPXLocationProvider(coordinates: coords, pacing: .immediate)
+        let gpxEngine = AmbientTrackingEngine(locationProvider: gpxProvider, databaseManager: dbManager)
+        
+        gpxEngine.startTracking()
+        
+        // Allow time for coordinates to stream and database writes to commit
+        try await Task.sleep(nanoseconds: 300_000_000)
+        
+        let count = try await dbManager.dbWriter.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+        }
+        
+        XCTAssertGreaterThan(count, 0, "GPXLocationProvider should stream coordinates through the engine to unlock hexes.")
+        await gpxEngine.stopTracking()
+    }
 }
+

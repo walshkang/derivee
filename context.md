@@ -2,7 +2,7 @@
 
 ## Current Status: 🐛 Fog Reliability & On-Device Walk Testing (Wave I.10b Ready)
 
-**The project is a 100% pure native iOS app written in Swift.** We have successfully completed the migration away from React Native / Expo. Waves E through H.1, W15 Dynamic Island support, and Waves I.1–I.10a are fully implemented and verified with 100% passing unit/snapshot tests (34 tests, 0 skips).
+**The project is a 100% pure native iOS app written in Swift.** We have successfully completed the migration away from React Native / Expo. Waves E through H.1, W15 Dynamic Island support, and Waves I.1–I.10a are fully implemented and verified with 100% passing unit/snapshot tests (35 tests, 0 skips).
 
 **Active focus:** Ready for Wave I.10b (untethered on-device field walk to capture 6-stage telemetry via `pipeline_debug.log`).
 
@@ -14,7 +14,7 @@ The app is now fully native:
 * **Project Generation:** Exclusively managed via `xcodegen` (`project.yml`). The `.pbxproj` file is never manually edited.
 * **UI Framework:** SwiftUI exclusively. No UIKit storyboards.
 * **Data Layer:** `GRDB.swift` handles SQLite interactions with `ValueObservation` driving SwiftUI `@Observable` models.
-* **Location Engine:** Ambient tracking uses modern `CLLocationUpdate.liveUpdates()` in a detached `Task` alongside `CLBackgroundActivitySession` to run reliably in the background without legacy delegate methods.
+* **Location Engine:** Ambient tracking uses modern `CLLocationUpdate.liveUpdates()` in a detached `Task` alongside `CLBackgroundActivitySession` to run reliably in the background without legacy delegate methods. A unified `LocationProvider` protocol supports both `LiveLocationProvider` and `GPXLocationProvider` for simulated playback and workout ingestion.
 * **Telemetry & Field Diagnostics:** `PipelineLogger` streams real-time telemetry across stdout, `os.Logger`, and `Documents/pipeline_debug.log`, accessible via the iOS Files app.
 
 ### Key Files Updated
@@ -22,6 +22,7 @@ The app is now fully native:
 | File | Purpose |
 | --- | --- |
 | `docs/design.md` | Single source of truth for the native UI blueprint and interaction patterns |
+| `docs/diagrams.md` | Single source of truth for UML class diagrams, reactive pipeline sequence, and architectural isomorphisms |
 | `AGENTS.md` | AI guardrails: pure native Swift mandates, xcodegen requirements, and UI guidelines |
 | `ROADMAP.MD` | Master status for current waves and shipped history |
 | `archive/shipped-waves-archive.md` | Preserved history of the old Expo / React Native waves |

@@ -132,10 +132,12 @@ derivee/
 ├── DeriveeNative/          # Pure Native iOS Swift Application
 │   ├── Derivee/            # Application Source Code
 │   │   ├── AmbientTrackingEngine.swift # Background location tracking
+│   │   ├── GPXLocationProvider.swift   # Unified GPX track playback provider
 │   │   ├── SpatialDatabaseManager.swift# GRDB SQLite manager
 │   │   ├── SpatialStore.swift          # Observable UI store
 │   │   ├── ContentView.swift           # Root SwiftUI view
 │   │   └── Info.plist                  # Permissions & Config
+│   ├── DeriveeTests/       # Unit & Snapshot test suite (35 tests)
 │   ├── project.yml         # XcodeGen configuration
 │   └── Derivee.xcodeproj   # Generated Xcode Project
 ├── observer/               # Go daemon for GTFS-RT ingestion & historical sparklines
@@ -143,6 +145,7 @@ derivee/
 ├── archive/                # Shipped wave documentation archive
 ├── docs/                   # Architecture blueprints & design language specs
 │   ├── architecture.md     # Full technical specification
+│   ├── diagrams.md         # UML class diagrams & reactive pipeline sequence
 │   └── design.md           # UI blueprint, screen specs, visual identity
 ├── ROADMAP.MD              # Development roadmap & wave tracking
 └── AGENTS.MD               # AI agent operational rules & constraints

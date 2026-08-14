@@ -1,13 +1,19 @@
 import Foundation
 import CoreLocation
 
-struct GPXCoordinate {
-    let latitude: Double
-    let longitude: Double
-    let timestamp: Date?
+public struct GPXCoordinate: Sendable {
+    public let latitude: Double
+    public let longitude: Double
+    public let timestamp: Date?
+    
+    public init(latitude: Double, longitude: Double, timestamp: Date? = nil) {
+        self.latitude = latitude
+        self.longitude = longitude
+        self.timestamp = timestamp
+    }
 }
 
-final class GPXParser: NSObject, XMLParserDelegate {
+public final class GPXParser: NSObject, XMLParserDelegate {
     private var coordinates: [GPXCoordinate] = []
     
     private var currentLat: Double?
@@ -20,7 +26,11 @@ final class GPXParser: NSObject, XMLParserDelegate {
         return formatter
     }()
     
-    func parse(url: URL) throws -> [GPXCoordinate] {
+    public override init() {
+        super.init()
+    }
+    
+    public func parse(url: URL) throws -> [GPXCoordinate] {
         coordinates = []
         let data = try Data(contentsOf: url)
         let parser = XMLParser(data: data)
@@ -34,7 +44,7 @@ final class GPXParser: NSObject, XMLParserDelegate {
     
     // MARK: - XMLParserDelegate
     
-    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String] = [:]) {
+    public func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String] = [:]) {
         currentElement = elementName
         if elementName == "trkpt" || elementName == "wpt" {
             if let latStr = attributeDict["lat"], let lat = Double(latStr),
@@ -46,13 +56,13 @@ final class GPXParser: NSObject, XMLParserDelegate {
         }
     }
     
-    func parser(_ parser: XMLParser, foundCharacters string: String) {
+    public func parser(_ parser: XMLParser, foundCharacters string: String) {
         if currentElement == "time" {
             currentDateString += string
         }
     }
     
-    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+    public func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
         if elementName == "trkpt" || elementName == "wpt" {
             if let lat = currentLat, let lon = currentLon {
                 let timestamp = dateFormatter.date(from: currentDateString.trimmingCharacters(in: .whitespacesAndNewlines))
