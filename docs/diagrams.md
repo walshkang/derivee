@@ -202,6 +202,13 @@ classDiagram
         +parse(url) → [GPXCoordinate]
     }
 
+    class TransitRealtimeService {
+        <<Service / SwiftProtobuf>>
+        +shared: TransitRealtimeService
+        +fetchLiveArrivals(for stopId, routeId) async → [ArrivalInfo]
+        +parseFeedMessage(data, stopId, targetRouteId) → [ArrivalInfo]
+    }
+
     class TransitRouteData {
         <<Static Data>>
         +lineInfo(for routeId) → LineInfo
@@ -255,6 +262,7 @@ classDiagram
     OnboardingView --> HydrationManager : drives hydration
 
     TransitRevealSheet --> SpatialDatabaseManager : fetchStopDetails
+    TransitRevealSheet --> TransitRealtimeService : polls GTFS-RT (15s)
     TransitRevealSheet --> TransitRouteData : route geometry
     TransitRevealSheet *-- TransitSparklineView : embeds
 

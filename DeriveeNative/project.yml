@@ -34,6 +34,8 @@ targets:
         product: MapLibre
       - package: swift-zstd
         product: SwiftZSTD
+      - package: swift-protobuf
+        product: SwiftProtobuf
       - target: DeriveeWidget
   DeriveeTests:
     type: bundle.unit-test
@@ -47,6 +49,8 @@ targets:
       - target: Derivee
       - package: swift-snapshot-testing
         product: SnapshotTesting
+      - package: swift-protobuf
+        product: SwiftProtobuf
   DeriveeWidget:
     type: app-extension
     platform: iOS
@@ -79,6 +83,9 @@ packages:
   swift-snapshot-testing:
     url: https://github.com/pointfreeco/swift-snapshot-testing.git
     from: 1.15.4
+  swift-protobuf:
+    url: https://github.com/apple/swift-protobuf.git
+    from: 1.28.0
 
 schemes:
   Derivee:

@@ -451,18 +451,19 @@ struct MapView: UIViewRepresentable {
                             // ARCHITECT GUARDRAIL 2: Dual-layer casing technique for dark MTA colors
                             // 1. Background Casing Layer (White/Light silver outline)
                             let casingLayer = MLNLineStyleLayer(identifier: self.ephemeralRouteCasingLayerId, source: source)
-                            casingLayer.lineColor = NSExpression(forConstantValue: UIColor.white)
+                            casingLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: "#E5E5EA"))
                             casingLayer.lineWidth = NSExpression(forConstantValue: 6)
-                            casingLayer.lineOpacity = NSExpression(forConstantValue: 0.5)
+                            casingLayer.lineOpacity = NSExpression(forConstantValue: 0.8)
                             casingLayer.lineCap = NSExpression(forConstantValue: "round")
                             casingLayer.lineJoin = NSExpression(forConstantValue: "round")
+                            casingLayer.lineOpacityTransition = MLNTransition(duration: 0.2, delay: 0)
                             style.addLayer(casingLayer)
                             
                             // 2. Primary Colored Route Line Layer
                             let routeLayer = MLNLineStyleLayer(identifier: self.ephemeralRouteLayerId, source: source)
                             routeLayer.lineColor = NSExpression(forConstantValue: lineInfo.uiColor)
                             routeLayer.lineWidth = NSExpression(forConstantValue: 4)
-                            routeLayer.lineOpacity = NSExpression(forConstantValue: 0.9)
+                            routeLayer.lineOpacity = NSExpression(forConstantValue: 0.95)
                             routeLayer.lineCap = NSExpression(forConstantValue: "round")
                             routeLayer.lineJoin = NSExpression(forConstantValue: "round")
                             routeLayer.lineOpacityTransition = MLNTransition(duration: 0.2, delay: 0)

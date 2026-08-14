@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import CoreLocation
 
 final class SpatialDatabaseManager: @unchecked Sendable {
     static let shared = SpatialDatabaseManager()
@@ -363,6 +364,27 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             }
             // Fallback realistic headway variation series
             return self.generateFallbackHeadways(for: stopId)
+        }
+    }
+    
+    func fetchRouteCoordinates(for routeId: String) async throws -> [CLLocationCoordinate2D]? {
+        return try await dbWriter.read { db in
+            do {
+                let sql = "SELECT lat, lon FROM transit.route_shapes WHERE route_id = ? ORDER BY sequence ASC"
+                let rows = try Row.fetchAll(db, sql: sql, arguments: [routeId])
+                if !rows.isEmpty {
+                    let coords = rows.compactMap { row -> CLLocationCoordinate2D? in
+                        guard let lat = row["lat"] as? Double, let lon = row["lon"] as? Double else { return nil }
+                        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                    }
+                    if !coords.isEmpty {
+                        return coords
+                    }
+                }
+            } catch {
+                // Table does not exist in SQLite schema; fallback to static route geometries
+            }
+            return nil
         }
     }
     

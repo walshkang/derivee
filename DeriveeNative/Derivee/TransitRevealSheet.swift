@@ -5,6 +5,16 @@ struct TransitRevealSheet: View {
     
     @State private var stopDetails: SpatialDatabaseManager.StopDetails?
     @State private var headways: [Double] = []
+    @State private var liveArrivals: [SpatialDatabaseManager.ArrivalInfo] = []
+    @State private var isLiveActive: Bool = false
+    @State private var lastUpdated: Date? = nil
+    
+    var displayedArrivals: [SpatialDatabaseManager.ArrivalInfo] {
+        if !liveArrivals.isEmpty {
+            return liveArrivals
+        }
+        return stopDetails?.arrivals ?? []
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -42,39 +52,66 @@ struct TransitRevealSheet: View {
                 
                 // Real-time Arrivals List
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("NEXT ARRIVALS")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(.secondary)
-                    
-                    ForEach(details.arrivals) { arrival in
-                        HStack {
-                            let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
-                            
-                            Circle()
-                                .fill(arrivalInfo.color)
-                                .frame(width: 22, height: 22)
-                                .overlay(
-                                    Text(arrivalInfo.name)
-                                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                                        .foregroundColor(Color(hex: arrivalInfo.textColorHex))
-                                )
-                            
-                            Text(arrival.destination)
-                                .font(.subheadline)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            HStack(spacing: 3) {
-                                Text("\(arrival.minutes)")
-                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    HStack {
+                        Text("NEXT ARRIVALS")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        if isLiveActive {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color(hex: "#FFB300"))
+                                    .frame(width: 6, height: 6)
+                                Text("LIVE")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                                     .foregroundColor(Color(hex: "#FFB300"))
-                                Text("min")
-                                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                    .foregroundColor(.secondary)
                             }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(hex: "#FFB300").opacity(0.12))
+                            .clipShape(Capsule())
                         }
-                        .padding(.vertical, 4)
+                    }
+                    
+                    if displayedArrivals.isEmpty {
+                        Text("No scheduled arrivals in the next 30 minutes")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.vertical, 6)
+                    } else {
+                        ForEach(displayedArrivals) { arrival in
+                            HStack {
+                                let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
+                                
+                                Circle()
+                                    .fill(arrivalInfo.color)
+                                    .frame(width: 22, height: 22)
+                                    .overlay(
+                                        Text(arrivalInfo.name)
+                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                            .foregroundColor(Color(hex: arrivalInfo.textColorHex))
+                                    )
+                                
+                                Text(arrival.destination)
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                
+                                Spacer()
+                                
+                                HStack(spacing: 3) {
+                                    Text("\(arrival.minutes)")
+                                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                        .foregroundColor(Color(hex: "#FFB300"))
+                                    Text("min")
+                                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
                     }
                 }
                 
@@ -90,19 +127,47 @@ struct TransitRevealSheet: View {
             Spacer()
         }
         .padding(20)
-        .task {
-            await loadData()
+        .task(id: stopId) {
+            await startPollingLifecycle()
         }
     }
     
     @MainActor
-    private func loadData() async {
+    private func startPollingLifecycle() async {
+        // 1. Initial base load from local SQLite
         let details = try? await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
         let hw = try? await SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
         
         self.stopDetails = details
         if let hw = hw {
             self.headways = hw
+        }
+        
+        guard let routeId = details?.routeId else { return }
+        
+        // 2. Sheet-Scoped Polling Loop (15s cadence, cancelled on dismiss)
+        while !Task.isCancelled {
+            do {
+                let live = try await TransitRealtimeService.shared.fetchLiveArrivals(for: stopId, routeId: routeId)
+                if !Task.isCancelled {
+                    if !live.isEmpty {
+                        self.liveArrivals = live
+                    }
+                    self.isLiveActive = true
+                    self.lastUpdated = Date()
+                }
+            } catch {
+                // Keep existing arrivals on transient network failure
+                if !Task.isCancelled {
+                    self.isLiveActive = false
+                }
+            }
+            
+            do {
+                try await Task.sleep(nanoseconds: 15_000_000_000)
+            } catch {
+                break // Task cancelled on sheet dismissal
+            }
         }
     }
 }
