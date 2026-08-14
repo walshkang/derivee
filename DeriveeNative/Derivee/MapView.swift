@@ -2,6 +2,7 @@ import SwiftUI
 import MapLibre
 import GRDB
 import CoreLocation
+import QuartzCore
 
 struct MapView: UIViewRepresentable {
     @Environment(\.colorScheme) var colorScheme
@@ -96,6 +97,7 @@ struct MapView: UIViewRepresentable {
         
         var lureTimer: Timer?
         var isLurePulsed: Bool = false
+        var isRollingBack: Bool = false
         
         init(_ parent: MapView) {
             self.parent = parent
@@ -221,6 +223,38 @@ struct MapView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, didChange mode: MLNUserTrackingMode, animated: Bool) {
             DispatchQueue.main.async {
                 self.parent.isCentered = (mode == .follow || mode == .followWithHeading)
+            }
+        }
+        
+        func mapView(_ mapView: MLNMapView, shouldChangeFrom oldCamera: MLNMapCamera, to newCamera: MLNMapCamera, reason: MLNCameraChangeReason) -> Bool {
+            return CameraBounds.shouldAllowCameraChange(
+                from: oldCamera,
+                to: newCamera,
+                reason: reason,
+                isRollingBack: isRollingBack
+            )
+        }
+        
+        func mapView(_ mapView: MLNMapView, regionDidChangeWith reason: MLNCameraChangeReason, animated: Bool) {
+            let currentCoord = mapView.centerCoordinate
+            
+            // If the camera came to rest outside the active bounding envelope, trigger a smooth easeOut rollback
+            if !CameraBounds.isWithinBounds(currentCoord) && !isRollingBack {
+                let clampedCoord = CameraBounds.clampedCoordinate(for: currentCoord)
+                let currentCam = mapView.camera
+                let rollbackCamera = MLNMapCamera(
+                    lookingAtCenter: clampedCoord,
+                    altitude: currentCam.altitude,
+                    pitch: currentCam.pitch,
+                    heading: currentCam.heading
+                )
+                
+                isRollingBack = true
+                mapView.setCamera(rollbackCamera, withDuration: 0.4, animationTimingFunction: CAMediaTimingFunction(name: .easeOut)) { [weak self] in
+                    self?.isRollingBack = false
+                }
+            } else if isRollingBack && CameraBounds.isWithinBounds(currentCoord) {
+                isRollingBack = false
             }
         }
         

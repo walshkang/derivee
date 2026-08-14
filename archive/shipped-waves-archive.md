@@ -763,3 +763,37 @@ Analysis of the on-device `pipeline_debug.log` from the untethered field walk:
 
 **Conclusion:**
 All 6 stages of the live GPS-to-fog pipeline are verified 100% operational in real-world untethered conditions. Wave I is fully complete with no I.11 hotfix needed. Ready to advance to Wave J.
+
+---
+
+## Wave J.1 — Camera Clamping & Rubber-Band Damping [Shipped]
+
+**Task ID:** `WJ1-CAMERA-BOUNDS`  
+**Depends on:** Wave I.1–I.10 (Cold-start fog and observation pipeline complete).
+
+### Problem Statement
+
+In the native MapLibre iOS engine, user gestures (pan, pinch-to-zoom, momentum scrolling) allowed panning the camera infinitely past the active fog bounding box (`[40.0, 41.5]` latitude, `[-74.5, -73.0]` longitude) into empty basemap space.
+
+Standard MapLibre bounds-locking via `mapView.restrictedCoordinateBounds` or `setCameraTargetBounds` is **strictly prohibited** by architecture rules (`docs/architecture.md:160`) because it acts as a hard wall at the Metal layer, abruptly halting momentum and causing violent jitter / lockups during high-velocity pinch-to-zoom near boundaries. Swizzling `UIGestureRecognizerDelegate` is also prohibited as it breaks internal velocity decay.
+
+### What Shipped
+
+1. **`CameraBounds.swift` (`DeriveeNative/Derivee/CameraBounds.swift`):**
+   * Encapsulates NYC Fog bounding coordinates (`minLat: 40.0`, `maxLat: 41.5`, `minLon: -74.5`, `maxLon: -73.0`) and rubber-band elastic margin (`0.35°`).
+   * Pure mathematical functions: `isWithinBounds`, `isWithinRubberBandLimit`, `clampedCoordinate`, `shouldAllowCameraChange`.
+2. **Camera Delegate Gating (`DeriveeNative/Derivee/MapView.swift`):**
+   * Implemented `MLNMapViewDelegate.mapView(_:shouldChangeFrom:to:reason:)` allowing movements within bounds and elastic rubber-band overshoot during active gestures (`.gesturePan`, `.gesturePinch`, etc.).
+   * Rejects movement exceeding the elastic limit.
+3. **Asynchronous Boundary Rollback (`DeriveeNative/Derivee/MapView.swift`):**
+   * Implemented `MLNMapViewDelegate.mapView(_:regionDidChangeWith:animated:)` to detect when the camera comes to rest outside the hard bounds and trigger an asynchronous 400ms `.easeOut` animation back to the clamped boundary perimeter.
+4. **Unit Tests (`DeriveeNative/DeriveeTests/CameraBoundsTests.swift`):**
+   * Headless unit tests covering inside coordinates, exact corners/boundaries, outside limits, coordinate clamping, rubber-band thresholding, and camera transition gating.
+
+### Files Modified / Created
+
+* `DeriveeNative/Derivee/CameraBounds.swift` (New)
+* `DeriveeNative/Derivee/MapView.swift` (Modified)
+* `DeriveeNative/DeriveeTests/CameraBoundsTests.swift` (New)
+* `ROADMAP.MD` (Status updated to `✅ Done`)
+

@@ -107,7 +107,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
-| **J.1** | **WJ1-CAMERA-BOUNDS** | **Camera Clamping & Rubber-Band Damping:** Clamp map camera using `mapView(_:shouldChangeFrom:to:reason:)` delegate with asynchronous `.easeOut` boundary rollback to eliminate viewport lockups on pinch/zoom. | **S** | Planned |
+| **J.1** | **WJ1-CAMERA-BOUNDS** | **Camera Clamping & Rubber-Band Damping:** Clamp map camera using `mapView(_:shouldChangeFrom:to:reason:)` delegate with asynchronous `.easeOut` boundary rollback to eliminate viewport lockups on pinch/zoom. | **S** | ✅ Done |
 | **J.2** | **WJ2-PERF-OPTIMIZATION** | **120Hz Spatial Unioning & Render Optimization:** Implement `h3.cellsToMultiPolygon` dissolution in detached Tasks to avoid $O(N^2)$ `earcut.hpp` triangulation degradation, targeting <1.5ms `@MainActor` shape assignment. | **M** | Planned |
 | **J.3** | **WJ3-FOG-POI-MASKING** | **Vector Tile POI Masking via `mgl_distanceFrom:`:** Suppress underlying commercial POIs/labels using GPU-accelerated 200m distance predicate filters to preserve exploration mystery under fog. | **S** | Planned |
 | **J.4** | **WJ4-BASEMAP-SWITCHER** | **Unified Composite Style Basemap Switcher:** Seamlessly crossfade map themes (Standard Day/Night, OLED Ultra Dark, Transit Networks) using `MLNTransition` on GPU without unmounting runtime sources. | **M** | Planned |
