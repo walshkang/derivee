@@ -31,9 +31,7 @@ struct ProfileFAB: View {
             impact.impactOccurred()
             action()
         }) {
-            Image(systemName: "person.crop.circle")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundColor(.primary)
+            ApertureMicroGlyph(size: 22, strokeWidth: 1.6)
                 .frame(width: 50, height: 50)
                 .background(.ultraThinMaterial)
                 .clipShape(Circle())

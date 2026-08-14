@@ -35,7 +35,9 @@ struct MapView: UIViewRepresentable {
         mapView.delegate = context.coordinator
         
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleMapTap(_:)))
-        mapView.addGestureRecognizer(tapGesture)
+        mapView.compassViewPosition = .topLeft
+        mapView.compassViewMargins = CGPoint(x: 20, y: 54)
+        mapView.compassView.image = ApertureCompassNeedle.makeNeedleImage()
         
         context.coordinator.mapView = mapView
         context.coordinator.setupCompassObservation()
@@ -134,6 +136,7 @@ struct MapView: UIViewRepresentable {
         
         func setupCompassObservation() {
             guard let mapView = mapView else { return }
+            mapView.compassView.image = ApertureCompassNeedle.makeNeedleImage()
             compassHiddenObserver = mapView.compassView.observe(\.isHidden, options: [.initial, .new]) { view, _ in
                 if view.isHidden {
                     view.isHidden = false

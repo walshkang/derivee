@@ -147,6 +147,11 @@ struct SettingsView: View {
                     Text("The Philosophy")
                 }
             }
+            
+            Section {
+                ApertureSignatureView()
+                    .listRowBackground(Color.clear)
+            }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)

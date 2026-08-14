@@ -232,12 +232,9 @@ struct StatsView: View {
                 // Milestone Progress Cards
                 Section(header: Text("Milestone Categories")) {
                     ForEach(data.milestoneCards) { card in
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 10) {
-                                Image(systemName: card.category.systemImage)
-                                    .font(.title3)
-                                    .foregroundColor(Color(hex: "#FFB300"))
-                                    .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(spacing: 12) {
+                                ApertureMilestoneFrame(category: card.category, isUnlocked: card.unlockedTierCount > 0, size: 38)
                                 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(card.category.title)
@@ -256,17 +253,27 @@ struct StatsView: View {
                             ProgressView(value: card.percentage, total: 100)
                                 .tint(colorScheme == .dark ? .white : .black)
                             
-                            // Tiers Carousel / Badges List
-                            VStack(spacing: 8) {
+                            // Tiers High-Negative-Space List
+                            VStack(spacing: 10) {
                                 ForEach(card.tiers) { tier in
                                     HStack(spacing: 12) {
                                         ZStack {
-                                            Circle()
-                                                .fill(tier.isUnlocked ? Color(hex: "#FFB300").opacity(0.2) : Color.gray.opacity(0.15))
-                                                .frame(width: 32, height: 32)
-                                            Image(systemName: tier.badgeIconName)
-                                                .font(.system(size: 14))
-                                                .foregroundColor(tier.isUnlocked ? Color(hex: "#FFB300") : .secondary)
+                                            ApertureShape()
+                                                .stroke(tier.isUnlocked ? Color(hex: "#FFB300") : Color.secondary.opacity(0.3), lineWidth: 1.2)
+                                                .background(
+                                                    ApertureShape().fill(tier.isUnlocked ? Color(hex: "#FFB300").opacity(0.15) : Color.gray.opacity(0.08))
+                                                )
+                                                .frame(width: 28, height: 28)
+                                            
+                                            if tier.isUnlocked {
+                                                Circle()
+                                                    .fill(Color(hex: "#FFB300"))
+                                                    .frame(width: 6, height: 6)
+                                            } else {
+                                                Text("\(tier.tierNumber)")
+                                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                                    .foregroundColor(.secondary)
+                                            }
                                         }
                                         
                                         VStack(alignment: .leading, spacing: 2) {
@@ -282,9 +289,14 @@ struct StatsView: View {
                                         Spacer()
                                         
                                         if tier.isUnlocked {
-                                            Image(systemName: "checkmark.seal.fill")
-                                                .foregroundColor(Color(hex: "#FFB300"))
-                                                .font(.subheadline)
+                                            HStack(spacing: 4) {
+                                                Circle()
+                                                    .fill(Color(hex: "#FFB300"))
+                                                    .frame(width: 6, height: 6)
+                                                Text("COMPLETED")
+                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(Color(hex: "#FFB300"))
+                                            }
                                         } else {
                                             Text("\(tier.targetCount)")
                                                 .font(.system(.caption2, design: .monospaced))

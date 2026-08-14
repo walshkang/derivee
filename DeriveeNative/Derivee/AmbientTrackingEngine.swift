@@ -49,6 +49,7 @@ final class AmbientTrackingEngine: ObservableObject {
     // Live Activity State
     private var currentActivity: Activity<TrackingAttributes>?
     private var sessionHexCount: Int = 0
+    private var sessionDistanceMeters: Double = 0.0
     
     @AppStorage("isTrackingEnabled") var isTrackingEnabled = false
     @Published var isTracking = false
@@ -106,9 +107,10 @@ final class AmbientTrackingEngine: ObservableObject {
         backgroundSession = CLBackgroundActivitySession()
         
         sessionHexCount = 0
+        sessionDistanceMeters = 0.0
         do {
             let attributes = TrackingAttributes(sessionStartTime: Date())
-            let state = TrackingAttributes.ContentState(hexesCleared: 0, activeNeighborhood: nil)
+            let state = TrackingAttributes.ContentState(hexesCleared: 0, activeNeighborhood: nil, distanceMeters: 0.0)
             currentActivity = try Activity.request(attributes: attributes, content: ActivityContent(state: state, staleDate: nil), pushType: nil)
         } catch {
             print("Failed to start Live Activity: \(error)")
@@ -132,7 +134,7 @@ final class AmbientTrackingEngine: ObservableObject {
         backgroundSession = nil
         
         if let activity = currentActivity {
-            let state = TrackingAttributes.ContentState(hexesCleared: sessionHexCount, activeNeighborhood: nil)
+            let state = TrackingAttributes.ContentState(hexesCleared: sessionHexCount, activeNeighborhood: nil, distanceMeters: sessionDistanceMeters)
             await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
             currentActivity = nil
         }
@@ -162,6 +164,7 @@ final class AmbientTrackingEngine: ObservableObject {
             speed = 0
         }
         
+        let stepDistance: CLLocationDistance = (lastLocation != nil) ? location.distance(from: lastLocation!) : 0
         lastLocation = location
         
         // Discard if speed is > 12 m/s (approx 27 mph)
@@ -169,6 +172,8 @@ final class AmbientTrackingEngine: ObservableObject {
             logPipeline("⚠️ Drift gate triggered: Dropping point due to speed (\(speed) m/s)")
             return
         }
+        
+        sessionDistanceMeters += stepDistance
         
         // Convert to H3 string to avoid blocking the actor
         do {
@@ -200,7 +205,7 @@ final class AmbientTrackingEngine: ObservableObject {
                             self.sessionHexCount += 1
                         }
                         if let activity = self.currentActivity {
-                            let state = TrackingAttributes.ContentState(hexesCleared: self.sessionHexCount, activeNeighborhood: nbhd)
+                            let state = TrackingAttributes.ContentState(hexesCleared: self.sessionHexCount, activeNeighborhood: nbhd, distanceMeters: self.sessionDistanceMeters)
                             Task {
                                 await activity.update(ActivityContent(state: state, staleDate: nil))
                             }
