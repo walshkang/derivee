@@ -50,6 +50,9 @@ struct MapView: UIViewRepresentable {
         context.coordinator.updateExploredHexes(in: uiView, with: fogShape)
         context.coordinator.updateTransientHex(shape: transientHexShape, in: uiView)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
+        if let style = uiView.style {
+            context.coordinator.updatePOIs(in: style)
+        }
         
         if let target = targetCoordinate {
             uiView.setCenter(target, zoomLevel: 14.5, animated: true)
@@ -160,11 +163,15 @@ struct MapView: UIViewRepresentable {
                     pois = try await SpatialDatabaseManager.shared.dbWriter.read { db in
                         let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1 OR location_type = 0")
                         return rows.map { row in
+                            let lat = row["stop_lat"] as? Double ?? 0
+                            let lon = row["stop_lon"] as? Double ?? 0
+                            let h3 = POIMaskManager.computeH3Index(latitude: lat, longitude: lon)
                             return GhostPOI(
                                 id: row["stop_id"] as? String ?? "",
                                 name: row["stop_name"] as? String ?? "",
-                                coordinate: CLLocationCoordinate2D(latitude: row["stop_lat"] as? Double ?? 0, longitude: row["stop_lon"] as? Double ?? 0),
-                                type: 1
+                                coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                                type: 1,
+                                h3Index: h3
                             )
                         }
                     }
@@ -216,6 +223,7 @@ struct MapView: UIViewRepresentable {
             guard let location = userLocation?.location else { return }
             lastLocation = location
             if let style = mapView.style {
+                POIMaskManager.updateVectorPOIMasks(in: style, userLocation: location)
                 updatePOIs(in: style)
             }
         }
@@ -314,6 +322,10 @@ struct MapView: UIViewRepresentable {
             archiveLayer.circleOpacity = NSExpression(forConstantValue: 0.15)
             archiveLayer.minimumZoomLevel = 16.5
             style.insertLayer(archiveLayer, above: activeLayer)
+            
+            // Mask commercial/park vector POIs & suppress base stations
+            POIMaskManager.configureBaseVectorLayers(in: style)
+            POIMaskManager.updateVectorPOIMasks(in: style, userLocation: lastLocation)
         }
         
         func updateFogColor(for colorScheme: ColorScheme, in mapView: MLNMapView) {
@@ -442,29 +454,33 @@ struct MapView: UIViewRepresentable {
             guard let userLoc = lastLocation else { return }
             
             var features: [MLNPointFeature] = []
+            let exploredHexes = parent.spatialStore.exploredHexes
+            let discoveredPOIs = parent.spatialStore.discoveredPOIs
+            
             for poi in pois {
+                guard let phase = POIMaskManager.resolvePhase(
+                    poi: poi,
+                    userLocation: userLoc,
+                    exploredHexes: exploredHexes,
+                    discoveredPOIs: discoveredPOIs
+                ) else {
+                    continue
+                }
+                
                 let feature = MLNPointFeature()
                 feature.coordinate = poi.coordinate
                 feature.attributes = [
                     "id": poi.id, 
                     "name": poi.name,
-                    "icon_name": poi.type == 1 ? "poi-subway-1" : "poi-bus-3"
+                    "icon_name": poi.type == 1 ? "poi-subway-1" : "poi-bus-3",
+                    "phase": phase
                 ]
                 
-                let distance = userLoc.distance(from: CLLocation(latitude: poi.coordinate.latitude, longitude: poi.coordinate.longitude))
-                
-                // 1 = Lure, 2 = Active, 3 = Archive
-                if distance < 200 {
-                    feature.attributes["phase"] = 2
-                    
+                if phase == 2 {
                     // Wave F.2: Discovery Trigger
                     DispatchQueue.main.async {
                         self.parent.spatialStore.discoverPOI(id: poi.id, name: poi.name)
                     }
-                } else if distance < 1000 {
-                    feature.attributes["phase"] = 1
-                } else {
-                    feature.attributes["phase"] = 3
                 }
                 
                 features.append(feature)
@@ -495,6 +511,7 @@ struct GhostPOI {
     let name: String
     let coordinate: CLLocationCoordinate2D
     let type: Int
+    var h3Index: String = ""
 }
 
 extension UIColor {
