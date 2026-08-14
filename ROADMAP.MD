@@ -105,15 +105,18 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 
 ### 🚀 Exploration, Performance & Map Customization (Wave J — Post-Debugging)
 
+> [!NOTE]
+> **Execution Cadence:** Wave J sub-waves execute in strict sequential order (J.2 → J.7). Each targets a distinct architectural layer; building and verifying independently prevents cascading style/shader regressions on the 120Hz render loop.
+
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
 | **J.1** | **WJ1-CAMERA-BOUNDS** | **Camera Clamping & Rubber-Band Damping:** Clamp map camera using `mapView(_:shouldChangeFrom:to:reason:)` delegate with asynchronous `.easeOut` boundary rollback to eliminate viewport lockups on pinch/zoom. | **S** | ✅ Done |
-| **J.2** | **WJ2-PERF-OPTIMIZATION** | **120Hz Spatial Unioning & Render Optimization:** Implement `h3.cellsToMultiPolygon` dissolution in detached Tasks to avoid $O(N^2)$ `earcut.hpp` triangulation degradation, targeting <1.5ms `@MainActor` shape assignment. | **M** | Planned |
-| **J.3** | **WJ3-FOG-POI-MASKING** | **Vector Tile POI Masking via `mgl_distanceFrom:`:** Suppress underlying commercial POIs/labels using GPU-accelerated 200m distance predicate filters to preserve exploration mystery under fog. | **S** | Planned |
-| **J.4** | **WJ4-BASEMAP-SWITCHER** | **Unified Composite Style Basemap Switcher:** Seamlessly crossfade map themes (Standard Day/Night, OLED Ultra Dark, Transit Networks) using `MLNTransition` on GPU without unmounting runtime sources. | **M** | Planned |
-| **J.5** | **WJ5-CUSTOMIZATION-SETTINGS** | **Zero-Geometry Customization Settings:** Real-time user fog opacity slider (`0.60`–`0.98`) and hex border toggling applied directly via fragment shader alpha without polygon recomputation. | **S** | Planned |
-| **J.6** | **WJ6-TRANSIT-NODE-TRACKING** | **Direct SwiftProtobuf Transit Sheet & High-Contrast Overlay:** Ingest binary `.pb` GTFS-RT feeds directly into SwiftUI presentation sheets with dual-layer high-contrast vector route rendering. | **M** | Planned |
-| **J.7** | **WJ7-POI-GAMIFICATION** | **Dual-Sensory Discovery Loop & Exploration Journal:** Instant `UIImpactFeedbackGenerator(.light)` on GRDB insert + transient expanding pulse overlay on the map, with categorized milestone tracking in Profile. | **M** | Planned |
+| **J.2** | **WJ2-PERF-OPTIMIZATION** | **120Hz Spatial Unioning & Render Optimization:** Full Res-11 dissolution via `cellsToMultiPolygon` in `Task.detached(priority: .userInitiated)` on every hex change — no incremental graph caching. Dissolves shared internal edges of contiguous hex clusters into macro-polygon boundaries (>85% vertex reduction), targeting <1.5ms `@MainActor` shape assignment. | **M** | Planned |
+| **J.3** | **WJ3-FOG-POI-MASKING** | **Dual-Model Vector Tile POI Masking:** Commercial/retail POIs suppressed via GPU-accelerated 200m `mgl_distanceFrom:` vicinity bubble (fade out when user leaves). Major transit stations and historical landmarks permanently unmasked once discovered — anchoring the user's mental map. | **S** | Planned |
+| **J.4** | **WJ4-BASEMAP-SWITCHER** | **Bundled Composite Style Basemap Switcher:** Ship a local `composite_style.json` in the app bundle containing all layer definitions (Day, Night, OLED Ultra Dark, Transit). Inject MapTiler key at runtime. Crossfade themes via `MLNTransition(duration: 0.6)` GPU property interpolation — zero style destruction, zero `MLNShapeSource` unmounting. | **M** | Planned |
+| **J.5** | **WJ5-CUSTOMIZATION-SETTINGS** | **Zero-Geometry Customization Settings (Screen 3 + `@AppStorage`):** Fog opacity slider (`0.60`–`0.98`) and hex border toggles in a dedicated "Map Aesthetics" section of `SettingsView`. `@AppStorage` persistence with immediate fragment shader updates — no polygon recomputation or DB queries. | **S** | Planned |
+| **J.6** | **WJ6-TRANSIT-NODE-TRACKING** | **Hybrid SwiftProtobuf Transit Sheet & Local Shape Fallback:** Live `.pb` GTFS-RT vehicle positions parsed directly via `SwiftProtobuf` for sub-second arrival countdowns. Physical track/route geometries sourced from pre-hydrated local `derivee_transit.sqlite` — no large geo-payload downloads over cellular. Dual-layer high-contrast route rendering (6px silver casing + 4px agency color). | **M** | Planned |
+| **J.7** | **WJ7-POI-GAMIFICATION** | **Dual-Sensory Discovery Loop & Categorized Milestone Journal:** Instant `UIImpactFeedbackGenerator(.light)` on GRDB insert + transient expanding `MLNCircleStyleLayer` pulse (0→80px, 1.2s fade) on the map. Screen 3 Exploration Journal with categorized milestone cards (Transit Hubs, Neighborhoods, Historic Landmarks) and badge progression. | **M** | Planned |
 
 ### Post-Ship (Deferred)
 

@@ -406,37 +406,42 @@ This is entirely local state driven by SwiftUI `@Observable`:
 
 ## 9. Exploration Polish, Customization & Gamification (Wave J)
 
-This section defines visual and interaction standards for upcoming Wave J features:
+This section defines visual and interaction standards for upcoming Wave J features. Sub-waves execute in **strict sequential order** (J.2 → J.7):
 
 ### 9.1 Camera Viewport Clamping & Rubber-Band Damping (`WJ1-CAMERA-BOUNDS`)
 * **Camera Bounds:** The map camera must not be allowed to pan infinitely past the active fog bounding box. The viewport is constrained to the bounding envelope of the fog canvas.
 * **Physics & Resistance:** During pan/pinch gestures near the perimeter, temporary overflow is allowed with gentle resistance. On gesture release, an asynchronous 400ms `.easeOut` animation smoothly restores the camera center to the boundary edge without jarring halts or gesture lockups.
 
-### 9.2 Complete POI & Vector Tile Masking Under Fog (`WJ3-FOG-POI-MASKING`)
+### 9.2 Dual-Model POI & Vector Tile Masking Under Fog (`WJ3-FOG-POI-MASKING`)
 * **Explorability Protection:** Underlying MapTiler vector POIs (restaurants, retail shops, parks, commercial labels) must be completely invisible underneath unexplored fog.
-* **Vicinity Bubble Filter:** Visibility is strictly governed by a GPU-accelerated 200m distance predicate (`mgl_distanceFrom:(userPoint) <= 200`). No commercial labels or POI markers are rendered until the user is physically standing within the 200m progressive disclosure bubble.
+* **Commercial/Retail POIs (Ephemeral 200m Vicinity Bubble):** Visibility is governed by a GPU-accelerated 200m distance predicate (`mgl_distanceFrom:(userPoint) <= 200`). Commercial labels and POI markers are rendered only when the user is physically standing within the 200m progressive disclosure bubble. POIs fade out when the user leaves the radius, preserving exploration mystery for ephemeral amenities.
+* **Transit Stations & Historic Landmarks (Permanent Discovery):** Major transit hubs and landmark POIs remain permanently unmasked once the hex containing them is recorded in `explored_hexes`. These serve as permanent spatial anchor points on the user's mental and physical map, preventing disorientation after returning to a previously-explored area.
 
-### 9.3 Map Base Layer & Unified Style Switching (`WJ4-BASEMAP-SWITCHER`)
+### 9.3 Map Base Layer & Bundled Composite Style Switching (`WJ4-BASEMAP-SWITCHER`)
 * **Available Styles:**
   1. *Standard Day/Night:* Parchment White (`#F9F9F6`) / Midnight Slate (`#12121A`).
   2. *Ultra Dark (OLED Minimalist):* Deep `#000000` / `#0A0A10` base for maximum contrast and battery conservation.
   3. *Transit Network Overlay:* Emphasizes subway, heavy rail, and bus route paths with official agency line colors.
-* **Zero-Freeze Transition:** Executed entirely via a Unified Composite Style using `MLNTransition(duration: 0.6)` on the GPU, avoiding style destruction and data source re-mounting.
+* **Delivery:** All layer definitions for all themes are bundled in a single local `composite_style.json` shipped in the iOS app bundle. The MapTiler API key is injected at runtime — no remote style endpoint dependency.
+* **Zero-Freeze Transition:** Executed entirely via GPU layer property interpolation (`fillColorTransition`, `lineOpacityTransition`) using `MLNTransition(duration: 0.6)`. Zero style destruction, zero `MLNShapeSource` unmounting, zero data source re-hydration.
 
 ### 9.4 Visual Customization Settings (`WJ5-CUSTOMIZATION-SETTINGS`)
-* Accessible via Settings in Screen 3:
+* **Location:** Dedicated "Map Aesthetics & Exploration" section in `SettingsView` (Screen 3). The primary map screen remains free of settings controls, consistent with the "map is the UI" philosophy.
+* **Persistence:** All preferences stored via `@AppStorage` keys for instant reactivity and cross-launch persistence.
+* **Controls:**
   * **Fog Opacity Slider:** Variable alpha (`0.60` to `0.98`) updating fragment shaders in real-time (`fillOpacityTransition = MLNTransition(duration: 0)`).
   * **Hex Grid Styling:** Toggle subtle hex grid border lines and boundary highlights.
+  * **Basemap Theme Picker:** Selection of Day, Night, OLED Ultra Dark, or Transit Network theme, triggering the GPU crossfade defined in §9.3.
 
-### 9.5 Dedicated Transit Node Tracking View (`WJ6-TRANSIT-NODE-TRACKING`)
+### 9.5 Hybrid Transit Node Tracking View (`WJ6-TRANSIT-NODE-TRACKING`)
 * When the user taps an active transit node in Screen 2:
   * **Presentation Ergonomics:** Native SwiftUI `.sheet` with `presentationDetents([.fraction(0.3), .large])` snapping to the bottom third.
-  * **High-Contrast Route Geometry:** Temporary dual-layer route rendering (6px light silver casing underneath a 4px agency-colored line) to prevent dark MTA colors from disappearing into the fog.
-  * **Real-Time Data:** Direct SwiftProtobuf GTFS-RT feed ingestion with dynamic $\Delta t$ arrival countdowns and historical headway sparklines.
+  * **High-Contrast Route Geometry:** Temporary dual-layer route rendering (6px light silver casing underneath a 4px agency-colored line) to prevent dark MTA colors from disappearing into the fog. Route shapes sourced from pre-hydrated local `derivee_transit.sqlite` — no geo-payload downloads over cellular.
+  * **Real-Time Data:** Direct SwiftProtobuf binary `.pb` GTFS-RT feed ingestion for sub-second dynamic $\Delta t$ arrival countdowns and historical headway sparklines. No JSON conversion overhead.
   * **Instant Teardown:** Dismissing the sheet instantly strips the temporary route layer with zero residual artifacts.
 
 ### 9.6 Minimalist Discovery Loop & Haptic Choreography (`WJ7-POI-GAMIFICATION`)
 * **Dual-Sensory Feedback:**
   * *Haptics:* `UIImpactFeedbackGenerator(style: .light)` fires immediately upon successful GRDB database insertion of a newly discovered hex.
   * *Transient Pulse:* Unlocked hex triggers an ephemeral `MLNCircleStyleLayer` expanding from radius 0 to 80 with a 1.2s opacity fade (`0.8` to `0.0`), auto-removed on completion.
-* **Exploration Journal:** Screen 3 houses categorized discoveries (Transit Hubs, Historic Landmarks, Parks) with discovery timestamps and badge progression, keeping the primary map completely free of gamified clutter.
+* **Exploration Journal:** Screen 3 houses categorized milestone cards (Transit Hubs, Neighborhoods, Historic Landmarks, Parks) with discovery timestamps and badge progression, keeping the primary map completely free of gamified clutter.
