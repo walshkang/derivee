@@ -13,7 +13,10 @@ final class CustomizationSettingsTests: XCTestCase {
             AppStorageKeys.fogOpacity,
             AppStorageKeys.showBoundaryBorders,
             AppStorageKeys.isTrackingEnabled,
-            AppStorageKeys.isLiveActivityEnabled
+            AppStorageKeys.isLiveActivityEnabled,
+            AppStorageKeys.showSubwayThoroughfares,
+            AppStorageKeys.subwayStationMarkerStyle,
+            AppStorageKeys.showNearbyBusesLens
         ]
         
         for key in keys {
@@ -36,6 +39,11 @@ final class CustomizationSettingsTests: XCTestCase {
         XCTAssertEqual(MapCustomizationDefaults.boundaryBorderWidth, 1.5, "Boundary border width should be 1.5pt")
         XCTAssertEqual(MapCustomizationDefaults.boundaryBorderOpacity, 0.75, "Boundary border opacity should be 0.75")
         XCTAssertEqual(MapCustomizationDefaults.fogBorderLayerId, "fog-border-layer")
+        
+        // Transit Defaults
+        XCTAssertTrue(MapCustomizationDefaults.defaultShowSubwayThoroughfares)
+        XCTAssertEqual(MapCustomizationDefaults.defaultSubwayStationMarkerStyle, .exploredOnly)
+        XCTAssertTrue(MapCustomizationDefaults.defaultShowNearbyBusesLens)
     }
     
     // MARK: - Zero-Geometry Layer Configuration Tests

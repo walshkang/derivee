@@ -21,12 +21,22 @@ struct ContentView: View {
     @AppStorage(AppStorageKeys.selectedBasemapTheme) private var storedTheme: String = ""
     @AppStorage(AppStorageKeys.fogOpacity) private var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
     @AppStorage(AppStorageKeys.showBoundaryBorders) private var showBoundaryBorders: Bool = MapCustomizationDefaults.defaultShowBoundaryBorders
+    @AppStorage(AppStorageKeys.showSubwayThoroughfares) private var showSubwayThoroughfares: Bool = MapCustomizationDefaults.defaultShowSubwayThoroughfares
+    @AppStorage(AppStorageKeys.subwayStationMarkerStyle) private var storedStationMarkerStyle: String = MapCustomizationDefaults.defaultSubwayStationMarkerStyle.rawValue
+    @AppStorage(AppStorageKeys.showNearbyBusesLens) private var showNearbyBusesLens: Bool = MapCustomizationDefaults.defaultShowNearbyBusesLens
+    
+    @State private var nearbyBusStops: [SpatialDatabaseManager.NearbyBusStop] = []
+    @State private var isScanningBuses: Bool = false
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
             return theme
         }
         return colorScheme == .dark ? .night : .day
+    }
+    
+    private var stationMarkerStyle: SubwayStationMarkerStyle {
+        SubwayStationMarkerStyle(rawValue: storedStationMarkerStyle) ?? .exploredOnly
     }
     
     var body: some View {
@@ -53,7 +63,10 @@ struct ContentView: View {
                             transientHexShape: spatialStore.transientHexShape,
                             selectedTheme: currentTheme,
                             fogOpacity: fogOpacity,
-                            showBoundaryBorders: showBoundaryBorders)
+                            showBoundaryBorders: showBoundaryBorders,
+                            showSubwayThoroughfares: showSubwayThoroughfares,
+                            subwayStationMarkerStyle: stationMarkerStyle,
+                            nearbyBusStops: nearbyBusStops)
                         .ignoresSafeArea()
                     
                     GeometryReader { geo in
@@ -80,15 +93,31 @@ struct ContentView: View {
                         
                         Spacer()
                         
-                        HStack {
+                        HStack(alignment: .bottom) {
+                            if showNearbyBusesLens {
+                                NearbyBusesCapsule(
+                                    busStops: nearbyBusStops,
+                                    isLoading: isScanningBuses,
+                                    onSelectStop: { stop in
+                                        selectedTransitStop = stop.id
+                                        showTransitSheet = true
+                                    },
+                                    onRefresh: {
+                                        scanNearbyBuses()
+                                    }
+                                )
+                                .padding(.leading, 20)
+                            }
+                            
                             Spacer()
+                            
                             RecenterFAB(isCentered: isMapCentered) {
                                 recenterTrigger.toggle()
                                 isMapCentered = true
                             }
-                            .padding(.bottom, 40)
                             .padding(.trailing, 20)
                         }
+                        .padding(.bottom, 40)
                     }
                     
                     if let poiName = spatialStore.newlyDiscoveredPOIName {
@@ -111,6 +140,11 @@ struct ContentView: View {
                                 }
                             }
                         }
+                    }
+                }
+                .onAppear {
+                    if showNearbyBusesLens {
+                        scanNearbyBuses()
                     }
                 }
                 .animation(.spring(), value: spatialStore.newlyDiscoveredPOIName)
@@ -154,6 +188,27 @@ struct ContentView: View {
                         glowScale = 4.0
                         glowOpacity = 0.0
                     }
+                }
+            }
+        }
+    }
+    
+    private func scanNearbyBuses() {
+        guard !isScanningBuses else { return }
+        isScanningBuses = true
+        
+        let center = trackingEngine.lastKnownLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
+        
+        Task {
+            do {
+                let stops = try await SpatialDatabaseManager.shared.fetchNearbyBusStops(coordinate: center, radiusMeters: 400.0)
+                await MainActor.run {
+                    self.nearbyBusStops = stops
+                    self.isScanningBuses = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.isScanningBuses = false
                 }
             }
         }

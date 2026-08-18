@@ -11,6 +11,9 @@ struct SettingsView: View {
     @AppStorage(AppStorageKeys.selectedBasemapTheme) private var storedTheme: String = BasemapTheme.night.rawValue
     @AppStorage(AppStorageKeys.fogOpacity) private var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
     @AppStorage(AppStorageKeys.showBoundaryBorders) private var showBoundaryBorders: Bool = MapCustomizationDefaults.defaultShowBoundaryBorders
+    @AppStorage(AppStorageKeys.showSubwayThoroughfares) private var showSubwayThoroughfares: Bool = MapCustomizationDefaults.defaultShowSubwayThoroughfares
+    @AppStorage(AppStorageKeys.subwayStationMarkerStyle) private var storedStationMarkerStyle: String = MapCustomizationDefaults.defaultSubwayStationMarkerStyle.rawValue
+    @AppStorage(AppStorageKeys.showNearbyBusesLens) private var showNearbyBusesLens: Bool = MapCustomizationDefaults.defaultShowNearbyBusesLens
     
     @State private var showResetAlert = false
     @State private var showCacheAlert = false
@@ -45,6 +48,18 @@ struct SettingsView: View {
                 .padding(.vertical, 4)
                 
                 Toggle("Exploration Boundary Borders", isOn: $showBoundaryBorders)
+            }
+            
+            Section(header: Text("Transit & Wayfinding"), footer: Text("Subway thoroughfares render as ambient orienting sub-context under the fog, lighting up vibrantly in explored territory.")) {
+                Toggle("Subway Thoroughfares", isOn: $showSubwayThoroughfares)
+                
+                Picker("Station Markers", selection: $storedStationMarkerStyle) {
+                    ForEach(SubwayStationMarkerStyle.allCases) { style in
+                        Text(style.rawValue).tag(style.rawValue)
+                    }
+                }
+                
+                Toggle("Nearby Buses Quick Lens", isOn: $showNearbyBusesLens)
             }
             
             Section(header: Text("Tracking")) {

@@ -13,9 +13,24 @@ final class TransitRealtimeService: @unchecked Sendable {
         case nqrw = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw"
         case l = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l"
         case sir = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si"
+        case bus = "https://gtfsrt.prod.obanyc.com/tripUpdates"
+        
+        static func isBusRoute(_ routeId: String) -> Bool {
+            let clean = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            if clean.hasPrefix("M") && clean.count > 1 && clean.dropFirst().first?.isNumber == true { return true }
+            if clean.hasPrefix("B") && clean.count > 1 && clean.dropFirst().first?.isNumber == true { return true }
+            if clean.hasPrefix("Q") && clean.count > 1 && clean.dropFirst().first?.isNumber == true { return true }
+            if clean.hasPrefix("BX") && clean.count > 2 && clean.dropFirst(2).first?.isNumber == true { return true }
+            if clean.hasPrefix("S") && clean.count > 1 && clean.dropFirst().first?.isNumber == true { return true }
+            if clean.contains("SBS") || clean.contains("BUS") { return true }
+            return false
+        }
         
         static func feed(for routeId: String) -> SubwayFeed {
             let clean = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            if isBusRoute(clean) {
+                return .bus
+            }
             switch clean {
             case "1", "2", "3", "4", "5", "6", "6X", "7", "7X", "S", "GS":
                 return .numbered
@@ -66,11 +81,11 @@ final class TransitRealtimeService: @unchecked Sendable {
     
     /// Parses binary Protobuf GTFS-RT feed message data into `SpatialDatabaseManager.ArrivalInfo` models
     func parseFeedMessage(data: Data, stopId: String, targetRouteId: String, referenceDate: Date = Date()) throws -> [SpatialDatabaseManager.ArrivalInfo] {
-        let feedMessage = try TransitRealtime_FeedMessage(serializedData: data)
+        let feedMessage = try TransitRealtime_FeedMessage(serializedBytes: data)
         let nowEpoch = Int64(referenceDate.timeIntervalSince1970)
         
-        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64)] = []
-        let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "")
+        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?)] = []
+        let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         
         for entity in feedMessage.entity {
             guard entity.hasTripUpdate else { continue }
@@ -78,7 +93,7 @@ final class TransitRealtimeService: @unchecked Sendable {
             let tripRouteId = tripUpdate.trip.hasRouteID ? tripUpdate.trip.routeID : targetRouteId
             
             // Match stop updates
-            for stopUpdate in tripUpdate.stopTimeUpdate {
+            for (idx, stopUpdate) in tripUpdate.stopTimeUpdate.enumerated() {
                 let currentStopId = stopUpdate.stopID.uppercased()
                 let matches = isStopMatch(currentStopId: currentStopId, targetStopId: cleanStopId)
                 
@@ -97,7 +112,10 @@ final class TransitRealtimeService: @unchecked Sendable {
                     guard diffSec >= -60 else { continue }
                     
                     let destination = resolveDestination(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
-                    rawArrivals.append((line: tripRouteId, destination: destination, arrivalEpoch: arrivalEpoch))
+                    let direction = resolveDirection(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
+                    let stopsAway = idx > 0 ? "\(idx) stops away" : "Approaching"
+                    
+                    rawArrivals.append((line: tripRouteId, destination: destination, arrivalEpoch: arrivalEpoch, direction: direction, distance: stopsAway))
                 }
             }
         }
@@ -112,7 +130,9 @@ final class TransitRealtimeService: @unchecked Sendable {
             return SpatialDatabaseManager.ArrivalInfo(
                 line: item.line,
                 destination: item.destination,
-                minutes: minutes
+                minutes: minutes,
+                direction: item.direction,
+                distanceDescription: item.distance
             )
         }
         
@@ -123,10 +143,21 @@ final class TransitRealtimeService: @unchecked Sendable {
         if currentStopId == targetStopId { return true }
         if currentStopId.hasPrefix(targetStopId) || targetStopId.hasPrefix(currentStopId) { return true }
         // Handle North/Southbound suffixes e.g. "L08N" vs "L08"
-        let baseCurrent = currentStopId.trimmingCharacters(in: CharacterSet(charactersIn: "NS"))
-        let baseTarget = targetStopId.trimmingCharacters(in: CharacterSet(charactersIn: "NS"))
+        let baseCurrent = currentStopId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
+        let baseTarget = targetStopId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
         if !baseCurrent.isEmpty && baseCurrent == baseTarget { return true }
         return false
+    }
+    
+    private func resolveDirection(tripUpdate: TransitRealtime_TripUpdate, line: String, stopId: String) -> String {
+        if stopId.hasSuffix("N") { return "Northbound" }
+        if stopId.hasSuffix("S") { return "Southbound" }
+        if stopId.hasSuffix("E") { return "Eastbound" }
+        if stopId.hasSuffix("W") { return "Westbound" }
+        if SubwayFeed.isBusRoute(line) {
+            return "Local Direction"
+        }
+        return "Uptown / Downtown"
     }
     
     private func resolveDestination(tripUpdate: TransitRealtime_TripUpdate, line: String, stopId: String) -> String {
@@ -179,6 +210,9 @@ final class TransitRealtimeService: @unchecked Sendable {
             if isNorthbound { return "Queens - Jamaica Center" }
             return "Manhattan - Broad St"
         default:
+            if SubwayFeed.isBusRoute(line) {
+                return "\(line) Terminal"
+            }
             return isNorthbound ? "Uptown / Terminal" : "Downtown / Terminal"
         }
     }

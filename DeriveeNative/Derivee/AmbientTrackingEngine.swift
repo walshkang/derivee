@@ -59,6 +59,7 @@ final class AmbientTrackingEngine: ObservableObject {
     @AppStorage(AppStorageKeys.isTrackingEnabled) var isTrackingEnabled = false
     @AppStorage(AppStorageKeys.isLiveActivityEnabled) var isLiveActivityEnabled = true
     @Published var isTracking = false
+    @Published var lastKnownLocation: CLLocation? = nil
     
     private let locationProvider: any LocationProvider
     private let databaseManager: SpatialDatabaseManager
@@ -276,6 +277,7 @@ final class AmbientTrackingEngine: ObservableObject {
             return
         case .accepted(let validLocation, _, let stepDistance):
             sessionDistanceMeters += stepDistance
+            self.lastKnownLocation = validLocation
             
             // Convert to H3 string to avoid blocking the actor
             do {
