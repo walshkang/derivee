@@ -94,4 +94,45 @@ final class NearbyBusLensTests: XCTestCase {
         XCTAssertEqual(arrivals[0].minutes, 4)
         XCTAssertEqual(arrivals[0].direction, "Southbound")
     }
+    
+    @MainActor
+    func testTrackingEngineImmediatelyUpdatesLastKnownLocationOnWarmupFix() async throws {
+        let dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
+        let locationProvider = MockLocationProvider()
+        let engine = AmbientTrackingEngine(locationProvider: locationProvider, databaseManager: dbManager)
+        
+        XCTAssertNil(engine.lastKnownLocation, "Initial lastKnownLocation should be nil before fixes.")
+        
+        engine.startTracking()
+        
+        // Single fix (Warmup 1/2)
+        let singleFix = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 40.7143, longitude: -73.9613),
+            altitude: 0,
+            horizontalAccuracy: 12,
+            verticalAccuracy: 5,
+            timestamp: Date()
+        )
+        locationProvider.yield(location: singleFix)
+        
+        // Give runloop time to process
+        try await Task.sleep(nanoseconds: 100_000_000)
+        
+        XCTAssertNotNil(engine.lastKnownLocation, "Engine should immediately update lastKnownLocation on first valid fix even during warmup.")
+        XCTAssertEqual(engine.lastKnownLocation?.coordinate.latitude ?? 0, 40.7143, accuracy: 0.0001)
+        XCTAssertEqual(engine.lastKnownLocation?.coordinate.longitude ?? 0, -73.9613, accuracy: 0.0001)
+        
+        await engine.stopTracking()
+        locationProvider.finish()
+    }
+    
+    func testNearbyBusStopQueryWilliamsburg() async throws {
+        let bedfordWilliamsburg = CLLocationCoordinate2D(latitude: 40.7143, longitude: -73.9613)
+        let stops = try await SpatialDatabaseManager.shared.fetchNearbyBusStops(coordinate: bedfordWilliamsburg, radiusMeters: 400.0)
+        
+        XCTAssertFalse(stops.isEmpty, "Should find bus stops near Bedford Ave Williamsburg.")
+        for stop in stops {
+            XCTAssertLessThanOrEqual(stop.distanceMeters, 400.0)
+        }
+    }
 }

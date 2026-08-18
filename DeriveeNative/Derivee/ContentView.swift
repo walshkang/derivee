@@ -13,6 +13,8 @@ struct ContentView: View {
     @State private var showStatsView = false
     @State private var userScreenPosition: CGPoint? = nil
     @State private var targetCoordinate: CLLocationCoordinate2D? = nil
+    @State private var currentUserLocation: CLLocationCoordinate2D? = nil
+    @State private var lastScannedLocation: CLLocationCoordinate2D? = nil
     
     @State private var glowScale: CGFloat = 1.0
     @State private var glowOpacity: Double = 0.0
@@ -60,6 +62,7 @@ struct ContentView: View {
                             recenterTrigger: $recenterTrigger,
                             userScreenPosition: $userScreenPosition,
                             targetCoordinate: $targetCoordinate,
+                            currentUserLocation: $currentUserLocation,
                             transientHexShape: spatialStore.transientHexShape,
                             selectedTheme: currentTheme,
                             fogOpacity: fogOpacity,
@@ -98,12 +101,13 @@ struct ContentView: View {
                                 NearbyBusesCapsule(
                                     busStops: nearbyBusStops,
                                     isLoading: isScanningBuses,
+                                    hasLocation: currentUserLocation != nil || trackingEngine.lastKnownLocation != nil,
                                     onSelectStop: { stop in
                                         selectedTransitStop = stop.id
                                         showTransitSheet = true
                                     },
                                     onRefresh: {
-                                        scanNearbyBuses()
+                                        scanNearbyBuses(force: true)
                                     }
                                 )
                                 .padding(.leading, 20)
@@ -143,6 +147,16 @@ struct ContentView: View {
                     }
                 }
                 .onAppear {
+                    if showNearbyBusesLens {
+                        scanNearbyBuses()
+                    }
+                }
+                .onChange(of: currentUserLocation?.latitude) {
+                    if showNearbyBusesLens {
+                        scanNearbyBuses()
+                    }
+                }
+                .onChange(of: trackingEngine.lastKnownLocation) {
                     if showNearbyBusesLens {
                         scanNearbyBuses()
                     }
@@ -193,11 +207,24 @@ struct ContentView: View {
         }
     }
     
-    private func scanNearbyBuses() {
+    private func scanNearbyBuses(force: Bool = false) {
+        guard let center = currentUserLocation ?? trackingEngine.lastKnownLocation?.coordinate else {
+            // GPS acquisition in progress — avoid querying synthetic/fallback coordinates
+            return
+        }
+        
+        // Avoid redundant queries if user moved less than 150m unless explicitly forced
+        if !force, let lastScanned = lastScannedLocation {
+            let lastLoc = CLLocation(latitude: lastScanned.latitude, longitude: lastScanned.longitude)
+            let currLoc = CLLocation(latitude: center.latitude, longitude: center.longitude)
+            if currLoc.distance(from: lastLoc) < 150.0 && !nearbyBusStops.isEmpty {
+                return
+            }
+        }
+        
         guard !isScanningBuses else { return }
         isScanningBuses = true
-        
-        let center = trackingEngine.lastKnownLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
+        lastScannedLocation = center
         
         Task {
             do {

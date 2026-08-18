@@ -15,6 +15,7 @@ struct MapView: UIViewRepresentable {
     @Binding var recenterTrigger: Bool
     @Binding var userScreenPosition: CGPoint?
     @Binding var targetCoordinate: CLLocationCoordinate2D?
+    @Binding var currentUserLocation: CLLocationCoordinate2D?
     var transientHexShape: MLNShape?
     var selectedTheme: BasemapTheme = .night
     var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
@@ -264,6 +265,12 @@ struct MapView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, didUpdate userLocation: MLNUserLocation?) {
             guard let location = userLocation?.location else { return }
             lastLocation = location
+            DispatchQueue.main.async {
+                if self.parent.currentUserLocation?.latitude != location.coordinate.latitude ||
+                   self.parent.currentUserLocation?.longitude != location.coordinate.longitude {
+                    self.parent.currentUserLocation = location.coordinate
+                }
+            }
             if let style = mapView.style {
                 updatePOIs(in: style)
             }

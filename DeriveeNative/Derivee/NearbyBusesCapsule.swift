@@ -5,6 +5,7 @@ import CoreLocation
 struct NearbyBusesCapsule: View {
     let busStops: [SpatialDatabaseManager.NearbyBusStop]
     let isLoading: Bool
+    let hasLocation: Bool
     let onSelectStop: (SpatialDatabaseManager.NearbyBusStop) -> Void
     let onRefresh: () -> Void
     
@@ -14,11 +15,13 @@ struct NearbyBusesCapsule: View {
     init(
         busStops: [SpatialDatabaseManager.NearbyBusStop],
         isLoading: Bool = false,
+        hasLocation: Bool = true,
         onSelectStop: @escaping (SpatialDatabaseManager.NearbyBusStop) -> Void,
         onRefresh: @escaping () -> Void
     ) {
         self.busStops = busStops
         self.isLoading = isLoading
+        self.hasLocation = hasLocation
         self.onSelectStop = onSelectStop
         self.onRefresh = onRefresh
     }
@@ -51,7 +54,16 @@ struct NearbyBusesCapsule: View {
                     }
                     
                     if busStops.isEmpty {
-                        Text(isLoading ? "Scanning stops nearby..." : "No MTA bus stops found within 400m")
+                        let statusText: String = {
+                            if !hasLocation {
+                                return "Acquiring GPS position..."
+                            } else if isLoading {
+                                return "Scanning stops nearby..."
+                            } else {
+                                return "No MTA bus stops found within 400m"
+                            }
+                        }()
+                        Text(statusText)
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.vertical, 4)

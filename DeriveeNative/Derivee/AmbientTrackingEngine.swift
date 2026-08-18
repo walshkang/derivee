@@ -260,6 +260,11 @@ final class AmbientTrackingEngine: ObservableObject {
     }
     
     private func processLocation(_ location: CLLocation) {
+        // Keep lastKnownLocation fresh for immediate UI queries even during warmup or mild accuracy convergence
+        if location.horizontalAccuracy >= 0 && location.horizontalAccuracy <= 100.0 {
+            self.lastKnownLocation = location
+        }
+        
         let filterResult = coldStartFilter.process(location: location)
         
         switch filterResult {
