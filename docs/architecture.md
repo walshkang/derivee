@@ -54,11 +54,14 @@ We abandoned legacy `CLLocationManagerDelegate` callbacks in favor of the modern
 ### 3.2 The Watchdog Shield
 To prevent iOS from terminating the app when running in the background for extended periods, we instantiate a `CLBackgroundActivitySession`. This tells the OS that the location session is critical and must be preserved.
 
-### 3.3 The Drift Gate (Speed Filter)
-To prevent "GPS drift" or multipath errors in urban canyons from unlocking false hexes, an implied speed filter is enforced:
-- Speed is calculated as $\Delta d / \Delta t$ using `update.location`.
-- If speed exceeds **12 m/s** (approx. 27 mph), the point is discarded.
-- This ensures hexes are only unlocked at walking/biking speeds.
+### 3.3 Multi-Stage Cold-Start Filter & Contextual Drift Gate (Wave J.12 & J.14)
+To eliminate urban canyon multipath noise, Rayleigh uncertainty errors, and cold-start convergence spikes, raw GPS fixes pass through `ColdStartLocationFilter` before spatial hashing:
+- **Staleness Check:** Discards cached fixes older than **5.0s** (`.discardedStale`).
+- **Rayleigh Error Bounding:** Rejects fixes where `horizontalAccuracy` exceeds **25.0m** (`.discardedUncertain`), bounding positioning error strictly within the ~28m H3 Resolution 11 cell radius.
+- **Warmup State Machine:** Requires **2 consecutive valid fixes** to establish a solid baseline coordinate before committing the first hex unlock.
+- **Subway Discontinuity & Emergence Classifier:** A temporal gap $\Delta t \ge 15.0\text{s}$ (e.g. subterranean transit travel or cold app resume) classifies the location jump as a legitimate subway emergence rather than pedestrian teleportation, resetting the velocity baseline without discarding the fix.
+- **Continuous Velocity Filter:** Enforces a maximum walking/biking speed limit of **12.0 m/s** (~27 mph).
+- **Decoupled UI GPS Ingestion (Wave J.14):** Immediate UI queries (e.g. the Nearby Buses Quick Lens) read `AmbientTrackingEngine.lastKnownLocation` as soon as any valid GPS fix ($\le 100\text{m}$ accuracy) arrives, without waiting for multi-fix warmup convergence, while hex persistence remains strictly gated.
 
 ### 3.4 Pipeline Diagnostic Logging & Untethered Field Testing
 To diagnose real-world GPS and fog update lifecycle events on physical devices disconnected from Xcode:
@@ -95,29 +98,37 @@ All hexes are calculated at **Resolution 11**.
 
 ---
 
-## 5. Map Rendering
+## 5. Map Rendering & Transit Discovery
 
-### 5.1 MapLibre Native
+### 5.1 MapLibre Native & Volumetric Fog of War
 The visual map is rendered using MapLibre Native.
 - Custom vector styles are injected using Data-Driven Styling (DDS).
-- The volumetric fog is rendered as a dark overlay. The `fog-source` (`MLNShapeSource`) holds a single `MLNPolygon` whose exterior ring is a 50km bounding box and whose interior rings are hex-shaped holes. `SpatialStore.currentFogShape` is passed through `ContentView` → `MapView.fogShape` → `Coordinator.updateExploredHexes()`, which sets `fogSource.shape = validShape` to update the map.
+- The volumetric fog is rendered as a dark overlay via `fog-source` (`MLNShapeSource`).
 - The full reactive chain is: `insertDiscoveredHex()` → GRDB `ValueObservation` fires → `recomputeFogShape()` at `.userInitiated` priority → `currentFogShape` set on `MainActor` → SwiftUI detects `@Observable` change → `updateUIView()` → MapLibre source update. This renders new hex holes in real-time without app restart.
 
-### 5.2 Fog Computation Priority
-All `recomputeFogShape()` invocations run inside `Task.detached(priority: .userInitiated)`. This applies to both the initial cold-start computation and all subsequent live updates triggered by `ValueObservation`.
-- **Why not `.background`:** iOS aggressively deprioritizes `.background` QoS tasks while the app is in the foreground. A `.background` priority fog recomputation gets queued but may not execute for seconds or minutes, causing the `MainActor.run` block (which sets `currentFogShape`) to never fire. This manifests as hexes appearing uncovered only after app restart. This was the root cause of the live-update starvation bug fixed in the `.background` → `.userInitiated` priority change.
-- **Why `.userInitiated` and not synchronous:** The polygon math (building `MLNPolygon` interior rings from H3 boundaries) completes in <1ms for typical hex counts, but running it off the main thread avoids any risk of jank at high hex counts (1000+).
+### 5.2 Closed Loop Fog Islands & FogGeometry (Wave J.11)
+When users walk closed loops around city blocks (e.g. circling a park or neighborhood), the dissolved H3 polygon contains interior unvisited holes (`LinkedGeoLoop.next`).
+- `FogPolygonMath.cellsToFogGeometry()` traverses all `LinkedGeoPolygon` clusters: the outer boundary loop (`first`) forms cutout holes in the bounding box, while interior island loops (`next`) are reversed to clockwise winding to produce disjoint interior fog island polygons.
+- The resulting `FogGeometry.shape` produces an `MLNShapeCollection` (or `MLNPolygon` when no islands exist), ensuring unvisited centers of closed loop walks remain accurately shrouded in fog.
 
-### 5.3 Fog Startup Synchronization
-On cold start, three systems race: `SpatialStore` fog computation, MapLibre style loading, and the first GPS fix. The architecture enforces:
-- **Map Ready Handshake:** A `isMapStyleLoaded` flag in the `MapView.Coordinator` ensures the computed fog shape is applied as soon as both the style and the shape are ready. If the shape is ready first, it's applied when the style loads. If the style loads first, it's applied when the shape arrives via the next `updateUIView` cycle.
-- **Bounding Box Jitter:** The initial fog source uses slightly offset coordinates from the `recomputeFogShape()` output to prevent MapLibre's shape cache from ignoring the first computed update.
+### 5.3 Fog Computation Priority & Handshake
+All `recomputeFogShape()` invocations run inside `Task.detached(priority: .userInitiated)`.
+- **Why not `.background`:** iOS aggressively deprioritizes `.background` QoS tasks while the app is in the foreground. A `.background` priority fog recomputation gets queued but may not execute for seconds or minutes, causing the `MainActor.run` block (which sets `currentFogShape`) to never fire.
+- **Map Ready Handshake:** A `isMapStyleLoaded` flag in the `MapView.Coordinator` ensures the computed fog shape is applied as soon as both the style and the shape are ready.
+- **Polygon Winding Convention:** Exterior bounding box and interior fog islands use clockwise winding; cutout holes use counterclockwise winding.
 
-### 5.3 Polygon Winding Order Convention
-The fog polygon follows the MapLibre Native (iOS) convention:
-- **Exterior ring (50km bounding box):** Clockwise winding.
-- **Interior rings (hex holes):** Winding order is verified empirically per MapLibre version (see Wave I.2 audit). H3's `cellToBoundary` returns counterclockwise coordinates; these are reversed if required by the current MapLibre build.
-- A permanent comment in `SpatialStore.recomputeFogShape()` documents the verified convention.
+### 5.4 Subway Thoroughfares & Transit Context (Wave J.13)
+To orient the explorer without spoiling unexplored territory:
+- Complete NYC Subway track alignments (`MtaSubwayNetworkData`) render beneath the fog layer with day/night adaptive casings (silver `#FFFFFF` / slate `#222433`) and MTA agency colors.
+- Subway thoroughfares glow vibrantly where fog has been uncovered, while providing subtle orienting context under the fog.
+
+### 5.5 Nearby Buses Quick Lens (Wave J.13 & J.14)
+Floating frosted-glass quick discovery capsule (`NearbyBusesCapsule`):
+- **Spatial Query:** Queries SQLite for MTA bus stops within **400m** of the user's coordinate.
+- **Real-Time GTFS-RT Protobuf:** Deserializes live bus arrivals via `TransitRealtimeService` (`gtfs-realtime.pb.swift`) with direction indicators (e.g. "Southbound to South Ferry").
+- **Bi-Directional Location Bridge:** `MapView` binds `currentUserLocation` directly to `ContentView`, ensuring the quick lens is always anchored to the user's live MapLibre location puck.
+- **Deferred Cold-Start Auto-Scan:** Eliminates synthetic fallback data on launch; automatically triggers bus discovery the moment the first valid GPS fix is acquired.
+- **150m Walking Drift Refresh:** Automatically updates nearby buses when the user walks $> 150\text{m}$, with manual refresh (↻) support.
 
 ---
 

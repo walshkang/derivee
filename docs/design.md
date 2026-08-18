@@ -262,14 +262,19 @@ The app has exactly **four** screens. If a screen is not enumerated below, the a
 * **The User Marker:** A native-feeling, smoothly interpolating Electric Amber (`#FFB300`) pulsing dot. Must use MapLibre's built-in user location layer with custom styling — not a custom SwiftUI view overlaid on the map.
 * **Ghost POI Nodes:** Transit beacons visible **only** within the 200m Active Vicinity Bubble. Rendered as unbranded, glowing geometric nodes (dots, diamonds) — never as traditional teardrop map pins or icons with text labels.
 * **Floating Action Buttons (FABs):** Two minimalist, translucent circular buttons floating over the map:
-  * **Recenter FAB** (bottom-right): Re-centers the camera on the user's current GPS position with a smooth 300ms ease animation.
-  * **Profile FAB** (top-right): Navigates to Screen 3 (Stats and Profile). Styled with `UltraThinMaterial` blur and a subtle shadow.
+* **Subway Thoroughfares (Ambient Sub-Context):** Complete NYC subway lines rendered beneath the fog layer with day/night adaptive casings. Explored sections glow vibrantly in true MTA line colors, while unexplored sections act as orienting sub-context under the fog.
+* **Nearby Buses Quick Lens (`NearbyBusesCapsule`):** A floating frosted-glass capsule in the bottom-left of the HUD providing on-demand transit discovery within 400m:
+  * **Dynamic Badge Counter:** Displays the number of nearby bus stops; refreshes automatically when walking drift exceeds 150m.
+  * **Expanded Quick Card:** Lists up to 3 nearest stops with line capsules (e.g. `M15-SBS`, `B62`), walk distances (in meters), and directions.
+  * **Live Protobuf Integration:** Tapping any bus stop opens Screen 2 (Transit Reveal) with live arrivals and destination details.
+  * **Manual Refresh (↻):** Allows instant on-demand rescan. Displays *"Acquiring GPS position..."* during cold startup until GPS fix is locked.
 * **Camera Model (Strict 2D Orthographic Top-Down):** The camera is hard-locked to nadir view (`pitch = 0.0`). Two-finger tilt gestures are disabled (`allowsTilting = false`), and `CameraBounds.shouldAllowCameraChange` rejects any `.gestureTilt` or `pitch > 0` transition. Buildings render as crisp flat 2D footprints across all close zoom levels ($z = 13..24$), eliminating 3D perspective distortion, depth-buffer z-fighting, or building extrusions clipping through the ground-level Fog of War polygon.
 
 **Ambient Tracking:** Tracking begins silently and automatically via the native Swift `AmbientTrackingEngine` the moment Screen 1 mounts. There is **no** manual "Start/Stop Tracking" button. The app is always tracking.
 
 **Interactions:**
-* **Tap Ghost POI:** Triggers a geospatial Point-in-Polygon (PiP) check. If the user is within physical proximity (200m), query `GRDB` synchronously and open Screen 2 (Transit Reveal native `.sheet`).
+* **Tap Ghost POI or Bus Stop:** Triggers a geospatial Point-in-Polygon (PiP) check or quick lens selection, opening Screen 2 (Transit Reveal native `.sheet`).
+* **Tap Nearby Buses Capsule:** Expands the quick discovery card or triggers an immediate rescan.
 * **Tap Recenter FAB:** Smooth camera animation to user location (enforcing `pitch: 0.0`).
 * **Pan & Zoom:** Smooth 2D panning and pinch-to-zoom bounded by the NYC envelope ($40.0^\circ\text{N} \le \text{lat} \le 41.5^\circ\text{N}$, $-74.5^\circ\text{W} \le \text{lon} \le -73.0^\circ\text{W}$) with $0.35^\circ$ elastic rubber-band margin and automatic `.easeOut` rollback.
 * **Tap Profile FAB:** Navigate to Screen 3.

@@ -28,6 +28,10 @@ classDiagram
         -showStatsView: Bool
         -userScreenPosition: CGPoint?
         -targetCoordinate: CLLocationCoordinate2D?
+        -currentUserLocation: CLLocationCoordinate2D?
+        -lastScannedLocation: CLLocationCoordinate2D?
+        -nearbyBusStops: [NearbyBusStop]
+        -isScanningBuses: Bool
         -glowScale: CGFloat
         -glowOpacity: Double
     }
@@ -53,6 +57,8 @@ classDiagram
         +recenterTrigger: Binding~Bool~
         +userScreenPosition: Binding~CGPoint?~
         +targetCoordinate: Binding~CLLocationCoordinate2D?~
+        +currentUserLocation: Binding~CLLocationCoordinate2D?~
+        +nearbyBusStops: [NearbyBusStop]
         +styleURL: URL
     }
 
@@ -67,8 +73,19 @@ classDiagram
         +updateTransientHex()
         +updateTransitSheetState()
         +updatePOIs()
+        +updateNearbyBusStops()
+        +updateSubwayThoroughfares()
         +handleMapTap()
         +setupLayers()
+    }
+
+    class NearbyBusesCapsule {
+        <<SwiftUI View / Screen 1 Quick Lens>>
+        +busStops: [NearbyBusStop]
+        +isLoading: Bool
+        +hasLocation: Bool
+        +onSelectStop: Action
+        +onRefresh: Action
     }
 
     class StatsView {
@@ -136,6 +153,7 @@ classDiagram
         +fetchNeighborhoodName() async
         +fetchExplorationJournalData() async
         +fetchStopDetails() async
+        +fetchNearbyBusStops() async
         +fetchHeadwayData() async
         +loadDiscoveredPOIs() async
         +insertDiscoveredPOI() async
@@ -146,7 +164,8 @@ classDiagram
         -locationManager: CLLocationManager
         -backgroundSession: CLBackgroundActivitySession?
         -updatesTask: Task
-        -lastLocation: CLLocation?
+        -coldStartFilter: ColdStartLocationFilter
+        -lastKnownLocation: CLLocation?
         -lastSavedHex: String?
         -currentActivity: Activity~TrackingAttributes~
         -sessionHexCount: Int
@@ -159,6 +178,27 @@ classDiagram
         +startTracking()
         +stopTracking() async
         -processLocation()
+    }
+
+    class ColdStartLocationFilter {
+        <<Sendable Struct>>
+        +maxStaleness: TimeInterval
+        +targetAccuracy: CLLocationAccuracy
+        +requiredWarmupFixes: Int
+        +maxPedestrianSpeed: Double
+        +temporalGapThreshold: TimeInterval
+        +process(location) → FilterResult
+        +reset()
+    }
+
+    class MtaSubwayNetworkData {
+        <<Static Geometry>>
+        +createSubwayNetworkShape() → MLNShapeCollectionFeature
+    }
+
+    class FogPolygonMath {
+        <<Spatial Math Utility>>
+        +cellsToFogGeometry(hexStrings, bounds) → FogGeometry
     }
 
     class LocationProvider {
@@ -450,27 +490,35 @@ stateDiagram-v2
 
 ## 4. MapLibre Active Layer Stack
 
-The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/DeriveeNative/Derivee/MapView.swift#L227-L283) uses a Data-Driven Styling (DDS) architecture overlaid on MapTiler vector tiles:
+The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/DeriveeNative/Derivee/MapView.swift#L310-L421) uses a Data-Driven Styling (DDS) architecture overlaid on MapTiler vector tiles:
 
 ```
 ▲ Top of Z-Stack
 │
-├── Layer 5: POI Hierarchy (poi-source)
-│   ├── [Z: 5c] poi-archive-layer  (CircleLayer: r=6, opacity=0.15, minZoom=16.5)
-│   ├── [Z: 5b] poi-active-layer   (SymbolLayer: subway diamond / bus dot)
-│   └── [Z: 5a] poi-lure-layer     (CircleLayer: r=12..18 pulse, amber glow)
+├── Layer 6: POI Hierarchy (poi-source)
+│   ├── [Z: 6c] poi-archive-layer  (CircleLayer: r=6, opacity=0.15, minZoom=16.5)
+│   ├── [Z: 6b] poi-active-layer   (SymbolLayer: subway diamond / bus dot)
+│   └── [Z: 6a] poi-lure-layer     (CircleLayer: r=12..18 pulse, amber glow)
+│
+├── Layer 5: Nearby Bus Stops (nearby-bus-stops-source)
+│   └── nearby-bus-stops-layer     (CircleLayer: 6pt cyan #00A1DE with 1.5pt white stroke)
 │
 ├── Layer 4: Ephemeral Route Inspection (ephemeral-route-source)
 │   ├── [Z: 4b] ephemeral-route-layer         (LineLayer: 4pt MTA route color)
-│   └── [Z: 4a] ephemeral-route-casing-layer  (LineLayer: 6pt semi-transparent white casing)
+│   └── [Z: 4a] ephemeral-route-casing-layer  (LineLayer: 6pt semi-transparent silver casing)
 │
-├── Layer 3: Transient Hex Unlock (transient-hex-source)
-│   └── transient-hex-layer (FillLayer: 0.3 -> 0.0 opacity flash on new hex unlock)
+├── Layer 3: Transient Hex Unlock & Pulse (transient-hex-source & transient-pulse-source)
+│   ├── transient-pulse-layer (CircleLayer: 0..80pt amber expanding wave, 1.2s easeOut)
+│   └── transient-hex-layer   (FillLayer: 0.3 -> 0.0 opacity flash on new hex unlock)
 │
 ├── Layer 2: The Fog Mask (fog-source)
 │   ├── [Z: 2b] fog-border-layer (LineLayer: 1.5pt #FFB300 amber boundary outline, opacity 0.0 or 0.75)
-│   └── [Z: 2a] cloud-layer      (FillLayer: 50km CW Bounding Box with CW H3 hex interior hole cutouts)
+│   └── [Z: 2a] cloud-layer      (FillLayer: 50km CW Bounding Box with CW H3 hex interior hole cutouts and interior fog islands)
 │       └── Opacity: 0.60..0.98 (@AppStorage) | Day: #1C1C1E | Night/OLED: #000000 | Transit: #0A0C10
+│
+├── Layer 1.5: Subway Network Thoroughfares (subway-lines-source)
+│   ├── [Z: 1.5b] subway-lines-layer        (LineLayer: 3.0pt dynamic MTA route color expression)
+│   └── [Z: 1.5a] subway-lines-casing-layer (LineLayer: 4.5pt day/night adaptive casing #FFFFFF / #222433)
 │
 └── Layer 1: Base Vector Style
     └── MapTiler Streets v2 (Coastlines, water, street grid, typography, and full-zoom 2D building footprints; 3D extrusions suppressed for coplanar 2D fog alignment)
