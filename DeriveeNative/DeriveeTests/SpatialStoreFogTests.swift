@@ -52,7 +52,16 @@ final class SpatialStoreFogTests: XCTestCase {
     ) async throws -> MLNPolygon {
         let start = Date()
         while Date().timeIntervalSince(start) < timeout {
-            if let polygon = store.currentFogShape as? MLNPolygon {
+            let poly: MLNPolygon?
+            if let directPoly = store.currentFogShape as? MLNPolygon {
+                poly = directPoly
+            } else if let collection = store.currentFogShape as? MLNShapeCollection, let firstPoly = collection.shapes.first as? MLNPolygon {
+                poly = firstPoly
+            } else {
+                poly = nil
+            }
+            
+            if let polygon = poly {
                 let count = polygon.interiorPolygons?.count ?? 0
                 if expectedInteriorCount == nil || count == expectedInteriorCount {
                     return polygon
@@ -63,7 +72,16 @@ final class SpatialStoreFogTests: XCTestCase {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         
-        if let polygon = store.currentFogShape as? MLNPolygon {
+        let poly: MLNPolygon?
+        if let directPoly = store.currentFogShape as? MLNPolygon {
+            poly = directPoly
+        } else if let collection = store.currentFogShape as? MLNShapeCollection, let firstPoly = collection.shapes.first as? MLNPolygon {
+            poly = firstPoly
+        } else {
+            poly = nil
+        }
+        
+        if let polygon = poly {
             let count = polygon.interiorPolygons?.count ?? 0
             if expectedInteriorCount == nil || count == expectedInteriorCount {
                 return polygon
@@ -231,5 +249,48 @@ final class SpatialStoreFogTests: XCTestCase {
         print("⏱️ Dissolution of \(hexSet.count) cells completed in \(String(format: "%.3f", elapsed))ms")
         XCTAssertEqual(dissolved.count, 1, "Connected k-ring of radius 5 must dissolve into 1 macro-polygon.")
         XCTAssertLessThan(elapsed, 15.0, "Dissolution of 91 Res-11 hexes must complete in <15ms (target <5ms).")
+    }
+    
+    @MainActor
+    func testReactivePipelinePreservesCenterFogIslandOnEnclosedLoop() async throws {
+        let centerCell = try H3.latLngToCell(latitude: 40.768075, longitude: -73.981897, resolution: 11)
+        let diskCells = try H3.gridDisk(origin: centerCell, distance: 1)
+        let ringCells = diskCells.filter { $0 != centerCell }
+        XCTAssertEqual(ringCells.count, 6)
+        
+        for cell in ringCells {
+            try await dbManager.insertDiscoveredHex(h3Index: String(cell, radix: 16))
+        }
+        
+        let store = SpatialStore(
+            dbManager: dbManager,
+            liveUpdatePriority: .userInitiated
+        )
+        retainedStores.append(store)
+        
+        let start = Date()
+        var compositeFeature: MLNShapeCollection? = nil
+        while Date().timeIntervalSince(start) < 4.0 {
+            if let collection = store.currentFogShape as? MLNShapeCollection {
+                compositeFeature = collection
+                break
+            }
+            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        
+        XCTAssertNotNil(compositeFeature, "store.currentFogShape must produce an MLNShapeCollection when an unvisited island exists")
+        guard let collection = compositeFeature else { return }
+        
+        XCTAssertEqual(collection.shapes.count, 2, "Collection must contain 1 world mask + 1 island polygon")
+        guard let worldMask = collection.shapes.first as? MLNPolygon,
+              let island = collection.shapes.last as? MLNPolygon else {
+            XCTFail("Collection shapes must be MLNPolygons")
+            return
+        }
+        
+        XCTAssertEqual(worldMask.interiorPolygons?.count, 1, "World mask must have 1 cutout hole")
+        XCTAssertEqual(worldMask.interiorPolygons?.first?.pointCount, 19, "Outer perimeter cutout has 19 points")
+        XCTAssertEqual(island.pointCount, 7, "Center island polygon has 7 points")
     }
 }

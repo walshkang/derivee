@@ -199,4 +199,56 @@ final class H3SpatialMathTests: XCTestCase {
         let fogPoly = FogPolygonMath.generateFogPolygon(hexes: [])
         XCTAssertNil(fogPoly.interiorPolygons, "Empty hex set must generate a fog polygon with nil interior rings.")
     }
+    
+    func testHollowHexRingPreservesCenterFogIslandGeometry() throws {
+        // 1. Arrange: Columbus Circle center cell + 1-ring (7 cells total)
+        let centerCell = try H3.latLngToCell(latitude: 40.768075, longitude: -73.981897, resolution: 11)
+        let diskCells = try H3.gridDisk(origin: centerCell, distance: 1)
+        XCTAssertEqual(diskCells.count, 7)
+        
+        // 2. Remove center cell to create a hollow 6-hex perimeter ring
+        let ringCells = diskCells.filter { $0 != centerCell }
+        XCTAssertEqual(ringCells.count, 6)
+        
+        // 3. Act: Dissolve cells into FogGeometry
+        let bounds = FogPolygonMath.makeDefaultBounds()
+        let fogGeom = FogPolygonMath.dissolveCellsToFogGeometry(cells: ringCells, bounds: bounds)
+        
+        // 4. Assert:
+        // a) World mask has exactly 1 cutout hole (the outer perimeter of the 6-hex loop)
+        XCTAssertEqual(fogGeom.worldMaskPolygon.interiorPolygons?.count, 1)
+        let outerCutout = fogGeom.worldMaskPolygon.interiorPolygons!.first!
+        XCTAssertEqual(outerCutout.pointCount, 19, "6-hex outer perimeter must have 18 vertices + 1 closing point")
+        
+        // b) Exactly 1 additive fog island polygon for the unvisited center
+        XCTAssertEqual(fogGeom.islandPolygons.count, 1, "Must generate exactly 1 center fog island polygon")
+        let islandPoly = fogGeom.islandPolygons.first!
+        XCTAssertEqual(islandPoly.pointCount, 7, "Center unvisited hex island must have 6 vertices + 1 closing point")
+        
+        // c) Verify center coordinate is inside the fog island's bounding rect
+        let centerCoord = try H3.cellToLatLng(cell: centerCell)
+        var islandCoords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: Int(islandPoly.pointCount))
+        islandPoly.getCoordinates(&islandCoords, range: NSRange(location: 0, length: Int(islandPoly.pointCount)))
+        
+        let minLat = islandCoords.map(\.latitude).min()!
+        let maxLat = islandCoords.map(\.latitude).max()!
+        let minLng = islandCoords.map(\.longitude).min()!
+        let maxLng = islandCoords.map(\.longitude).max()!
+        
+        XCTAssertTrue(centerCoord.latitude >= minLat && centerCoord.latitude <= maxLat, "Center cell latitude must be enclosed in island bounds")
+        XCTAssertTrue(centerCoord.longitude >= minLng && centerCoord.longitude <= maxLng, "Center cell longitude must be enclosed in island bounds")
+        
+        // d) Verify Clockwise (CW) winding order on both outer cutout and center island
+        var cutoutCoords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: Int(outerCutout.pointCount))
+        outerCutout.getCoordinates(&cutoutCoords, range: NSRange(location: 0, length: Int(outerCutout.pointCount)))
+        
+        XCTAssertGreaterThan(FogPolygonMath.shoelaceSignedArea(cutoutCoords), 0, "Outer cutout must have Clockwise (CW) winding order")
+        XCTAssertGreaterThan(FogPolygonMath.shoelaceSignedArea(islandCoords), 0, "Fog island must have Clockwise (CW) winding order")
+        
+        // e) Verify composite shape polymorphism
+        let composite = fogGeom.compositeShape
+        XCTAssertTrue(composite is MLNShapeCollection, "Composite shape with islands must be an MLNShapeCollection")
+        let collection = composite as! MLNShapeCollection
+        XCTAssertEqual(collection.shapes.count, 2, "Collection must contain 1 world mask + 1 island polygon")
+    }
 }

@@ -122,15 +122,17 @@ final class SpatialStore: @unchecked Sendable {
                 CLLocationCoordinate2D(latitude: 41.5 + jitter, longitude: -74.5 - jitter)  // Top Left (closed)
             ]
             
-            let innerRings = FogPolygonMath.dissolveHexesToInteriorPolygons(hexes: hexes)
+            let fogGeometry = FogPolygonMath.dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
             
             if Task.isCancelled {
                 logPipeline("📍 [S5 - recomputeFogShape CANCELLED] before polygon construction, hexCount=\(hexes.count)")
                 return
             }
-            print("Generated \(innerRings.count) interior rings for the fog mask")
+            let capturedCutoutCount = fogGeometry.worldMaskPolygon.interiorPolygons?.count ?? 0
+            let capturedIslandCount = fogGeometry.islandPolygons.count
+            print("Generated \(capturedCutoutCount) cutout holes and \(capturedIslandCount) fog islands")
             
-            let fogPolygon = MLNPolygon(coordinates: bounds, count: UInt(bounds.count), interiorPolygons: innerRings.isEmpty ? nil : innerRings)
+            let fogShape = fogGeometry.compositeShape
             
             // If a new hex was unlocked, get its center coordinate
             var newHexLocation: CLLocationCoordinate2D? = nil
@@ -155,15 +157,14 @@ final class SpatialStore: @unchecked Sendable {
             
             let capturedNewHexLocation = newHexLocation
             let capturedTransientShape = transientHexPolygon
-            let capturedRingsCount = innerRings.count
             print("✅ recomputeFogShape EXIT at \(Date())")
             await MainActor.run { [weak self] in
                 if Task.isCancelled {
                     logPipeline("📍 [S5 - recomputeFogShape CANCELLED] inside MainActor.run, hexCount=\(hexes.count)")
                     return
                 }
-                logPipeline("📍 [S5 - recomputeFogShape COMPLETE] Rendering \(capturedRingsCount) interior rings, setting currentFogShape")
-                self?.currentFogShape = fogPolygon
+                logPipeline("📍 [S5 - recomputeFogShape COMPLETE] Rendering \(capturedCutoutCount) cutout holes and \(capturedIslandCount) fog islands, setting currentFogShape")
+                self?.currentFogShape = fogShape
                 self?.transientHexShape = capturedTransientShape
                 if let loc = capturedNewHexLocation {
                     self?.newlyUnlockedHexLocation = loc

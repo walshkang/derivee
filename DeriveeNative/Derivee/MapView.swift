@@ -152,10 +152,15 @@ struct MapView: UIViewRepresentable {
         @objc func appDidEnterBackground() {
             lureTimer?.invalidate()
             lureTimer = nil
+            mapView?.showsUserLocation = false
         }
         
         @objc func appWillEnterForeground() {
             startLureTimer()
+            mapView?.showsUserLocation = true
+            if parent.isCentered {
+                mapView?.setUserTrackingMode(.followWithHeading, animated: false, completionHandler: nil)
+            }
         }
         
         func startLureTimer() {
@@ -394,7 +399,14 @@ struct MapView: UIViewRepresentable {
         }
         
         func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {
-            let interiorCount = (shape as? MLNPolygon)?.interiorPolygons?.count ?? 0
+            let interiorCount: Int
+            if let poly = shape as? MLNPolygon {
+                interiorCount = poly.interiorPolygons?.count ?? 0
+            } else if let collection = shape as? MLNShapeCollection, let poly = collection.shapes.first as? MLNPolygon {
+                interiorCount = poly.interiorPolygons?.count ?? 0
+            } else {
+                interiorCount = 0
+            }
             logPipeline("📍 [S6 - updateExploredHexes] ENTER shape=\(shape != nil ? "present" : "nil"), interiorCount=\(interiorCount), isMapStyleLoaded=\(isMapStyleLoaded)")
             guard let style = mapView.style, let fogSource = style.source(withIdentifier: "fog-source") as? MLNShapeSource else {
                 logPipeline("📍 [S6 - updateExploredHexes] fog-source or style not ready yet")
@@ -405,9 +417,8 @@ struct MapView: UIViewRepresentable {
             
             if let validShape = shape {
                 fogSource.shape = validShape
-                if isMapStyleLoaded, isTransitioningFromInitial, let poly = validShape as? MLNPolygon {
-                    let holes = poly.interiorPolygons?.count ?? 0
-                    print("✅ Deferred fog shape applied (\(holes) holes)")
+                if isMapStyleLoaded, isTransitioningFromInitial {
+                    print("✅ Deferred fog shape applied (\(interiorCount) holes)")
                 }
             } else if isMapStyleLoaded {
                 print("⚠️ Fog shape not yet ready, will apply on next update")
