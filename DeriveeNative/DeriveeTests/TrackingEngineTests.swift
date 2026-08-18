@@ -86,15 +86,20 @@ final class TrackingEngineTests: XCTestCase {
         
         let startDate = Date()
         
+        // Warmup fix 1
         let point1 = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.768075, longitude: -73.981897),
                                 altitude: 0, horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: startDate)
+        // Warmup fix 2 (completes warmup, unlocks hex 1)
+        let point1b = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.768080, longitude: -73.981897),
+                                 altitude: 0, horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: startDate.addingTimeInterval(1))
         
         // 100 meters away, but only 1 second later (100 m/s > 12 m/s drift gate)
         // 0.001 deg is approx 111 meters
         let point2 = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 40.769075, longitude: -73.981897),
-                                altitude: 0, horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: startDate.addingTimeInterval(1))
+                                altitude: 0, horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: startDate.addingTimeInterval(2))
         
         locationProvider.yield(location: point1)
+        locationProvider.yield(location: point1b)
         locationProvider.yield(location: point2)
         
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -103,7 +108,7 @@ final class TrackingEngineTests: XCTestCase {
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
         }
         
-        // Point 1 should be accepted and save a hex. Point 2 should be rejected.
+        // Point 1b completes warmup and saves a hex. Point 2 should be rejected by the drift gate.
         XCTAssertEqual(count, 1, "The drift gate should reject point 2, resulting in only 1 hex written.")
     }
     
@@ -194,9 +199,10 @@ final class TrackingEngineTests: XCTestCase {
         await gpxEngine.stopTracking()
     }
     
-    func testAppTerminationCleanup() async throws {
+    func testAppTerminationPreservesPersistentTrackingPreference() async throws {
         engine.startTracking()
         XCTAssertTrue(engine.isTracking)
+        XCTAssertTrue(engine.isTrackingEnabled)
         
         // Simulating UIApplication.willTerminateNotification lifecycle execution
         engine.handleAppTermination()
@@ -204,8 +210,68 @@ final class TrackingEngineTests: XCTestCase {
         // Calling cleanUpOrphanedLiveActivities should run safely
         engine.cleanUpOrphanedLiveActivities()
         
+        // Runtime tracking is halted, but persistent user preference remains enabled
+        XCTAssertFalse(engine.isTracking)
+        XCTAssertTrue(engine.isTrackingEnabled, "isTrackingEnabled must remain true across app termination so cold launches auto-resume.")
+        
+        // On next launch, resumeTrackingIfNeeded should successfully re-engage tracking
+        engine.resumeTrackingIfNeeded()
+        XCTAssertTrue(engine.isTracking)
+        
         await engine.stopTracking()
         XCTAssertFalse(engine.isTracking)
+        XCTAssertFalse(engine.isTrackingEnabled)
+    }
+    
+    func testColdFixInNewNeighborhoodWithUndeterminedSpeedUnlocksHex() async throws {
+        engine.startTracking()
+        
+        let startDate = Date()
+        // 1. Initial fixes in Brooklyn (DUMBO) with speed = -1 (undetermined hardware speed on cold start)
+        let dumboLoc1 = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 40.7033, longitude: -73.9890),
+            altitude: 0,
+            horizontalAccuracy: 5,
+            verticalAccuracy: 5,
+            course: -1,
+            speed: -1,
+            timestamp: startDate
+        )
+        let dumboLoc2 = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 40.70331, longitude: -73.9890),
+            altitude: 0,
+            horizontalAccuracy: 5,
+            verticalAccuracy: 5,
+            course: -1,
+            speed: -1,
+            timestamp: startDate.addingTimeInterval(1)
+        )
+        locationProvider.yield(location: dumboLoc1)
+        locationProvider.yield(location: dumboLoc2)
+        try await Task.sleep(nanoseconds: 150_000_000)
+        
+        var count = try await dbManager.dbWriter.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+        }
+        XCTAssertEqual(count, 1, "Cold start fixes in Brooklyn should complete warmup and unlock 1 hex.")
+        
+        // 2. Teleport fix in Central Park 30 seconds later (e.g. subway arrival / app reopened) with speed = -1
+        let centralParkLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 40.7829, longitude: -73.9654),
+            altitude: 0,
+            horizontalAccuracy: 5,
+            verticalAccuracy: 5,
+            course: -1,
+            speed: -1,
+            timestamp: startDate.addingTimeInterval(30)
+        )
+        locationProvider.yield(location: centralParkLoc)
+        try await Task.sleep(nanoseconds: 150_000_000)
+        
+        count = try await dbManager.dbWriter.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+        }
+        XCTAssertEqual(count, 2, "Second fix in Central Park after 30s time gap must not be dropped by drift gate and should unlock 2nd hex.")
     }
     
     func testLiveActivityDecoupledPreference() async throws {

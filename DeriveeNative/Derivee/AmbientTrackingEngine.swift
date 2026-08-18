@@ -43,8 +43,8 @@ final class AmbientTrackingEngine: ObservableObject {
     // Persistent task for live updates
     private var updatesTask: Task<Void, Never>?
     
-    // State for tracking previous location to calculate speed if speed is invalid
-    private var lastLocation: CLLocation?
+    // Filter for cold-start convergence, staleness, and contextual drift gating
+    private var coldStartFilter = ColdStartLocationFilter()
     private var lastSavedHex: String?
     private var currentNeighborhood: String?
     
@@ -119,8 +119,10 @@ final class AmbientTrackingEngine: ObservableObject {
             _ = semaphore.wait(timeout: .now() + 0.25)
         }
         
-        // 5. Persist disabled tracking preference so cold boot / wakes do not auto-start
-        isTrackingEnabled = false
+        // 5. Clean up in-memory runtime tracking state (keep persistent isTrackingEnabled preference)
+        coldStartFilter.reset()
+        lastSavedHex = nil
+        currentNeighborhood = nil
         isTracking = false
         
         logPipeline("🛑 [AmbientTrackingEngine] handleAppTermination complete — all location sessions killed")
@@ -211,6 +213,8 @@ final class AmbientTrackingEngine: ObservableObject {
         
         isTrackingEnabled = true
         isTracking = true
+        coldStartFilter.reset()
+        lastSavedHex = nil
         locationManager.allowsBackgroundLocationUpdates = true
         
         // Instantiate the watchdog shield
@@ -246,7 +250,7 @@ final class AmbientTrackingEngine: ObservableObject {
         locationManager.stopUpdatingLocation()
         locationManager.allowsBackgroundLocationUpdates = false
         
-        lastLocation = nil
+        coldStartFilter.reset()
         lastSavedHex = nil
         currentNeighborhood = nil
         
@@ -255,93 +259,89 @@ final class AmbientTrackingEngine: ObservableObject {
     }
     
     private func processLocation(_ location: CLLocation) {
-        // Implied Speed Filter
-        let speed: CLLocationSpeed
+        let filterResult = coldStartFilter.process(location: location)
         
-        if location.speed >= 0 {
-            speed = location.speed
-        } else if let lastLoc = lastLocation {
-            let distance = location.distance(from: lastLoc)
-            let timeDelta = location.timestamp.timeIntervalSince(lastLoc.timestamp)
-            speed = timeDelta > 0 ? distance / timeDelta : 0
-        } else {
-            speed = 0
-        }
-        
-        let stepDistance: CLLocationDistance = (lastLocation != nil) ? location.distance(from: lastLocation!) : 0
-        lastLocation = location
-        
-        // Discard if speed is > 12 m/s (approx 27 mph)
-        if speed > 12.0 {
-            logPipeline("⚠️ Drift gate triggered: Dropping point due to speed (\(speed) m/s)")
+        switch filterResult {
+        case .discardedStale(let age):
+            logPipeline("⚠️ [Filter - Stale] Dropping cached/historical fix (age: \(String(format: "%.1f", age))s)")
             return
-        }
-        
-        sessionDistanceMeters += stepDistance
-        
-        // Convert to H3 string to avoid blocking the actor
-        do {
-            let index = try H3.latLngToCell(latitude: location.coordinate.latitude,
-                                            longitude: location.coordinate.longitude,
-                                            resolution: 11)
-            let indexString = String(index, radix: 16)
+        case .discardedUncertain(let accuracy):
+            logPipeline("⚠️ [Filter - Uncertain] Dropping inaccurate fix (hAcc: \(String(format: "%.1f", accuracy))m > 25m)")
+            return
+        case .warmingUp(let current, let target):
+            logPipeline("⏳ [Filter - Warmup] Buffering fix \(current)/\(target) before first hex unlock")
+            return
+        case .discardedExcessiveSpeed(let speed):
+            logPipeline("⚠️ [Filter - Excessive Speed] Drift gate triggered: Dropping multipath jump (\(String(format: "%.1f", speed)) m/s)")
+            return
+        case .accepted(let validLocation, _, let stepDistance):
+            sessionDistanceMeters += stepDistance
             
-            logPipeline("📍 [S2 - processLocation] hex=\(indexString), timestamp=\(location.timestamp), lastSavedHex=\(lastSavedHex ?? "nil"), speed=\(speed)")
-            
-            // If still within the same hex, refresh rolling stale date & distance metrics
-            if indexString == lastSavedHex {
-                if let activity = currentActivity {
-                    let state = TrackingAttributes.ContentState(
-                        hexesCleared: sessionHexCount,
-                        activeNeighborhood: currentNeighborhood,
-                        distanceMeters: sessionDistanceMeters
-                    )
-                    Task {
-                        await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(45)))
+            // Convert to H3 string to avoid blocking the actor
+            do {
+                let index = try H3.latLngToCell(latitude: validLocation.coordinate.latitude,
+                                                longitude: validLocation.coordinate.longitude,
+                                                resolution: 11)
+                let indexString = String(index, radix: 16)
+                
+                logPipeline("📍 [S2 - processLocation] hex=\(indexString), timestamp=\(validLocation.timestamp), lastSavedHex=\(lastSavedHex ?? "nil"), hAcc=\(validLocation.horizontalAccuracy)")
+                
+                // If still within the same hex, refresh rolling stale date & distance metrics
+                if indexString == lastSavedHex {
+                    if let activity = currentActivity {
+                        let state = TrackingAttributes.ContentState(
+                            hexesCleared: sessionHexCount,
+                            activeNeighborhood: currentNeighborhood,
+                            distanceMeters: sessionDistanceMeters
+                        )
+                        Task {
+                            await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(45)))
+                        }
                     }
+                    return
                 }
-                return
-            }
-            
-            lastSavedHex = indexString
-            
-            Task.detached { [weak self] in
-                guard let self = self else { return }
-                do {
-                    print("⚡️ [AmbientTrackingEngine] processLocation inserting hex \(indexString) using dbWriter pool: \(ObjectIdentifier(self.databaseManager.dbWriter as AnyObject))")
-                    // Hand off to the database
-                    let isNew = try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
-                    logPipeline("📍 [S3 - insertDiscoveredHex] hex=\(indexString), isNew=\(isNew)")
-                    let nbhd = try? await self.databaseManager.fetchNeighborhoodName(for: indexString)
-                    
-                    await MainActor.run {
-                        if let nbhd = nbhd {
-                            self.currentNeighborhood = nbhd
-                        }
-                        if isNew {
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.prepare()
-                            generator.impactOccurred()
-                            self.sessionHexCount += 1
-                        }
-                        if let activity = self.currentActivity {
-                            let state = TrackingAttributes.ContentState(
-                                hexesCleared: self.sessionHexCount,
-                                activeNeighborhood: self.currentNeighborhood,
-                                distanceMeters: self.sessionDistanceMeters
-                            )
-                            Task {
-                                await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(45)))
+                
+                lastSavedHex = indexString
+                
+                Task.detached { [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        print("⚡️ [AmbientTrackingEngine] processLocation inserting hex \(indexString) using dbWriter pool: \(ObjectIdentifier(self.databaseManager.dbWriter as AnyObject))")
+                        // Hand off to the database
+                        let isNew = try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
+                        logPipeline("📍 [S3 - insertDiscoveredHex] hex=\(indexString), isNew=\(isNew)")
+                        let nbhd = try? await self.databaseManager.fetchNeighborhoodName(for: indexString)
+                        
+                        await MainActor.run {
+                            if let nbhd = nbhd {
+                                self.currentNeighborhood = nbhd
+                            }
+                            if isNew {
+                                let generator = UIImpactFeedbackGenerator(style: .light)
+                                generator.prepare()
+                                generator.impactOccurred()
+                                self.sessionHexCount += 1
+                            }
+                            if let activity = self.currentActivity {
+                                let state = TrackingAttributes.ContentState(
+                                    hexesCleared: self.sessionHexCount,
+                                    activeNeighborhood: self.currentNeighborhood,
+                                    distanceMeters: self.sessionDistanceMeters
+                                )
+                                Task {
+                                    await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(45)))
+                                }
                             }
                         }
+                        print("Processed hex: \(indexString) (New: \(isNew))")
+                    } catch {
+                        logPipeline("❌ Failed to process hex: \(error)")
                     }
-                    print("Processed hex: \(indexString) (New: \(isNew))")
-                } catch {
-                    logPipeline("❌ Failed to process hex: \(error)")
                 }
+            } catch {
+                print("Failed to convert hex: \(error)")
             }
-        } catch {
-            print("Failed to convert hex: \(error)")
         }
     }
 }
+
