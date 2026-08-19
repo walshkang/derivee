@@ -97,9 +97,11 @@ final class NearbyBusLensTests: XCTestCase {
     
     @MainActor
     func testTrackingEngineImmediatelyUpdatesLastKnownLocationOnWarmupFix() async throws {
+        let suite = "com.derivee.tests.\(UUID().uuidString)"
+        let userDefaults = UserDefaults(suiteName: suite)!
         let dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
         let locationProvider = MockLocationProvider()
-        let engine = AmbientTrackingEngine(locationProvider: locationProvider, databaseManager: dbManager)
+        let engine = AmbientTrackingEngine(locationProvider: locationProvider, databaseManager: dbManager, userDefaults: userDefaults)
         
         XCTAssertNil(engine.lastKnownLocation, "Initial lastKnownLocation should be nil before fixes.")
         
@@ -124,6 +126,7 @@ final class NearbyBusLensTests: XCTestCase {
         
         await engine.stopTracking()
         locationProvider.finish()
+        userDefaults.removePersistentDomain(forName: suite)
     }
     
     func testNearbyBusStopQueryWilliamsburg() async throws {

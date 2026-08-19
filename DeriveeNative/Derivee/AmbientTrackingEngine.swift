@@ -22,7 +22,7 @@ public struct LiveLocationProvider: LocationProvider {
                         }
                     }
                 } catch {
-                    print("Live updates failed: \(error)")
+                    logPipeline("❌ [LiveLocationProvider] Live updates failed: \(error)")
                     continuation.finish()
                 }
             }
@@ -36,6 +36,7 @@ public struct LiveLocationProvider: LocationProvider {
 @MainActor
 final class AmbientTrackingEngine: ObservableObject {
     private let locationManager = CLLocationManager()
+    private let userDefaults: UserDefaults
     
     // Watchdog Shield to keep app alive in background
     private var backgroundSession: CLBackgroundActivitySession?
@@ -56,17 +57,44 @@ final class AmbientTrackingEngine: ObservableObject {
     private var sessionHexCount: Int = 0
     private var sessionDistanceMeters: Double = 0.0
     
-    @AppStorage(AppStorageKeys.isTrackingEnabled) var isTrackingEnabled = true
-    @AppStorage(AppStorageKeys.isLiveActivityEnabled) var isLiveActivityEnabled = true
+    @Published var isTrackingEnabled: Bool {
+        didSet {
+            userDefaults.set(isTrackingEnabled, forKey: AppStorageKeys.isTrackingEnabled)
+        }
+    }
+    
+    @Published var isLiveActivityEnabled: Bool {
+        didSet {
+            userDefaults.set(isLiveActivityEnabled, forKey: AppStorageKeys.isLiveActivityEnabled)
+        }
+    }
+    
     @Published var isTracking = false
     @Published var lastKnownLocation: CLLocation? = nil
     
     private let locationProvider: any LocationProvider
     private let databaseManager: SpatialDatabaseManager
     
-    init(locationProvider: any LocationProvider = LiveLocationProvider(), databaseManager: SpatialDatabaseManager = .shared) {
+    init(
+        locationProvider: any LocationProvider = LiveLocationProvider(),
+        databaseManager: SpatialDatabaseManager = .shared,
+        userDefaults: UserDefaults = .standard
+    ) {
         self.locationProvider = locationProvider
         self.databaseManager = databaseManager
+        self.userDefaults = userDefaults
+        
+        if userDefaults.object(forKey: AppStorageKeys.isTrackingEnabled) == nil {
+            self.isTrackingEnabled = true
+        } else {
+            self.isTrackingEnabled = userDefaults.bool(forKey: AppStorageKeys.isTrackingEnabled)
+        }
+        
+        if userDefaults.object(forKey: AppStorageKeys.isLiveActivityEnabled) == nil {
+            self.isLiveActivityEnabled = true
+        } else {
+            self.isLiveActivityEnabled = userDefaults.bool(forKey: AppStorageKeys.isLiveActivityEnabled)
+        }
         
         locationManager.distanceFilter = 10.0
         // Note: pausesLocationUpdatesAutomatically doesn't apply to liveUpdates in iOS 17
@@ -210,9 +238,13 @@ final class AmbientTrackingEngine: ObservableObject {
         guard !isTracking else { return }
         logPipeline("▶️ [AmbientTrackingEngine] startTracking called")
         
+        if locationManager.authorizationStatus == .notDetermined {
+            logPipeline("📍 [AmbientTrackingEngine] Authorization is .notDetermined — requesting Always authorization")
+            locationManager.requestAlwaysAuthorization()
+        }
+        
         cleanUpOrphanedLiveActivities()
         
-        isTrackingEnabled = true
         isTracking = true
         coldStartFilter.reset()
         lastSavedHex = nil
@@ -255,7 +287,6 @@ final class AmbientTrackingEngine: ObservableObject {
         lastSavedHex = nil
         currentNeighborhood = nil
         
-        isTrackingEnabled = false
         isTracking = false
     }
     

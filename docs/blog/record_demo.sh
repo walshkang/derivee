@@ -20,15 +20,15 @@ echo "🗺️ GPX Track Path:   ${GPX_PATH}"
 echo "📁 Output Video:     ${OUTPUT_FINAL}"
 echo "======================================================================"
 
-# 1. Bring Simulator to Front
-echo "==> [1/4] Focusing Simulator..."
+# 1. Bring Simulator to Front & Pre-grant Location Privacy Permissions
+echo "==> [1/4] Focusing Simulator and granting CoreLocation permissions..."
 open -a Simulator
+xcrun simctl privacy "${SIMULATOR_NAME}" grant location-always com.derivee.Derivee 2>/dev/null || true
 
-# 2. Set Appearance & Presentation Status Bar on Booted Device
-echo "==> [2/4] Setting Day Mode, pristine status bar, and initial Columbus Circle location..."
+# 2. Terminate Stale App Process, Set Appearance & Launch Fresh
+echo "==> [2/4] Setting Day Mode, pristine status bar, initial Columbus Circle fix, and launching Dérivée..."
+xcrun simctl terminate "${SIMULATOR_NAME}" com.derivee.Derivee 2>/dev/null || true
 xcrun simctl ui "${SIMULATOR_NAME}" appearance light 2>/dev/null || true
-xcrun simctl spawn "${SIMULATOR_NAME}" defaults write com.derivee.Derivee selectedBasemapTheme -string "day" 2>/dev/null || true
-xcrun simctl spawn "${SIMULATOR_NAME}" defaults write com.derivee.Derivee isTrackingEnabled -bool true 2>/dev/null || true
 xcrun simctl location "${SIMULATOR_NAME}" set 40.768075,-73.981897 2>/dev/null || true
 xcrun simctl status_bar "${SIMULATOR_NAME}" override \
     --time "9:41" \
@@ -40,7 +40,8 @@ xcrun simctl status_bar "${SIMULATOR_NAME}" override \
     --batteryState "charged" \
     --batteryLevel 100 2>/dev/null || true
 
-sleep 1
+xcrun simctl launch "${SIMULATOR_NAME}" com.derivee.Derivee -isTrackingEnabled YES -selectedBasemapTheme day 2>/dev/null || true
+sleep 2
 
 # 3. Start High-Definition Screen Recording to /tmp (avoids CoreSimulator sandbox permissions on external drives)
 echo "==> [3/4] Initializing 60fps screen recording..."

@@ -27,16 +27,23 @@ final class TrackingEngineTests: XCTestCase {
     var dbManager: SpatialDatabaseManager!
     var locationProvider: MockLocationProvider!
     var engine: AmbientTrackingEngine!
+    var userDefaults: UserDefaults!
+    var suiteName: String!
     
     override func setUpWithError() throws {
+        suiteName = "com.derivee.tests.\(UUID().uuidString)"
+        userDefaults = UserDefaults(suiteName: suiteName)!
         dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
         locationProvider = MockLocationProvider()
-        engine = AmbientTrackingEngine(locationProvider: locationProvider, databaseManager: dbManager)
+        engine = AmbientTrackingEngine(locationProvider: locationProvider, databaseManager: dbManager, userDefaults: userDefaults)
     }
     
     override func tearDown() async throws {
         await engine.stopTracking()
         locationProvider.finish()
+        if let suite = suiteName {
+            userDefaults?.removePersistentDomain(forName: suite)
+        }
     }
     
     func testValidWalkUnlocksHexes() async throws {
@@ -139,9 +146,10 @@ final class TrackingEngineTests: XCTestCase {
     
     func testResumeTrackingIfNeeded() async throws {
         XCTAssertFalse(engine.isTracking)
-        XCTAssertFalse(engine.isTrackingEnabled)
+        XCTAssertTrue(engine.isTrackingEnabled, "isTrackingEnabled defaults to true in a clean environment")
         
-        // Calling resumeTrackingIfNeeded when isTrackingEnabled is false should do nothing
+        // Disabling isTrackingEnabled and calling resumeTrackingIfNeeded should do nothing
+        engine.isTrackingEnabled = false
         engine.resumeTrackingIfNeeded()
         XCTAssertFalse(engine.isTracking)
         
@@ -152,17 +160,17 @@ final class TrackingEngineTests: XCTestCase {
         
         await engine.stopTracking()
         XCTAssertFalse(engine.isTracking)
-        XCTAssertFalse(engine.isTrackingEnabled)
+        XCTAssertTrue(engine.isTrackingEnabled, "stopTracking only halts runtime execution and preserves user preference")
     }
     
-    func testStopTrackingCleansUpStateAndPersistsDisabledPreference() async throws {
+    func testStopTrackingCleansUpStateAndPreservesPersistentTrackingPreference() async throws {
         engine.startTracking()
         XCTAssertTrue(engine.isTracking)
         XCTAssertTrue(engine.isTrackingEnabled)
         
         await engine.stopTracking()
         XCTAssertFalse(engine.isTracking)
-        XCTAssertFalse(engine.isTrackingEnabled)
+        XCTAssertTrue(engine.isTrackingEnabled, "isTrackingEnabled preference must remain true after runtime stopTracking()")
     }
     
     func testOrphanedLiveActivityCleanup() async throws {
@@ -184,7 +192,7 @@ final class TrackingEngineTests: XCTestCase {
         ]
         
         let gpxProvider = GPXLocationProvider(coordinates: coords, pacing: .immediate)
-        let gpxEngine = AmbientTrackingEngine(locationProvider: gpxProvider, databaseManager: dbManager)
+        let gpxEngine = AmbientTrackingEngine(locationProvider: gpxProvider, databaseManager: dbManager, userDefaults: userDefaults)
         
         gpxEngine.startTracking()
         
@@ -220,7 +228,7 @@ final class TrackingEngineTests: XCTestCase {
         
         await engine.stopTracking()
         XCTAssertFalse(engine.isTracking)
-        XCTAssertFalse(engine.isTrackingEnabled)
+        XCTAssertTrue(engine.isTrackingEnabled)
     }
     
     func testColdFixInNewNeighborhoodWithUndeterminedSpeedUnlocksHex() async throws {

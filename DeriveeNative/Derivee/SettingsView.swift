@@ -67,6 +67,7 @@ struct SettingsView: View {
                     get: { trackingEngine.isTracking },
                     set: { newValue in
                         if newValue {
+                            trackingEngine.isTrackingEnabled = true
                             trackingEngine.startTracking()
                         } else {
                             showPauseTrackingAlert = true
@@ -76,6 +77,7 @@ struct SettingsView: View {
                 .alert("Pause Ambient Exploration?", isPresented: $showPauseTrackingAlert) {
                     Button("Keep Tracking On", role: .cancel) { }
                     Button("Pause Tracking", role: .destructive) {
+                        trackingEngine.isTrackingEnabled = false
                         Task {
                             await trackingEngine.stopTracking()
                         }
