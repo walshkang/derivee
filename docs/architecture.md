@@ -117,10 +117,16 @@ All `recomputeFogShape()` invocations run inside `Task.detached(priority: .userI
 - **Map Ready Handshake:** A `isMapStyleLoaded` flag in the `MapView.Coordinator` ensures the computed fog shape is applied as soon as both the style and the shape are ready.
 - **Polygon Winding Convention:** Exterior bounding box and interior fog islands use clockwise winding; cutout holes use counterclockwise winding.
 
-### 5.4 Subway Thoroughfares & Transit Context (Wave J.13)
+### 5.4 Subway Thoroughfares, Station Markers & Transit Context (Waves J.13 & J.15)
 To orient the explorer without spoiling unexplored territory:
 - Complete NYC Subway track alignments (`MtaSubwayNetworkData`) render beneath the fog layer with day/night adaptive casings (silver `#FFFFFF` / slate `#222433`) and MTA agency colors.
 - Subway thoroughfares glow vibrantly where fog has been uncovered, while providing subtle orienting context under the fog.
+- **Sub-Fog Subway Station Bullets (`subway-station-bullets-layer`):** All ~496 NYC subway station complexes render beneath the fog as 4.5pt circle discs with theme-adaptive fill/casing.
+- **Marker Presentation Modes (`SubwayStationMarkerStyle`):**
+  - **`Explored Only` (Default):** Sub-fog bullets hidden for unexplored stations; explored stations render above the fog in Electric Amber (`#FFB300`) at zoom $\ge 11.0$. Unexplored stations within 1,000m pulse with ambient lure glow.
+  - **`All Stations`:** Sub-fog bullets visible across NYC beneath the fog, fully interactive via map tap to open `TransitRevealSheet`.
+  - **`Hidden`:** Station bullets and ambient lure glow suppressed.
+  - Physical entry within 200m active vicinity triggers discovery haptics/toast and SQLite unlock across all modes.
 
 ### 5.5 Nearby Buses Quick Lens (Wave J.13 & J.14)
 Floating frosted-glass quick discovery capsule (`NearbyBusesCapsule`):

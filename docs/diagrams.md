@@ -75,6 +75,7 @@ classDiagram
         +updatePOIs()
         +updateNearbyBusStops()
         +updateSubwayThoroughfares()
+        +updateSubwayStationBullets()
         +handleMapTap()
         +setupLayers()
     }
@@ -496,9 +497,9 @@ The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/
 ▲ Top of Z-Stack
 │
 ├── Layer 6: POI Hierarchy (poi-source)
-│   ├── [Z: 6c] poi-archive-layer  (CircleLayer: r=6, opacity=0.15, minZoom=16.5)
+│   ├── [Z: 6c] poi-archive-layer  (CircleLayer: r=4.5, amber #FFB300 with 1pt white stroke, opacity=0.85, minZoom=11.0)
 │   ├── [Z: 6b] poi-active-layer   (SymbolLayer: subway diamond / bus dot)
-│   └── [Z: 6a] poi-lure-layer     (CircleLayer: r=12..18 pulse, amber glow)
+│   └── [Z: 6a] poi-lure-layer     (CircleLayer: r=12..18 pulse, amber glow in .exploredOnly mode)
 │
 ├── Layer 5: Nearby Bus Stops (nearby-bus-stops-source)
 │   └── nearby-bus-stops-layer     (CircleLayer: 6pt cyan #00A1DE with 1.5pt white stroke)
@@ -516,9 +517,10 @@ The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/
 │   └── [Z: 2a] cloud-layer      (FillLayer: 50km CW Bounding Box with CW H3 hex interior hole cutouts and interior fog islands)
 │       └── Opacity: 0.60..0.98 (@AppStorage) | Day: #1C1C1E | Night/OLED: #000000 | Transit: #0A0C10
 │
-├── Layer 1.5: Subway Network Thoroughfares (subway-lines-source)
-│   ├── [Z: 1.5b] subway-lines-layer        (LineLayer: 3.0pt dynamic MTA route color expression)
-│   └── [Z: 1.5a] subway-lines-casing-layer (LineLayer: 4.5pt day/night adaptive casing #FFFFFF / #222433)
+├── Layer 1.5: Subway Network Thoroughfares & Sub-Fog Bullets (subway-lines-source & subway-station-bullets-source)
+│   ├── [Z: 1.5c] subway-station-bullets-layer (CircleLayer: 4.5pt day/night adaptive fill & stroke, opacity 0.0 or 0.95)
+│   ├── [Z: 1.5b] subway-lines-layer           (LineLayer: 3.0pt dynamic MTA route color expression)
+│   └── [Z: 1.5a] subway-lines-casing-layer    (LineLayer: 4.5pt day/night adaptive casing #FFFFFF / #222433)
 │
 └── Layer 1: Base Vector Style
     └── MapTiler Streets v2 (Coastlines, water, street grid, typography, and full-zoom 2D building footprints; 3D extrusions suppressed for coplanar 2D fog alignment)

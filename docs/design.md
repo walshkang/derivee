@@ -535,13 +535,19 @@ This section defines visual and interaction standards for upcoming Wave J featur
 * **Delivery:** All layer definitions for all themes are bundled in a single local `composite_style.json` shipped in the iOS app bundle with a shared `maptiler_streets` vector source. The MapTiler API key is injected at runtime — zero remote style endpoint dependency.
 * **Zero-Freeze Transition:** Executed entirely via GPU layer property interpolation (`fillColorTransition`, `lineOpacityTransition`, `backgroundColorTransition`) using `MLNTransition(duration: 0.6)`. Zero style destruction, zero `MLNShapeSource` unmounting, zero data source re-hydration.
 
-### 9.4 Visual Customization Settings (`WJ5-CUSTOMIZATION-SETTINGS`)
-* **Location:** Dedicated "Map Aesthetics & Exploration" section in `SettingsView` (Screen 3). The primary map screen remains free of settings controls, consistent with the "map is the UI" philosophy.
+### 9.4 Visual Customization Settings (`WJ5-CUSTOMIZATION-SETTINGS` & `WJ15-STATION-MARKER-TOGGLE`)
+* **Location:** Dedicated "Map Aesthetics & Exploration" and "Transit & Wayfinding" sections in `SettingsView` (Screen 3). The primary map screen remains free of settings controls, consistent with the "map is the UI" philosophy.
 * **Persistence:** All preferences stored via `@AppStorage` keys for instant reactivity and cross-launch persistence.
 * **Controls:**
   * **Fog Opacity Slider:** Variable alpha (`0.60` to `0.98`) updating fragment shaders in real-time (`fillOpacityTransition = MLNTransition(duration: 0)`).
   * **Hex / Boundary Styling:** Toggle subtle hex grid border lines and boundary highlights via an `MLNLineStyleLayer` attached directly to the existing `fog-source` geometry (`fillOpacityTransition = MLNTransition(duration: 0)`).
   * **Basemap Theme Picker:** Selection of Day, Night, OLED Ultra Dark, or Transit Network theme, triggering the GPU crossfade defined in §9.3.
+  * **Subway Thoroughfares Toggle:** Toggles MTA trunk track geometries (`subwayLinesLayerId` & casing) beneath the fog.
+  * **Station Markers Picker (`SubwayStationMarkerStyle`):**
+    * *Explored Only (Default):* Explored stations render above the fog in Electric Amber (`#FFB300`) with 1pt white stroke at zoom $\ge 11.0$; unexplored stations within 1,000m pulse with ambient lure glow.
+    * *All Stations:* All ~496 NYC subway station complexes render beneath the fog as 4.5pt circle discs (`subway-station-bullets-layer`) with theme-adaptive fill/casing, fully tappable to open `TransitRevealSheet`.
+    * *Hidden:* Station bullets and ambient lure glow suppressed for a clean, minimalist map.
+  * **Nearby Buses Quick Lens Toggle:** Toggles the bottom-left `NearbyBusesCapsule` on the primary map HUD.
 
 ### 9.5 Hybrid Transit Node Tracking View (`WJ6-TRANSIT-NODE-TRACKING`)
 * When the user taps an active transit node in Screen 2:
