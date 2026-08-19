@@ -56,7 +56,7 @@ final class AmbientTrackingEngine: ObservableObject {
     private var sessionHexCount: Int = 0
     private var sessionDistanceMeters: Double = 0.0
     
-    @AppStorage(AppStorageKeys.isTrackingEnabled) var isTrackingEnabled = false
+    @AppStorage(AppStorageKeys.isTrackingEnabled) var isTrackingEnabled = true
     @AppStorage(AppStorageKeys.isLiveActivityEnabled) var isLiveActivityEnabled = true
     @Published var isTracking = false
     @Published var lastKnownLocation: CLLocation? = nil

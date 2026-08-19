@@ -24,3 +24,10 @@ venv/
 .expo/
 .agents/
 skills-lock.json
+
+# Media & Demo Recordings
+*.mp4
+*.mov
+*.webm
+*.avi
+

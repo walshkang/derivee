@@ -27,8 +27,8 @@ enum POIMaskManager {
     /// Maximum distance in meters for the ambient lure glow in unexplored fog
     static let lureMaxRadius: CLLocationDistance = 1000.0
     
-    /// Configures base vector layers by suppressing all commercial/retail/park POIs and stations
-    /// in favor of Dérivée's subway station runtime layer.
+    /// Configures base vector layers by suppressing commercial POIs, base stations, and heavy rail
+    /// in favor of Dérivée's subway network runtime layer.
     static func configureBaseVectorLayers(in style: MLNStyle) {
         for layerId in baseVectorPOILayerIds {
             if let layer = style.layer(withIdentifier: layerId) {
@@ -40,9 +40,16 @@ enum POIMaskManager {
         if let stationLayer = style.layer(withIdentifier: baseStationLayerId) {
             stationLayer.isVisible = false
         }
+        
+        // Suppress heavy rail layers (Metro North, LIRR, Amtrak)
+        for layerId in BasemapThemeManager.railLayerIds {
+            if let layer = style.layer(withIdentifier: layerId) {
+                layer.isVisible = false
+            }
+        }
     }
     
-    /// Updates base vector POI layer visibility. Commercial/retail base POIs remain suppressed.
+    /// Updates base vector POI layer visibility. Commercial/retail base POIs and heavy rail remain suppressed.
     static func updateVectorPOIMasks(in style: MLNStyle, userLocation: CLLocation?) {
         for layerId in baseVectorPOILayerIds {
             if let layer = style.layer(withIdentifier: layerId) {
@@ -51,6 +58,11 @@ enum POIMaskManager {
         }
         if let stationLayer = style.layer(withIdentifier: baseStationLayerId) {
             stationLayer.isVisible = false
+        }
+        for layerId in BasemapThemeManager.railLayerIds {
+            if let layer = style.layer(withIdentifier: layerId) {
+                layer.isVisible = false
+            }
         }
     }
     

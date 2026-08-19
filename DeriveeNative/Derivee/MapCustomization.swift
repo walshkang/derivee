@@ -26,7 +26,7 @@ public enum SubwayStationMarkerStyle: String, CaseIterable, Identifiable, Sendab
 
 /// Constants and defaults for map visual customization (Wave J.5 & J.6)
 public enum MapCustomizationDefaults {
-    public static let defaultTheme = BasemapTheme.night
+    public static let defaultTheme = BasemapTheme.day
     
     // Fog Opacity
     public static let defaultFogOpacity: Double = 0.85

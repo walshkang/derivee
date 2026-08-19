@@ -8,7 +8,7 @@ struct SettingsView: View {
     @ObservedObject var trackingEngine: AmbientTrackingEngine
     var spatialStore: SpatialStore
     
-    @AppStorage(AppStorageKeys.selectedBasemapTheme) private var storedTheme: String = BasemapTheme.night.rawValue
+    @AppStorage(AppStorageKeys.selectedBasemapTheme) private var storedTheme: String = BasemapTheme.day.rawValue
     @AppStorage(AppStorageKeys.fogOpacity) private var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
     @AppStorage(AppStorageKeys.showBoundaryBorders) private var showBoundaryBorders: Bool = MapCustomizationDefaults.defaultShowBoundaryBorders
     @AppStorage(AppStorageKeys.showSubwayThoroughfares) private var showSubwayThoroughfares: Bool = MapCustomizationDefaults.defaultShowSubwayThoroughfares

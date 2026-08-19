@@ -17,7 +17,7 @@ struct MapView: UIViewRepresentable {
     @Binding var targetCoordinate: CLLocationCoordinate2D?
     @Binding var currentUserLocation: CLLocationCoordinate2D?
     var transientHexShape: MLNShape?
-    var selectedTheme: BasemapTheme = .night
+    var selectedTheme: BasemapTheme = .day
     var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
     var showBoundaryBorders: Bool = MapCustomizationDefaults.defaultShowBoundaryBorders
     var showSubwayThoroughfares: Bool = MapCustomizationDefaults.defaultShowSubwayThoroughfares
@@ -34,7 +34,7 @@ struct MapView: UIViewRepresentable {
         mapView.showsUserHeadingIndicator = true
         mapView.allowsTilting = false
         mapView.minimumZoomLevel = 10.5
-        mapView.setCenter(CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060), zoomLevel: 15.5, animated: false)
+        mapView.setCenter(CLLocationCoordinate2D(latitude: 40.768075, longitude: -73.981897), zoomLevel: 16.0, animated: false)
         mapView.userTrackingMode = .followWithHeading
         mapView.delegate = context.coordinator
         

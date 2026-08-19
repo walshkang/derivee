@@ -22,6 +22,7 @@ public struct ColdStartLocationFilter: Sendable {
     private var lastValidLocation: CLLocation?
     private var isWarmingUp: Bool = true
     private var validFixCount: Int = 0
+    private var consecutiveExcessiveSpeedDrops: Int = 0
     
     public let maxStaleness: TimeInterval
     public let targetAccuracy: CLLocationAccuracy
@@ -72,6 +73,7 @@ public struct ColdStartLocationFilter: Sendable {
         guard let previous = lastValidLocation else {
             lastValidLocation = location
             validFixCount = 1
+            consecutiveExcessiveSpeedDrops = 0
             if requiredWarmupFixes <= 1 {
                 isWarmingUp = false
                 return .accepted(location: location, isFirstAcceptedFix: true, stepDistance: 0)
@@ -85,6 +87,7 @@ public struct ColdStartLocationFilter: Sendable {
         // Discontinuity / Temporal Gap (Subway emergence, background wake, cold resume)
         if deltaTime >= temporalGapThreshold {
             lastValidLocation = location
+            consecutiveExcessiveSpeedDrops = 0
             if isWarmingUp {
                 validFixCount = 1
                 return .warmingUp(currentFix: 1, target: requiredWarmupFixes)
@@ -106,9 +109,26 @@ public struct ColdStartLocationFilter: Sendable {
         }
         
         guard effectiveSpeed <= maxPedestrianSpeed else {
+            consecutiveExcessiveSpeedDrops += 1
+            // If multiple consecutive fixes occur at the new location (e.g. teleport or vehicular emergence),
+            // reset baseline so we don't stay wedged forever
+            if consecutiveExcessiveSpeedDrops >= 2 {
+                consecutiveExcessiveSpeedDrops = 0
+                lastValidLocation = location
+                if isWarmingUp {
+                    validFixCount += 1
+                    if validFixCount >= requiredWarmupFixes {
+                        isWarmingUp = false
+                        return .accepted(location: location, isFirstAcceptedFix: true, stepDistance: 0)
+                    }
+                    return .warmingUp(currentFix: validFixCount, target: requiredWarmupFixes)
+                }
+                return .accepted(location: location, isFirstAcceptedFix: false, stepDistance: 0)
+            }
             return .discardedExcessiveSpeed(speed: effectiveSpeed)
         }
         
+        consecutiveExcessiveSpeedDrops = 0
         lastValidLocation = location
         
         if isWarmingUp {
@@ -128,5 +148,6 @@ public struct ColdStartLocationFilter: Sendable {
         lastValidLocation = nil
         isWarmingUp = true
         validFixCount = 0
+        consecutiveExcessiveSpeedDrops = 0
     }
 }

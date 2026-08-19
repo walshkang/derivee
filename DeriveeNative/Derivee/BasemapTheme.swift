@@ -140,7 +140,7 @@ public enum BasemapThemeManager {
         "Tunnel", "Bridge", "Pier", "Pier road", "Pedestrian", "Path",
         "Path minor", "Footway tunnel", "Aqueduct", "Aeroway", "Heliport"
     ]
-    static let railLayerIds = [
+    public static let railLayerIds = [
         "Major rail", "Minor rail", "Railway tunnel",
         "Major rail hatching", "Minor rail hatching", "Railway tunnel hatching",
         "Cablecar", "Cablecar dash"
@@ -226,9 +226,10 @@ public enum BasemapThemeManager {
             }
         }
         
-        // 8. Rail & Transit
+        // 8. Rail & Transit (Turn off heavy rail / commuter rail in favor of subway network)
         for layerId in railLayerIds {
             if let lineLayer = style.layer(withIdentifier: layerId) as? MLNLineStyleLayer {
+                lineLayer.isVisible = false
                 lineLayer.lineColorTransition = transition
                 lineLayer.lineColor = NSExpression(forConstantValue: palette.railColor)
                 lineLayer.lineWidthTransition = transition
