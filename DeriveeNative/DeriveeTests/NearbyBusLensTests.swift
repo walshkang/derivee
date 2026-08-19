@@ -135,4 +135,73 @@ final class NearbyBusLensTests: XCTestCase {
             XCTAssertLessThanOrEqual(stop.distanceMeters, 400.0)
         }
     }
+    
+    func testDistinctStopDetailsForDifferentStops() async throws {
+        let details1 = try await SpatialDatabaseManager.shared.fetchStopDetails(for: "BUS_001")
+        let details2 = try await SpatialDatabaseManager.shared.fetchStopDetails(for: "BUS_002")
+        let details3 = try await SpatialDatabaseManager.shared.fetchStopDetails(for: "BUS_003")
+        
+        XCTAssertNotEqual(details1.name, details2.name, "BUS_001 and BUS_002 must have distinct stop names.")
+        XCTAssertNotEqual(details2.name, details3.name, "BUS_002 and BUS_003 must have distinct stop names.")
+        XCTAssertEqual(details1.name, "1 Av & E 14 St")
+        XCTAssertEqual(details2.name, "E 14 St & 2 Av")
+        XCTAssertEqual(details3.name, "1 Av & E 18 St")
+    }
+    
+    func testRealBusStopsContainExactRoutes() async throws {
+        let unionSq = CLLocationCoordinate2D(latitude: 40.7350, longitude: -73.9905)
+        let stops = try await SpatialDatabaseManager.shared.fetchNearbyBusStops(coordinate: unionSq, radiusMeters: 400.0)
+        
+        XCTAssertFalse(stops.isEmpty)
+        for stop in stops {
+            XCTAssertFalse(stop.routes.isEmpty, "Stop \(stop.name) must have mapped routes.")
+            XCTAssertFalse(stop.id.isEmpty)
+        }
+        
+        // Fetch details for the first real stop
+        let firstStop = stops[0]
+        let details = try await SpatialDatabaseManager.shared.fetchStopDetails(for: firstStop.id)
+        XCTAssertEqual(details.name, firstStop.name)
+        XCTAssertEqual(details.routeType, 3)
+    }
+    
+    func testDynamicProximitySortingRecalculation() {
+        let stopA = SpatialDatabaseManager.NearbyBusStop(
+            id: "A",
+            name: "Stop A",
+            coordinate: CLLocationCoordinate2D(latitude: 40.7300, longitude: -73.9900),
+            distanceMeters: 100,
+            routes: ["M1"],
+            direction: "Northbound"
+        )
+        let stopB = SpatialDatabaseManager.NearbyBusStop(
+            id: "B",
+            name: "Stop B",
+            coordinate: CLLocationCoordinate2D(latitude: 40.7350, longitude: -73.9900),
+            distanceMeters: 200,
+            routes: ["M2"],
+            direction: "Southbound"
+        )
+        
+        var list = [stopA, stopB]
+        XCTAssertEqual(list[0].id, "A")
+        
+        // User moves to 40.7360 (much closer to Stop B)
+        let newLocation = CLLocation(latitude: 40.7360, longitude: -73.9900)
+        var updatedList = list.map { stop in
+            let loc = CLLocation(latitude: stop.coordinate.latitude, longitude: stop.coordinate.longitude)
+            return SpatialDatabaseManager.NearbyBusStop(
+                id: stop.id,
+                name: stop.name,
+                coordinate: stop.coordinate,
+                distanceMeters: newLocation.distance(from: loc),
+                routes: stop.routes,
+                direction: stop.direction
+            )
+        }
+        updatedList.sort { $0.distanceMeters < $1.distanceMeters }
+        
+        XCTAssertEqual(updatedList[0].id, "B", "Stop B should now be first because user is closer to Stop B.")
+        XCTAssertLessThan(updatedList[0].distanceMeters, updatedList[1].distanceMeters)
+    }
 }

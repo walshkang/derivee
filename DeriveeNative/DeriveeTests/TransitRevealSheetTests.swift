@@ -28,10 +28,11 @@ final class TransitRevealSheetTests: XCTestCase {
                     stop_lat REAL NOT NULL,
                     stop_lon REAL NOT NULL,
                     route_type INTEGER NOT NULL DEFAULT 1,
-                    location_type INTEGER NOT NULL DEFAULT 0
+                    location_type INTEGER NOT NULL DEFAULT 0,
+                    routes TEXT NOT NULL DEFAULT ''
                 );
-                INSERT INTO stops VALUES ('stop_bedford', 'Bedford Ave Station', 40.7180, -73.9575, 1, 1);
-                INSERT INTO stops VALUES ('stop_lorimer', 'Lorimer St Station', 40.7140, -73.9500, 1, 1);
+                INSERT INTO stops VALUES ('stop_bedford', 'Bedford Ave Station', 40.7180, -73.9575, 1, 1, 'L');
+                INSERT INTO stops VALUES ('stop_lorimer', 'Lorimer St Station', 40.7140, -73.9500, 1, 1, 'L,G');
                 
                 CREATE TABLE headway_history (
                     stop_id TEXT NOT NULL,

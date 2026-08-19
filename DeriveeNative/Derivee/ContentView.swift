@@ -213,11 +213,30 @@ struct ContentView: View {
             return
         }
         
-        // Avoid redundant queries if user moved less than 150m unless explicitly forced
+        let userLoc = CLLocation(latitude: center.latitude, longitude: center.longitude)
+        
+        // 1. Immediately update distance and re-sort existing stops relative to current live location
+        if !nearbyBusStops.isEmpty {
+            var updatedStops = nearbyBusStops.map { stop in
+                let stopLoc = CLLocation(latitude: stop.coordinate.latitude, longitude: stop.coordinate.longitude)
+                let dist = userLoc.distance(from: stopLoc)
+                return SpatialDatabaseManager.NearbyBusStop(
+                    id: stop.id,
+                    name: stop.name,
+                    coordinate: stop.coordinate,
+                    distanceMeters: dist,
+                    routes: stop.routes,
+                    direction: stop.direction
+                )
+            }
+            updatedStops.sort { $0.distanceMeters < $1.distanceMeters }
+            self.nearbyBusStops = updatedStops
+        }
+        
+        // 2. Query SQLite if forced, or if stops are empty, or if user walked > 30m since last full DB query
         if !force, let lastScanned = lastScannedLocation {
             let lastLoc = CLLocation(latitude: lastScanned.latitude, longitude: lastScanned.longitude)
-            let currLoc = CLLocation(latitude: center.latitude, longitude: center.longitude)
-            if currLoc.distance(from: lastLoc) < 150.0 && !nearbyBusStops.isEmpty {
+            if userLoc.distance(from: lastLoc) < 30.0 && !nearbyBusStops.isEmpty {
                 return
             }
         }

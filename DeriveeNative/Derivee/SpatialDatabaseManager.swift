@@ -94,13 +94,19 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         if !fileManager.fileExists(atPath: targetURL.path) {
             shouldCopy = true
         } else {
-            // 1. Compare modification dates between bundle asset and cached local file
+            // 1. Compare file sizes and modification dates between bundle asset and cached local file
             do {
                 let bundleAttrs = try fileManager.attributesOfItem(atPath: bundleURL.path)
                 let targetAttrs = try fileManager.attributesOfItem(atPath: targetURL.path)
-                if let bundleDate = bundleAttrs[.modificationDate] as? Date,
-                   let targetDate = targetAttrs[.modificationDate] as? Date,
-                   bundleDate > targetDate {
+                let bundleSize = bundleAttrs[.size] as? Int64 ?? 0
+                let targetSize = targetAttrs[.size] as? Int64 ?? 0
+                
+                if targetSize == 0 || (bundleSize > 0 && bundleSize != targetSize) {
+                    print("Bundle \(bundleURL.lastPathComponent) size differs from local copy (\(bundleSize) vs \(targetSize)). Updating...")
+                    shouldCopy = true
+                } else if let bundleDate = bundleAttrs[.modificationDate] as? Date,
+                          let targetDate = targetAttrs[.modificationDate] as? Date,
+                          bundleDate > targetDate {
                     print("Bundle \(bundleURL.lastPathComponent) is newer than local copy (\(bundleDate) > \(targetDate)). Updating...")
                     shouldCopy = true
                 }
@@ -580,8 +586,12 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             var nearbyList: [NearbyBusStop] = []
             
             do {
+                let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stops)")
+                let hasRoutes = columns.contains { ($0["name"] as? String) == "routes" }
+                let routesSelect = hasRoutes ? "routes" : "'' AS routes"
+                
                 let sql = """
-                    SELECT stop_id, stop_name, stop_lat, stop_lon 
+                    SELECT stop_id, stop_name, stop_lat, stop_lon, \(routesSelect) 
                     FROM transit.stops 
                     WHERE location_type = 0 
                       AND stop_lat BETWEEN ? AND ? 
@@ -599,7 +609,13 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     if dist <= radiusMeters {
                         let stopId: String = row["stop_id"]
                         let stopName: String = row["stop_name"]
-                        let inferredRoutes = self.inferBusRoutes(from: stopName, stopId: stopId)
+                        let routesStr: String = (row["routes"] as? String) ?? ""
+                        let routes: [String]
+                        if !routesStr.isEmpty {
+                            routes = routesStr.components(separatedBy: ",").filter { !$0.isEmpty }
+                        } else {
+                            routes = self.inferBusRoutes(from: stopName, stopId: stopId)
+                        }
                         let direction = self.inferBusDirection(from: stopName)
                         
                         nearbyList.append(NearbyBusStop(
@@ -607,7 +623,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                             name: stopName,
                             coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
                             distanceMeters: dist,
-                            routes: inferredRoutes,
+                            routes: routes.isEmpty ? ["MTA"] : routes,
                             direction: direction
                         ))
                     }
@@ -636,12 +652,30 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         
         return try await dbWriter.read { db in
             do {
-                if let row = try Row.fetchOne(db, sql: "SELECT stop_name, location_type FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
+                let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stops)")
+                let hasRoutes = columns.contains { ($0["name"] as? String) == "routes" }
+                let hasLocationType = columns.contains { ($0["name"] as? String) == "location_type" }
+                let routesSelect = hasRoutes ? "routes" : "'' AS routes"
+                let locTypeSelect = hasLocationType ? "location_type" : "1 AS location_type"
+                
+                let sql = "SELECT stop_name, \(locTypeSelect), \(routesSelect) FROM transit.stops WHERE stop_id = ?"
+                if let row = try Row.fetchOne(db, sql: sql, arguments: [stopId]) {
                     let name: String = row["stop_name"]
                     let locationType: Int = row["location_type"] ?? 1
+                    let routesStr: String? = row["routes"]
                     let isBus = locationType == 0 || stopId.hasPrefix("BUS_") || name.contains("/")
                     let routeType = isBus ? 3 : 1
-                    let routeId = isBus ? self.inferBusRoutes(from: name, stopId: stopId).first ?? "M15" : self.inferRouteId(from: stopId, name: name)
+                    
+                    let routeId: String
+                    if isBus {
+                        if let rStr = routesStr, !rStr.isEmpty, let firstRoute = rStr.components(separatedBy: ",").first, !firstRoute.isEmpty {
+                            routeId = firstRoute
+                        } else {
+                            routeId = self.inferBusRoutes(from: name, stopId: stopId).first ?? "M15"
+                        }
+                    } else {
+                        routeId = self.inferRouteId(from: stopId, name: name)
+                    }
                     
                     let arrivals = isBus ? self.generateBusArrivals(for: routeId, stopName: name) : self.generateArrivals(for: routeId)
                     return StopDetails(stopId: stopId, name: name, routeId: routeId, routeType: routeType, arrivals: arrivals)
@@ -652,25 +686,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 throw error
             }
             
-            let isBus = stopId.hasPrefix("BUS_")
-            let routeId = isBus ? "M15" : "L"
-            let routeType = isBus ? 3 : 1
-            let name = isBus ? "1 Av / E 14 St (Bus Stop)" : "14th St - Union Sq"
-            
-            return StopDetails(
-                stopId: stopId,
-                name: name,
-                routeId: routeId,
-                routeType: routeType,
-                arrivals: isBus ? [
-                    ArrivalInfo(line: "M15-SBS", destination: "South Ferry", minutes: 2, direction: "Southbound", distanceDescription: "0.3 mi away"),
-                    ArrivalInfo(line: "M15", destination: "Lower East Side", minutes: 8, direction: "Southbound", distanceDescription: "1.1 mi away"),
-                    ArrivalInfo(line: "M14A+", destination: "Lower East Side", minutes: 12, direction: "Eastbound", distanceDescription: "1.8 mi away")
-                ] : [
-                    ArrivalInfo(line: "L", destination: "Manhattan - 8th Ave", minutes: 3, direction: "Northbound", distanceDescription: "2 stops away"),
-                    ArrivalInfo(line: "L", destination: "Brooklyn - Rockaway Pkwy", minutes: 7, direction: "Southbound", distanceDescription: "5 stops away")
-                ]
-            )
+            return self.generateFallbackStopDetails(for: stopId)
         }
     }
     
@@ -763,32 +779,98 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     private func generateFallbackNearbyBusStops(for coordinate: CLLocationCoordinate2D, radiusMeters: Double) -> [NearbyBusStop] {
+        let userLoc = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        
+        let c1 = CLLocationCoordinate2D(latitude: coordinate.latitude + 0.0012, longitude: coordinate.longitude + 0.0008)
+        let c2 = CLLocationCoordinate2D(latitude: coordinate.latitude - 0.0010, longitude: coordinate.longitude + 0.0015)
+        let c3 = CLLocationCoordinate2D(latitude: coordinate.latitude + 0.0020, longitude: coordinate.longitude - 0.0006)
+        
+        let d1 = userLoc.distance(from: CLLocation(latitude: c1.latitude, longitude: c1.longitude))
+        let d2 = userLoc.distance(from: CLLocation(latitude: c2.latitude, longitude: c2.longitude))
+        let d3 = userLoc.distance(from: CLLocation(latitude: c3.latitude, longitude: c3.longitude))
+        
         return [
             NearbyBusStop(
                 id: "BUS_001",
                 name: "1 Av & E 14 St",
-                coordinate: CLLocationCoordinate2D(latitude: coordinate.latitude + 0.0015, longitude: coordinate.longitude + 0.0010),
-                distanceMeters: min(150, radiusMeters * 0.4),
+                coordinate: c1,
+                distanceMeters: d1,
                 routes: ["M15-SBS", "M15"],
                 direction: "Southbound to South Ferry"
             ),
             NearbyBusStop(
                 id: "BUS_002",
                 name: "E 14 St & 2 Av",
-                coordinate: CLLocationCoordinate2D(latitude: coordinate.latitude - 0.0012, longitude: coordinate.longitude + 0.0018),
-                distanceMeters: min(240, radiusMeters * 0.6),
+                coordinate: c2,
+                distanceMeters: d2,
                 routes: ["M14A-SBS", "M14D-SBS"],
                 direction: "Eastbound to Lower East Side"
             ),
             NearbyBusStop(
                 id: "BUS_003",
                 name: "1 Av & E 18 St",
-                coordinate: CLLocationCoordinate2D(latitude: coordinate.latitude + 0.0028, longitude: coordinate.longitude - 0.0005),
-                distanceMeters: min(320, radiusMeters * 0.8),
+                coordinate: c3,
+                distanceMeters: d3,
                 routes: ["M15-SBS", "M101"],
                 direction: "Northbound to East Harlem"
             )
         ]
+    }
+    
+    private func generateFallbackStopDetails(for stopId: String) -> StopDetails {
+        switch stopId {
+        case "BUS_001":
+            return StopDetails(
+                stopId: stopId,
+                name: "1 Av & E 14 St",
+                routeId: "M15-SBS",
+                routeType: 3,
+                arrivals: [
+                    ArrivalInfo(line: "M15-SBS", destination: "South Ferry", minutes: 2, direction: "Southbound", distanceDescription: "0.3 mi away"),
+                    ArrivalInfo(line: "M15", destination: "Lower East Side", minutes: 8, direction: "Southbound", distanceDescription: "1.1 mi away")
+                ]
+            )
+        case "BUS_002":
+            return StopDetails(
+                stopId: stopId,
+                name: "E 14 St & 2 Av",
+                routeId: "M14A-SBS",
+                routeType: 3,
+                arrivals: [
+                    ArrivalInfo(line: "M14A-SBS", destination: "Lower East Side", minutes: 4, direction: "Eastbound", distanceDescription: "0.4 mi away"),
+                    ArrivalInfo(line: "M14D-SBS", destination: "Chelsea Piers", minutes: 11, direction: "Westbound", distanceDescription: "1.2 mi away")
+                ]
+            )
+        case "BUS_003":
+            return StopDetails(
+                stopId: stopId,
+                name: "1 Av & E 18 St",
+                routeId: "M15",
+                routeType: 3,
+                arrivals: [
+                    ArrivalInfo(line: "M15", destination: "East Harlem", minutes: 5, direction: "Northbound", distanceDescription: "0.6 mi away"),
+                    ArrivalInfo(line: "M101", destination: "Fort George", minutes: 13, direction: "Northbound", distanceDescription: "1.4 mi away")
+                ]
+            )
+        default:
+            let isBus = stopId.hasPrefix("BUS_")
+            let routeId = isBus ? "M15" : "L"
+            let routeType = isBus ? 3 : 1
+            let name = isBus ? "Bus Stop (\(stopId))" : "Transit Station (\(stopId))"
+            return StopDetails(
+                stopId: stopId,
+                name: name,
+                routeId: routeId,
+                routeType: routeType,
+                arrivals: isBus ? [
+                    ArrivalInfo(line: "M15-SBS", destination: "South Ferry", minutes: 3, direction: "Southbound", distanceDescription: "0.4 mi away"),
+                    ArrivalInfo(line: "M15", destination: "Terminal", minutes: 9, direction: "Southbound", distanceDescription: "1.2 mi away")
+                ] : [
+                    ArrivalInfo(line: "L", destination: "Manhattan - 8th Ave", minutes: 3, direction: "Northbound", distanceDescription: "2 stops away"),
+                    ArrivalInfo(line: "L", destination: "Brooklyn - Rockaway Pkwy", minutes: 7, direction: "Southbound", distanceDescription: "5 stops away")
+                ]
+            )
+        }
     }
     
     private func generateArrivals(for routeId: String) -> [ArrivalInfo] {
