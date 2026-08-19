@@ -109,4 +109,27 @@ final class CustomizationSettingsTests: XCTestCase {
         // Assert shape instance pointer did not change
         XCTAssertTrue(fogSource.shape === initialPolygon, "Fog source shape must not be recomputed on opacity change")
     }
+    
+    func testSubwayStationMarkerStyleCases() {
+        XCTAssertEqual(SubwayStationMarkerStyle.allCases.count, 3)
+        XCTAssertEqual(SubwayStationMarkerStyle.exploredOnly.rawValue, "Explored Only")
+        XCTAssertEqual(SubwayStationMarkerStyle.allStations.rawValue, "All Stations")
+        XCTAssertEqual(SubwayStationMarkerStyle.hidden.rawValue, "Hidden")
+    }
+    
+    func testSubwayStationBulletsLayerConfiguration() {
+        let bulletsSource = MLNShapeSource(identifier: MapCustomizationDefaults.subwayStationBulletsSourceId, features: [], options: nil)
+        let bulletsLayer = MLNCircleStyleLayer(identifier: MapCustomizationDefaults.subwayStationBulletsLayerId, source: bulletsSource)
+        
+        bulletsLayer.circleColor = NSExpression(forConstantValue: UIColor.white)
+        bulletsLayer.circleRadius = NSExpression(forConstantValue: 4.5)
+        bulletsLayer.circleStrokeColor = NSExpression(forConstantValue: UIColor.black)
+        bulletsLayer.circleStrokeWidth = NSExpression(forConstantValue: 1.0)
+        bulletsLayer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)
+        bulletsLayer.circleOpacity = NSExpression(forConstantValue: 0.95)
+        
+        XCTAssertEqual(bulletsLayer.identifier, "subway-station-bullets-layer")
+        XCTAssertEqual(bulletsLayer.sourceIdentifier, "subway-station-bullets-source")
+        XCTAssertEqual(bulletsLayer.circleOpacityTransition.duration, 0)
+    }
 }

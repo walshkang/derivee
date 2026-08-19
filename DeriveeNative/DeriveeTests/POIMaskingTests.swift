@@ -87,6 +87,50 @@ final class POIMaskingTests: XCTestCase {
         XCTAssertEqual(h3Index.count, 15, "H3 Res-11 index hex string should be 15 characters")
     }
     
+    func testHiddenMarkerStyleSuppressesAllMarkers() {
+        let userLocation = CLLocation(latitude: 40.7128, longitude: -74.0060)
+        let nearCoord = CLLocationCoordinate2D(latitude: 40.7132, longitude: -74.0060)
+        let hex = "8b2a100d6c91fff"
+        let poi = GhostPOI(id: "stop_1", name: "Nearby Stop", coordinate: nearCoord, type: 1, h3Index: hex)
+        
+        let phase = POIMaskManager.resolvePhase(
+            poi: poi,
+            userLocation: userLocation,
+            exploredHexes: [hex],
+            discoveredPOIs: ["stop_1"],
+            markerStyle: .hidden
+        )
+        
+        XCTAssertNil(phase, "Hidden marker style must return nil to suppress all visual markers on map")
+    }
+    
+    func testAllStationsMarkerStyleWithActiveAndExplored() {
+        let userLocation = CLLocation(latitude: 40.7128, longitude: -74.0060)
+        let nearCoord = CLLocationCoordinate2D(latitude: 40.7132, longitude: -74.0060)
+        let hex = "8b2a100d6c91fff"
+        let poiNear = GhostPOI(id: "stop_near", name: "Near Stop", coordinate: nearCoord, type: 1, h3Index: hex)
+        
+        let phaseNear = POIMaskManager.resolvePhase(
+            poi: poiNear,
+            userLocation: userLocation,
+            exploredHexes: [],
+            discoveredPOIs: [],
+            markerStyle: .allStations
+        )
+        XCTAssertEqual(phaseNear, 2, "POI <= 200m in .allStations mode should still resolve to Phase 2 (Active)")
+        
+        let farCoord = CLLocationCoordinate2D(latitude: 40.7350, longitude: -74.0060)
+        let poiExploredFar = GhostPOI(id: "stop_exp_far", name: "Explored Far Stop", coordinate: farCoord, type: 1, h3Index: "8b2a100d6c93fff")
+        let phaseExploredFar = POIMaskManager.resolvePhase(
+            poi: poiExploredFar,
+            userLocation: userLocation,
+            exploredHexes: ["8b2a100d6c93fff"],
+            discoveredPOIs: [],
+            markerStyle: .allStations
+        )
+        XCTAssertEqual(phaseExploredFar, 3, "Explored POI in .allStations mode should resolve to Phase 3 (Archive)")
+    }
+    
     func testBaseVectorPOILayersDefinition() {
         XCTAssertEqual(POIMaskManager.baseVectorPOILayerIds.count, 10)
         XCTAssertTrue(POIMaskManager.baseVectorPOILayerIds.contains("Public"))

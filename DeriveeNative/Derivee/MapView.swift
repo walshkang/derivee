@@ -66,6 +66,7 @@ struct MapView: UIViewRepresentable {
             context.coordinator.updateFogOpacity(fogOpacity, in: style)
             context.coordinator.updateBoundaryBorders(showBoundaryBorders, in: style)
             context.coordinator.updateSubwayThoroughfares(show: showSubwayThoroughfares, theme: selectedTheme, in: style)
+            context.coordinator.updateSubwayStationBullets(style: subwayStationMarkerStyle, theme: selectedTheme, in: style)
             context.coordinator.updateNearbyBusStops(nearbyBusStops, in: style)
             context.coordinator.updatePOIs(in: style)
         }
@@ -109,6 +110,7 @@ struct MapView: UIViewRepresentable {
         let subwayLinesSourceId = MapCustomizationDefaults.subwayLinesSourceId
         let subwayLinesCasingLayerId = MapCustomizationDefaults.subwayLinesCasingLayerId
         let subwayLinesLayerId = MapCustomizationDefaults.subwayLinesLayerId
+        let subwayStationBulletsSourceId = MapCustomizationDefaults.subwayStationBulletsSourceId
         let subwayStationBulletsLayerId = MapCustomizationDefaults.subwayStationBulletsLayerId
         let nearbyBusStopsSourceId = MapCustomizationDefaults.nearbyBusStopsSourceId
         let nearbyBusStopsLayerId = MapCustomizationDefaults.nearbyBusStopsLayerId
@@ -195,7 +197,7 @@ struct MapView: UIViewRepresentable {
         func loadPOIs() {
             Task {
                 do {
-                    pois = try await SpatialDatabaseManager.shared.dbWriter.read { db in
+                    let loadedPOIs = try await SpatialDatabaseManager.shared.dbWriter.read { db in
                         let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1")
                         return rows.map { row in
                             let lat: Double = row["stop_lat"]
@@ -212,6 +214,13 @@ struct MapView: UIViewRepresentable {
                             )
                         }
                     }
+                    await MainActor.run {
+                        self.pois = loadedPOIs
+                        if let style = self.mapView?.style {
+                            self.populateSubwayStationBullets(in: style)
+                            self.updatePOIs(in: style)
+                        }
+                    }
                 } catch {
                     print("⚠️ Transit POIs unavailable: \(error)")
                 }
@@ -226,12 +235,15 @@ struct MapView: UIViewRepresentable {
             style.setImage(subwayDiamond, forName: "poi-subway-1")
             
             setupLayers(in: style)
+            populateSubwayStationBullets(in: style)
             let initialTheme = parent.selectedTheme
             BasemapThemeManager.applyTheme(initialTheme, in: style, animated: false)
             lastAppliedTheme = initialTheme
             
             updateFogOpacity(parent.fogOpacity, in: style)
             updateBoundaryBorders(parent.showBoundaryBorders, in: style)
+            updateSubwayThoroughfares(show: parent.showSubwayThoroughfares, theme: initialTheme, in: style)
+            updateSubwayStationBullets(style: parent.subwayStationMarkerStyle, theme: initialTheme, in: style)
             updatePOIs(in: style)
             updateExploredHexes(in: mapView, with: parent.spatialStore.currentFogShape)
             startLureTimer()
@@ -336,6 +348,21 @@ struct MapView: UIViewRepresentable {
             subwayLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.insertLayer(subwayLinesLayer, above: subwayCasingLayer)
             
+            // Sub-fog Subway Station Bullets (Orienting nodes beneath Fog of War)
+            let bulletsSource = MLNShapeSource(identifier: subwayStationBulletsSourceId, features: [], options: nil)
+            style.addSource(bulletsSource)
+            
+            let bulletsLayer = MLNCircleStyleLayer(identifier: subwayStationBulletsLayerId, source: bulletsSource)
+            let bulletFillColor = parent.selectedTheme == .day ? UIColor(hex: "#1C1C1E") : UIColor(hex: "#FFFFFF")
+            let bulletStrokeColor = parent.selectedTheme == .day ? UIColor(hex: "#FFFFFF") : UIColor(hex: "#222433")
+            bulletsLayer.circleColor = NSExpression(forConstantValue: bulletFillColor)
+            bulletsLayer.circleRadius = NSExpression(forConstantValue: 4.5)
+            bulletsLayer.circleStrokeColor = NSExpression(forConstantValue: bulletStrokeColor)
+            bulletsLayer.circleStrokeWidth = NSExpression(forConstantValue: 1.0)
+            bulletsLayer.circleOpacity = NSExpression(forConstantValue: parent.subwayStationMarkerStyle == .allStations ? 0.95 : 0.0)
+            bulletsLayer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)
+            style.insertLayer(bulletsLayer, above: subwayLinesLayer)
+            
             // VERIFIED: MapLibre Native (iOS) initial fog shape requires CW winding order for exterior bounds.
             // Matches SpatialStore bounds order (Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left -> Top-Left).
             // Tested & hardened in Wave I.2 (WI2-WINDING).
@@ -355,7 +382,7 @@ struct MapView: UIViewRepresentable {
             let colorHex = parent.colorScheme == .dark ? "#000000" : "#1C1C1E"
             fogLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
             fogLayer.fillOpacity = NSExpression(forConstantValue: parent.fogOpacity)
-            style.insertLayer(fogLayer, above: subwayLinesLayer)
+            style.insertLayer(fogLayer, above: bulletsLayer)
             
             let borderLayer = MLNLineStyleLayer(identifier: fogBorderLayerId, source: fogSource)
             borderLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: MapCustomizationDefaults.boundaryBorderColorHex))
@@ -418,9 +445,11 @@ struct MapView: UIViewRepresentable {
             let archiveLayer = MLNCircleStyleLayer(identifier: archiveLayerId, source: source)
             archiveLayer.predicate = NSPredicate(format: "phase == 3")
             archiveLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
-            archiveLayer.circleRadius = NSExpression(forConstantValue: 6)
-            archiveLayer.circleOpacity = NSExpression(forConstantValue: 0.15)
-            archiveLayer.minimumZoomLevel = 16.5
+            archiveLayer.circleRadius = NSExpression(forConstantValue: 4.5)
+            archiveLayer.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
+            archiveLayer.circleStrokeWidth = NSExpression(forConstantValue: 1.0)
+            archiveLayer.circleOpacity = NSExpression(forConstantValue: 0.85)
+            archiveLayer.minimumZoomLevel = 11.0
             style.insertLayer(archiveLayer, above: activeLayer)
             
             // Suppress commercial/park vector POIs & base stations in favor of subway POIs
@@ -442,6 +471,34 @@ struct MapView: UIViewRepresentable {
             if let linesLayer = style.layer(withIdentifier: subwayLinesLayerId) as? MLNLineStyleLayer {
                 linesLayer.lineOpacity = NSExpression(forConstantValue: show ? 0.95 : 0.0)
             }
+        }
+        
+        func updateSubwayStationBullets(style markerStyle: SubwayStationMarkerStyle, theme: BasemapTheme, in style: MLNStyle) {
+            guard isMapStyleLoaded else { return }
+            if let bulletsLayer = style.layer(withIdentifier: subwayStationBulletsLayerId) as? MLNCircleStyleLayer {
+                let bulletFillColor = theme == .day ? UIColor(hex: "#1C1C1E") : UIColor(hex: "#FFFFFF")
+                let bulletStrokeColor = theme == .day ? UIColor(hex: "#FFFFFF") : UIColor(hex: "#222433")
+                bulletsLayer.circleColor = NSExpression(forConstantValue: bulletFillColor)
+                bulletsLayer.circleStrokeColor = NSExpression(forConstantValue: bulletStrokeColor)
+                bulletsLayer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)
+                bulletsLayer.circleOpacity = NSExpression(forConstantValue: markerStyle == .allStations ? 0.95 : 0.0)
+            }
+        }
+        
+        func populateSubwayStationBullets(in style: MLNStyle) {
+            guard let bulletsSource = style.source(withIdentifier: subwayStationBulletsSourceId) as? MLNShapeSource else { return }
+            var features: [MLNPointFeature] = []
+            for poi in pois {
+                let feature = MLNPointFeature()
+                feature.coordinate = poi.coordinate
+                feature.attributes = [
+                    "id": poi.id,
+                    "name": poi.name,
+                    "type": poi.type
+                ]
+                features.append(feature)
+            }
+            bulletsSource.shape = MLNShapeCollectionFeature(shapes: features)
         }
         
         func updateNearbyBusStops(_ stops: [SpatialDatabaseManager.NearbyBusStop], in style: MLNStyle) {
@@ -468,6 +525,7 @@ struct MapView: UIViewRepresentable {
                 lastAppliedTheme = theme
                 BasemapThemeManager.applyTheme(theme, in: style, animated: true)
                 updateSubwayThoroughfares(show: parent.showSubwayThoroughfares, theme: theme, in: style)
+                updateSubwayStationBullets(style: parent.subwayStationMarkerStyle, theme: theme, in: style)
             }
         }
         
@@ -653,13 +711,15 @@ struct MapView: UIViewRepresentable {
             var features: [MLNPointFeature] = []
             let exploredHexes = parent.spatialStore.exploredHexes
             let discoveredPOIs = parent.spatialStore.discoveredPOIs
+            let markerStyle = parent.subwayStationMarkerStyle
             
             for poi in pois {
                 guard let phase = POIMaskManager.resolvePhase(
                     poi: poi,
                     userLocation: userLoc,
                     exploredHexes: exploredHexes,
-                    discoveredPOIs: discoveredPOIs
+                    discoveredPOIs: discoveredPOIs,
+                    markerStyle: markerStyle
                 ) else {
                     continue
                 }
@@ -689,7 +749,7 @@ struct MapView: UIViewRepresentable {
         @objc func handleMapTap(_ gesture: UITapGestureRecognizer) {
             guard let mapView = mapView else { return }
             let point = gesture.location(in: mapView)
-            let features = mapView.visibleFeatures(at: point, styleLayerIdentifiers: [activeLayerId, nearbyBusStopsLayerId])
+            let features = mapView.visibleFeatures(at: point, styleLayerIdentifiers: [activeLayerId, archiveLayerId, subwayStationBulletsLayerId, nearbyBusStopsLayerId])
             
             if let first = features.first {
                 if let stopId = first.attributes["id"] as? String {

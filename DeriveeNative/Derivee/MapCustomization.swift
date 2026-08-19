@@ -49,6 +49,7 @@ public enum MapCustomizationDefaults {
     public static let subwayLinesSourceId = "subway-thoroughfares-source"
     public static let subwayLinesCasingLayerId = "subway-lines-casing-layer"
     public static let subwayLinesLayerId = "subway-lines-layer"
+    public static let subwayStationBulletsSourceId = "subway-station-bullets-source"
     public static let subwayStationBulletsLayerId = "subway-station-bullets-layer"
     public static let nearbyBusStopsSourceId = "nearby-bus-stops-source"
     public static let nearbyBusStopsLayerId = "nearby-bus-stops-layer"

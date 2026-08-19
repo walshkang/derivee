@@ -57,29 +57,34 @@ enum POIMaskManager {
     /// Resolves the Ghost POI 3-phase lifecycle state:
     /// - Phase 2 (Active Vicinity): Distance <= 200m
     /// - Phase 3 (Archive): Distance > 200m AND (in exploredHexes OR in discoveredPOIs)
-    /// - Phase 1 (Lure Glow): Distance > 200m AND Distance <= 1000m AND NOT explored
-    /// - nil (Hidden): Distance > 1000m AND NOT explored
+    /// - Phase 1 (Lure Glow): Distance > 200m AND Distance <= 1000m AND NOT explored (when in .exploredOnly mode)
+    /// - nil (Hidden): Otherwise or when in .hidden mode
     static func resolvePhase(
         poi: GhostPOI,
         userLocation: CLLocation?,
         exploredHexes: Set<String>,
-        discoveredPOIs: Set<String>
+        discoveredPOIs: Set<String>,
+        markerStyle: SubwayStationMarkerStyle = .exploredOnly
     ) -> Int? {
+        if markerStyle == .hidden {
+            return nil
+        }
+        
+        let isExplored = (!poi.h3Index.isEmpty && exploredHexes.contains(poi.h3Index)) || discoveredPOIs.contains(poi.id)
+        
         guard let userLoc = userLocation else {
             // If user location is not yet known:
             // If explored, show as archive (phase 3)
-            let isExplored = (!poi.h3Index.isEmpty && exploredHexes.contains(poi.h3Index)) || discoveredPOIs.contains(poi.id)
             return isExplored ? 3 : nil
         }
         
         let distance = userLoc.distance(from: CLLocation(latitude: poi.coordinate.latitude, longitude: poi.coordinate.longitude))
-        let isExplored = (!poi.h3Index.isEmpty && exploredHexes.contains(poi.h3Index)) || discoveredPOIs.contains(poi.id)
         
         if distance <= activeVicinityRadius {
             return 2
         } else if isExplored {
             return 3
-        } else if distance <= lureMaxRadius {
+        } else if markerStyle == .exploredOnly && distance <= lureMaxRadius {
             return 1
         } else {
             return nil
