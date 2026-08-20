@@ -626,3 +626,19 @@ The Hour × Minute Departure Matrix provides full Naver Maps-style schedule insp
   * **Boundary Markers:** First and last departures of the operating day styled with distinct amber border rings.
   * **Live Real-Time Delta Overlays:** When GTFS-RT telemetry is active, live countdowns ($\Delta t = T_{\text{actual}} - T_{\text{current}}$) inject directly into departure pills with a pulsing Electric Amber (`#FFB300`) dot.
   * **Delay Badging:** Vehicles deviating $\ge 3\text{ min}$ from scheduled timetable append a high-visibility delta tag (e.g. Alert Red `+5m` or Amber `+3m` pill) in the upper-right quadrant.
+
+---
+
+### 10.3 Live Real-Time Feed Indicators & Instant Refresh Controls (`W11.7c-LIVE-PULSE`)
+
+To provide clear visual distinction between live streaming GTFS-RT telemetry and static timetable estimates, Dérivée employs a dual-layer radar broadcast pulse and an instant manual refresh affordance:
+
+* **Radar Broadcast Pulse (`LiveStatusBadge`):**
+  * **Core Dot:** $6\text{ pt}$ Electric Amber (`#FFB300`) center dot breathing continuously between $\text{opacity } 1.0 \leftrightarrow 0.35$ with a subtle $2.5\text{ pt}$ drop shadow.
+  * **Outer Radar Ping:** Concentric circle expanding from $\text{scale } 1.0 \rightarrow 1.8$ and fading $\text{opacity } 0.6 \rightarrow 0.0$ on a $1.2\text{ s}$ repeating ease-in-out curve.
+  * **Typography:** Compact monospaced `"LIVE"` label in Electric Amber inside a pill container (`#FFB300` at $12\%$ opacity).
+  * **Offline / Tunnel Fallback:** When underground or disconnected from cell telemetry, the badge transitions gracefully to a dimmed secondary `"SCHEDULED"` pill (static $5\text{ pt}$ gray dot, pulse halted) displaying local SQLite schedule estimates.
+* **Smooth 15s Countdown Arc & Instant Refresh (`CircularRefreshButton`):**
+  * **Visual Container:** $22\text{ pt}$ touch target containing an $18\text{ pt}$ circular track.
+  * **Progress Ring:** $1.5\text{ pt}$ stroke progress arc that drains/fills smoothly across the $15\text{ s}$ background polling interval without jittery text countdowns.
+  * **Instant Manual Tap:** Tapping the refresh icon immediately triggers `fetchLiveArrivals`, spins the `arrow.clockwise` icon $360^\circ$, fires a light haptic pulse (`UIImpactFeedbackGenerator(style: .light)`), and resets the generational background polling timer from the completion timestamp to prevent double-polling bursts.

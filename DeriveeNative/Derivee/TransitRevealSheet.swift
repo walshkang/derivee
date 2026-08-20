@@ -29,6 +29,10 @@ struct TransitRevealSheet: View {
     @State private var showAlertsExpanded: Bool = false
     @State private var isLiveActive: Bool = false
     @State private var lastUpdated: Date? = nil
+    @State private var isLivePulsing: Bool = false
+    @State private var isRefreshing: Bool = false
+    @State private var pollProgress: Double = 0.0
+    @State private var pollGeneration: Int = 0
     
     init(
         stopId: String,
@@ -40,6 +44,7 @@ struct TransitRevealSheet: View {
         self._stopDetails = State(initialValue: initialDetails)
         self._liveArrivals = State(initialValue: initialLiveArrivals)
         self._serviceAlerts = State(initialValue: initialAlerts)
+        self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
     }
     
     var displayedArrivals: [SpatialDatabaseManager.ArrivalInfo] {
@@ -234,26 +239,20 @@ struct TransitRevealSheet: View {
                         if selectedTab == .liveArrivals {
                             // Real-time Arrivals Organized by Direction
                             VStack(alignment: .leading, spacing: 12) {
-                                HStack {
+                                HStack(alignment: .center, spacing: 8) {
                                     Text("UPCOMING DEPARTURES")
                                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                                         .foregroundColor(.secondary)
                                     
                                     Spacer()
                                     
-                                    if isLiveActive {
-                                        HStack(spacing: 4) {
-                                            Circle()
-                                                .fill(Color(hex: "#FFB300"))
-                                                .frame(width: 6, height: 6)
-                                            Text("LIVE")
-                                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                                .foregroundColor(Color(hex: "#FFB300"))
-                                        }
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color(hex: "#FFB300").opacity(0.12))
-                                        .clipShape(Capsule())
+                                    LiveStatusBadge(isLive: isLiveActive, isPulsing: isLivePulsing)
+                                    
+                                    CircularRefreshButton(
+                                        isRefreshing: isRefreshing,
+                                        progress: pollProgress
+                                    ) {
+                                        triggerManualRefresh()
                                     }
                                 }
                                 
@@ -410,6 +409,11 @@ struct TransitRevealSheet: View {
                 .presentationDetents([.fraction(0.5), .large])
                 .presentationDragIndicator(.visible)
         }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                isLivePulsing = true
+            }
+        }
         .task(id: stopId) {
             await startPollingLifecycle()
         }
@@ -424,6 +428,59 @@ struct TransitRevealSheet: View {
                     }
                 }
             }
+        }
+    }
+    
+    @MainActor
+    private func triggerManualRefresh() {
+        guard !isRefreshing, let routeId = stopDetails?.routeId else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        pollGeneration += 1
+        let currentGen = pollGeneration
+        self.pollProgress = 0.0
+        Task {
+            await performLiveFetch(routeId: routeId)
+            await runPollingLoop(routeId: routeId, currentGen: currentGen)
+        }
+    }
+    
+    @MainActor
+    private func performLiveFetch(routeId: String) async {
+        isRefreshing = true
+        do {
+            let live = try await TransitRealtimeService.shared.fetchLiveArrivals(for: stopId, routeId: routeId)
+            if !Task.isCancelled {
+                if !live.isEmpty {
+                    self.liveArrivals = live
+                }
+                self.isLiveActive = true
+                self.lastUpdated = Date()
+            }
+        } catch {
+            if !Task.isCancelled {
+                self.isLiveActive = false
+            }
+        }
+        self.isRefreshing = false
+    }
+    
+    @MainActor
+    private func runPollingLoop(routeId: String, currentGen: Int) async {
+        while !Task.isCancelled && pollGeneration == currentGen {
+            let pollDuration: Double = 15.0
+            let stepInterval: Double = 0.25
+            let totalSteps = Int(pollDuration / stepInterval)
+            
+            for step in 0..<totalSteps {
+                if Task.isCancelled || pollGeneration != currentGen { return }
+                self.pollProgress = Double(step) / Double(totalSteps)
+                try? await Task.sleep(nanoseconds: UInt64(stepInterval * 1_000_000_000))
+            }
+            
+            if Task.isCancelled || pollGeneration != currentGen { return }
+            self.pollProgress = 1.0
+            await performLiveFetch(routeId: routeId)
+            self.pollProgress = 0.0
         }
     }
     
@@ -452,29 +509,95 @@ struct TransitRevealSheet: View {
         let alerts = await TransitRealtimeService.shared.fetchServiceAlerts(for: routeId)
         self.serviceAlerts = alerts
         
-        // 2. Sheet-Scoped Polling Loop (15s cadence, cancelled on dismiss)
-        while !Task.isCancelled {
-            do {
-                let live = try await TransitRealtimeService.shared.fetchLiveArrivals(for: stopId, routeId: routeId)
-                if !Task.isCancelled {
-                    if !live.isEmpty {
-                        self.liveArrivals = live
-                    }
-                    self.isLiveActive = true
-                    self.lastUpdated = Date()
-                }
-            } catch {
-                if !Task.isCancelled {
-                    self.isLiveActive = false
+        // 2. Fetch initial live arrivals & start generational polling loop
+        pollGeneration += 1
+        let currentGen = pollGeneration
+        await performLiveFetch(routeId: routeId)
+        await runPollingLoop(routeId: routeId, currentGen: currentGen)
+    }
+}
+
+// MARK: - Subcomponents
+
+private struct LiveStatusBadge: View {
+    let isLive: Bool
+    let isPulsing: Bool
+    
+    var body: some View {
+        HStack(spacing: 5) {
+            ZStack {
+                if isLive {
+                    // Outer expanding radar ping
+                    Circle()
+                        .fill(Color(hex: "#FFB300"))
+                        .frame(width: 6, height: 6)
+                        .scaleEffect(isPulsing ? 1.8 : 1.0)
+                        .opacity(isPulsing ? 0.0 : 0.6)
+                    
+                    // Core breathing amber dot
+                    Circle()
+                        .fill(Color(hex: "#FFB300"))
+                        .frame(width: 6, height: 6)
+                        .opacity(isPulsing ? 1.0 : 0.35)
+                        .shadow(color: Color(hex: "#FFB300").opacity(0.8), radius: isPulsing ? 2.5 : 0.5)
+                } else {
+                    Circle()
+                        .fill(Color.secondary.opacity(0.5))
+                        .frame(width: 5, height: 5)
                 }
             }
+            .frame(width: 8, height: 8)
             
-            do {
-                try await Task.sleep(nanoseconds: 15_000_000_000)
-            } catch {
-                break
-            }
+            Text(isLive ? "LIVE" : "SCHEDULED")
+                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                .foregroundColor(isLive ? Color(hex: "#FFB300") : .secondary)
         }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(isLive ? Color(hex: "#FFB300").opacity(0.12) : Color.primary.opacity(0.04))
+        .clipShape(Capsule())
+    }
+}
+
+private struct CircularRefreshButton: View {
+    let isRefreshing: Bool
+    let progress: Double
+    let onRefresh: () -> Void
+    
+    var body: some View {
+        Button(action: onRefresh) {
+            ZStack {
+                // Background Track
+                Circle()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1.5)
+                    .frame(width: 18, height: 18)
+                
+                // Animated Progress Ring (15s countdown arc)
+                Circle()
+                    .trim(from: 0.0, to: isRefreshing ? 0.25 : max(0.02, min(1.0, progress)))
+                    .stroke(
+                        Color(hex: "#FFB300").opacity(isRefreshing ? 0.8 : 0.5),
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
+                    )
+                    .frame(width: 18, height: 18)
+                    .rotationEffect(.degrees(-90))
+                
+                // Refresh Arrow Icon
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundColor(isRefreshing ? Color(hex: "#FFB300") : .secondary)
+                    .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                    .animation(
+                        isRefreshing ? .linear(duration: 0.75).repeatForever(autoreverses: false) : .default,
+                        value: isRefreshing
+                    )
+            }
+            .frame(width: 22, height: 22)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isRefreshing)
+        .accessibilityLabel("Refresh live arrivals")
     }
 }
 
