@@ -76,6 +76,16 @@ final class TransitRevealSheetTests: XCTestCase {
                     observed_at INTEGER NOT NULL,
                     direction_id INTEGER NOT NULL DEFAULT 0
                 );
+                
+                CREATE TABLE scheduled_stops (
+                    stop_id TEXT NOT NULL,
+                    trip_id TEXT NOT NULL,
+                    route_id TEXT NOT NULL,
+                    departure_time TEXT NOT NULL,
+                    headsign TEXT NOT NULL,
+                    direction_id INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (stop_id, trip_id, departure_time)
+                );
             """)
             
             // Seed all 168 cells (7 days x 24 hours) for stop_bedford
@@ -95,6 +105,17 @@ final class TransitRevealSheetTests: XCTestCase {
                     INSERT INTO stop_events 
                     VALUES ('EVT_\(i)', 'TRIP_L_\(i)', 'L', 'stop_bedford', 1736337600 + \(i * 300), 1736337600 + \(i * 300 + 45), 45, 1736337600 + \(i * 300 + 50), 0);
                 """)
+            }
+            
+            // Seed sample scheduled stops
+            for h in 0..<24 {
+                for m in [5, 15, 25, 35, 45, 55] {
+                    let timeStr = String(format: "2025-01-08 %02d:%02d:00", h, m)
+                    try db.execute(sql: """
+                        INSERT INTO scheduled_stops
+                        VALUES ('stop_bedford', 'TRIP_SCHED_\(h)_\(m)', 'L', ?, 'Manhattan - 8th Ave', 0);
+                    """, arguments: [timeStr])
+                }
             }
         }
         
@@ -215,5 +236,58 @@ final class TransitRevealSheetTests: XCTestCase {
         
         let vc = UIHostingController(rootView: view)
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
+    }
+    
+    func testTimetableQueryPerformanceUnder12ms() async throws {
+        _ = try await dbManager.fetchTimetable(for: "stop_bedford", routeId: "L", directionId: 0)
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let schedule = try await dbManager.fetchTimetable(for: "stop_bedford", routeId: "L", directionId: 0)
+        let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+        
+        XCTAssertEqual(schedule.count, 24, "Timetable query should return all 24 hours.")
+        let totalPills = schedule.reduce(0) { $0 + $1.departures.count }
+        XCTAssertGreaterThan(totalPills, 0, "Timetable should contain departures.")
+        XCTAssertLessThan(durationMs, 12.0, "Timetable database query must complete in < 12ms (Actual: \(durationMs)ms).")
+    }
+    
+    func testTimetableFallbackQueryPerformanceUnder12ms() async throws {
+        _ = try await dbManager.fetchTimetable(for: "stop_unknown", routeId: "7", directionId: 0)
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let schedule = try await dbManager.fetchTimetable(for: "stop_unknown", routeId: "7", directionId: 0)
+        let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+        
+        XCTAssertEqual(schedule.count, 24, "Fallback timetable should generate all 24 hours.")
+        let totalPills = schedule.reduce(0) { $0 + $1.departures.count }
+        XCTAssertGreaterThan(totalPills, 100, "Fallback timetable should generate full day of departures.")
+        XCTAssertLessThan(durationMs, 12.0, "Fallback timetable generation must complete in < 12ms (Actual: \(durationMs)ms).")
+    }
+    
+    func testDepartureMatrixViewSnapshot() throws {
+        let sampleDepartures = [
+            SpatialDatabaseManager.DeparturePillRecord(id: "1", tripId: "T1", routeId: "L", destination: "8th Ave", minute: 4, isExpress: false, isFirstDeparture: true),
+            SpatialDatabaseManager.DeparturePillRecord(id: "2", tripId: "T2", routeId: "L", destination: "8th Ave", minute: 12, isExpress: false, liveDeltaMinutes: 3, isLive: true),
+            SpatialDatabaseManager.DeparturePillRecord(id: "3", tripId: "T3", routeId: "L", destination: "8th Ave", minute: 19, isExpress: true),
+            SpatialDatabaseManager.DeparturePillRecord(id: "4", tripId: "T4", routeId: "L", destination: "8th Ave", minute: 26, isExpress: false, delaySeconds: 240),
+            SpatialDatabaseManager.DeparturePillRecord(id: "5", tripId: "T5", routeId: "L", destination: "8th Ave", minute: 34, isExpress: false),
+            SpatialDatabaseManager.DeparturePillRecord(id: "6", tripId: "T6", routeId: "L", destination: "8th Ave", minute: 42, isExpress: true),
+            SpatialDatabaseManager.DeparturePillRecord(id: "7", tripId: "T7", routeId: "L", destination: "8th Ave", minute: 51, isExpress: false, isLastDeparture: true)
+        ]
+        
+        let sampleHours = (0..<24).map { h in
+            SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: sampleDepartures)
+        }
+        
+        let view = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_bedford",
+            liveArrivals: [
+                SpatialDatabaseManager.ArrivalInfo(line: "L", destination: "8th Ave", minutes: 3, direction: "Northbound")
+            ]
+        )
+        .frame(width: 375, height: 620)
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620))))
     }
 }

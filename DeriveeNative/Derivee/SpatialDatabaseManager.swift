@@ -608,6 +608,60 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    public struct DeparturePillRecord: Identifiable, Sendable, Equatable {
+        public let id: String
+        public let tripId: String
+        public let routeId: String
+        public let destination: String
+        public let directionId: Int
+        public let minute: Int
+        public let isExpress: Bool
+        public let isFirstDeparture: Bool
+        public let isLastDeparture: Bool
+        public var liveDeltaMinutes: Int?
+        public var delaySeconds: Int?
+        public var isLive: Bool
+        
+        public init(
+            id: String,
+            tripId: String,
+            routeId: String,
+            destination: String,
+            directionId: Int = 0,
+            minute: Int,
+            isExpress: Bool = false,
+            isFirstDeparture: Bool = false,
+            isLastDeparture: Bool = false,
+            liveDeltaMinutes: Int? = nil,
+            delaySeconds: Int? = nil,
+            isLive: Bool = false
+        ) {
+            self.id = id
+            self.tripId = tripId
+            self.routeId = routeId
+            self.destination = destination
+            self.directionId = directionId
+            self.minute = minute
+            self.isExpress = isExpress
+            self.isFirstDeparture = isFirstDeparture
+            self.isLastDeparture = isLastDeparture
+            self.liveDeltaMinutes = liveDeltaMinutes
+            self.delaySeconds = delaySeconds
+            self.isLive = isLive
+        }
+    }
+    
+    public struct HourScheduleRecord: Identifiable, Sendable, Equatable {
+        public var id: Int { hourOfDay }
+        public let hourOfDay: Int
+        public var departures: [DeparturePillRecord]
+        
+        public init(hourOfDay: Int, departures: [DeparturePillRecord]) {
+            self.hourOfDay = hourOfDay
+            self.departures = departures
+        }
+    }
+    
     public struct ArrivalInfo: Identifiable, Sendable {
         public let id: UUID
         public let line: String
@@ -888,6 +942,71 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             }
             
             return self.generateFallbackStopEvents(for: stopId, hourOfDay: hourOfDay, dayOfWeek: dayOfWeek)
+        }
+    }
+    
+    public func fetchTimetable(for stopId: String, routeId: String? = nil, directionId: Int = 0) async throws -> [HourScheduleRecord] {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        defer {
+            let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+            print("⏱️ fetchTimetable for \(stopId) dir=\(directionId) executed in \(String(format: "%.2f", elapsed))ms")
+        }
+        
+        return try await dbWriter.read { db in
+            do {
+                let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_stops)")
+                if !columns.isEmpty {
+                    let sql = """
+                        SELECT strftime('%H', departure_time) as dep_hour,
+                               strftime('%M', departure_time) as dep_min,
+                               trip_id, route_id, headsign, direction_id
+                        FROM transit.scheduled_stops
+                        WHERE stop_id = ? AND direction_id = ?
+                        ORDER BY departure_time ASC
+                    """
+                    let rows = try Row.fetchAll(db, sql: sql, arguments: [stopId, directionId])
+                    if !rows.isEmpty {
+                        var hourMap: [Int: [DeparturePillRecord]] = [:]
+                        for hour in 0..<24 {
+                            hourMap[hour] = []
+                        }
+                        for (idx, row) in rows.enumerated() {
+                            guard let hourStr: String = row["dep_hour"], let hour = Int(hourStr),
+                                  let minStr: String = row["dep_min"], let min = Int(minStr) else { continue }
+                            let tripId: String = row["trip_id"] ?? "TRIP_\(idx)"
+                            let rId: String = row["route_id"] ?? (routeId ?? "L")
+                            let dest: String = row["headsign"] ?? "Terminal"
+                            let dir: Int = row["direction_id"] ?? directionId
+                            let isExp = rId.contains("X") || rId.contains("SBS") || (rId == "2" || rId == "4" || rId == "5" || rId == "A")
+                            let isFirst = idx == 0
+                            let isLast = idx == rows.count - 1
+                            
+                            let pill = DeparturePillRecord(
+                                id: "\(tripId)_\(hour)_\(min)",
+                                tripId: tripId,
+                                routeId: rId,
+                                destination: dest,
+                                directionId: dir,
+                                minute: min,
+                                isExpress: isExp,
+                                isFirstDeparture: isFirst,
+                                isLastDeparture: isLast
+                            )
+                            hourMap[hour]?.append(pill)
+                        }
+                        return (0..<24).map { h in
+                            HourScheduleRecord(hourOfDay: h, departures: hourMap[h] ?? [])
+                        }
+                    }
+                }
+            } catch let error as DatabaseError {
+                print("⚠️ Transit scheduled_stops query failed: \(error.message). Returning fallback timetable.")
+            } catch {
+                throw error
+            }
+            
+            let effectiveRoute = routeId ?? self.inferRouteId(from: stopId, name: stopId)
+            return self.generateFallbackTimetable(for: stopId, routeId: effectiveRoute, directionId: directionId)
         }
     }
     
@@ -1202,8 +1321,103 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             base - 0.2,
             base + 0.8,
             base + 0.1,
-            base - 0.4
         ]
+    }
+    
+    private func generateFallbackTimetable(for stopId: String, routeId: String, directionId: Int) -> [HourScheduleRecord] {
+        var hourRecords: [HourScheduleRecord] = []
+        let seed = abs(stopId.hashValue ^ routeId.hashValue ^ (directionId * 79))
+        let isBus = stopId.hasPrefix("BUS_") || routeId.contains("-")
+        
+        let destination: String
+        if isBus {
+            destination = directionId == 0 ? "Terminal / Uptown" : "Terminal / Downtown"
+        } else {
+            switch routeId {
+            case "L":
+                destination = directionId == 0 ? "Manhattan - 8th Ave" : "Brooklyn - Canarsie"
+            case "G":
+                destination = directionId == 0 ? "Court Sq" : "Church Ave"
+            case "7":
+                destination = directionId == 0 ? "Flushing - Main St" : "34 St - Hudson Yards"
+            case "A", "C", "E":
+                destination = directionId == 0 ? "Inwood - 207 St" : "Far Rockaway / Lefferts"
+            case "1", "2", "3":
+                destination = directionId == 0 ? "Van Cortlandt / Harlem" : "South Ferry / Flatbush"
+            default:
+                destination = directionId == 0 ? "Uptown / Manhattan" : "Downtown / Brooklyn"
+            }
+        }
+        
+        var allDepartures: [(hour: Int, min: Int, isExp: Bool)] = []
+        
+        for hour in 0..<24 {
+            let hourSeed = (seed + hour * 37) % 100
+            let departureCount: Int
+            
+            if hour >= 0 && hour < 5 {
+                // Late night service: 3-4 departures / hour (15-20 min headways)
+                departureCount = 3 + (hourSeed % 2)
+            } else if (hour >= 7 && hour <= 9) || (hour >= 16 && hour <= 19) {
+                // Peak rush hour: 12-16 departures / hour (3-5 min headways)
+                departureCount = 12 + (hourSeed % 5)
+            } else if hour >= 10 && hour <= 15 {
+                // Midday off-peak: 7-10 departures / hour (6-8 min headways)
+                departureCount = 7 + (hourSeed % 4)
+            } else {
+                // Evening / Early morning: 5-7 departures / hour (8-12 min headways)
+                departureCount = 5 + (hourSeed % 3)
+            }
+            
+            var minutes: [Int] = []
+            let interval = max(1, 60 / departureCount)
+            for i in 0..<departureCount {
+                let jitter = (hourSeed + i * 11) % 3 - 1
+                let m = max(0, min(59, (i * interval) + jitter + ((hourSeed % 3))))
+                if !minutes.contains(m) {
+                    minutes.append(m)
+                }
+            }
+            minutes.sort()
+            
+            for m in minutes {
+                let isExp = (routeId == "A" || routeId == "2" || routeId == "4" || routeId == "5" || routeId == "7" || routeId.contains("SBS")) && ((m + hourSeed) % 4 == 0)
+                allDepartures.append((hour: hour, min: m, isExp: isExp))
+            }
+        }
+        
+        let firstIndex = allDepartures.firstIndex(where: { $0.hour == 5 }) ?? 0
+        let lastIndex = (allDepartures.lastIndex(where: { $0.hour == 4 }) ?? (allDepartures.count - 1))
+        
+        var depMap: [Int: [DeparturePillRecord]] = [:]
+        for h in 0..<24 {
+            depMap[h] = []
+        }
+        
+        for (idx, item) in allDepartures.enumerated() {
+            let isFirst = idx == firstIndex
+            let isLast = idx == lastIndex
+            let tripId = "TRIP_\(routeId)_\(item.hour)\(String(format: "%02d", item.min))_\(idx)"
+            
+            let pill = DeparturePillRecord(
+                id: "\(tripId)_\(item.hour)_\(item.min)",
+                tripId: tripId,
+                routeId: routeId,
+                destination: destination,
+                directionId: directionId,
+                minute: item.min,
+                isExpress: item.isExp,
+                isFirstDeparture: isFirst,
+                isLastDeparture: isLast
+            )
+            depMap[item.hour]?.append(pill)
+        }
+        
+        for h in 0..<24 {
+            hourRecords.append(HourScheduleRecord(hourOfDay: h, departures: depMap[h] ?? []))
+        }
+        
+        return hourRecords
     }
 }
 
