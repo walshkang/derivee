@@ -81,9 +81,12 @@ final class TransitRevealSheetTests: XCTestCase {
     }
 
     func testTransitSparklineViewSnapshot() throws {
+        // Pinned referenceDate (Wednesday Jan 8, 2025 12:00:00 UTC) to ensure deterministic snapshots across CI runs
+        let fixedDate = Date(timeIntervalSince1970: 1736337600)
         let view = TransitSparklineView(
             headways: [4.2, 4.5, 4.0, 5.8, 4.3, 4.6, 4.1],
-            title: "7-Day Headway Reliability (min)"
+            title: "7-Day Headway Reliability (min)",
+            referenceDate: fixedDate
         )
         .frame(width: 320, height: 100)
 

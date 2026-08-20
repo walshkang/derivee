@@ -25,9 +25,19 @@ echo "==> [1/4] Focusing Simulator and granting CoreLocation permissions..."
 open -a Simulator
 xcrun simctl privacy "${SIMULATOR_NAME}" grant location-always com.derivee.Derivee 2>/dev/null || true
 
-# 2. Terminate Stale App Process, Set Appearance & Launch Fresh
-echo "==> [2/4] Setting Day Mode, pristine status bar, initial Columbus Circle fix, and launching Dérivée..."
+# 2. Terminate Stale App Process, Reset Explored Hexes DB, Set Appearance & Launch Fresh
+echo "==> [2/4] Resetting explored hexes DB, Day Mode, pristine status bar, Columbus Circle fix..."
 xcrun simctl terminate "${SIMULATOR_NAME}" com.derivee.Derivee 2>/dev/null || true
+
+CONTAINER_DATA=$(xcrun simctl get_app_container "${SIMULATOR_NAME}" com.derivee.Derivee data 2>/dev/null || true)
+if [ -n "${CONTAINER_DATA}" ] && [ -d "${CONTAINER_DATA}" ]; then
+    DB_PATH="${CONTAINER_DATA}/Library/Application Support/derivee_spatial.sqlite"
+    if [ -f "${DB_PATH}" ]; then
+        echo "    🧹 Cleared previously explored hexes & POIs from SQLite"
+        sqlite3 "${DB_PATH}" "DELETE FROM explored_hexes; DELETE FROM discovered_pois; VACUUM;" 2>/dev/null || rm -f "${CONTAINER_DATA}/Library/Application Support/derivee_spatial.sqlite"*
+    fi
+fi
+
 xcrun simctl ui "${SIMULATOR_NAME}" appearance light 2>/dev/null || true
 xcrun simctl location "${SIMULATOR_NAME}" set 40.768075,-73.981897 2>/dev/null || true
 xcrun simctl status_bar "${SIMULATOR_NAME}" override \
@@ -53,22 +63,21 @@ xcrun simctl io "${SIMULATOR_NAME}" recordVideo \
     "${TMP_RAW}" &
 RECORD_PID=$!
 
-# 4. Start Waypoint Walk from GPX
-echo "==> [4/4] Starting GPX waypoint simulation (speed: 3.5 m/s)..."
-grep -o 'lat="[^"]*" lon="[^"]*"' "${GPX_PATH}" | sed -E 's/lat="([^"]*)" lon="([^"]*)"/\1,\2/' | xcrun simctl location "${SIMULATOR_NAME}" start --speed 3.5 -
+# 4. Start Waypoint Walk from GPX (Walks 5 hexes / ~260m over ~20s, then holds position)
+echo "==> [4/4] Starting 5-hex GPX walk (~20s duration, will stop and hold position)..."
+grep -o 'lat="[^"]*" lon="[^"]*"' "${GPX_PATH}" | head -n 15 | sed -E 's/lat="([^"]*)" lon="([^"]*)"/\1,\2/' | xcrun simctl location "${SIMULATOR_NAME}" start --speed 13 -
 
 echo ""
 echo "======================================================================"
-echo "🎥 RECORDING ACTIVE! Storyboard Teleprompter Guide:"
+echo "🎥 RECORDING ACTIVE!"
 echo "----------------------------------------------------------------------"
-echo "⏱️  00:00 - 00:10 | Scene 1: Pan Lower Manhattan (Cold start & Fog mask)"
-echo "⏱️  00:10 - 00:24 | Scene 2: Live Walk along 8th Ave (120Hz hex unlocks)"
-echo "⏱️  00:24 - 00:38 | Scene 3: Tap 14th St Station (Transit sheet & headways)"
-echo "⏱️  00:38 - 00:52 | Scene 4: Dismiss Sheet -> Tap Bus Capsule -> Open Journal"
-echo "⏱️  00:52 - 01:04 | Scene 5: Settings -> Toggle Day/Night & Fog Opacity"
-echo "⏱️  01:04 - 01:14 | Scene 6: Zoom out full NYC skyline (Outro)"
-echo "======================================================================"
-echo "Press [ENTER] or Ctrl+C in this terminal when finished recording."
+echo "🚶 1. Real-Time Walk: The blue dot will walk 5 hexes (~20 seconds) and stop."
+echo "👆 2. Manual Demo: After it stops, interact at your own pace:"
+echo "      - Tap Subway Station (e.g. 59th St Columbus Circle / 72nd St)"
+echo "      - Tap floating Bus Capsule -> Open Exploration Journal / Stats"
+echo "      - Open Settings FAB -> Toggle Day/Night & Fog Opacity slider"
+echo "      - Dismiss Settings -> Pinch/zoom out for full NYC skyline overview"
+echo "🛑 3. Finish: Press [ENTER] or Ctrl+C in this terminal to render video."
 echo "======================================================================"
 
 cleanup() {

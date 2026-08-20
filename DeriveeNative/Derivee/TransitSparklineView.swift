@@ -4,11 +4,18 @@ struct TransitSparklineView: View {
     let headways: [Double]
     let title: String
     let tintColor: Color
+    let referenceDate: Date
     
-    init(headways: [Double] = [4.5, 5.0, 4.2, 6.1, 4.8, 5.5, 4.3], title: String = "7-Day Headway Reliability (min)", tintColor: Color = Color(hex: "#FFB300")) {
+    init(
+        headways: [Double] = [4.5, 5.0, 4.2, 6.1, 4.8, 5.5, 4.3],
+        title: String = "7-Day Headway Reliability (min)",
+        tintColor: Color = Color(hex: "#FFB300"),
+        referenceDate: Date = Date()
+    ) {
         self.headways = headways.isEmpty ? [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0] : headways
         self.title = title
         self.tintColor = tintColor
+        self.referenceDate = referenceDate
     }
     
     private var minVal: Double {
@@ -21,6 +28,26 @@ struct TransitSparklineView: View {
     
     private var avgHeadway: Double {
         headways.reduce(0, +) / Double(headways.count)
+    }
+    
+    private var dayLabels: [String] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "E M/d"
+        
+        let count = headways.count
+        guard count > 0 else { return [] }
+        
+        return (0..<count).map { idx in
+            let daysAgo = (count - 1) - idx
+            if let date = calendar.date(byAdding: .day, value: -daysAgo, to: referenceDate) {
+                return formatter.string(from: date)
+            }
+            return ""
+        }
     }
     
     var body: some View {
@@ -83,26 +110,41 @@ struct TransitSparklineView: View {
                     }
                     .stroke(tintColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                     
-                    // Latest Data Point Dot
-                    if let lastPoint = points.last {
+                    // Latest Data Point Dot & Today Annotation
+                    if let lastPoint = points.last, let lastVal = headways.last {
                         Circle()
                             .fill(tintColor)
                             .frame(width: 6, height: 6)
                             .position(lastPoint)
                             .shadow(color: tintColor.opacity(0.8), radius: 4)
+                        
+                        Text(String(format: "%.1fm", lastVal))
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(tintColor)
+                            .position(x: max(lastPoint.x - 18, 18), y: max(lastPoint.y - 10, 8))
                     }
                 }
             }
             .frame(height: 48)
             
             HStack {
-                Text("7 Days Ago")
-                    .font(.system(size: 9, weight: .regular, design: .monospaced))
-                    .foregroundColor(.secondary)
+                if let first = dayLabels.first {
+                    Text(first)
+                        .font(.system(size: 9, weight: .regular, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
                 Spacer()
-                Text("Today")
-                    .font(.system(size: 9, weight: .regular, design: .monospaced))
-                    .foregroundColor(.secondary)
+                if dayLabels.count > 2 {
+                    Text(dayLabels[dayLabels.count / 2])
+                        .font(.system(size: 9, weight: .regular, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if let last = dayLabels.last {
+                    Text("\(last) (Today)")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .padding(12)

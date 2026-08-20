@@ -135,7 +135,7 @@ struct TransitRevealSheet: View {
                                 HStack(spacing: 3) {
                                     Text("\(arrival.minutes)")
                                         .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                        .foregroundColor(Color(hex: "#FFB300"))
+                                        .foregroundColor(.primary)
                                     Text("min")
                                         .font(.system(size: 12, weight: .regular, design: .monospaced))
                                         .foregroundColor(.secondary)
