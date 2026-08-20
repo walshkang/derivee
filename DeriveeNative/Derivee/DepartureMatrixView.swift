@@ -29,19 +29,29 @@ struct DepartureMatrixView: View {
     
     private var directionNames: [String] {
         if isBus {
-            return ["Uptown / Inbound", "Downtown / Outbound"]
+            return ["Northbound / Inbound", "Southbound / Outbound"]
         }
         switch routeId.uppercased() {
         case "L":
             return ["Manhattan (8th Ave)", "Brooklyn (Canarsie)"]
         case "G":
-            return ["Court Sq (Northbound)", "Church Ave (Southbound)"]
-        case "7":
-            return ["Flushing - Main St", "Hudson Yards"]
-        case "A", "C", "E":
-            return ["Uptown / 207 St", "Downtown / Brooklyn"]
+            return ["Queens (Court Sq)", "Brooklyn (Church Ave)"]
+        case "7", "7X":
+            return ["Queens (Flushing)", "Manhattan (Hudson Yards)"]
         case "1", "2", "3":
-            return ["Uptown / Bronx", "Downtown / Brooklyn"]
+            return ["Uptown & Bronx", "Downtown & Brooklyn"]
+        case "4", "5", "6", "6X":
+            return ["Uptown & Bronx", "Downtown & Brooklyn"]
+        case "A", "C", "E":
+            return ["Uptown & Queens / Bronx", "Downtown & Brooklyn"]
+        case "B", "D", "F", "FX", "M":
+            return ["Uptown & Queens / Bronx", "Downtown & Brooklyn"]
+        case "N", "Q", "R", "W":
+            return ["Uptown & Queens", "Downtown & Brooklyn"]
+        case "J", "Z":
+            return ["Queens (Jamaica)", "Manhattan (Broad St)"]
+        case "SIR":
+            return ["Inbound (St. George)", "Outbound (Tottenville)"]
         default:
             return ["Uptown / Northbound", "Downtown / Southbound"]
         }

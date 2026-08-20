@@ -27,7 +27,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             let neighborhoodDBURL = appSupportURL.appendingPathComponent("derivee_neighborhood.sqlite")
             
             if customTransitURL == nil {
-                Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["transit_delta", "derivee_transit"], targetURL: transitDBURL, fileManager: fileManager)
+                Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["derivee_transit", "transit_delta"], targetURL: transitDBURL, fileManager: fileManager)
             }
             
             Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["neighborhood"], targetURL: neighborhoodDBURL, fileManager: fileManager)
@@ -128,6 +128,26 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     }
                 } catch {
                     print("Failed to inspect local neighborhood DB schema: \(error). Re-copying...")
+                    shouldCopy = true
+                }
+            }
+            
+            // 3. Schema & record count integrity check for transit database
+            if !shouldCopy && (bundleResourceNames.contains("derivee_transit") || bundleResourceNames.contains("transit_delta")) {
+                do {
+                    let dbQueue = try DatabaseQueue(path: targetURL.path)
+                    let isValid = try dbQueue.read { db in
+                        let stopsColumns = try Row.fetchAll(db, sql: "PRAGMA table_info(stops)")
+                        let hasRoutes = stopsColumns.contains { ($0["name"] as? String) == "routes" }
+                        let stopCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM stops") ?? 0
+                        return hasRoutes && stopCount >= 10000
+                    }
+                    if !isValid {
+                        print("Local transit DB is missing routes column or incomplete (<10k stops). Re-copying from bundle...")
+                        shouldCopy = true
+                    }
+                } catch {
+                    print("Failed to inspect local transit DB schema: \(error). Re-copying...")
                     shouldCopy = true
                 }
             }
@@ -765,11 +785,6 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 print("⚠️ Transit DB bus stops query unavailable: \(error)")
             }
             
-            // If local DB returned no rows within radius (e.g. testing or outside offline envelope), provide synthetic bus stops
-            if nearbyList.isEmpty {
-                nearbyList = self.generateFallbackNearbyBusStops(for: coordinate, radiusMeters: radiusMeters)
-            }
-            
             // Sort by proximity
             nearbyList.sort { $0.distanceMeters < $1.distanceMeters }
             return Array(nearbyList.prefix(8))
@@ -1205,49 +1220,16 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     private func generateBusArrivals(for routeId: String, stopName: String) -> [ArrivalInfo] {
+        let upper = stopName.uppercased()
+        let isEastWest = (upper.contains("ST") && !upper.contains("AV")) || upper.contains("CROSSTOWN") || upper.contains("14 ST") || upper.contains("23 ST") || upper.contains("34 ST")
+        let dir1 = isEastWest ? "Eastbound" : "Southbound"
+        let dir2 = isEastWest ? "Westbound" : "Northbound"
+        let dest1 = isEastWest ? "Lower East Side / FDR" : "South Ferry / Downtown"
+        let dest2 = isEastWest ? "Chelsea Piers / 11 Ave" : "East Harlem / Uptown"
         return [
-            ArrivalInfo(line: routeId, destination: "Terminal / Downtown", minutes: 3, direction: "Southbound", distanceDescription: "0.4 mi away"),
-            ArrivalInfo(line: routeId, destination: "Terminal / Downtown", minutes: 11, direction: "Southbound", distanceDescription: "1.2 mi away"),
-            ArrivalInfo(line: routeId, destination: "Uptown / Crosstown", minutes: 6, direction: "Northbound", distanceDescription: "0.8 mi away")
-        ]
-    }
-    
-    private func generateFallbackNearbyBusStops(for coordinate: CLLocationCoordinate2D, radiusMeters: Double) -> [NearbyBusStop] {
-        let userLoc = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        
-        let c1 = CLLocationCoordinate2D(latitude: coordinate.latitude + 0.0012, longitude: coordinate.longitude + 0.0008)
-        let c2 = CLLocationCoordinate2D(latitude: coordinate.latitude - 0.0010, longitude: coordinate.longitude + 0.0015)
-        let c3 = CLLocationCoordinate2D(latitude: coordinate.latitude + 0.0020, longitude: coordinate.longitude - 0.0006)
-        
-        let d1 = userLoc.distance(from: CLLocation(latitude: c1.latitude, longitude: c1.longitude))
-        let d2 = userLoc.distance(from: CLLocation(latitude: c2.latitude, longitude: c2.longitude))
-        let d3 = userLoc.distance(from: CLLocation(latitude: c3.latitude, longitude: c3.longitude))
-        
-        return [
-            NearbyBusStop(
-                id: "BUS_001",
-                name: "1 Av & E 14 St",
-                coordinate: c1,
-                distanceMeters: d1,
-                routes: ["M15-SBS", "M15"],
-                direction: "Southbound to South Ferry"
-            ),
-            NearbyBusStop(
-                id: "BUS_002",
-                name: "E 14 St & 2 Av",
-                coordinate: c2,
-                distanceMeters: d2,
-                routes: ["M14A-SBS", "M14D-SBS"],
-                direction: "Eastbound to Lower East Side"
-            ),
-            NearbyBusStop(
-                id: "BUS_003",
-                name: "1 Av & E 18 St",
-                coordinate: c3,
-                distanceMeters: d3,
-                routes: ["M15-SBS", "M101"],
-                direction: "Northbound to East Harlem"
-            )
+            ArrivalInfo(line: routeId, destination: dest1, minutes: 3, direction: dir1, distanceDescription: "0.4 mi away"),
+            ArrivalInfo(line: routeId, destination: dest1, minutes: 11, direction: dir1, distanceDescription: "1.2 mi away"),
+            ArrivalInfo(line: routeId, destination: dest2, minutes: 6, direction: dir2, distanceDescription: "0.8 mi away")
         ]
     }
     
@@ -1261,7 +1243,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 routeType: 3,
                 arrivals: [
                     ArrivalInfo(line: "M15-SBS", destination: "South Ferry", minutes: 2, direction: "Southbound", distanceDescription: "0.3 mi away"),
-                    ArrivalInfo(line: "M15", destination: "Lower East Side", minutes: 8, direction: "Southbound", distanceDescription: "1.1 mi away")
+                    ArrivalInfo(line: "M15", destination: "Lower East Side", minutes: 8, direction: "Southbound", distanceDescription: "1.1 mi away"),
+                    ArrivalInfo(line: "M15-SBS", destination: "East Harlem", minutes: 5, direction: "Northbound", distanceDescription: "0.5 mi away")
                 ]
             )
         case "BUS_002":
@@ -1283,7 +1266,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 routeType: 3,
                 arrivals: [
                     ArrivalInfo(line: "M15", destination: "East Harlem", minutes: 5, direction: "Northbound", distanceDescription: "0.6 mi away"),
-                    ArrivalInfo(line: "M101", destination: "Fort George", minutes: 13, direction: "Northbound", distanceDescription: "1.4 mi away")
+                    ArrivalInfo(line: "M101", destination: "Fort George", minutes: 13, direction: "Northbound", distanceDescription: "1.4 mi away"),
+                    ArrivalInfo(line: "M15", destination: "South Ferry", minutes: 7, direction: "Southbound", distanceDescription: "0.8 mi away")
                 ]
             )
         default:
@@ -1296,42 +1280,77 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 name: name,
                 routeId: routeId,
                 routeType: routeType,
-                arrivals: isBus ? [
-                    ArrivalInfo(line: "M15-SBS", destination: "South Ferry", minutes: 3, direction: "Southbound", distanceDescription: "0.4 mi away"),
-                    ArrivalInfo(line: "M15", destination: "Terminal", minutes: 9, direction: "Southbound", distanceDescription: "1.2 mi away")
-                ] : [
-                    ArrivalInfo(line: "L", destination: "Manhattan - 8th Ave", minutes: 3, direction: "Northbound", distanceDescription: "2 stops away"),
-                    ArrivalInfo(line: "L", destination: "Brooklyn - Rockaway Pkwy", minutes: 7, direction: "Southbound", distanceDescription: "5 stops away")
-                ]
+                arrivals: isBus ? self.generateBusArrivals(for: routeId, stopName: name) : self.generateArrivals(for: routeId)
             )
         }
     }
     
     private func generateArrivals(for routeId: String) -> [ArrivalInfo] {
         switch routeId.uppercased() {
+        case "L":
+            return [
+                ArrivalInfo(line: "L", destination: "8th Ave", minutes: 3, direction: "Manhattan-bound", distanceDescription: "2 stops away"),
+                ArrivalInfo(line: "L", destination: "Canarsie - Rockaway Pkwy", minutes: 5, direction: "Brooklyn-bound", distanceDescription: "1 stop away"),
+                ArrivalInfo(line: "L", destination: "8th Ave", minutes: 9, direction: "Manhattan-bound", distanceDescription: "5 stops away"),
+                ArrivalInfo(line: "L", destination: "Canarsie - Rockaway Pkwy", minutes: 14, direction: "Brooklyn-bound", distanceDescription: "6 stops away")
+            ]
         case "G":
             return [
-                ArrivalInfo(line: "G", destination: "Court Sq", minutes: 4, direction: "Northbound", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: "G", destination: "Church Ave", minutes: 9, direction: "Southbound", distanceDescription: "4 stops away"),
-                ArrivalInfo(line: "G", destination: "Court Sq", minutes: 14, direction: "Northbound", distanceDescription: "7 stops away")
+                ArrivalInfo(line: "G", destination: "Court Sq", minutes: 4, direction: "Queens-bound", distanceDescription: "2 stops away"),
+                ArrivalInfo(line: "G", destination: "Church Ave", minutes: 7, direction: "Brooklyn-bound", distanceDescription: "3 stops away"),
+                ArrivalInfo(line: "G", destination: "Court Sq", minutes: 14, direction: "Queens-bound", distanceDescription: "7 stops away")
+            ]
+        case "7", "7X":
+            return [
+                ArrivalInfo(line: "7", destination: "Flushing - Main St", minutes: 2, direction: "Queens-bound", distanceDescription: "1 stop away"),
+                ArrivalInfo(line: "7", destination: "34 St - Hudson Yards", minutes: 5, direction: "Manhattan-bound", distanceDescription: "3 stops away"),
+                ArrivalInfo(line: "7", destination: "Flushing - Main St", minutes: 9, direction: "Queens-bound", distanceDescription: "6 stops away")
             ]
         case "A", "C", "E":
             return [
-                ArrivalInfo(line: "A", destination: "Uptown / 207 St", minutes: 2, direction: "Northbound", distanceDescription: "1 stop away"),
-                ArrivalInfo(line: "C", destination: "Downtown / Brooklyn", minutes: 5, direction: "Southbound", distanceDescription: "3 stops away"),
-                ArrivalInfo(line: "E", destination: "World Trade Center", minutes: 11, direction: "Southbound", distanceDescription: "6 stops away")
+                ArrivalInfo(line: "A", destination: "Inwood - 207 St", minutes: 2, direction: "Uptown & Queens / Bronx", distanceDescription: "1 stop away"),
+                ArrivalInfo(line: "C", destination: "Euclid Ave", minutes: 5, direction: "Downtown & Brooklyn", distanceDescription: "3 stops away"),
+                ArrivalInfo(line: "E", destination: "World Trade Center", minutes: 8, direction: "Downtown & Brooklyn", distanceDescription: "5 stops away"),
+                ArrivalInfo(line: "A", destination: "Far Rockaway", minutes: 12, direction: "Downtown & Brooklyn", distanceDescription: "7 stops away")
             ]
         case "1", "2", "3":
             return [
-                ArrivalInfo(line: "1", destination: "Van Cortlandt Park", minutes: 3, direction: "Northbound", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: "2", destination: "Flatbush Ave", minutes: 6, direction: "Southbound", distanceDescription: "4 stops away"),
-                ArrivalInfo(line: "3", destination: "Harlem - 148 St", minutes: 12, direction: "Northbound", distanceDescription: "8 stops away")
+                ArrivalInfo(line: "1", destination: "Van Cortlandt Park", minutes: 3, direction: "Uptown & Bronx", distanceDescription: "2 stops away"),
+                ArrivalInfo(line: "2", destination: "Flatbush Ave", minutes: 6, direction: "Downtown & Brooklyn", distanceDescription: "4 stops away"),
+                ArrivalInfo(line: "3", destination: "Harlem - 148 St", minutes: 12, direction: "Uptown & Bronx", distanceDescription: "8 stops away")
+            ]
+        case "4", "5", "6", "6X":
+            return [
+                ArrivalInfo(line: "4", destination: "Woodlawn", minutes: 2, direction: "Uptown & Bronx", distanceDescription: "1 stop away"),
+                ArrivalInfo(line: "5", destination: "Flatbush Ave", minutes: 5, direction: "Downtown & Brooklyn", distanceDescription: "3 stops away"),
+                ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 8, direction: "Uptown & Bronx", distanceDescription: "5 stops away")
+            ]
+        case "B", "D", "F", "M":
+            return [
+                ArrivalInfo(line: "F", destination: "Jamaica - 179 St", minutes: 3, direction: "Uptown & Queens / Bronx", distanceDescription: "2 stops away"),
+                ArrivalInfo(line: "M", destination: "Middle Village", minutes: 7, direction: "Downtown & Brooklyn", distanceDescription: "4 stops away"),
+                ArrivalInfo(line: "F", destination: "Coney Island", minutes: 10, direction: "Downtown & Brooklyn", distanceDescription: "6 stops away")
+            ]
+        case "N", "Q", "R", "W":
+            return [
+                ArrivalInfo(line: "N", destination: "Astoria - Ditmars Blvd", minutes: 3, direction: "Uptown & Queens", distanceDescription: "2 stops away"),
+                ArrivalInfo(line: "Q", destination: "Coney Island", minutes: 6, direction: "Downtown & Brooklyn", distanceDescription: "4 stops away"),
+                ArrivalInfo(line: "R", destination: "Bay Ridge - 95 St", minutes: 11, direction: "Downtown & Brooklyn", distanceDescription: "6 stops away")
+            ]
+        case "J", "Z":
+            return [
+                ArrivalInfo(line: "J", destination: "Jamaica Center", minutes: 4, direction: "Queens-bound", distanceDescription: "2 stops away"),
+                ArrivalInfo(line: "J", destination: "Broad St", minutes: 8, direction: "Manhattan-bound", distanceDescription: "4 stops away")
+            ]
+        case "SIR":
+            return [
+                ArrivalInfo(line: "SIR", destination: "St George", minutes: 5, direction: "Inbound (St. George)", distanceDescription: "3 stops away"),
+                ArrivalInfo(line: "SIR", destination: "Tottenville", minutes: 12, direction: "Outbound (Tottenville)", distanceDescription: "7 stops away")
             ]
         default:
             return [
-                ArrivalInfo(line: routeId, destination: "Manhattan - 8th Ave", minutes: 3, direction: "Northbound", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: routeId, destination: "Brooklyn - Rockaway Pkwy", minutes: 8, direction: "Southbound", distanceDescription: "5 stops away"),
-                ArrivalInfo(line: routeId, destination: "Manhattan - 8th Ave", minutes: 15, direction: "Northbound", distanceDescription: "9 stops away")
+                ArrivalInfo(line: routeId, destination: "Uptown / Terminal", minutes: 3, direction: "Uptown & Northbound", distanceDescription: "2 stops away"),
+                ArrivalInfo(line: routeId, destination: "Downtown / Terminal", minutes: 8, direction: "Downtown & Southbound", distanceDescription: "5 stops away")
             ]
         }
     }

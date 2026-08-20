@@ -207,4 +207,12 @@ final class NearbyBusLensTests: XCTestCase {
         XCTAssertEqual(updatedList[0].id, "B", "Stop B should now be first because user is closer to Stop B.")
         XCTAssertLessThan(updatedList[0].distanceMeters, updatedList[1].distanceMeters)
     }
+    
+    func testSparseLocationReturnsEmptyWithoutDrift() async throws {
+        // Location in the middle of Jamaica Bay far from any bus stops (> 2km)
+        let remoteWater = CLLocationCoordinate2D(latitude: 40.6120, longitude: -73.8350)
+        let stops = try await SpatialDatabaseManager.shared.fetchNearbyBusStops(coordinate: remoteWater, radiusMeters: 400.0)
+        
+        XCTAssertTrue(stops.isEmpty, "Sparse coordinates without bus stops must return empty list without fabricating drifting fake stops.")
+    }
 }
