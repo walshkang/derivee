@@ -31,3 +31,9 @@ skills-lock.json
 *.webm
 *.avi
 
+# Databases & Observer runtime
+observer/*.sqlite*
+observer/*.zst
+*.sqlite-wal
+*.sqlite-shm
+
