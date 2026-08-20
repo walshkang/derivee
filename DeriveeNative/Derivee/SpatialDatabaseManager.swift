@@ -1146,14 +1146,39 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     private func inferRouteId(from stopId: String, name: String) -> String {
-        let upper = (stopId + " " + name).uppercased()
-        if upper.contains("L") { return "L" }
-        if upper.contains("G") { return "G" }
-        if upper.contains("7") { return "7" }
-        if upper.contains("A") || upper.contains("C") || upper.contains("E") { return "A" }
-        if upper.contains("1") || upper.contains("2") || upper.contains("3") { return "1" }
-        if upper.contains("4") || upper.contains("5") || upper.contains("6") { return "4" }
-        if upper.contains("N") || upper.contains("Q") || upper.contains("R") { return "N" }
+        let cleanId = stopId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleanId.hasPrefix("1") && cleanId.count == 3 { return "1" }
+        if cleanId.hasPrefix("2") && cleanId.count == 3 { return "2" }
+        if cleanId.hasPrefix("3") && cleanId.count == 3 { return "3" }
+        if cleanId.hasPrefix("4") && cleanId.count == 3 { return "4" }
+        if cleanId.hasPrefix("5") && cleanId.count == 3 { return "5" }
+        if cleanId.hasPrefix("6") && cleanId.count == 3 { return "6" }
+        if cleanId.hasPrefix("7") && cleanId.count == 3 { return "7" }
+        if cleanId.hasPrefix("A") { return "A" }
+        if cleanId.hasPrefix("B") { return "B" }
+        if cleanId.hasPrefix("C") { return "C" }
+        if cleanId.hasPrefix("D") { return "F" }
+        if cleanId.hasPrefix("E") { return "E" }
+        if cleanId.hasPrefix("F") { return "F" }
+        if cleanId.hasPrefix("G") { return "G" }
+        if cleanId.hasPrefix("J") || cleanId.hasPrefix("Z") { return "J" }
+        if cleanId.hasPrefix("L") { return "L" }
+        if cleanId.hasPrefix("M") && cleanId.count == 3 { return "M" }
+        if cleanId.hasPrefix("N") { return "N" }
+        if cleanId.hasPrefix("Q") { return "Q" }
+        if cleanId.hasPrefix("R") { return "R" }
+        if cleanId.hasPrefix("W") { return "W" }
+        if cleanId.hasPrefix("S") && cleanId.count == 3 { return "SIR" }
+        
+        let upperName = name.uppercased()
+        if upperName.contains("CANARSIE") || upperName.contains("BEDFORD") { return "L" }
+        if upperName.contains("CROSSTOWN") || upperName.contains("NASSAU AVE") { return "G" }
+        if upperName.contains("FLUSHING") || upperName.contains("CORONA") { return "7" }
+        if upperName.contains("LEXINGTON") { return "4" }
+        if upperName.contains("SEVENTH") || upperName.contains("BROADWAY-7") { return "1" }
+        if upperName.contains("EIGHTH") { return "A" }
+        if upperName.contains("SIXTH") { return "F" }
+        
         return "L"
     }
     

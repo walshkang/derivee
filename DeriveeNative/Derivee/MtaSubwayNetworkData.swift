@@ -234,8 +234,24 @@ public struct MtaSubwayNetworkData: Sendable {
     
     /// Generates MapLibre Shape Collection Feature containing all subway trunk polylines with style properties
     public static func createSubwayNetworkShape() -> MLNShapeCollectionFeature {
-        var features: [MLNPolylineFeature] = []
+        // 1. Attempt to load high-resolution GTFS GeoJSON from app bundle
+        if let bundleURL = Bundle.main.url(forResource: "subway-lines", withExtension: "geojson"),
+           let data = try? Data(contentsOf: bundleURL),
+           let parsedShape = try? MLNShape(data: data, encoding: String.Encoding.utf8.rawValue) as? MLNShapeCollectionFeature {
+            
+            for shape in parsedShape.shapes {
+                if let feature = shape as? MLNFeature {
+                    let hex = (feature.attributes["color_hex"] as? String) ?? "#FFB300"
+                    var attrs = feature.attributes
+                    attrs["color"] = UIColor(hex: hex)
+                    feature.attributes = attrs
+                }
+            }
+            return parsedShape
+        }
         
+        // 2. Fallback to static trunk line features
+        var features: [MLNPolylineFeature] = []
         for trunk in trunkLines {
             let polyline = MLNPolylineFeature(coordinates: trunk.coordinates, count: UInt(trunk.coordinates.count))
             polyline.attributes = [

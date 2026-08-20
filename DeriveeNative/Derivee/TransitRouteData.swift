@@ -56,6 +56,12 @@ struct TransitRouteData {
     static func loadRouteCoordinates(for stopOrRouteId: String) async -> [CLLocationCoordinate2D] {
         return await Task.detached(priority: .userInitiated) {
             let cleanId = stopOrRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // If it's a bus stop ID or bus route, do not render a subway polyline
+            if isBusIdentifier(cleanId) {
+                return []
+            }
+            
             let routeId = inferRouteId(from: cleanId)
             
             // 1. Attempt to fetch real physical track geometry from local SQLite database
@@ -63,24 +69,107 @@ struct TransitRouteData {
                 return dbCoords
             }
             
-            // 2. Comprehensive static route fallback polylines across all NYC transit lines
+            // 2. Attempt to load from bundled GeoJSON shapes
+            if let geoCoords = loadCoordinatesFromGeoJSON(for: routeId), !geoCoords.isEmpty {
+                return geoCoords
+            }
+            
+            // 3. Fallback polylines across all NYC transit lines
             return fallbackCoordinates(for: routeId)
         }.value
     }
     
-    private static func inferRouteId(from id: String) -> String {
-        let upper = id.uppercased()
-        if upper.contains("L") || upper.hasPrefix("L") { return "L" }
-        if upper.contains("G") || upper.hasPrefix("G") { return "G" }
-        if upper.contains("7") { return "7" }
-        if upper.contains("1") || upper.contains("2") || upper.contains("3") { return "1" }
-        if upper.contains("4") || upper.contains("5") || upper.contains("6") { return "4" }
-        if upper.contains("A") || upper.contains("C") || upper.contains("E") { return "A" }
-        if upper.contains("B") || upper.contains("D") || upper.contains("F") || upper.contains("M") { return "F" }
-        if upper.contains("N") || upper.contains("Q") || upper.contains("R") || upper.contains("W") { return "N" }
-        if upper.contains("J") || upper.contains("Z") { return "J" }
-        if upper.contains("SIR") { return "SIR" }
-        if upper.contains("S") { return "S" }
+    private static func isBusIdentifier(_ id: String) -> Bool {
+        let clean = id.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.hasPrefix("BUS_") { return true }
+        if clean.hasPrefix("BX") || clean.hasPrefix("SBS") { return true }
+        if clean.contains("/") || clean.contains(" - SBS") { return true }
+        if (clean.hasPrefix("M") || clean.hasPrefix("B") || clean.hasPrefix("Q") || clean.hasPrefix("S")) && clean.count >= 2 && clean.dropFirst().first?.isNumber == true {
+            return true
+        }
+        if clean.count >= 5, Int(clean) != nil {
+            return true
+        }
+        return false
+    }
+    
+    private static func loadCoordinatesFromGeoJSON(for routeId: String) -> [CLLocationCoordinate2D]? {
+        guard let bundleURL = Bundle.main.url(forResource: "subway-lines", withExtension: "geojson") ?? Bundle(for: SpatialDatabaseManager.self).url(forResource: "subway-lines", withExtension: "geojson"),
+              let data = try? Data(contentsOf: bundleURL),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [[String: Any]] else {
+            return nil
+        }
+        
+        let targetRoute = routeId.uppercased()
+        for feature in features {
+            if let props = feature["properties"] as? [String: Any],
+               let routeGroup = props["route_group"] as? String {
+                
+                let matches: Bool
+                switch routeGroup {
+                case "123": matches = ["1", "2", "3"].contains(targetRoute)
+                case "456": matches = ["4", "5", "6", "6X"].contains(targetRoute)
+                case "7": matches = ["7", "7X"].contains(targetRoute)
+                case "ACE": matches = ["A", "C", "E"].contains(targetRoute)
+                case "BDFM": matches = ["B", "D", "F", "FX", "M"].contains(targetRoute)
+                case "G": matches = targetRoute == "G"
+                case "JZ": matches = ["J", "Z"].contains(targetRoute)
+                case "L": matches = targetRoute == "L"
+                case "NQRW": matches = ["N", "Q", "R", "W"].contains(targetRoute)
+                case "S": matches = ["S", "GS", "FS", "H"].contains(targetRoute)
+                case "SIR": matches = targetRoute == "SIR" || targetRoute == "SI"
+                default: matches = routeGroup == targetRoute
+                }
+                
+                if matches, let geom = feature["geometry"] as? [String: Any] {
+                    let geomType = (geom["type"] as? String) ?? ""
+                    if geomType == "MultiLineString", let multiCoords = geom["coordinates"] as? [[[Double]]] {
+                        if let longest = multiCoords.max(by: { $0.count < $1.count }) {
+                            return longest.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
+                        }
+                    } else if geomType == "LineString", let coords = geom["coordinates"] as? [[Double]] {
+                        return coords.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
+                    }
+                }
+            }
+        }
+        return nil
+    }
+    
+    public static func inferRouteId(from id: String) -> String {
+        let clean = id.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        let validRoutes = ["1", "2", "3", "4", "5", "6", "7", "A", "B", "C", "D", "E", "F", "G", "J", "L", "M", "N", "Q", "R", "S", "W", "Z", "SIR"]
+        if validRoutes.contains(clean) {
+            return clean
+        }
+        
+        // Stop ID prefix matching for subway stations
+        if clean.hasPrefix("1") && clean.count == 3 { return "1" }
+        if clean.hasPrefix("2") && clean.count == 3 { return "2" }
+        if clean.hasPrefix("3") && clean.count == 3 { return "3" }
+        if clean.hasPrefix("4") && clean.count == 3 { return "4" }
+        if clean.hasPrefix("5") && clean.count == 3 { return "5" }
+        if clean.hasPrefix("6") && clean.count == 3 { return "6" }
+        if clean.hasPrefix("7") && clean.count == 3 { return "7" }
+        if clean.hasPrefix("A") { return "A" }
+        if clean.hasPrefix("B") { return "B" }
+        if clean.hasPrefix("C") { return "C" }
+        if clean.hasPrefix("D") { return "F" }
+        if clean.hasPrefix("E") { return "E" }
+        if clean.hasPrefix("F") { return "F" }
+        if clean.hasPrefix("G") { return "G" }
+        if clean.hasPrefix("J") || clean.hasPrefix("Z") { return "J" }
+        if clean.hasPrefix("L") { return "L" }
+        if clean.hasPrefix("M") && clean.count == 3 { return "M" }
+        if clean.hasPrefix("N") { return "N" }
+        if clean.hasPrefix("Q") { return "Q" }
+        if clean.hasPrefix("R") { return "R" }
+        if clean.hasPrefix("W") { return "W" }
+        if clean.hasPrefix("S") && clean.count == 3 { return "SIR" }
+        if clean.hasPrefix("H") { return "S" }
+        
         return "L"
     }
     

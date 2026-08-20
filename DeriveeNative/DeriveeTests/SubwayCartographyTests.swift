@@ -30,14 +30,23 @@ final class SubwayCartographyTests: XCTestCase {
         XCTAssertEqual(shapeCollection.shapes.count, 11, "Shape collection should contain 11 polyline features.")
         
         for shape in shapeCollection.shapes {
-            guard let polyline = shape as? MLNPolylineFeature else {
-                XCTFail("Shape must be an MLNPolylineFeature.")
+            guard let feature = shape as? MLNFeature else {
+                XCTFail("Shape must conform to MLNFeature.")
                 continue
             }
-            XCTAssertNotNil(polyline.attributes["route_group"], "Polyline must have route_group attribute.")
-            XCTAssertNotNil(polyline.attributes["color_hex"], "Polyline must have color_hex attribute.")
-            XCTAssertNotNil(polyline.attributes["color"], "Polyline must have color UIColor attribute.")
-            XCTAssertGreaterThan(polyline.pointCount, 1, "Polyline must contain at least 2 points.")
+            XCTAssertNotNil(feature.attributes["route_group"], "Feature must have route_group attribute.")
+            XCTAssertNotNil(feature.attributes["color_hex"], "Feature must have color_hex attribute.")
+            XCTAssertNotNil(feature.attributes["color"], "Feature must have color UIColor attribute.")
+            
+            let pointCount: UInt
+            if let poly = shape as? MLNPolylineFeature {
+                pointCount = poly.pointCount
+            } else if let multiPoly = shape as? MLNMultiPolylineFeature {
+                pointCount = UInt(multiPoly.polylines.reduce(0) { $0 + Int($1.pointCount) })
+            } else {
+                pointCount = 0
+            }
+            XCTAssertGreaterThan(pointCount, 1, "Feature must contain at least 2 points.")
         }
     }
     

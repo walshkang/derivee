@@ -184,6 +184,7 @@ struct ContentView: View {
                         TransitRevealSheet(stopId: stopId)
                             .presentationDetents([.medium, .large])
                             .presentationDragIndicator(.visible)
+                            .presentationContentInteraction(.scrolls)
                     }
                 }
                 .sheet(isPresented: $showStatsView) {

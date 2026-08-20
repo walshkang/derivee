@@ -28,168 +28,181 @@ struct TransitRevealSheet: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Header: Line Badge + Station Name
+        VStack(alignment: .leading, spacing: 0) {
+            // Pinned Header: Line Badge + Station Name + Tab Picker
             if let details = stopDetails {
                 let routeInfo = TransitRouteData.lineInfo(for: details.routeId)
                 let isBus = details.routeType == 3
                 
-                HStack(alignment: .center, spacing: 12) {
-                    if isBus {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color(hex: "#00A1DE"))
-                            .frame(width: 42, height: 38)
-                            .overlay(
-                                Image(systemName: "bus.fill")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundColor(.white)
-                            )
-                    } else {
-                        Circle()
-                            .fill(routeInfo.color)
-                            .frame(width: 38, height: 38)
-                            .overlay(
-                                Text(routeInfo.name)
-                                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                                    .foregroundColor(Color(hex: routeInfo.textColorHex))
-                            )
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(details.name)
-                            .font(.title2)
-                            .bold()
-                            .foregroundColor(.primary)
-                            .lineLimit(1)
-                        
-                        Text(isBus ? "MTA Bus Stop" : "MTA Subway Station")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                }
-                .padding(.top, 8)
-                
-                // Segmented Tab Picker: [ Live Arrivals | Full Timetable ]
-                Picker("Transit Surface", selection: $selectedTab) {
-                    ForEach(TransitTabMode.allCases) { tab in
-                        Text(tab.rawValue).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                
-                Divider()
-                
-                if selectedTab == .liveArrivals {
-                    // Real-time Arrivals List
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("NEXT ARRIVALS")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                            if isLiveActive {
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color(hex: "#FFB300"))
-                                        .frame(width: 6, height: 6)
-                                    Text("LIVE")
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                        .foregroundColor(Color(hex: "#FFB300"))
-                                }
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color(hex: "#FFB300").opacity(0.12))
-                                .clipShape(Capsule())
-                            }
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .center, spacing: 12) {
+                        if isBus {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color(hex: "#00A1DE"))
+                                .frame(width: 42, height: 38)
+                                .overlay(
+                                    Image(systemName: "bus.fill")
+                                        .font(.system(size: 18, weight: .bold))
+                                        .foregroundColor(.white)
+                                )
+                        } else {
+                            Circle()
+                                .fill(routeInfo.color)
+                                .frame(width: 38, height: 38)
+                                .overlay(
+                                    Text(routeInfo.name)
+                                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                                        .foregroundColor(Color(hex: routeInfo.textColorHex))
+                                )
                         }
                         
-                        if displayedArrivals.isEmpty {
-                            Text("No scheduled arrivals in the next 30 minutes")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(details.name)
+                                .font(.title2)
+                                .bold()
+                                .foregroundColor(.primary)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.85)
+                            
+                            Text(isBus ? "MTA Bus Stop" : "MTA Subway Station")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                                .padding(.vertical, 6)
-                        } else {
-                            ForEach(displayedArrivals) { arrival in
-                                HStack(alignment: .center, spacing: 10) {
-                                    let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
-                                    
-                                    if arrival.line.hasPrefix("M") || arrival.line.hasPrefix("B") || arrival.line.hasPrefix("Q") || arrival.line.hasPrefix("Bx") || arrival.line.hasPrefix("S") {
-                                        Text(arrival.line)
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 3)
-                                            .background(Color(hex: "#00A1DE").opacity(0.15))
-                                            .foregroundColor(Color(hex: "#00A1DE"))
-                                            .clipShape(Capsule())
-                                    } else {
-                                        Circle()
-                                            .fill(arrivalInfo.color)
-                                            .frame(width: 22, height: 22)
-                                            .overlay(
-                                                Text(arrivalInfo.name)
-                                                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                                                    .foregroundColor(Color(hex: arrivalInfo.textColorHex))
-                                            )
-                                    }
-                                    
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(arrival.destination)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(.primary)
-                                            .lineLimit(1)
-                                        
-                                        if let dir = arrival.direction ?? arrival.distanceDescription {
-                                            Text(dir)
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.top, 14)
+                    
+                    // Segmented Tab Picker: [ Live Arrivals | Full Timetable ]
+                    Picker("Transit Surface", selection: $selectedTab) {
+                        ForEach(TransitTabMode.allCases) { tab in
+                            Text(tab.rawValue).tag(tab)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    
+                    Divider()
+                        .padding(.top, 2)
+                }
+                .padding(.horizontal, 20)
+                
+                // Scrollable Content
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if selectedTab == .liveArrivals {
+                            // Real-time Arrivals List
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text("NEXT ARRIVALS")
+                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.secondary)
                                     
                                     Spacer()
                                     
-                                    HStack(spacing: 3) {
-                                        Text("\(arrival.minutes)")
-                                            .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                            .foregroundColor(.primary)
-                                        Text("min")
-                                            .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                            .foregroundColor(.secondary)
+                                    if isLiveActive {
+                                        HStack(spacing: 4) {
+                                            Circle()
+                                                .fill(Color(hex: "#FFB300"))
+                                                .frame(width: 6, height: 6)
+                                            Text("LIVE")
+                                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                .foregroundColor(Color(hex: "#FFB300"))
+                                        }
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color(hex: "#FFB300").opacity(0.12))
+                                        .clipShape(Capsule())
                                     }
                                 }
-                                .padding(.vertical, 3)
+                                
+                                if displayedArrivals.isEmpty {
+                                    Text("No scheduled arrivals in the next 30 minutes")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(.vertical, 6)
+                                } else {
+                                    ForEach(displayedArrivals) { arrival in
+                                        HStack(alignment: .center, spacing: 10) {
+                                            let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
+                                            
+                                            if arrival.line.hasPrefix("M") || arrival.line.hasPrefix("B") || arrival.line.hasPrefix("Q") || arrival.line.hasPrefix("Bx") || arrival.line.hasPrefix("S") {
+                                                Text(arrival.line)
+                                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 3)
+                                                    .background(Color(hex: "#00A1DE").opacity(0.15))
+                                                    .foregroundColor(Color(hex: "#00A1DE"))
+                                                    .clipShape(Capsule())
+                                            } else {
+                                                Circle()
+                                                    .fill(arrivalInfo.color)
+                                                    .frame(width: 22, height: 22)
+                                                    .overlay(
+                                                        Text(arrivalInfo.name)
+                                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                                            .foregroundColor(Color(hex: arrivalInfo.textColorHex))
+                                                    )
+                                            }
+                                            
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                Text(arrival.destination)
+                                                    .font(.subheadline)
+                                                    .fontWeight(.medium)
+                                                    .foregroundColor(.primary)
+                                                    .lineLimit(1)
+                                                
+                                                if let dir = arrival.direction ?? arrival.distanceDescription {
+                                                    Text(dir)
+                                                        .font(.caption2)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            HStack(spacing: 3) {
+                                                Text("\(arrival.minutes)")
+                                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(.primary)
+                                                Text("min")
+                                                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        }
+                                        .padding(.vertical, 3)
+                                    }
+                                }
                             }
+                            
+                            Divider()
+                            
+                            // 24x7 Immediate-Mode Reliability Heatmap Matrix
+                            ReliabilityHeatmapCanvas(records: hourlyReliability) { record in
+                                self.selectedRecord = record
+                            }
+                        } else {
+                            // Full 24-Hour Departure Timetable Matrix
+                            DepartureMatrixView(
+                                records: timetableSchedule,
+                                routeId: details.routeId,
+                                stopId: stopId,
+                                liveArrivals: liveArrivals,
+                                selectedDirection: $selectedDirection
+                            )
                         }
                     }
-                    
-                    Divider()
-                    
-                    // 24x7 Immediate-Mode Reliability Heatmap Matrix
-                    ReliabilityHeatmapCanvas(records: hourlyReliability) { record in
-                        self.selectedRecord = record
-                    }
-                } else {
-                    // Full 24-Hour Departure Timetable Matrix
-                    DepartureMatrixView(
-                        records: timetableSchedule,
-                        routeId: details.routeId,
-                        stopId: stopId,
-                        liveArrivals: liveArrivals,
-                        selectedDirection: $selectedDirection
-                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
                 }
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 180)
             }
-            
-            Spacer()
         }
-        .padding(20)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationContentInteraction(.scrolls)
         .sheet(item: $selectedRecord) { rec in
             TransitMatrixInspectorView(record: rec)
                 .presentationDetents([.fraction(0.5), .large])

@@ -660,6 +660,8 @@ struct MapView: UIViewRepresentable {
                             if let casing = style.layer(withIdentifier: self.ephemeralRouteCasingLayerId) { style.removeLayer(casing) }
                             if let source = style.source(withIdentifier: self.ephemeralRouteSourceId) { style.removeSource(source) }
                             
+                            guard !coords.isEmpty else { return }
+                            
                             let line = MLNPolyline(coordinates: coords, count: UInt(coords.count))
                             let source = MLNShapeSource(identifier: self.ephemeralRouteSourceId, shape: line, options: nil)
                             style.addSource(source)
