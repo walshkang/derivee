@@ -5,6 +5,8 @@ struct TransitRevealSheet: View {
     
     @State private var stopDetails: SpatialDatabaseManager.StopDetails?
     @State private var headways: [Double] = []
+    @State private var hourlyReliability: [SpatialDatabaseManager.HourlyReliabilityRecord] = []
+    @State private var selectedRecord: SpatialDatabaseManager.HourlyReliabilityRecord? = nil
     @State private var liveArrivals: [SpatialDatabaseManager.ArrivalInfo] = []
     @State private var isLiveActive: Bool = false
     @State private var lastUpdated: Date? = nil
@@ -148,8 +150,10 @@ struct TransitRevealSheet: View {
                 
                 Divider()
                 
-                // Historical Reliability Sparkline
-                TransitSparklineView(headways: headways, title: "7-Day Headway Reliability (min)", tintColor: isBus ? Color(hex: "#00A1DE") : routeInfo.color)
+                // 24x7 Immediate-Mode Reliability Heatmap Matrix
+                ReliabilityHeatmapCanvas(records: hourlyReliability) { record in
+                    self.selectedRecord = record
+                }
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 180)
@@ -158,6 +162,11 @@ struct TransitRevealSheet: View {
             Spacer()
         }
         .padding(20)
+        .sheet(item: $selectedRecord) { rec in
+            TransitMatrixInspectorView(record: rec)
+                .presentationDetents([.fraction(0.5), .large])
+                .presentationDragIndicator(.visible)
+        }
         .task(id: stopId) {
             await startPollingLifecycle()
         }
@@ -168,10 +177,14 @@ struct TransitRevealSheet: View {
         // 1. Initial base load from local SQLite
         let details = try? await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
         let hw = try? await SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
+        let rel = try? await SpatialDatabaseManager.shared.fetchHourlyReliability(for: stopId, routeId: details?.routeId)
         
         self.stopDetails = details
         if let hw = hw {
             self.headways = hw
+        }
+        if let rel = rel {
+            self.hourlyReliability = rel
         }
         
         guard let routeId = details?.routeId else { return }

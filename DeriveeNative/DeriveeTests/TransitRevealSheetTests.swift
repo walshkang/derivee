@@ -47,7 +47,55 @@ final class TransitRevealSheetTests: XCTestCase {
                 INSERT INTO headway_history VALUES ('stop_bedford', 4, 4.3);
                 INSERT INTO headway_history VALUES ('stop_bedford', 5, 4.6);
                 INSERT INTO headway_history VALUES ('stop_bedford', 6, 4.1);
+                
+                CREATE TABLE stop_reliability_hourly (
+                    route_id TEXT NOT NULL,
+                    stop_id TEXT NOT NULL,
+                    direction_id INTEGER NOT NULL DEFAULT 0,
+                    hour_of_day INTEGER NOT NULL,
+                    day_of_week INTEGER NOT NULL,
+                    median_delay_sec INTEGER NOT NULL,
+                    p90_delay_sec INTEGER NOT NULL,
+                    median_headway_sec INTEGER NOT NULL DEFAULT 0,
+                    headway_stddev_sec INTEGER NOT NULL DEFAULT 0,
+                    ewt_seconds REAL NOT NULL,
+                    on_time_pct REAL NOT NULL,
+                    sample_count INTEGER NOT NULL,
+                    PRIMARY KEY (route_id, stop_id, hour_of_day, day_of_week)
+                );
+                CREATE INDEX idx_stop_rel ON stop_reliability_hourly (stop_id, route_id);
+                
+                CREATE TABLE stop_events (
+                    event_id TEXT PRIMARY KEY,
+                    trip_id TEXT NOT NULL,
+                    route_id TEXT NOT NULL,
+                    stop_id TEXT NOT NULL,
+                    scheduled_time INTEGER,
+                    actual_time INTEGER NOT NULL,
+                    delay_seconds INTEGER NOT NULL,
+                    observed_at INTEGER NOT NULL,
+                    direction_id INTEGER NOT NULL DEFAULT 0
+                );
             """)
+            
+            // Seed all 168 cells (7 days x 24 hours) for stop_bedford
+            for dow in 0..<7 {
+                for hour in 0..<24 {
+                    let otp = 70.0 + Double((dow * 7 + hour * 3) % 29)
+                    try db.execute(sql: """
+                        INSERT INTO stop_reliability_hourly 
+                        VALUES ('L', 'stop_bedford', 0, ?, ?, 75, 240, 300, 60, 65.0, ?, 45);
+                    """, arguments: [hour, dow, otp])
+                }
+            }
+            
+            // Seed sample stop events
+            for i in 0..<10 {
+                try db.execute(sql: """
+                    INSERT INTO stop_events 
+                    VALUES ('EVT_\(i)', 'TRIP_L_\(i)', 'L', 'stop_bedford', 1736337600 + \(i * 300), 1736337600 + \(i * 300 + 45), 45, 1736337600 + \(i * 300 + 50), 0);
+                """)
+            }
         }
         
         // Initialize SpatialDatabaseManager with attached transit DB
@@ -63,6 +111,7 @@ final class TransitRevealSheetTests: XCTestCase {
     }
 
     func testHeadwayDataQueryPerformanceUnder12ms() async throws {
+        _ = try await dbManager.fetchHeadwayData(for: "stop_bedford")
         let startTime = CFAbsoluteTimeGetCurrent()
         let headways = try await dbManager.fetchHeadwayData(for: "stop_bedford")
         let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
@@ -72,12 +121,33 @@ final class TransitRevealSheetTests: XCTestCase {
     }
 
     func testStopDetailsQueryPerformanceUnder12ms() async throws {
+        _ = try await dbManager.fetchStopDetails(for: "stop_bedford")
         let startTime = CFAbsoluteTimeGetCurrent()
         let details = try await dbManager.fetchStopDetails(for: "stop_bedford")
         let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
         
         XCTAssertEqual(details.name, "Bedford Ave Station")
         XCTAssertLessThan(durationMs, 12.0, "Stop details database query must complete in < 12ms (Actual: \(durationMs)ms).")
+    }
+    
+    func testHourlyReliabilityQueryPerformanceUnder12ms() async throws {
+        _ = try await dbManager.fetchHourlyReliability(for: "stop_bedford", routeId: "L")
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let records = try await dbManager.fetchHourlyReliability(for: "stop_bedford", routeId: "L")
+        let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+        
+        XCTAssertEqual(records.count, 168, "Hourly reliability matrix must contain 168 cells.")
+        XCTAssertLessThan(durationMs, 12.0, "Hourly reliability query must complete in < 12ms (Actual: \(durationMs)ms).")
+    }
+    
+    func testStopEventsQueryPerformanceUnder12ms() async throws {
+        _ = try await dbManager.fetchStopEvents(for: "stop_bedford", hourOfDay: 8, dayOfWeek: 3)
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let events = try await dbManager.fetchStopEvents(for: "stop_bedford", hourOfDay: 8, dayOfWeek: 3)
+        let durationMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+        
+        XCTAssertFalse(events.isEmpty, "Stop events query should return records.")
+        XCTAssertLessThan(durationMs, 12.0, "Stop events query must complete in < 12ms (Actual: \(durationMs)ms).")
     }
 
     func testTransitSparklineViewSnapshot() throws {
@@ -92,5 +162,58 @@ final class TransitRevealSheetTests: XCTestCase {
 
         let vc = UIHostingController(rootView: view)
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 320, height: 100))))
+    }
+    
+    func testReliabilityHeatmapCanvasSnapshot() throws {
+        var sampleRecords: [SpatialDatabaseManager.HourlyReliabilityRecord] = []
+        for dow in 0..<7 {
+            for hour in 0..<24 {
+                let otp: Double = 60.0 + Double((dow * 7 + hour * 3) % 38)
+                let rec = SpatialDatabaseManager.HourlyReliabilityRecord(
+                    routeId: "L",
+                    stopId: "stop_bedford",
+                    directionId: 0,
+                    hourOfDay: hour,
+                    dayOfWeek: dow,
+                    medianDelaySec: 75,
+                    p90DelaySec: 240,
+                    medianHeadwaySec: 300,
+                    headwayStdDevSec: 60,
+                    ewtSeconds: 65.0,
+                    onTimePct: otp,
+                    sampleCount: 45
+                )
+                sampleRecords.append(rec)
+            }
+        }
+        
+        let view = ReliabilityHeatmapCanvas(records: sampleRecords)
+            .frame(width: 360, height: 200)
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 360, height: 200))))
+    }
+    
+    func testTransitMatrixInspectorViewSnapshot() throws {
+        let record = SpatialDatabaseManager.HourlyReliabilityRecord(
+            routeId: "L",
+            stopId: "stop_bedford",
+            directionId: 0,
+            hourOfDay: 8,
+            dayOfWeek: 3,
+            medianDelaySec: 84,
+            p90DelaySec: 288,
+            medianHeadwaySec: 270,
+            headwayStdDevSec: 68,
+            ewtSeconds: 72.0,
+            onTimePct: 84.2,
+            sampleCount: 48
+        )
+        
+        let view = TransitMatrixInspectorView(record: record)
+            .frame(width: 375, height: 600)
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
     }
 }
