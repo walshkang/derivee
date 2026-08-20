@@ -119,9 +119,11 @@ All `recomputeFogShape()` invocations run inside `Task.detached(priority: .userI
 
 ### 5.4 Subway Thoroughfares, Station Markers & Transit Context (Waves J.13 & J.15)
 To orient the explorer without spoiling unexplored territory:
-- Complete NYC Subway track alignments (`MtaSubwayNetworkData`) render beneath the fog layer with day/night adaptive casings (silver `#FFFFFF` / slate `#222433`) and MTA agency colors.
+- **High-Precision GTFS Track Geometries:** Complete NYC Subway track alignments (`subway-lines.geojson` loaded via `MtaSubwayNetworkData`) render beneath the fog layer with day/night adaptive casings (silver `#FFFFFF` / slate `#222433`) and MTA agency colors. All 11 trunk line groups follow exact street curvature and align with 0.0m delta to all 496 subway station points.
 - Subway thoroughfares glow vibrantly where fog has been uncovered, while providing subtle orienting context under the fog.
 - **Sub-Fog Subway Station Bullets (`subway-station-bullets-layer`):** All ~496 NYC subway station complexes render beneath the fog as 4.5pt circle discs with theme-adaptive fill/casing.
+- **Database Route Mapping:** All 496 subway stations in `derivee_transit.sqlite` store their exact serving lines in `stops.routes` (e.g. `101` -> `1`, `120` -> `1,2,3`, `635` -> `4,5,6`), queried asynchronously by `SpatialDatabaseManager.fetchStopDetails`.
+- **Transit Drawer Interaction (`TransitRevealSheet`):** Anchored with a pinned header (line badge, title, subtitle, segmented picker) and scrollable body wrapped with `.presentationContentInteraction(.scrolls)`, allowing interactive scrolling across arrivals, reliability heatmaps, and full timetables in both half-sheet (`.medium`) and maximized full-screen (`.large`) detents.
 - **Marker Presentation Modes (`SubwayStationMarkerStyle`):**
   - **`Explored Only` (Default):** Sub-fog bullets hidden for unexplored stations; explored stations render above the fog in Electric Amber (`#FFB300`) at zoom $\ge 11.0$. Unexplored stations within 1,000m pulse with ambient lure glow.
   - **`All Stations`:** Sub-fog bullets visible across NYC beneath the fog, fully interactive via map tap to open `TransitRevealSheet`.

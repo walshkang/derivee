@@ -573,8 +573,10 @@ This section defines visual specifications, color science, progressive disclosur
 The 24 × 7 Reliability Heatmap directly replaces the legacy 7-day sparkline in `TransitRevealSheet`, providing a complete spatial-temporal overview of station reliability across all 168 hours of the operating week.
 
 * **UI Container & Presentation:**
-  * **`.fraction(0.3)` Snap Point (Tier 1 Ambient Overview):** Renders a compact, ambient 48–80pt high heatmap strip summarizing peak-hour reliability trends.
-  * **`.large` Snap Point (Interactive Matrix):** Expands into a full 24-row × 7-column grid ($1056\text{ pt}$ scrollable container) with interactive cell tap inspection.
+  * **Pinned Header & Navigation:** Station Badge, Stop Title (`.lineLimit(2)` + scale factor), and Subtitle ("MTA Subway Station" / "MTA Bus Stop") stay pinned with the `[ Live Arrivals | Full Timetable ]` segmented picker at the top of `TransitRevealSheet` with 14pt padding beneath the drag grabber.
+  * **`.medium` Snap Point (Half-Drawer):** Live Next Arrivals and the ambient overview of the 24 × 7 Heatmap are immediately visible, with smooth interactive scrolling enabled inside the half-drawer.
+  * **`.large` Snap Point (Interactive Matrix):** Dragging up expands into full-screen view ($1056\text{ pt}$ scrollable container) with interactive cell tap inspection.
+  * **Scrolling Interaction:** Set with `.presentationContentInteraction(.scrolls)` and `.presentationDragIndicator(.visible)`.
 * **Ambient Metric Encoding:**
   * The fill color of each matrix cell represents **On-Time Performance ($OTP\%$)** strictly mapped to a 6-tier discrete, Color-Vision-Deficient (CVD) safe **Cividis** colormap.
 * **6-Tier Cividis Colormap Specification (Universal Day/Night):**
