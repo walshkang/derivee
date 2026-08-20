@@ -260,4 +260,26 @@ This section defines the implementation parameters and algorithmic constraints e
     3. *Historic Landmarks:* Curated cultural and historic landmark POIs discovered.
   - Preserves lightning-fast hex inserts (<0.5ms) while keeping the primary map interface minimal and free of gamified clutter.
 
+### 8.8 High-Performance Immediate-Mode Transit Matrix Architecture (`W11.7a` & `W11.7b`)
+- **Prohibited Approaches:**
+  - *SwiftUI `Grid` Container (iOS 16+):* Banned for dense transit matrices. Evaluates all 168–1,440 cells eagerly, creating distinct View and Layout tree nodes for every cell. Single-cell state updates invalidate the full layout hierarchy, dropping frames during dynamic feed refreshes.
+  - *SwiftUI `LazyVGrid`:* Rejected. While instantiating views on demand is efficient for long vertical feeds, it introduces noticeable layout calculation overhead and touch latency during rapid bidirectional scrolling or drag-scrubbing.
+- **Mandated Implementation:**
+  - **Immediate-Mode SwiftUI `Canvas` (`GraphicsContext`):** Renders all 168 heatmap cells ($24 \times 7$) or dynamic departure minute nodes inside a unified immediate-mode `Canvas` pass backed by Metal.
+  - **Memory & Draw Performance:** Executes the entire matrix draw pass in **< 1.2 ms** directly on the GPU, driven by primitive `[Float]` array state with zero View-tree allocation overhead, guaranteeing 120Hz ProMotion compliance (< 8.33 ms frame delivery).
+  - **Universal 6-Tier Cividis Colormap:** Maps On-Time Performance ($OTP$) to discrete CVD-safe hex stops (`#00224E`, `#414D6B`, `#7B7B78`, `#A9A55E`, `#D4C84A`, `#FDEA45`) with 1pt hairline cell borders.
+- **Mathematical Formulations for Transit Reliability:**
+  - **On-Time Performance ($OTP$):**
+    $$OTP = \frac{\sum_{i=1}^{N} \mathbb{I}(-60\text{s} \le \text{delay}_i \le 300\text{s})}{N} \times 100$$
+  - **Excess Wait Time ($EWT$):**
+    $$EWT = \text{AWT} - \text{SWT} = \frac{\sum (\Delta t)^2}{2 \sum \Delta t} - \frac{\text{Scheduled Headway}}{2}$$
+  - **Headway Variance ($\sigma^2_{\Delta t}$):**
+    $$\sigma^2 = \frac{1}{M} \sum_{j=1}^{M} (\Delta t_j - \mu_{\Delta t})^2 \quad \text{where } \mu_{\Delta t} = \frac{1}{M} \sum \Delta t_j$$
+  - **90th Percentile Delay ($P90$):** Nearest-rank interpolation of sorted delay seconds array at index $\lfloor 0.90 \times N \rfloor$.
+- **Database & Query Architecture:**
+  - **Async GRDB Reads:** All queries executed via `try await dbWriter.read { db in ... }` with `.userInitiated` QoS.
+  - **Query Budget:** Aggregated 168-cell matrix queries from `stop_reliability_hourly` execute in **< 12 ms**.
+  - **Testing Architecture:** Pre-seeded deterministic SQLite test fixtures in `DeriveeTests` allow full snapshot and math verification in CI without dependency on live Oracle Cloud Observer data collection.
+
+
 

@@ -561,3 +561,66 @@ This section defines visual and interaction standards for upcoming Wave J featur
   * *Haptics:* `UIImpactFeedbackGenerator(style: .light)` fires immediately upon successful GRDB database insertion of a newly discovered hex.
   * *Transient Pulse:* Unlocked hex triggers an ephemeral `MLNCircleStyleLayer` expanding from radius 0 to 80 with a 1.2s opacity fade (`0.8` to `0.0`), auto-removed on completion.
 * **Exploration Journal:** Screen 3 houses categorized milestone cards (Transit Hubs, Neighborhoods, Historic Landmarks) with discovery timestamps and badge progression computed on-demand via asynchronous GRDB reads (`dbWriter.read`), keeping the primary map completely free of gamified clutter.
+
+---
+
+## 10. Spatial-Temporal Transit Interfaces: Headway Matrix & Heatmaps (`W11.7a` & `W11.7b`)
+
+This section defines visual specifications, color science, progressive disclosure layers, and interaction paradigms for Dérivée's spatial-temporal transit interface sub-surfaces on Screen 2 (`TransitRevealSheet`).
+
+### 10.1 24 × 7 Reliability Heatmap (`W11.7a-HEATMAP`)
+
+The 24 × 7 Reliability Heatmap directly replaces the legacy 7-day sparkline in `TransitRevealSheet`, providing a complete spatial-temporal overview of station reliability across all 168 hours of the operating week.
+
+* **UI Container & Presentation:**
+  * **`.fraction(0.3)` Snap Point (Tier 1 Ambient Overview):** Renders a compact, ambient 48–80pt high heatmap strip summarizing peak-hour reliability trends.
+  * **`.large` Snap Point (Interactive Matrix):** Expands into a full 24-row × 7-column grid ($1056\text{ pt}$ scrollable container) with interactive cell tap inspection.
+* **Ambient Metric Encoding:**
+  * The fill color of each matrix cell represents **On-Time Performance ($OTP\%$)** strictly mapped to a 6-tier discrete, Color-Vision-Deficient (CVD) safe **Cividis** colormap.
+* **6-Tier Cividis Colormap Specification (Universal Day/Night):**
+  * All cells share identical hex stops across Day and Night modes, framed by a 1pt hairline border (`Color.secondary.opacity(0.15)`):
+
+| OTP Range | Quality Tier | Cividis Hex | Visual Semantic |
+|:---|:---|:---|:---|
+| **0% – 50%** | Critical | `#00224E` | Deep navy |
+| **50% – 65%** | Poor | `#414D6B` | Steel blue-gray |
+| **65% – 75%** | Below Average | `#7B7B78` | Neutral gray |
+| **75% – 85%** | Acceptable | `#A9A55E` | Olive gold |
+| **85% – 95%** | Good | `#D4C84A` | Warm gold |
+| **95% – 100%** | Excellent | `#FDEA45` | Bright yellow |
+| *No Data* (`sample_count = 0`) | Unobserved | `Color.primary.opacity(0.04)` | Subtle backdrop tint |
+
+* **Viewport Layout & Apple HIG Touch Target Math (iPhone 393pt logical width):**
+  * **Y-Axis Hour Labels:** 36pt fixed monospace column (`00:00` through `23:00`).
+  * **Grid Data Width:** $393\text{ pt} - 36\text{ pt} = 357\text{ pt}$.
+  * **Day Columns (Mon–Sun):** $357\text{ pt} / 7 = 51.0\text{ pt}$ cell width ($\ge 44\text{ pt}$ Apple HIG target).
+  * **Interactive Cell Height:** $44.0\text{ pt}$ per row ($24 \times 44\text{ pt} = 1056\text{ pt}$ scrollable height).
+* **3-Tier Progressive Disclosure Model:**
+  * **Tier 1 (Ambient Grid):** Single $OTP\%$ Cividis fill per cell for instant visual scanning.
+  * **Tier 2 (Inspector Sheet on Cell Tap):** Tapping any cell ($Hour \times Day$) opens a native `.sheet` (`presentationDetents([.fraction(0.35), .large])`) with `.ultraThinMaterial` blur displaying detailed SF Mono readouts:
+    * On-Time Percentage ($OTP\%$, e.g. `84.2%`)
+    * Median Delay ($\tilde{D}$, e.g. `+1.4 min`)
+    * 90th Percentile Delay ($P90$, e.g. `+4.8 min`)
+    * Headway Variance ($\sigma^2_{\Delta t}$, e.g. `±1.8 min`)
+    * Excess Wait Time ($EWT$, e.g. `+1.2 min`)
+    * 7-Day rolling headway sparkline for that specific hour block.
+  * **Tier 3 (Raw Trip Ledger on Deep Dive):** Tapping the sparkline or log button expands to `.large` detent showing the chronological table of every individual vehicle arrival (scheduled vs. actual times, vehicle IDs, recorded headways $\Delta t$) loaded asynchronously via GRDB in $< 12\text{ ms}$.
+
+---
+
+### 10.2 Hour × Minute Departure Matrix (`W11.7b-DEPARTURES`)
+
+The Hour × Minute Departure Matrix provides full Naver Maps-style schedule inspection for high-density transit corridors.
+
+* **UI Container & Segmented Control:**
+  * Housed directly inside Screen 2 (`TransitRevealSheet`) via a native segmented picker: `[ Live Arrivals | Full Timetable ]`.
+  * Preserves Screen Hierarchy Guardrail G10 by remaining entirely within Screen 2 at the `.large` sheet detent.
+* **Matrix Layout:**
+  * **Vertical Axis (Rows):** Operating hours from early morning service launch (`05:00`) to late-night connections (`24:00`+).
+  * **Horizontal Axis (Columns):** Dynamic flex container housing chronological 2-digit departure minute pills (e.g. `02, 08, 15, 22, 30, 37...`) rather than a rigid 60-slot grid, gracefully accommodating both high-frequency subway corridors and lower-frequency express buses.
+* **Visual Data Encoding & Badges:**
+  * **Departure Pills:** 2-digit monospace integer in high-contrast neutral pill container (`#1C1C1E` / `#FFFFFF`).
+  * **Service Variants (Express / Branch):** Highlighted with filled background badges using official MTA route line colors (e.g. Red for 1/2/3, Green for 4/5/6).
+  * **Boundary Markers:** First and last departures of the operating day styled with distinct amber border rings.
+  * **Live Real-Time Delta Overlays:** When GTFS-RT telemetry is active, live countdowns ($\Delta t = T_{\text{actual}} - T_{\text{current}}$) inject directly into departure pills with a pulsing Electric Amber (`#FFB300`) dot.
+  * **Delay Badging:** Vehicles deviating $\ge 3\text{ min}$ from scheduled timetable append a high-visibility delta tag (e.g. Alert Red `+5m` or Amber `+3m` pill) in the upper-right quadrant.

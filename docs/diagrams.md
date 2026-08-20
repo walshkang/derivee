@@ -609,3 +609,114 @@ Dérivée achieves high performance and reliability through three mathematical a
 - The entire application lifecycle is a pure unidirectional functor:
   $$\text{Location Fix} \longrightarrow \text{H3 Cell} \longrightarrow \text{SQLite Write} \longrightarrow \text{ValueObservation} \longrightarrow \text{Fog Shape} \longrightarrow \text{Metal GPU Triangulation}$$
   SQLite is the **single source of truth** and state reconciler; neither UI state nor view controllers maintain parallel spatial buffers.
+
+---
+
+## 7. Transit Spatial-Temporal Interfaces & 3-Tier Progressive Disclosure Flow
+
+This diagram defines the architecture and progressive disclosure state transitions across the 24×7 Reliability Heatmap (`W11.7a-HEATMAP`) and the Hour × Minute Departure Matrix (`W11.7b-DEPARTURES`).
+
+### 7.1 Screen 2 Transit Sub-Surface State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> SheetPresented: Tap Ghost POI / Station Node
+    
+    state SheetPresented {
+        [*] --> LiveArrivalsTab
+        
+        state LiveArrivalsTab {
+            [*] --> Tier1AmbientHeatmap: Render Cividis Canvas (48pt)
+            Tier1AmbientHeatmap --> ExpandedHeatmap: Pull Sheet to .large Detent
+            
+            state ExpandedHeatmap {
+                [*] --> IdleGrid: 24x7 Matrix (168 Cells)
+                IdleGrid --> Tier2InspectorSheet: Tap Cell (Hour x Day)
+                
+                state Tier2InspectorSheet {
+                    [*] --> MetricsDisplay: OTP%, Median, P90, EWT, Var
+                    MetricsDisplay --> Tier3TripLedger: Tap Sparkline / Run Logs
+                    
+                    state Tier3TripLedger {
+                        [*] --> AsyncQuery: dbWriter.read (<12ms)
+                        AsyncQuery --> TableRender: Chronological Stop Events
+                    }
+                }
+            }
+        }
+        
+        state FullTimetableTab {
+            [*] --> HourMinuteMatrix: Render Operating Hours (05:00-24:00)
+            HourMinuteMatrix --> DeparturePills: Dynamic Horizontal Flex
+            DeparturePills --> LiveDeltaOverlay: GTFS-RT Active (Pulsing Dot + Badge)
+        }
+        
+        LiveArrivalsTab --> FullTimetableTab: Switch Segmented Picker
+        FullTimetableTab --> LiveArrivalsTab: Switch Segmented Picker
+    }
+    
+    SheetPresented --> [*]: Dismiss Sheet (Swipe Down / Map Tap)
+```
+
+### 7.2 Component Ownership & Data Hierarchy
+
+```mermaid
+classDiagram
+    direction TB
+
+    class TransitRevealSheet {
+        <<SwiftUI View / Screen 2>>
+        +stopId: String
+        -selectedTab: TransitTabMode
+        -stopDetails: StopDetails?
+        -liveArrivals: [ArrivalInfo]
+    }
+
+    class ReliabilityHeatmapCanvas {
+        <<SwiftUI Immediate-Mode Canvas>>
+        +gridData: [Float]
+        +colormap: CividisColormap
+        +onSelectCell: (Int, Int) -> Void
+        +draw(context, size)
+    }
+
+    class TransitMatrixInspectorView {
+        <<SwiftUI View / Tier 2 Sheet>>
+        +hour: Int
+        +dayOfWeek: Int
+        +metrics: HourlyReliabilityMetrics
+        +onViewRunLogs: Action
+    }
+
+    class TripLedgerView {
+        <<SwiftUI View / Tier 3 Sheet>>
+        +stopId: String
+        +hour: Int
+        +dayOfWeek: Int
+        -stopEvents: [StopEvent]
+        +loadEvents()
+    }
+
+    class DepartureMatrixView {
+        <<SwiftUI View / Timetable Tab>>
+        +stopId: String
+        +scheduledDepartures: [HourDepartures]
+        +liveDeltas: [String: Int]
+    }
+
+    class SpatialDatabaseManager {
+        <<Thread-Safe Actor / GRDB Pool>>
+        +fetchHourlyReliability(stopId) async throws
+        +fetchStopEvents(stopId, hour, dow) async throws
+        +fetchTimetable(stopId) async throws
+    }
+
+    TransitRevealSheet --> ReliabilityHeatmapCanvas : embeds (Live Tab)
+    TransitRevealSheet --> DepartureMatrixView : embeds (Timetable Tab)
+    ReliabilityHeatmapCanvas ..> TransitMatrixInspectorView : triggers on tap
+    TransitMatrixInspectorView --> TripLedgerView : expands on tap
+    TransitMatrixInspectorView ..> SpatialDatabaseManager : queries metrics
+    TripLedgerView ..> SpatialDatabaseManager : queries raw events
+    DepartureMatrixView ..> SpatialDatabaseManager : queries scheduled timetable
+```
+
