@@ -58,15 +58,33 @@ struct ReliabilityHeatmapCanvas: View {
     // Day columns ordered Monday (1) through Sunday (0)
     static let dayOrder: [Int] = [1, 2, 3, 4, 5, 6, 0]
     static let dayLabels: [String] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    static let fullDayNames: [Int: String] = [
+        1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday", 0: "Sunday"
+    ]
+    static let shortDayNames: [Int: String] = [
+        1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 0: "Sun"
+    ]
+    
+    @State private var selectedDay: Int
+    @State private var selectedHour: Int
     
     init(
         records: [SpatialDatabaseManager.HourlyReliabilityRecord],
         title: String = "24 × 7 Station Reliability Matrix",
+        initialDay: Int? = nil,
+        initialHour: Int? = nil,
         onSelectCell: ((SpatialDatabaseManager.HourlyReliabilityRecord) -> Void)? = nil
     ) {
         self.records = records
         self.title = title
         self.onSelectCell = onSelectCell
+        
+        let currentWeekday = Calendar.current.component(.weekday, from: Date())
+        let defaultDay = (currentWeekday - 1) % 7
+        let defaultHour = Calendar.current.component(.hour, from: Date())
+        
+        self._selectedDay = State(initialValue: initialDay ?? defaultDay)
+        self._selectedHour = State(initialValue: initialHour ?? defaultHour)
     }
     
     // Quick lookup map: (dow, hour) -> record
@@ -85,6 +103,33 @@ struct ReliabilityHeatmapCanvas: View {
         let valid = records.filter { $0.sampleCount > 0 }
         guard !valid.isEmpty else { return 0.0 }
         return valid.reduce(0.0) { $0 + $1.onTimePct } / Double(valid.count)
+    }
+    
+    static func hourRangeString(for hour: Int) -> String {
+        String(format: "%02d:00 – %02d:00", hour, (hour + 1) % 24)
+    }
+    
+    func recordFor(dayOfWeek dow: Int, hourOfDay hour: Int) -> SpatialDatabaseManager.HourlyReliabilityRecord {
+        if let rec = recordMap[dow]?[hour] {
+            return rec
+        }
+        let rId = records.first?.routeId ?? "L"
+        let sId = records.first?.stopId ?? "station"
+        let dir = records.first?.directionId ?? 0
+        return SpatialDatabaseManager.HourlyReliabilityRecord(
+            routeId: rId,
+            stopId: sId,
+            directionId: dir,
+            hourOfDay: hour,
+            dayOfWeek: dow,
+            medianDelaySec: 60,
+            p90DelaySec: 180,
+            medianHeadwaySec: 300,
+            headwayStdDevSec: 60,
+            ewtSeconds: 60.0,
+            onTimePct: 0.0,
+            sampleCount: 0
+        )
     }
     
     var body: some View {
@@ -192,6 +237,38 @@ struct ReliabilityHeatmapCanvas: View {
                             )
                         }
                     }
+                    
+                    // 3. Draw Crosshair Guide Lines & Highlighted Active Cell
+                    if let colIdx = Self.dayOrder.firstIndex(of: selectedDay), selectedHour >= 0, selectedHour < 24 {
+                        let activeCellX = yAxisWidth + CGFloat(colIdx) * colWidth
+                        let activeCellY = headerHeight + CGFloat(selectedHour) * rowHeight
+                        let activeRect = CGRect(
+                            x: activeCellX + 0.5,
+                            y: activeCellY + 0.5,
+                            width: max(0.5, colWidth - 1.0),
+                            height: max(0.5, rowHeight - 1.0)
+                        )
+                        
+                        // Vertical Column Crosshair Guide
+                        var vGuide = Path()
+                        vGuide.move(to: CGPoint(x: activeCellX + colWidth / 2.0, y: headerHeight))
+                        vGuide.addLine(to: CGPoint(x: activeCellX + colWidth / 2.0, y: headerHeight + gridHeight))
+                        context.stroke(vGuide, with: .color(Color(hex: "#FFB300").opacity(0.3)), lineWidth: 1.0)
+                        
+                        // Horizontal Row Crosshair Guide
+                        var hGuide = Path()
+                        hGuide.move(to: CGPoint(x: yAxisWidth, y: activeCellY + rowHeight / 2.0))
+                        hGuide.addLine(to: CGPoint(x: yAxisWidth + gridWidth, y: activeCellY + rowHeight / 2.0))
+                        context.stroke(hGuide, with: .color(Color(hex: "#FFB300").opacity(0.3)), lineWidth: 1.0)
+                        
+                        // Highlight Active Cell Outline
+                        let highlightBorder = Path(roundedRect: activeRect.insetBy(dx: -0.5, dy: -0.5), cornerRadius: 2.0)
+                        context.stroke(
+                            highlightBorder,
+                            with: .color(Color(hex: "#FFB300")),
+                            lineWidth: 1.5
+                        )
+                    }
                 }
                 .contentShape(Rectangle())
                 .gesture(
@@ -205,34 +282,118 @@ struct ReliabilityHeatmapCanvas: View {
                             guard colIdx >= 0 && colIdx < 7 && hourIdx >= 0 && hourIdx < 24 else { return }
                             let dow = Self.dayOrder[colIdx]
                             
-                            if let rec = self.recordMap[dow]?[hourIdx] {
-                                self.onSelectCell?(rec)
-                            } else {
-                                // Provide fallback record if empty cell tapped
-                                let fallback = SpatialDatabaseManager.HourlyReliabilityRecord(
-                                    routeId: "L",
-                                    stopId: "station",
-                                    directionId: 0,
-                                    hourOfDay: hourIdx,
-                                    dayOfWeek: dow,
-                                    medianDelaySec: 60,
-                                    p90DelaySec: 180,
-                                    medianHeadwaySec: 300,
-                                    headwayStdDevSec: 60,
-                                    ewtSeconds: 60.0,
-                                    onTimePct: 88.0,
-                                    sampleCount: 30
-                                )
-                                self.onSelectCell?(fallback)
-                            }
+                            self.selectedDay = dow
+                            self.selectedHour = hourIdx
+                            
+                            let rec = self.recordFor(dayOfWeek: dow, hourOfDay: hourIdx)
+                            self.onSelectCell?(rec)
                         }
                 )
             }
             .frame(height: 140)
             
+            // Dual-Input Inspector Controls: Day & Hour Menus + Inspect Button
+            HStack(spacing: 8) {
+                // Day Selector Menu
+                Menu {
+                    ForEach(Self.dayOrder, id: \.self) { dow in
+                        Button {
+                            self.selectedDay = dow
+                            let rec = self.recordFor(dayOfWeek: dow, hourOfDay: self.selectedHour)
+                            self.onSelectCell?(rec)
+                        } label: {
+                            HStack {
+                                Text(Self.fullDayNames[dow] ?? "Day \(dow)")
+                                if dow == selectedDay {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundColor(Color(hex: "#FFB300"))
+                        Text(Self.shortDayNames[selectedDay] ?? "Day")
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.primary)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(minHeight: 32)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                
+                // Hour Selector Menu
+                Menu {
+                    ForEach(0..<24, id: \.self) { h in
+                        Button {
+                            self.selectedHour = h
+                            let rec = self.recordFor(dayOfWeek: self.selectedDay, hourOfDay: h)
+                            self.onSelectCell?(rec)
+                        } label: {
+                            HStack {
+                                Text(Self.hourRangeString(for: h))
+                                if h == selectedHour {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundColor(Color(hex: "#FFB300"))
+                        Text(Self.hourRangeString(for: selectedHour))
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.primary)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(minHeight: 32)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                // Inspect Button
+                Button {
+                    let rec = self.recordFor(dayOfWeek: self.selectedDay, hourOfDay: self.selectedHour)
+                    self.onSelectCell?(rec)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Inspect")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#FFB300"))
+                        Image(systemName: "arrow.up.right.square.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(Color(hex: "#FFB300"))
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .frame(minHeight: 32)
+                    .background(Color(hex: "#FFB300").opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 4)
+            
             // Subtitle hint
             HStack {
-                Text("Tap any hour block to inspect on-time metrics & arrival logs")
+                Text("Select Day & Hour above or tap matrix to inspect metrics")
                     .font(.system(size: 9, weight: .regular, design: .monospaced))
                     .foregroundColor(.secondary)
                 Spacer()
@@ -270,6 +431,6 @@ struct ReliabilityHeatmapCanvas: View {
         }
     }
     
-    ReliabilityHeatmapCanvas(records: sample)
+    ReliabilityHeatmapCanvas(records: sample, initialDay: 3, initialHour: 8)
         .padding()
 }

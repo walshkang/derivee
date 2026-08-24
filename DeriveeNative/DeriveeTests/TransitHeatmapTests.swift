@@ -87,4 +87,89 @@ final class TransitHeatmapTests: XCTestCase {
         XCTAssertEqual(event.delaySeconds, 45)
         XCTAssertEqual(event.directionId, 0)
     }
+
+    func testDayNamesMapping() {
+        XCTAssertEqual(ReliabilityHeatmapCanvas.fullDayNames[1], "Monday")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.fullDayNames[2], "Tuesday")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.fullDayNames[3], "Wednesday")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.fullDayNames[4], "Thursday")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.fullDayNames[5], "Friday")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.fullDayNames[6], "Saturday")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.fullDayNames[0], "Sunday")
+        
+        XCTAssertEqual(ReliabilityHeatmapCanvas.shortDayNames[1], "Mon")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.shortDayNames[2], "Tue")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.shortDayNames[3], "Wed")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.shortDayNames[4], "Thu")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.shortDayNames[5], "Fri")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.shortDayNames[6], "Sat")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.shortDayNames[0], "Sun")
+    }
+
+    func testHourRangeFormatting() {
+        XCTAssertEqual(ReliabilityHeatmapCanvas.hourRangeString(for: 0), "00:00 – 01:00")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.hourRangeString(for: 8), "08:00 – 09:00")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.hourRangeString(for: 14), "14:00 – 15:00")
+        XCTAssertEqual(ReliabilityHeatmapCanvas.hourRangeString(for: 23), "23:00 – 00:00")
+    }
+
+    func testRecordForLookupWithExistingRecord() {
+        let existing = SpatialDatabaseManager.HourlyReliabilityRecord(
+            routeId: "L",
+            stopId: "stop_bedford",
+            directionId: 0,
+            hourOfDay: 8,
+            dayOfWeek: 3,
+            medianDelaySec: 75,
+            p90DelaySec: 240,
+            medianHeadwaySec: 300,
+            headwayStdDevSec: 60,
+            ewtSeconds: 65.0,
+            onTimePct: 88.5,
+            sampleCount: 42
+        )
+        
+        let canvas = ReliabilityHeatmapCanvas(
+            records: [existing],
+            initialDay: 3,
+            initialHour: 8
+        )
+        
+        let found = canvas.recordFor(dayOfWeek: 3, hourOfDay: 8)
+        XCTAssertEqual(found.id, existing.id)
+        XCTAssertEqual(found.onTimePct, 88.5)
+        XCTAssertEqual(found.sampleCount, 42)
+    }
+
+    func testRecordForFallbackWithMissingRecord() {
+        let sample = SpatialDatabaseManager.HourlyReliabilityRecord(
+            routeId: "N",
+            stopId: "stop_astoria",
+            directionId: 1,
+            hourOfDay: 10,
+            dayOfWeek: 2,
+            medianDelaySec: 60,
+            p90DelaySec: 180,
+            medianHeadwaySec: 300,
+            headwayStdDevSec: 60,
+            ewtSeconds: 60.0,
+            onTimePct: 90.0,
+            sampleCount: 30
+        )
+        
+        let canvas = ReliabilityHeatmapCanvas(
+            records: [sample],
+            initialDay: 5,
+            initialHour: 15
+        )
+        
+        let fallback = canvas.recordFor(dayOfWeek: 5, hourOfDay: 15)
+        XCTAssertEqual(fallback.routeId, "N")
+        XCTAssertEqual(fallback.stopId, "stop_astoria")
+        XCTAssertEqual(fallback.directionId, 1)
+        XCTAssertEqual(fallback.dayOfWeek, 5)
+        XCTAssertEqual(fallback.hourOfDay, 15)
+        XCTAssertEqual(fallback.sampleCount, 0)
+        XCTAssertEqual(fallback.onTimePct, 0.0)
+    }
 }
