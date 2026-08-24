@@ -43,12 +43,19 @@ func InitStaticDB(path string) (*StaticDatabase, error) {
 		stop_name TEXT NOT NULL,
 		stop_lat REAL NOT NULL,
 		stop_lon REAL NOT NULL,
-		location_type INTEGER NOT NULL DEFAULT 0
+		location_type INTEGER NOT NULL DEFAULT 0,
+		parent_station TEXT DEFAULT NULL
 	) WITHOUT ROWID;
+
+	CREATE INDEX IF NOT EXISTS idx_stops_parent ON stops(parent_station);
 	`
 	if _, err := db.Exec(createTableSQL); err != nil {
 		return nil, fmt.Errorf("failed to create static tables: %w", err)
 	}
+
+	// Migrations for pre-existing databases missing columns
+	db.Exec(`ALTER TABLE stops ADD COLUMN parent_station TEXT DEFAULT NULL;`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_stops_parent ON stops(parent_station);`)
 
 	// We clear scheduled_stops on init because we will reload it from the latest GTFS zip
 	db.Exec(`DELETE FROM scheduled_stops;`)
@@ -99,13 +106,14 @@ func (d *StaticDatabase) BulkInsertStops(records []fetcher.GTFSStop) error {
 	}
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO stops (stop_id, stop_name, stop_lat, stop_lon, location_type)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO stops (stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(stop_id) DO UPDATE SET
 			stop_name = excluded.stop_name,
 			stop_lat = excluded.stop_lat,
 			stop_lon = excluded.stop_lon,
-			location_type = excluded.location_type;
+			location_type = excluded.location_type,
+			parent_station = excluded.parent_station;
 	`)
 	if err != nil {
 		tx.Rollback()
@@ -114,7 +122,11 @@ func (d *StaticDatabase) BulkInsertStops(records []fetcher.GTFSStop) error {
 	defer stmt.Close()
 
 	for _, r := range records {
-		if _, err := stmt.Exec(r.StopID, r.StopName, r.StopLat, r.StopLon, r.LocationType); err != nil {
+		var parentStn interface{} = nil
+		if r.ParentStation != "" {
+			parentStn = r.ParentStation
+		}
+		if _, err := stmt.Exec(r.StopID, r.StopName, r.StopLat, r.StopLon, r.LocationType, parentStn); err != nil {
 			log.Printf("Failed to insert static stop %s: %v", r.StopID, err)
 		}
 	}
@@ -124,7 +136,7 @@ func (d *StaticDatabase) BulkInsertStops(records []fetcher.GTFSStop) error {
 
 // GetAllStops returns all stops from static database
 func (d *StaticDatabase) GetAllStops() ([]fetcher.GTFSStop, error) {
-	rows, err := d.db.Query(`SELECT stop_id, stop_name, stop_lat, stop_lon, location_type FROM stops`)
+	rows, err := d.db.Query(`SELECT stop_id, stop_name, stop_lat, stop_lon, location_type, COALESCE(parent_station, '') FROM stops`)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +145,7 @@ func (d *StaticDatabase) GetAllStops() ([]fetcher.GTFSStop, error) {
 	var stops []fetcher.GTFSStop
 	for rows.Next() {
 		var s fetcher.GTFSStop
-		if err := rows.Scan(&s.StopID, &s.StopName, &s.StopLat, &s.StopLon, &s.LocationType); err != nil {
+		if err := rows.Scan(&s.StopID, &s.StopName, &s.StopLat, &s.StopLon, &s.LocationType, &s.ParentStation); err != nil {
 			continue
 		}
 		stops = append(stops, s)

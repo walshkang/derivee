@@ -61,8 +61,11 @@ func InitDB(path string) (*Database, error) {
 		stop_name TEXT NOT NULL,
 		stop_lat REAL NOT NULL,
 		stop_lon REAL NOT NULL,
-		location_type INTEGER NOT NULL DEFAULT 0
+		location_type INTEGER NOT NULL DEFAULT 0,
+		parent_station TEXT DEFAULT NULL
 	) WITHOUT ROWID;
+
+	CREATE INDEX IF NOT EXISTS idx_stops_parent ON stops(parent_station);
 	
 	CREATE INDEX IF NOT EXISTS idx_stop_events_observed ON stop_events(observed_at);
 	`
@@ -76,6 +79,8 @@ func InitDB(path string) (*Database, error) {
 	db.Exec(`ALTER TABLE stop_reliability_hourly ADD COLUMN direction_id INTEGER NOT NULL DEFAULT 0;`)
 	db.Exec(`ALTER TABLE stop_reliability_hourly ADD COLUMN median_headway_sec INTEGER NOT NULL DEFAULT 0;`)
 	db.Exec(`ALTER TABLE stop_reliability_hourly ADD COLUMN headway_stddev_sec INTEGER NOT NULL DEFAULT 0;`)
+	db.Exec(`ALTER TABLE stops ADD COLUMN parent_station TEXT DEFAULT NULL;`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_stops_parent ON stops(parent_station);`)
 
 	return &Database{db: db}, nil
 }
@@ -98,13 +103,14 @@ func (d *Database) SyncStopsFromStatic(staticDB *StaticDatabase) error {
 	}
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO stops (stop_id, stop_name, stop_lat, stop_lon, location_type)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO stops (stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(stop_id) DO UPDATE SET
 			stop_name = excluded.stop_name,
 			stop_lat = excluded.stop_lat,
 			stop_lon = excluded.stop_lon,
-			location_type = excluded.location_type;
+			location_type = excluded.location_type,
+			parent_station = excluded.parent_station;
 	`)
 	if err != nil {
 		tx.Rollback()
@@ -113,7 +119,11 @@ func (d *Database) SyncStopsFromStatic(staticDB *StaticDatabase) error {
 	defer stmt.Close()
 
 	for _, s := range stops {
-		if _, err := stmt.Exec(s.StopID, s.StopName, s.StopLat, s.StopLon, s.LocationType); err != nil {
+		var parentStn interface{} = nil
+		if s.ParentStation != "" {
+			parentStn = s.ParentStation
+		}
+		if _, err := stmt.Exec(s.StopID, s.StopName, s.StopLat, s.StopLon, s.LocationType, parentStn); err != nil {
 			log.Printf("Failed to sync stop %s into delta DB: %v", s.StopID, err)
 		}
 	}

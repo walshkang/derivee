@@ -139,11 +139,12 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     let isValid = try dbQueue.read { db in
                         let stopsColumns = try Row.fetchAll(db, sql: "PRAGMA table_info(stops)")
                         let hasRoutes = stopsColumns.contains { ($0["name"] as? String) == "routes" }
+                        let hasParentStation = stopsColumns.contains { ($0["name"] as? String) == "parent_station" }
                         let stopCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM stops") ?? 0
-                        return hasRoutes && stopCount >= 10000
+                        return hasRoutes && hasParentStation && stopCount >= 10000
                     }
                     if !isValid {
-                        print("Local transit DB is missing routes column or incomplete (<10k stops). Re-copying from bundle...")
+                        print("Local transit DB is missing routes/parent_station column or incomplete (<10k stops). Re-copying from bundle...")
                         shouldCopy = true
                     }
                 } catch {
@@ -805,14 +806,78 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stops)")
                 let hasRoutes = columns.contains { ($0["name"] as? String) == "routes" }
                 let hasLocationType = columns.contains { ($0["name"] as? String) == "location_type" }
+                let hasParentStation = columns.contains { ($0["name"] as? String) == "parent_station" }
+                let hasLat = columns.contains { ($0["name"] as? String) == "stop_lat" }
+                let hasLon = columns.contains { ($0["name"] as? String) == "stop_lon" }
+                
                 let routesSelect = hasRoutes ? "routes" : "'' AS routes"
                 let locTypeSelect = hasLocationType ? "location_type" : "1 AS location_type"
+                let parentSelect = hasParentStation ? "parent_station" : "NULL AS parent_station"
+                let latSelect = hasLat ? "stop_lat" : "NULL AS stop_lat"
+                let lonSelect = hasLon ? "stop_lon" : "NULL AS stop_lon"
                 
-                let sql = "SELECT stop_name, \(locTypeSelect), \(routesSelect) FROM transit.stops WHERE stop_id = ?"
+                let sql = "SELECT stop_name, \(locTypeSelect), \(routesSelect), \(parentSelect), \(latSelect), \(lonSelect) FROM transit.stops WHERE stop_id = ?"
                 if let row = try Row.fetchOne(db, sql: sql, arguments: [stopId]) {
-                    let name: String = row["stop_name"]
-                    let locationType: Int = row["location_type"] ?? 1
-                    let routesStr: String? = row["routes"]
+                    var name: String = row["stop_name"] ?? ""
+                    var locationType: Int = row["location_type"] ?? 1
+                    var routesStr: String? = row["routes"]
+                    let parentStationId: String? = row["parent_station"]
+                    let stopLat: Double? = row["stop_lat"]
+                    let stopLon: Double? = row["stop_lon"]
+                    
+                    let isPrimaryGeneric = self.isGenericStopName(name, stopId: stopId)
+                    
+                    // Tier 2: Hierarchical Parent Station Lookup
+                    if let parentId = parentStationId, !parentId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, parentId != stopId {
+                        if isPrimaryGeneric || locationType == 0 {
+                            let parentSql = "SELECT stop_name, \(locTypeSelect), \(routesSelect) FROM transit.stops WHERE stop_id = ?"
+                            if let parentRow = try Row.fetchOne(db, sql: parentSql, arguments: [parentId]) {
+                                let parentName: String = parentRow["stop_name"] ?? ""
+                                if !self.isGenericStopName(parentName, stopId: parentId) {
+                                    if isPrimaryGeneric {
+                                        name = parentName
+                                    }
+                                    if let pLoc = parentRow["location_type"] as? Int, locationType == 0 && isPrimaryGeneric {
+                                        locationType = pLoc
+                                    }
+                                    let parentRoutes: String? = parentRow["routes"]
+                                    if (routesStr == nil || routesStr?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true),
+                                       let pRoutes = parentRoutes, !pRoutes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        routesStr = pRoutes
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Tier 3: Offline Cross-Street Intersection / Spatial Fallback
+                    if self.isGenericStopName(name, stopId: stopId) {
+                        if let lat = stopLat, let lon = stopLon {
+                            let latDelta = 0.002 // ~220m
+                            let lonDelta = 0.002
+                            let nearbySql = """
+                                SELECT stop_name FROM transit.stops 
+                                WHERE stop_lat BETWEEN ? AND ? 
+                                  AND stop_lon BETWEEN ? AND ? 
+                                  AND stop_name != '' 
+                                  AND stop_id != ?
+                                ORDER BY ((stop_lat - ?) * (stop_lat - ?) + (stop_lon - ?) * (stop_lon - ?)) ASC 
+                                LIMIT 1
+                            """
+                            if let nearbyRow = try Row.fetchOne(db, sql: nearbySql, arguments: [lat - latDelta, lat + latDelta, lon - lonDelta, lon + lonDelta, stopId, lat, lat, lon, lon]) {
+                                let nearbyName: String = nearbyRow["stop_name"] ?? ""
+                                if !self.isGenericStopName(nearbyName, stopId: "") {
+                                    name = nearbyName.contains("/") || nearbyName.contains("&") ? nearbyName : "\(nearbyName) Area"
+                                }
+                            }
+                        }
+                        
+                        if self.isGenericStopName(name, stopId: stopId) {
+                            let fallback = self.generateFallbackStopDetails(for: stopId)
+                            name = fallback.name
+                        }
+                    }
+                    
                     let isBus = locationType == 0 || stopId.hasPrefix("BUS_") || name.contains("/")
                     let routeType = isBus ? 3 : 1
                     
@@ -840,6 +905,31 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             
             return self.generateFallbackStopDetails(for: stopId)
         }
+    }
+    
+    public func isGenericStopName(_ name: String, stopId: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+        
+        let upper = trimmed.uppercased()
+        if upper == stopId.uppercased() || upper == "BUS_\(stopId.uppercased())" { return true }
+        
+        let genericExact: Set<String> = [
+            "BUS STOP", "BUSSTOP", "STOP", "TRANSIT STOP", "STATION",
+            "SUBWAY STATION", "TRANSIT STATION", "BUS TERMINAL", "TERMINAL",
+            "PLATFORM", "BAY", "GATE", "DOCK", "BERTH", "STAND", "UNKNOWN"
+        ]
+        if genericExact.contains(upper) { return true }
+        
+        let genericPrefixes = [
+            "BUS STOP (", "TRANSIT STOP (", "TRANSIT STATION (", "STOP #", "STOP NO",
+            "PLATFORM ", "BAY ", "GATE ", "TRACK ", "BERTH ", "DOCK "
+        ]
+        for prefix in genericPrefixes {
+            if upper.hasPrefix(prefix) { return true }
+        }
+        
+        return false
     }
     
     public func fetchHeadwayData(for stopId: String) async throws -> [Double] {

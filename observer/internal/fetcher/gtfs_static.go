@@ -21,11 +21,12 @@ type ScheduledStopTime struct {
 
 // GTFSStop holds static stop location details
 type GTFSStop struct {
-	StopID       string
-	StopName     string
-	StopLat      float64
-	StopLon      float64
-	LocationType int
+	StopID        string
+	StopName      string
+	StopLat       float64
+	StopLon       float64
+	LocationType  int
+	ParentStation string
 }
 
 // FetchAndParseStaticGTFS downloads a GTFS zip and extracts stop_times.txt and stops.txt, streaming to the provided callbacks
@@ -164,7 +165,7 @@ func parseStopsToDB(file *zip.File, insertBatch func([]GTFSStop) error) error {
 		return err
 	}
 
-	stopIDIdx, stopNameIdx, stopLatIdx, stopLonIdx, locTypeIdx := -1, -1, -1, -1, -1
+	stopIDIdx, stopNameIdx, stopLatIdx, stopLonIdx, locTypeIdx, parentStationIdx := -1, -1, -1, -1, -1, -1
 	for i, h := range headers {
 		switch strings.TrimSpace(h) {
 		case "stop_id":
@@ -177,6 +178,8 @@ func parseStopsToDB(file *zip.File, insertBatch func([]GTFSStop) error) error {
 			stopLonIdx = i
 		case "location_type":
 			locTypeIdx = i
+		case "parent_station":
+			parentStationIdx = i
 		}
 	}
 
@@ -209,12 +212,18 @@ func parseStopsToDB(file *zip.File, insertBatch func([]GTFSStop) error) error {
 			locType, _ = strconv.Atoi(strings.TrimSpace(record[locTypeIdx]))
 		}
 
+		parentStation := ""
+		if parentStationIdx != -1 && parentStationIdx < len(record) {
+			parentStation = strings.TrimSpace(record[parentStationIdx])
+		}
+
 		batch = append(batch, GTFSStop{
-			StopID:       strings.TrimSpace(record[stopIDIdx]),
-			StopName:     strings.TrimSpace(record[stopNameIdx]),
-			StopLat:      lat,
-			StopLon:      lon,
-			LocationType: locType,
+			StopID:        strings.TrimSpace(record[stopIDIdx]),
+			StopName:      strings.TrimSpace(record[stopNameIdx]),
+			StopLat:       lat,
+			StopLon:       lon,
+			LocationType:  locType,
+			ParentStation: parentStation,
 		})
 
 		if len(batch) >= BatchSize {
