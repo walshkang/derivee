@@ -41,7 +41,7 @@ struct DepartureMatrixView: View {
     }
     
     private var isBus: Bool {
-        stopId.hasPrefix("BUS_") || routeId.contains("-")
+        stopId.hasPrefix("BUS_") || TransitRouteData.isBusRoute(routeId)
     }
     
     private var baseDirectionNames: [String] {

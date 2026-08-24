@@ -32,14 +32,7 @@ final class TransitRealtimeService: @unchecked Sendable {
         case bus = "https://gtfsrt.prod.obanyc.com/tripUpdates"
         
         static func isBusRoute(_ routeId: String) -> Bool {
-            let clean = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-            if clean.hasPrefix("M") && clean.count > 1 && clean.dropFirst().first?.isNumber == true { return true }
-            if clean.hasPrefix("B") && clean.count > 1 && clean.dropFirst().first?.isNumber == true { return true }
-            if clean.hasPrefix("Q") && clean.count > 1 && clean.dropFirst().first?.isNumber == true { return true }
-            if clean.hasPrefix("BX") && clean.count > 2 && clean.dropFirst(2).first?.isNumber == true { return true }
-            if clean.hasPrefix("S") && clean.count > 1 && clean.dropFirst().first?.isNumber == true { return true }
-            if clean.contains("SBS") || clean.contains("BUS") { return true }
-            return false
+            TransitRouteData.isBusRoute(routeId)
         }
         
         static func feed(for routeId: String) -> SubwayFeed {

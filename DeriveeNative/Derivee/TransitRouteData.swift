@@ -45,11 +45,29 @@ struct TransitRouteData {
         case "SIR":
             return LineInfo(routeId: cleanId, name: "SIR", colorHex: "#0078C6", textColorHex: "#FFFFFF")
         default:
-            if cleanId.hasPrefix("M") || cleanId.hasPrefix("B") || cleanId.hasPrefix("Q") || cleanId.hasPrefix("Bx") || cleanId.hasPrefix("S") {
+            if isBusRoute(cleanId) {
                 return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00A1DE", textColorHex: "#FFFFFF")
             }
             return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#FFB300", textColorHex: "#000000")
         }
+    }
+    
+    /// Determines whether a given route identifier or stop ID corresponds to an MTA Bus route
+    public static func isBusRoute(_ routeId: String) -> Bool {
+        let clean = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.hasPrefix("BUS_") { return true }
+        if clean.hasPrefix("BX") && clean.count > 2 && clean.dropFirst(2).first?.isNumber == true { return true }
+        if clean.hasPrefix("SIM") && clean.count > 3 && clean.dropFirst(3).first?.isNumber == true { return true }
+        if (clean.hasPrefix("M") || clean.hasPrefix("B") || clean.hasPrefix("Q") || clean.hasPrefix("S")) && clean.count > 1 && clean.dropFirst().first?.isNumber == true {
+            return true
+        }
+        if clean.contains("SBS") || clean.contains("BUS") || clean.contains("/") || clean.contains(" - SBS") {
+            return true
+        }
+        if clean.count >= 5, Int(clean) != nil {
+            return true
+        }
+        return false
     }
     
     /// Parses GeoJSON / track route polyline off the main thread, querying local database first
@@ -58,7 +76,7 @@ struct TransitRouteData {
             let cleanId = stopOrRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
             
             // If it's a bus stop ID or bus route, do not render a subway polyline
-            if isBusIdentifier(cleanId) {
+            if isBusRoute(cleanId) {
                 return []
             }
             
@@ -77,20 +95,6 @@ struct TransitRouteData {
             // 3. Fallback polylines across all NYC transit lines
             return fallbackCoordinates(for: routeId)
         }.value
-    }
-    
-    private static func isBusIdentifier(_ id: String) -> Bool {
-        let clean = id.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        if clean.hasPrefix("BUS_") { return true }
-        if clean.hasPrefix("BX") || clean.hasPrefix("SBS") { return true }
-        if clean.contains("/") || clean.contains(" - SBS") { return true }
-        if (clean.hasPrefix("M") || clean.hasPrefix("B") || clean.hasPrefix("Q") || clean.hasPrefix("S")) && clean.count >= 2 && clean.dropFirst().first?.isNumber == true {
-            return true
-        }
-        if clean.count >= 5, Int(clean) != nil {
-            return true
-        }
-        return false
     }
     
     private static func loadCoordinatesFromGeoJSON(for routeId: String) -> [CLLocationCoordinate2D]? {

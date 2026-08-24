@@ -356,7 +356,7 @@ struct TransitRevealSheet: View {
                                                     HStack(alignment: .center, spacing: 10) {
                                                         let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
                                                         
-                                                        if arrival.line.hasPrefix("M") || arrival.line.hasPrefix("B") || arrival.line.hasPrefix("Q") || arrival.line.hasPrefix("Bx") || arrival.line.hasPrefix("S") {
+                                                        if TransitRouteData.isBusRoute(arrival.line) {
                                                             Text(arrival.line)
                                                                 .font(.system(size: 11, weight: .bold, design: .rounded))
                                                                 .padding(.horizontal, 6)

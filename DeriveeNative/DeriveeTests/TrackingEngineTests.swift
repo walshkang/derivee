@@ -303,5 +303,69 @@ final class TrackingEngineTests: XCTestCase {
         await engine.stopTracking()
         XCTAssertFalse(engine.isTracking)
     }
+    
+    func testStationaryColdStartUnlocksAfterDwell() async throws {
+        engine.startTracking()
+        
+        let startDate = Date()
+        // Intermediate accuracy fix (hAcc = 18m) -> requires dwell
+        let point = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 40.768075, longitude: -73.981897),
+            altitude: 0,
+            horizontalAccuracy: 18.0,
+            verticalAccuracy: 5.0,
+            timestamp: startDate
+        )
+        locationProvider.yield(location: point)
+        
+        // 1. Immediately (100ms later), hex is in dwell window and should not be committed yet
+        try await Task.sleep(nanoseconds: 100_000_000)
+        var count = try await dbManager.dbWriter.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+        }
+        XCTAssertEqual(count, 0, "Hex must not be unlocked while waiting in the 3s dwell window.")
+        
+        // 2. Wait for the 3.0s dwell timer to fire (+ 250ms processing leeway)
+        try await Task.sleep(nanoseconds: 3_250_000_000)
+        
+        count = try await dbManager.dbWriter.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+        }
+        XCTAssertEqual(count, 1, "Hex must unlock automatically after stationary 3s dwell timer expires.")
+    }
+    
+    func testMovingWalkResolvesIntermediateAccuracyBeforeDwellExpires() async throws {
+        engine.startTracking()
+        
+        let startDate = Date()
+        // Fix 1: Intermediate accuracy fix (hAcc = 18m) -> requires dwell
+        let point1 = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 40.768075, longitude: -73.981897),
+            altitude: 0,
+            horizontalAccuracy: 18.0,
+            verticalAccuracy: 5.0,
+            timestamp: startDate
+        )
+        // Fix 2: 1s later, 3m away with high accuracy (hAcc = 8m)
+        let point2 = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 40.768095, longitude: -73.981897),
+            altitude: 0,
+            horizontalAccuracy: 8.0,
+            verticalAccuracy: 5.0,
+            timestamp: startDate.addingTimeInterval(1.0)
+        )
+        
+        locationProvider.yield(location: point1)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        locationProvider.yield(location: point2)
+        
+        // Give 200ms to process without waiting for 3s dwell
+        try await Task.sleep(nanoseconds: 200_000_000)
+        
+        let count = try await dbManager.dbWriter.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+        }
+        XCTAssertEqual(count, 1, "Moving pedestrian fix should resolve dwell early and unlock hex immediately.")
+    }
 }
 
