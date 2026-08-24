@@ -29,6 +29,7 @@ struct ContentView: View {
     
     @State private var nearbyBusStops: [SpatialDatabaseManager.NearbyBusStop] = []
     @State private var isScanningBuses: Bool = false
+    @State private var isReadyForToasts: Bool = false
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
@@ -124,7 +125,7 @@ struct ContentView: View {
                         .padding(.bottom, 40)
                     }
                     
-                    if let poiName = spatialStore.newlyDiscoveredPOIName {
+                    if let poiName = spatialStore.newlyDiscoveredPOIName, isReadyForToasts {
                         VStack {
                             DiscoveryToast(stationName: poiName) {
                                 spatialStore.newlyDiscoveredPOIName = nil
@@ -147,6 +148,9 @@ struct ContentView: View {
                     }
                 }
                 .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        isReadyForToasts = true
+                    }
                     if showNearbyBusesLens {
                         scanNearbyBuses()
                     }

@@ -23,6 +23,7 @@ struct StatsView: View {
     @State private var journalData: ExplorationJournalData? = nil
     @State private var isImporting = false
     @State private var importProgress: Double = 0.0
+    @State private var showSettings = false
     @State private var showFileImporter = false
     @State private var isLoading = true
     
@@ -86,9 +87,16 @@ struct StatsView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: SettingsView(trackingEngine: trackingEngine, spatialStore: spatialStore)) {
+                    Button {
+                        showSettings = true
+                    } label: {
                         Image(systemName: "gear")
                     }
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                NavigationStack {
+                    SettingsView(trackingEngine: trackingEngine, spatialStore: spatialStore)
                 }
             }
             .task {
@@ -126,6 +134,17 @@ struct StatsView: View {
                 let totalCleared = neighborhoods.reduce(0) { $0 + $1.clearedHexes }
                 let totalOverall = neighborhoods.reduce(0) { $0 + $1.totalHexes }
                 let overallPercentage = totalOverall > 0 ? (Double(totalCleared) / Double(totalOverall)) * 100.0 : 0.0
+                let formattedPercentage: String = {
+                    if overallPercentage == 0.0 {
+                        return "0.0%"
+                    } else if overallPercentage < 0.01 {
+                        return "< 0.01%"
+                    } else if overallPercentage < 0.1 {
+                        return String(format: "%.2f%%", overallPercentage)
+                    } else {
+                        return String(format: "%.1f%%", overallPercentage)
+                    }
+                }()
                 
                 Section(header: Text("Macro Metrics")) {
                     VStack(alignment: .leading, spacing: 12) {
@@ -133,7 +152,7 @@ struct StatsView: View {
                             Text("City Explored")
                                 .font(.headline)
                             Spacer()
-                            Text("\(String(format: "%.1f", overallPercentage))%")
+                            Text(formattedPercentage)
                                 .font(.system(.headline, design: .monospaced))
                                 .bold()
                         }
@@ -147,7 +166,8 @@ struct StatsView: View {
                             Spacer()
                             Text("\(totalCleared)")
                                 .font(.system(.subheadline, design: .monospaced))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.primary)
+                                .bold()
                         }
                     }
                     .padding(.vertical, 8)
@@ -171,7 +191,16 @@ struct StatsView: View {
                                 Spacer()
                                 
                                 VStack(alignment: .trailing) {
-                                    Text("\(String(format: "%.1f", nbhd.percentage))%")
+                                    let formattedNbhdPct: String = {
+                                        if nbhd.percentage == 0.0 {
+                                            return "0.0%"
+                                        } else if nbhd.percentage < 0.1 {
+                                            return String(format: "%.2f%%", nbhd.percentage)
+                                        } else {
+                                            return String(format: "%.1f%%", nbhd.percentage)
+                                        }
+                                    }()
+                                    Text(formattedNbhdPct)
                                         .font(.system(.subheadline, design: .monospaced))
                                         .fontWeight(.bold)
                                     

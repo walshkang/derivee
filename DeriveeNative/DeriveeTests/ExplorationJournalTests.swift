@@ -150,7 +150,7 @@ final class ExplorationJournalTests: XCTestCase {
         
         let targetCoordBinding = Binding<CLLocationCoordinate2D?>(get: { nil }, set: { _ in })
         let view = StatsView(trackingEngine: engine, spatialStore: store, targetCoordinate: targetCoordBinding)
-            .environment(\.colorScheme, .dark)
+            .environment(\.colorScheme, .light)
             .frame(width: 393, height: 852)
         
         let vc = UIHostingController(rootView: view)

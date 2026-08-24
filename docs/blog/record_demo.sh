@@ -8,7 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-SIMULATOR_NAME="${1:-booted}"
+SIMULATOR_NAME="${1:-iPhone 17e}"
 TMP_RAW="/tmp/derivee_demo_raw.mp4"
 OUTPUT_FINAL="${SCRIPT_DIR}/derivee_demo_final.mp4"
 GPX_PATH="${REPO_ROOT}/DeriveeNative/NYC_Walk.gpx"
@@ -21,8 +21,13 @@ echo "🗺️ GPX Track Path:   ${GPX_PATH}"
 echo "📁 Output Video:     ${OUTPUT_FINAL}"
 echo "======================================================================"
 
-# 1. Bring Simulator to Front & Pre-grant Location Privacy Permissions
-echo "==> [1/4] Focusing Simulator and granting CoreLocation permissions..."
+# 0. Clean up any stale recorder processes
+pkill -f "simctl.*recordVideo" 2>/dev/null || true
+
+# 1. Ensure Target Simulator is Booted & Bring to Front
+echo "==> [1/4] Booting simulator and granting CoreLocation permissions..."
+xcrun simctl boot "${SIMULATOR_NAME}" 2>/dev/null || true
+xcrun simctl bootstatus "${SIMULATOR_NAME}" -b 2>/dev/null || true
 open -a Simulator
 xcrun simctl privacy "${SIMULATOR_NAME}" grant location-always com.derivee.Derivee 2>/dev/null || true
 
@@ -51,8 +56,11 @@ xcrun simctl status_bar "${SIMULATOR_NAME}" override \
     --batteryState "charged" \
     --batteryLevel 100 2>/dev/null || true
 
+xcrun simctl spawn "${SIMULATOR_NAME}" defaults write com.derivee.Derivee selectedBasemapTheme -string "day" 2>/dev/null || true
+xcrun simctl spawn "${SIMULATOR_NAME}" defaults write com.derivee.Derivee isTrackingEnabled -bool YES 2>/dev/null || true
+
 xcrun simctl install "${SIMULATOR_NAME}" "${REPO_ROOT}/DeriveeNative/build/Build/Products/Debug-iphonesimulator/Derivee.app" 2>/dev/null || true
-xcrun simctl launch "${SIMULATOR_NAME}" com.derivee.Derivee -isTrackingEnabled YES -selectedBasemapTheme day 2>/dev/null || true
+xcrun simctl launch "${SIMULATOR_NAME}" com.derivee.Derivee 2>/dev/null || true
 sleep 2
 
 # 3. Start High-Definition Screen Recording to /tmp (avoids CoreSimulator sandbox permissions on external drives)
@@ -64,6 +72,7 @@ xcrun simctl io "${SIMULATOR_NAME}" recordVideo \
     --force \
     "${TMP_RAW}" &
 RECORD_PID=$!
+sleep 1
 
 # 4. Start Waypoint Walk from GPX (Walks 5 hexes / ~260m over ~20s, then holds position)
 echo "==> [4/4] Starting 5-hex GPX walk (~20s duration, will stop and hold position)..."
@@ -88,31 +97,39 @@ cleanup() {
     echo "==> Stopping GPX playback..."
     xcrun simctl location "${SIMULATOR_NAME}" clear 2>/dev/null || true
     
-    if kill -0 "${RECORD_PID}" 2>/dev/null; then
+    if [ -n "${RECORD_PID:-}" ] && kill -0 "${RECORD_PID}" 2>/dev/null; then
         echo "==> Finalizing video recording stream (PID: ${RECORD_PID})..."
         kill -SIGINT "${RECORD_PID}" 2>/dev/null || true
-        wait "${RECORD_PID}" 2>/dev/null || true
-        sleep 1
+        for i in {1..10}; do
+            if ! kill -0 "${RECORD_PID}" 2>/dev/null; then
+                break
+            fi
+            sleep 0.5
+        done
     fi
 
     echo "==> Resetting status bar override..."
     xcrun simctl status_bar "${SIMULATOR_NAME}" clear 2>/dev/null || true
 
-    if [ -f "${TMP_RAW}" ] && command -v ffmpeg &>/dev/null; then
-        echo "==> Optimizing video with FFmpeg to ${OUTPUT_FINAL}..."
-        ffmpeg -y -i "${TMP_RAW}" \
-            -c:v libx264 \
-            -preset slow \
-            -crf 18 \
-            -pix_fmt yuv420p \
-            -r 60 \
-            -movflags +faststart \
-            "${OUTPUT_FINAL}"
-        rm -f "${TMP_RAW}"
-        echo "==> ✅ Demo video successfully rendered: ${OUTPUT_FINAL}"
-    elif [ -f "${TMP_RAW}" ]; then
-        mv "${TMP_RAW}" "${OUTPUT_FINAL}"
-        echo "==> ✅ Raw demo video saved: ${OUTPUT_FINAL}"
+    if [ -f "${TMP_RAW}" ] && [ -s "${TMP_RAW}" ]; then
+        if command -v ffmpeg &>/dev/null; then
+            echo "==> Optimizing video with FFmpeg to ${OUTPUT_FINAL}..."
+            ffmpeg -y -i "${TMP_RAW}" \
+                -c:v libx264 \
+                -preset slow \
+                -crf 18 \
+                -pix_fmt yuv420p \
+                -r 60 \
+                -movflags +faststart \
+                "${OUTPUT_FINAL}"
+            rm -f "${TMP_RAW}"
+            echo "==> ✅ Demo video successfully rendered: ${OUTPUT_FINAL}"
+        else
+            mv "${TMP_RAW}" "${OUTPUT_FINAL}"
+            echo "==> ✅ Raw demo video saved: ${OUTPUT_FINAL}"
+        fi
+    else
+        echo "==> ⚠️ No video recorded or recording was empty."
     fi
 }
 

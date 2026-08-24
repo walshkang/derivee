@@ -464,8 +464,7 @@ struct TransitRevealSheet: View {
                     .padding(.bottom, 24)
                 }
             } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity, minHeight: 180)
+                TransitSheetSkeletonView()
             }
         }
         .presentationDetents([.medium, .large])
@@ -676,6 +675,77 @@ private struct CircularRefreshButton: View {
         .buttonStyle(.plain)
         .disabled(isRefreshing)
         .accessibilityLabel("Refresh live arrivals")
+    }
+}
+
+private struct TransitSheetSkeletonView: View {
+    @State private var isPulsing: Bool = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header Skeleton
+            HStack(alignment: .center, spacing: 12) {
+                Circle()
+                    .fill(Color.primary.opacity(0.08))
+                    .frame(width: 38, height: 38)
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.primary.opacity(0.12))
+                        .frame(width: 180, height: 18)
+                    
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.primary.opacity(0.06))
+                        .frame(width: 100, height: 12)
+                }
+                
+                Spacer()
+            }
+            .padding(.top, 14)
+            
+            // Tab Picker Skeleton
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.primary.opacity(0.06))
+                .frame(height: 32)
+            
+            Divider()
+                .padding(.top, 2)
+            
+            // Section Title Skeleton
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.primary.opacity(0.06))
+                .frame(width: 130, height: 11)
+                .padding(.top, 4)
+            
+            // Row Skeletons
+            ForEach(0..<4, id: \.self) { _ in
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(Color.primary.opacity(0.08))
+                        .frame(width: 22, height: 22)
+                    
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.primary.opacity(0.08))
+                        .frame(width: 150, height: 14)
+                    
+                    Spacer()
+                    
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.primary.opacity(0.08))
+                        .frame(width: 36, height: 14)
+                }
+                .padding(.vertical, 6)
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .opacity(isPulsing ? 0.45 : 0.85)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                isPulsing = true
+            }
+        }
     }
 }
 

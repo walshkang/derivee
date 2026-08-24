@@ -2,7 +2,7 @@
 ## Manual Video Recording Guide (5-Hex Automated Walk + Manual UI Exploration)
 
 - **Target Duration:** ~65–75 seconds
-- **Format:** 9:16 Vertical Video (iPhone 17 Pro, 1206×2622) or 16:9 Landscape
+- **Format:** 9:16 Vertical Video (iPhone 17e) or 16:9 Landscape
 - **Workflow:** The GPX walk runs automatically for ~18 seconds (5 hexes), then holds position so you can perform all UI interactions at your own pace.
 
 ---
