@@ -134,7 +134,10 @@ The interface is built exclusively around a pure, high-contrast Light Mode desig
 * **The Universal Accent Color (`#FFB300` — Electric Amber):**
   * Shared across both modes. Used for the live GPS indicator dot, boundary borders, exploration milestone glows, and active vicinity bubbles.
 * **Transit & Subway Network Palette (Official Line Colors):**
-  * Subway lines and route polylines are rendered in their true official MTA colors (e.g. Red `#EE352E` for 1/2/3, Green `#00933C` for 4/5/6, Purple `#B933AD` for 7, Blue `#0039A6` for A/C/E, Orange `#FF6319` for B/D/F/M, Lime `#6CBE45` for G, Brown `#996633` for J/Z, Silver `#A7A9AC` for L, Yellow `#FCCC0A` for N/Q/R/W) across map tracks, ephemeral route overlays, and station reliability sparklines.
+  * Subway lines and route polylines are rendered in their true official MTA colors (e.g. Red `#EE352E` for 1/2/3, Green `#00933C` for 4/5/6, Purple `#B933AD` for 7, Blue `#0039A6` for A/C/E, Orange `#FF6319` for B/D/F/M, Lime `#6CBE45` for G, Brown `#996633` for J/Z, Silver `#A7A9AC` for L, Yellow `#FCCC0A` for N/Q/R/W).
+  * **PATH Network Palette:** Rendered with dual-layer rapid rail casing in official Port Authority brand colors: Red (`#E03A3E` for NWK–WTC), Green (`#00A3E0` for HOB–WTC), Yellow (`#FFC72C` for JSQ–33), and Blue (`#009639` for HOB–33).
+  * **Maritime Ferry Palette:** NYC Ferry and harbor vessels rendered as dashed lines in Maritime Cyan (`#00A3E0`, 2.5pt stroke with 4pt dash) across slate water polygons (`#C8D7DE`), with shoreline pier landing glyphs.
+  * **Bus Capillary Palette:** Bus stops and routes render in subtle Transit Cyan (`#00A1DE`) via the dynamic zoom $\ge 14.5$ Nearby Lens.
 
 ### 1.2 Typography & Micro-Interference
 
@@ -609,19 +612,26 @@ The 24 × 7 Reliability Heatmap directly replaces the legacy 7-day sparkline in 
 
 ---
 
-### 10.2 Hour × Minute Departure Matrix (`W11.7b-DEPARTURES`)
+### 10.2 Hour × Minute Departure Matrix & $\pm 7$ Day Navigation (`W11.7b-DEPARTURES`)
 
 The Hour × Minute Departure Matrix provides full Naver Maps-style schedule inspection for high-density transit corridors.
 
 * **UI Container & Segmented Control:**
   * Housed directly inside Screen 2 (`TransitRevealSheet`) via a native segmented picker: `[ Live Arrivals | Full Timetable ]`.
   * Preserves Screen Hierarchy Guardrail G10 by remaining entirely within Screen 2 at the `.large` sheet detent.
+* **$\pm 7$ Day Scrubbing Bar (Time-Machine Navigation):**
+  * Directly below the segmented control, a horizontal 7-day day selector enables time-traveling transit analysis:
+    * **Today (Live):** Real-time countdown overlays, active delay badges, pulsing live amber dot, and past departure dimming.
+    * **Future Days ($+1 \dots +7$):** Pure static scheduled timetable matching that specific day of week (weekday vs. Saturday vs. Sunday patterns).
+    * **Past Days ($-7 \dots -1$):** **Observed Reality Replay** pulled from `stop_events`:
+      * Pills color-coded by performance: **Green** (On-Time $\le 2\text{m}$), **Amber** (Minor Delay $2\text{m}–5\text{m}$), **Red** (Severe Delay $> 5\text{m}$).
+      * Tapping a past pill displays: *"Scheduled 8:14 AM • Arrived 8:19 AM (+5m late) • Train ID #L0842"*.
 * **Matrix Layout:**
   * **Vertical Axis (Rows):** Operating hours from early morning service launch (`05:00`) to late-night connections (`24:00`+).
   * **Horizontal Axis (Columns):** Dynamic flex container housing chronological 2-digit departure minute pills (e.g. `02, 08, 15, 22, 30, 37...`) rather than a rigid 60-slot grid, gracefully accommodating both high-frequency subway corridors and lower-frequency express buses.
 * **Visual Data Encoding & Badges:**
   * **Departure Pills:** 2-digit monospace integer in high-contrast neutral pill container (`#1C1C1E` / `#FFFFFF`).
-  * **Service Variants (Express / Branch):** Highlighted with filled background badges using official MTA route line colors (e.g. Red for 1/2/3, Green for 4/5/6).
+  * **Service Variants (Express / Branch):** Highlighted with filled background badges using official route line colors (e.g. Red for 1/2/3/NWK-WTC, Green for 4/5/6/HOB-WTC).
   * **Boundary Markers:** First and last departures of the operating day styled with distinct amber border rings.
   * **Live Real-Time Delta Overlays:** When GTFS-RT telemetry is active, live countdowns ($\Delta t = T_{\text{actual}} - T_{\text{current}}$) inject directly into departure pills with a pulsing Electric Amber (`#FFB300`) dot.
   * **Delay Badging:** Vehicles deviating $\ge 3\text{ min}$ from scheduled timetable append a high-visibility delta tag (e.g. Alert Red `+5m` or Amber `+3m` pill) in the upper-right quadrant.
@@ -641,3 +651,12 @@ To provide clear visual distinction between live streaming GTFS-RT telemetry and
   * **Visual Container:** $22\text{ pt}$ touch target containing an $18\text{ pt}$ circular track.
   * **Progress Ring:** $1.5\text{ pt}$ stroke progress arc that drains/fills smoothly across the $15\text{ s}$ background polling interval without jittery text countdowns.
   * **Instant Manual Tap:** Tapping the refresh icon immediately triggers `fetchLiveArrivals`, spins the `arrow.clockwise` icon $360^\circ$, fires a light haptic pulse (`UIImpactFeedbackGenerator(style: .light)`), and resets the generational background polling timer from the completion timestamp to prevent double-polling bursts.
+
+---
+
+### 10.4 Transit Agency Attributions & Open Data Citations (`W11.7d-ATTRIBUTIONS`)
+
+Following Google Maps and Apple Maps open transit compliance standards, Dérivée provides transparent agency citations:
+
+* **Sheet Footer Citation:** At the bottom of `TransitRevealSheet` (below the matrix/arrivals list), a subtle monospaced attribution label renders in `.secondary` (e.g. *"Data provided by MTA New York City Transit, Port Authority of NY & NJ, and NYC Ferry"*).
+* **Settings Directory:** `Settings > About & Open Data` contains full agency licenses, static GTFS revision timestamps, and official public feed endpoints for all installed city packs.

@@ -915,4 +915,44 @@ final class TransitRevealSheetTests: XCTestCase {
         XCTAssertTrue(h10.departures[1].isUnscheduled)
         XCTAssertTrue(h10.departures[1].isLive)
     }
+
+    func testBusFallbackAvailableDirectionsKentAndWythe() async throws {
+        // Kent Av / Metropolitan Av is Northbound only (Direction 0)
+        let kentDirs = try await dbManager.fetchAvailableDirections(for: "308666", routeId: "B32")
+        XCTAssertEqual(kentDirs, Set([0]), "Kent Av B32 stop 308666 must be Direction 0 (Northbound) only.")
+        
+        let kentNamedDirs = try await dbManager.fetchAvailableDirections(for: "stop_kent_metropolitan", routeId: "B32")
+        XCTAssertEqual(kentNamedDirs, Set([0]), "Kent Av B32 stop must be Direction 0 (Northbound) only.")
+        
+        // Wythe Av / Metropolitan Av is Southbound only (Direction 1)
+        let wytheDirs = try await dbManager.fetchAvailableDirections(for: "308683", routeId: "B32")
+        XCTAssertEqual(wytheDirs, Set([1]), "Wythe Av B32 stop 308683 must be Direction 1 (Southbound) only.")
+    }
+
+    func testBusFallbackTimetableRealisticHeadways() async throws {
+        let timetable = try await dbManager.fetchTimetable(for: "308666", routeId: "B32", directionId: 0)
+        XCTAssertEqual(timetable.count, 24)
+        
+        // Rush hour (8 AM) should have realistic 2-3 departures per hour (~20-30m headways), not 12-16 subway departures
+        let h8 = timetable.first(where: { $0.hourOfDay == 8 })!
+        XCTAssertTrue(h8.departures.count >= 2 && h8.departures.count <= 4, "Local bus rush hour should have 2-4 departures/hr, got \(h8.departures.count).")
+        
+        // Late night (2 AM) should have 0 departures for daytime-only local bus
+        let h2 = timetable.first(where: { $0.hourOfDay == 2 })!
+        XCTAssertEqual(h2.departures.count, 0, "Daytime-only local bus should have 0 departures at 2 AM.")
+        
+        // Destination should be Long Island City - Queens Plaza
+        if let firstDep = h8.departures.first {
+            XCTAssertEqual(firstDep.destination, "Long Island City - Queens Plaza")
+        }
+    }
+
+    func testBusFallbackHeadwaysRange() async throws {
+        let busHeadways = try await dbManager.fetchHeadwayData(for: "BUS_B32")
+        XCTAssertFalse(busHeadways.isEmpty)
+        for hw in busHeadways {
+            XCTAssertGreaterThanOrEqual(hw, 10.0, "Bus headways should be >= 10m, got \(hw).")
+            XCTAssertLessThanOrEqual(hw, 35.0, "Bus headways should be <= 35m, got \(hw).")
+        }
+    }
 }

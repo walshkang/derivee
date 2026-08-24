@@ -1239,6 +1239,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     private func generateFallbackReliabilityMatrix(for stopId: String, routeId: String) -> [HourlyReliabilityRecord] {
         var records: [HourlyReliabilityRecord] = []
         let seed = abs(stopId.hashValue ^ routeId.hashValue)
+        let isBus = stopId.hasPrefix("BUS_") || TransitRouteData.isBusRoute(routeId) || TransitRouteData.isBusRoute(stopId)
         
         for dow in 0..<7 {
             let isWeekend = (dow == 0 || dow == 6)
@@ -1256,33 +1257,33 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     baseOTP = 72.0 + Double(cellSeed % 15)
                     medianDelay = 120 + (cellSeed % 60)
                     p90Delay = 320 + (cellSeed % 120)
-                    medianHeadway = 720 + (cellSeed % 180)
+                    medianHeadway = isBus ? (1800 + (cellSeed % 600)) : (720 + (cellSeed % 180))
                     ewt = 95.0 + Double(cellSeed % 30)
                 } else if !isWeekend && ((hour >= 7 && hour <= 9) || (hour >= 16 && hour <= 19)) {
                     // Peak rush hour
                     baseOTP = 76.0 + Double(cellSeed % 14)
                     medianDelay = 90 + (cellSeed % 50)
                     p90Delay = 260 + (cellSeed % 90)
-                    medianHeadway = 240 + (cellSeed % 60)
+                    medianHeadway = isBus ? (900 + (cellSeed % 300)) : (240 + (cellSeed % 60))
                     ewt = 65.0 + Double(cellSeed % 25)
                 } else if hour >= 10 && hour <= 15 {
                     // Daytime off-peak
                     baseOTP = 88.0 + Double(cellSeed % 11)
                     medianDelay = 45 + (cellSeed % 40)
                     p90Delay = 180 + (cellSeed % 60)
-                    medianHeadway = 360 + (cellSeed % 90)
+                    medianHeadway = isBus ? (1200 + (cellSeed % 400)) : (360 + (cellSeed % 90))
                     ewt = 45.0 + Double(cellSeed % 20)
                 } else {
                     // Evening / Early morning
                     baseOTP = 84.0 + Double(cellSeed % 13)
                     medianDelay = 60 + (cellSeed % 45)
                     p90Delay = 210 + (cellSeed % 70)
-                    medianHeadway = 480 + (cellSeed % 120)
+                    medianHeadway = isBus ? (1500 + (cellSeed % 300)) : (480 + (cellSeed % 120))
                     ewt = 55.0 + Double(cellSeed % 25)
                 }
                 
                 let sampleCount = 25 + (cellSeed % 50)
-                let headwayStdDev = 30 + (cellSeed % 50)
+                let headwayStdDev = isBus ? (120 + (cellSeed % 90)) : (30 + (cellSeed % 50))
                 
                 records.append(
                     HourlyReliabilityRecord(
@@ -1422,13 +1423,19 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     private func generateBusArrivals(for routeId: String, stopName: String) -> [ArrivalInfo] {
+        let availableDirs = generateFallbackAvailableDirections(for: stopName, routeId: routeId)
         let (dest1, dir1) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 0, stopName: stopName)
         let (dest2, dir2) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 1, stopName: stopName)
-        return [
-            ArrivalInfo(line: routeId, destination: dest1, minutes: 3, direction: dir1, distanceDescription: "0.4 mi away"),
-            ArrivalInfo(line: routeId, destination: dest1, minutes: 11, direction: dir1, distanceDescription: "1.2 mi away"),
-            ArrivalInfo(line: routeId, destination: dest2, minutes: 6, direction: dir2, distanceDescription: "0.8 mi away")
-        ]
+        
+        var arrivals: [ArrivalInfo] = []
+        if availableDirs.contains(0) {
+            arrivals.append(ArrivalInfo(line: routeId, destination: dest1, minutes: 8, direction: dir1, distanceDescription: "0.9 mi away"))
+            arrivals.append(ArrivalInfo(line: routeId, destination: dest1, minutes: 23, direction: dir1, distanceDescription: "2.4 mi away"))
+        }
+        if availableDirs.contains(1) {
+            arrivals.append(ArrivalInfo(line: routeId, destination: dest2, minutes: 14, direction: dir2, distanceDescription: "1.5 mi away"))
+        }
+        return arrivals
     }
     
     private func generateFallbackStopDetails(for stopId: String) -> StopDetails {
@@ -1568,7 +1575,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     
     private func generateFallbackHeadways(for stopId: String) -> [Double] {
         let hash = abs(stopId.hashValue)
-        let base = 4.0 + Double(hash % 3)
+        let isBus = stopId.hasPrefix("BUS_") || TransitRouteData.isBusRoute(stopId)
+        let base: Double = isBus ? (15.0 + Double(hash % 10)) : (4.0 + Double(hash % 3))
         return [
             base + 0.3,
             base - 0.5,
@@ -1594,6 +1602,13 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         if lower.contains("1way_nb") || lower.contains("1way_north") {
             return [0]
         }
+        // Known one-way bus corridors & stop IDs
+        if stopId == "308666" || (lower.contains("kent") && (routeId == "B32" || lower.contains("b32"))) {
+            return [0] // Northbound only on Kent Av
+        }
+        if stopId == "308683" || (lower.contains("wythe") && (routeId == "B32" || lower.contains("b32"))) {
+            return [1] // Southbound only on Wythe Av
+        }
         return [0, 1]
     }
     
@@ -1605,7 +1620,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         
         var hourRecords: [HourScheduleRecord] = []
         let seed = abs(stopId.hashValue ^ routeId.hashValue ^ (directionId * 79))
-        let isBus = stopId.hasPrefix("BUS_") || routeId.contains("-")
+        let isBus = stopId.hasPrefix("BUS_") || routeId.contains("-") || TransitRouteData.isBusRoute(routeId)
+        let isSBS = routeId.contains("SBS") || routeId.contains("+")
         
         let destination: String
         if isBus || TransitRealtimeService.SubwayFeed.isBusRoute(routeId) {
@@ -1633,34 +1649,55 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             let hourSeed = (seed + hour * 37) % 100
             let departureCount: Int
             
-            if hour >= 0 && hour < 5 {
-                // Late night service: 3-4 departures / hour (15-20 min headways)
-                departureCount = 3 + (hourSeed % 2)
-            } else if (hour >= 7 && hour <= 9) || (hour >= 16 && hour <= 19) {
-                // Peak rush hour: 12-16 departures / hour (3-5 min headways)
-                departureCount = 12 + (hourSeed % 5)
-            } else if hour >= 10 && hour <= 15 {
-                // Midday off-peak: 7-10 departures / hour (6-8 min headways)
-                departureCount = 7 + (hourSeed % 4)
+            if isBus {
+                if hour >= 0 && hour < 6 {
+                    // Late night bus: 0 departures for daytime-only routes (like B32), 1-2 for SBS/trunks
+                    departureCount = isSBS ? (1 + (hourSeed % 2)) : 0
+                } else if (hour >= 7 && hour <= 9) || (hour >= 16 && hour <= 19) {
+                    // Peak rush hour bus: 5-7 dep/hr for SBS, 2-3 dep/hr (~20-30m) for local buses
+                    departureCount = isSBS ? (5 + (hourSeed % 3)) : (2 + (hourSeed % 2))
+                } else if hour >= 10 && hour <= 15 {
+                    // Midday off-peak bus: 4-5 dep/hr for SBS, 2 dep/hr (~30m) for local buses
+                    departureCount = isSBS ? (4 + (hourSeed % 2)) : 2
+                } else if hour >= 21 {
+                    // Late evening bus (9 PM - midnight): reduced service / winding down
+                    departureCount = isSBS ? 2 : (hourSeed % 2)
+                } else {
+                    // Early morning / Evening bus: 3-4 dep/hr for SBS, 2 dep/hr for local buses
+                    departureCount = isSBS ? (3 + (hourSeed % 2)) : 2
+                }
             } else {
-                // Evening / Early morning: 5-7 departures / hour (8-12 min headways)
-                departureCount = 5 + (hourSeed % 3)
-            }
-            
-            var minutes: [Int] = []
-            let interval = max(1, 60 / departureCount)
-            for i in 0..<departureCount {
-                let jitter = (hourSeed + i * 11) % 3 - 1
-                let m = max(0, min(59, (i * interval) + jitter + ((hourSeed % 3))))
-                if !minutes.contains(m) {
-                    minutes.append(m)
+                if hour >= 0 && hour < 5 {
+                    // Late night subway: 3-4 departures / hour (15-20 min headways)
+                    departureCount = 3 + (hourSeed % 2)
+                } else if (hour >= 7 && hour <= 9) || (hour >= 16 && hour <= 19) {
+                    // Peak rush hour subway: 12-16 departures / hour (3-5 min headways)
+                    departureCount = 12 + (hourSeed % 5)
+                } else if hour >= 10 && hour <= 15 {
+                    // Midday off-peak subway: 7-10 departures / hour (6-8 min headways)
+                    departureCount = 7 + (hourSeed % 4)
+                } else {
+                    // Evening / Early morning subway: 5-7 departures / hour (8-12 min headways)
+                    departureCount = 5 + (hourSeed % 3)
                 }
             }
-            minutes.sort()
             
-            for m in minutes {
-                let isExp = (routeId == "A" || routeId == "2" || routeId == "4" || routeId == "5" || routeId == "7" || routeId.contains("SBS")) && ((m + hourSeed) % 4 == 0)
-                allDepartures.append((hour: hour, min: m, isExp: isExp))
+            if departureCount > 0 {
+                var minutes: [Int] = []
+                let interval = max(1, 60 / departureCount)
+                for i in 0..<departureCount {
+                    let jitter = (hourSeed + i * 11) % 3 - 1
+                    let m = max(0, min(59, (i * interval) + jitter + ((hourSeed % 3))))
+                    if !minutes.contains(m) {
+                        minutes.append(m)
+                    }
+                }
+                minutes.sort()
+                
+                for m in minutes {
+                    let isExp = (routeId == "A" || routeId == "2" || routeId == "4" || routeId == "5" || routeId == "7" || routeId.contains("SBS")) && ((m + hourSeed) % 4 == 0)
+                    allDepartures.append((hour: hour, min: m, isExp: isExp))
+                }
             }
         }
         

@@ -161,4 +161,28 @@ final class TransitRealtimeTests: XCTestCase {
             XCTAssertTrue(error is CancellationError)
         }
     }
+
+    func testBusDestinationResolutionB32() {
+        let nb = TransitRealtimeService.resolveBusDestination(routeId: "B32", directionId: 0)
+        XCTAssertEqual(nb.destination, "Long Island City - Queens Plaza")
+        XCTAssertEqual(nb.direction, "Northbound & Queens")
+        
+        let sb = TransitRealtimeService.resolveBusDestination(routeId: "B32", directionId: 1)
+        XCTAssertEqual(sb.destination, "Williamsburg Bridge Plaza")
+        XCTAssertEqual(sb.direction, "Southbound & Williamsburg")
+    }
+
+    func testWilliamsburgBusDestinations() {
+        let b24 = TransitRealtimeService.resolveBusDestination(routeId: "B24", directionId: 0)
+        XCTAssertEqual(b24.destination, "Greenpoint - Manhattan Ave")
+        
+        let b43 = TransitRealtimeService.resolveBusDestination(routeId: "B43", directionId: 0)
+        XCTAssertEqual(b43.destination, "Greenpoint - Box St")
+        
+        let q54 = TransitRealtimeService.resolveBusDestination(routeId: "Q54", directionId: 0)
+        XCTAssertEqual(q54.destination, "Jamaica - 170 St / Jamaica Ave")
+        
+        let q59 = TransitRealtimeService.resolveBusDestination(routeId: "Q59", directionId: 0)
+        XCTAssertEqual(q59.destination, "Rego Park - 63 Dr / Queens Blvd")
+    }
 }

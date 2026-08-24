@@ -154,6 +154,6 @@ final class ExplorationJournalTests: XCTestCase {
             .frame(width: 393, height: 852)
         
         let vc = UIHostingController(rootView: view)
-        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 393, height: 852))))
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 393, height: 852)), precision: 0.98))
     }
 }

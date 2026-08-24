@@ -169,9 +169,10 @@ While the primary mobile client is pure native iOS, the surrounding ecosystem su
 
 ### 7.1 Observer Daemon (Go)
 To provide users with offline-first historical transit reliability data, a standalone daemon aggregates live GTFS-RT feeds.
-- **Deployment:** The Go Observer is compiled as a single, statically linked binary and deployed directly to an Oracle Cloud ARM instance.
+- **Deployment:** The Go Observer is compiled as a single, statically linked binary and deployed directly to an Oracle Cloud ARM instance (OCI Always Free Ampere A1, 4 OCPU, 24 GB RAM).
 - **No Docker:** Containerization is explicitly avoided. Running the raw binary via `systemd` eliminates virtualized filesystem overhead and maximizes SQLite write performance.
-- **Output:** A Zstandard-compressed SQLite database (`transit_delta.sqlite.zst`) containing 7-day headways, uploaded nightly to Cloudflare R2 for the mobile client to download.
+- **Output & R2 Upload Cadence:** A Zstandard-compressed SQLite database (`transit_delta.sqlite.zst`) containing 7-day headways, uploaded to Cloudflare R2 (`fog-of-transit` bucket) for mobile client synchronization.
+- **Multi-City Scaling Constraint:** While local single-city development pushes every 3 minutes, production multi-city fleet deployments batch historical delta uploads hourly or nightly. This ensures 100+ metros stay within Cloudflare R2's 1,000,000 monthly Class A write limit (<7.2% capacity) and 10 GB storage budget (<25% capacity). See [docs/multi-city.md §7.3](file:///Volumes/T7ssd/derivee/docs/multi-city.md#73-free-tier-capacity--100-city-scaling-analysis) for the complete 100-city capacity specification.
 
 ### 7.2 Web MVP
 A standalone web version of the transit map provides a lightweight alternative.
@@ -279,10 +280,30 @@ This section defines the implementation parameters and algorithmic constraints e
   - **Headway Variance ($\sigma^2_{\Delta t}$):**
     $$\sigma^2 = \frac{1}{M} \sum_{j=1}^{M} (\Delta t_j - \mu_{\Delta t})^2 \quad \text{where } \mu_{\Delta t} = \frac{1}{M} \sum \Delta t_j$$
   - **90th Percentile Delay ($P90$):** Nearest-rank interpolation of sorted delay seconds array at index $\lfloor 0.90 \times N \rfloor$.
-- **Database & Query Architecture:**
-  - **Async GRDB Reads:** All queries executed via `try await dbWriter.read { db in ... }` with `.userInitiated` QoS.
-  - **Query Budget:** Aggregated 168-cell matrix queries from `stop_reliability_hourly` execute in **< 12 ms**.
-  - **Testing Architecture:** Pre-seeded deterministic SQLite test fixtures in `DeriveeTests` allow full snapshot and math verification in CI without dependency on live Oracle Cloud Observer data collection.
 
-
-
+### 8.9 Multi-Modal & Multi-Agency Transit Architecture (Wave L)
+- **Mandated Implementation:**
+  - **Compact Static Timetable Schema (`scheduled_hourly_patterns`):**
+    ```sql
+    CREATE TABLE scheduled_hourly_patterns (
+        stop_id TEXT NOT NULL,
+        route_id TEXT NOT NULL,
+        direction_id INTEGER NOT NULL,
+        day_of_week INTEGER NOT NULL, -- 0 = Sunday ... 6 = Saturday
+        hour_of_day INTEGER NOT NULL, -- 0 ... 23
+        minute_offsets TEXT NOT NULL, -- e.g. "04,16,28,40,52"
+        headsign TEXT NOT NULL,
+        PRIMARY KEY (stop_id, route_id, direction_id, day_of_week, hour_of_day)
+    );
+    CREATE INDEX idx_patterns_lookup ON scheduled_hourly_patterns(stop_id, route_id, direction_id);
+    ```
+    Pre-aggregating static GTFS timetables into compact minute-offset strings shrinks `transit.sqlite` from ~110 MB down to **~4.5 MB uncompressed** (< 1.2 MB Zstandard compressed) with sub-millisecond query performance.
+  - **Multi-Agency Realtime Multiplexing (`TransitRealtimeService`):**
+    - Feed endpoints are declared per modal key in `city_config.json` (`subway`, `bus`, `path`, `ferry`).
+    - Feeds are polled in parallel via detached Swift `TaskGroup` workers with a strict 5.0s timeout per feed.
+    - **Isolated Failure Isolation:** An outage or network timeout on one agency's endpoint (e.g. Ferry) immediately degrades only that modal sheet to `SCHEDULED` fallback mode, while Subway and Bus feeds continue streaming real-time countdowns without latency or UI stutter.
+  - **$\pm 7$ Day Time-Machine Timetable Engine:**
+    - Combines future static schedules from `scheduled_hourly_patterns`, live streaming reconciler for today, and historical departure receipts from `stop_events` ($-7$ to $-1$ days) color-coded by arrival punctuality (Green $\le 2\text{m}$, Amber $2\text{m}–5\text{m}$, Red $> 5\text{m}$).
+  - **Zero-Download Cold Start & Hot-Swap Lifecycle:**
+    - `city-nyc.pack.zst` is bundled directly inside the iOS app bundle. On first launch, `CityPackManager` decompresses it into `~/Documents/CityPacks/nyc/` in < 200ms.
+    - City switching executes `DETACH DATABASE transit; ATTACH DATABASE '.../Documents/CityPacks/{slug}/transit.sqlite' AS transit;` with zero changes required in `SpatialDatabaseManager` read methods.

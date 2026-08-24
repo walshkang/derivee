@@ -50,9 +50,9 @@ All city assets are bundled into a single atomic, compressed archive to prevent 
 
 ```
 city-bos.pack/
-├── city_config.json          # Bounding box, camera defaults, feeds, metadata
-├── transit.sqlite            # GRDB SQLite database (stops, routes, stop_times)
-└── transit-lines.geojson     # Line geometries with hex colors & properties
+├── city_config.json          # Bounding box, camera defaults, multi-modal feeds, attributions, metadata
+├── transit.sqlite            # GRDB SQLite database (stops, routes, scheduled_hourly_patterns)
+└── transit-lines.geojson     # Line geometries (Subway, PATH, Maritime Ferry) with hex colors & properties
 ```
 
 ### 3.2 `city_config.json` Schema
@@ -60,33 +60,77 @@ city-bos.pack/
 ```json
 {
   "version": 1,
-  "slug": "bos",
-  "displayName": "Boston",
-  "region": "Massachusetts, USA",
+  "slug": "nyc",
+  "displayName": "New York City",
+  "region": "New York, USA",
   "bounds": {
-    "minLatitude": 42.15,
-    "maxLatitude": 42.55,
-    "minLongitude": -71.30,
-    "maxLongitude": -70.85
+    "minLatitude": 40.48,
+    "maxLatitude": 40.95,
+    "minLongitude": -74.28,
+    "maxLongitude": -73.68
   },
   "center": {
-    "latitude": 42.3601,
-    "longitude": -71.0589,
+    "latitude": 40.7128,
+    "longitude": -74.0060,
     "defaultZoom": 13.0
   },
   "transit": {
-    "agencyName": "MBTA",
+    "agencyName": "Metropolitan Transportation Authority",
+    "attributions": [
+      "MTA New York City Transit",
+      "Port Authority of NY & NJ",
+      "NYC Ferry by Hornblower",
+      "Roosevelt Island Operating Corp"
+    ],
     "realtimeFeeds": {
-      "subway": "https://api-v3.mbta.com/trip-updates",
-      "bus": "https://api-v3.mbta.com/trip-updates"
+      "subway_numbered": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+      "subway_lettered_ace": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace",
+      "subway_lettered_bdfm": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm",
+      "subway_lettered_g": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g",
+      "subway_lettered_jz": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz",
+      "subway_lettered_nqrw": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw",
+      "subway_lettered_l": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l",
+      "subway_sir": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si",
+      "bus": "https://gtfsrt.prod.obanyc.com/tripUpdates",
+      "path": "https://path.api.panynj.gov/gtfsrealtime",
+      "ferry": "https://api.ferry.nyc/gtfs-rt"
     },
-    "staticGtfsSource": "https://cdn.mbta.com/MBTA_GTFS.zip"
+    "staticGtfsSources": [
+      "http://web.mta.info/developers/data/nyct/subway/google_transit.zip",
+      "http://web.mta.info/developers/data/nyct/bus/google_transit_manhattan.zip",
+      "http://web.mta.info/developers/data/nyct/bus/google_transit_brooklyn.zip",
+      "http://web.mta.info/developers/data/nyct/bus/google_transit_queens.zip",
+      "http://web.mta.info/developers/data/nyct/bus/google_transit_bronx.zip",
+      "http://web.mta.info/developers/data/nyct/bus/google_transit_staten_island.zip",
+      "https://www.panynj.gov/path/gtfs/google_transit.zip",
+      "https://www.ferry.nyc/gtfs/google_transit.zip"
+    ]
   },
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 }
 ```
 
-### 3.3 Remote Manifest (`cities.json`)
+### 3.3 Compact Static Timetable Schema (`transit.sqlite`)
+
+Rather than ingesting 1.8 million raw `stop_times` rows, `transit.sqlite` pre-aggregates departures into compact hourly minute-offset arrays:
+
+```sql
+CREATE TABLE scheduled_hourly_patterns (
+    stop_id TEXT NOT NULL,
+    route_id TEXT NOT NULL,
+    direction_id INTEGER NOT NULL,
+    day_of_week INTEGER NOT NULL, -- 0 = Sunday ... 6 = Saturday
+    hour_of_day INTEGER NOT NULL, -- 0 ... 23
+    minute_offsets TEXT NOT NULL, -- e.g. "04,16,28,40,52"
+    headsign TEXT NOT NULL,
+    PRIMARY KEY (stop_id, route_id, direction_id, day_of_week, hour_of_day)
+);
+CREATE INDEX idx_patterns_lookup ON scheduled_hourly_patterns(stop_id, route_id, direction_id);
+```
+
+- **Compression & Performance:** Drops database size from ~110 MB to **~4.5 MB uncompressed** (< 1.2 MB Zstandard compressed). Queries execute in < 0.5ms.
+
+### 3.4 Remote Manifest (`cities.json`)
 
 Hosted at `https://cdn.derivee.app/cities.json` (backed by Cloudflare R2):
 
@@ -99,17 +143,17 @@ Hosted at `https://cdn.derivee.app/cities.json` (backed by Cloudflare R2):
       "slug": "nyc",
       "displayName": "New York City",
       "region": "New York, USA",
-      "compressedSizeBytes": 22800000,
-      "uncompressedSizeBytes": 38500000,
+      "compressedSizeBytes": 12800000,
+      "uncompressedSizeBytes": 28500000,
       "isBundled": true,
-      "version": "1.0.4"
+      "version": "1.1.0"
     },
     {
       "slug": "bos",
       "displayName": "Boston",
       "region": "Massachusetts, USA",
-      "compressedSizeBytes": 18400000,
-      "uncompressedSizeBytes": 32100000,
+      "compressedSizeBytes": 9400000,
+      "uncompressedSizeBytes": 22100000,
       "isBundled": false,
       "version": "1.0.0"
     }
@@ -156,7 +200,9 @@ Exploration history is permanently preserved per city using dedicated tables in 
 
 ---
 
-## 5. Dynamic Map & Geometry Pipeline
+---
+
+## 5. Dynamic Map & Multi-Modal Geometry Pipeline
 
 ### 5.1 Dynamic `CameraBounds`
 `CameraBounds` transitions from static constants to a configuration-backed model:
@@ -172,28 +218,39 @@ public struct CameraBounds {
 }
 ```
 
-### 5.2 Dynamic Fog Bounds
-`FogPolygonMath.makeBounds(for config: CityConfig)` computes the 5-point rectangular exterior bounds directly from `activeConfig.bounds`.
+### 5.2 Dynamic Fog Bounds & Water Fog Policy
+- `FogPolygonMath.makeBounds(for config: CityConfig)` computes the 5-point rectangular exterior bounds directly from `activeConfig.bounds`.
+- **Strict Land-Only Fog Policy:** Open water bodies (rivers, bays, ocean) are excluded from the H3 exploration tracking engine. Ferry trips across water do not punch holes through open water polygons; exploration clearance occurs strictly on terrestrial landmass, pedestrian bridges, and ferry landing piers.
 
-### 5.3 Unified GeoJSON Subway Loader
+### 5.3 Unified GeoJSON Multi-Modal Transit Loader
 1. Delete hardcoded `MtaSubwayNetworkData.swift`.
-2. Move NYC geometry to `city-nyc.pack/transit-lines.geojson`.
-3. `MapView.Coordinator` loads `MLNShapeSource` by parsing GeoJSON directly from the active city pack directory.
-4. Line styling extracts `stroke` or `color` feature properties from GeoJSON for agency-accurate rendering.
+2. Move NYC geometries to `city-nyc.pack/transit-lines.geojson`.
+3. `MapView.Coordinator` loads dynamic `MLNShapeSource` layers with distinct modal treatments:
+   - **Subway (NYCT):** 4px solid line in official MTA line colors + 6px light silver casing (`#E0E0DC`). 4.5pt circle station discs.
+   - **PATH:** 4px solid line in official PATH brand colors (Red `#E03A3E`, Green `#00A3E0`, Yellow `#FFC72C`, Blue `#009639`) + 6px silver casing.
+   - **Maritime Ferry (NYC Ferry):** 2.5pt dashed line (`#00A3E0` with 4pt dash) over water polygons with custom pier landing pins.
+   - **Bus Capillary Network:** Preserves the dynamic **Nearby Bus Lens** appearing at zoom $\ge 14.5$ as subtle `#00A1DE` dots.
+4. **Regional Boundary Policy:** Commuter rail (LIRR, Metro-North, NJ Transit) and statewide express bus networks are indexed as terminal hub POIs (Penn Station, Grand Central, PABT, GWB Terminal) with 3-tier hierarchical resolution, while excluding statewide 19,000+ suburban bus stops and intercity rail lines to preserve the **<45 MB package size limit**.
 
 ---
 
-## 6. User Experience & Download Flow
+## 6. User Experience, Timetable Navigation & Attributions
 
 1. **Non-Blocking Modal Presentation:** When a new city is detected, a bottom sheet appears above the map:
-   - *"Exploring Boston? Download transit network & offline map (≈38 MB)."*
+   - *"Exploring Boston? Download transit network & offline map (≈22 MB)."*
    - Actions: `[ Download Now ]` (Primary) / `[ Not Now ]` (Secondary).
 2. **Download & Verification:**
    - Streamed download via `URLSessionDownloadTask` with progress tracking.
    - Decompressed via native `libcompression` into `~/Documents/CityPacks/{slug}/`.
    - Verified against `sha256` checksum before activating.
-3. **Graceful Fallback:** If declined, the user can continue exploring the map with full Fog of War and GPS tracking, but transit nodes display: *"Transit data not installed for this city — Tap to download."*
-4. **Settings Manager:** A new **Settings > Cities** screen enables:
+   - **Zero-Download NYC First Launch:** The base app bundle includes `city-nyc.pack.zst`, uncompressed locally on first launch in <200ms with zero network dependency.
+3. **$\pm 7$ Day Timetable Navigation (Observed Reality Replay):**
+   - **Today (Live):** Real-time GTFS-RT countdown overlays, delay badges (`+4m`), and pulsing live indicators.
+   - **Future Days ($+1 \dots +7$):** Pure scheduled baseline for that day of week.
+   - **Past Days ($-7 \dots -1$):** **Observed Reality Replay** rendering green/amber/red departure pills with actual recorded arrival times from `stop_events`.
+4. **Transit Agency Attributions:**
+   - Data source citations (e.g. *"Data provided by MTA New York City Transit, Port Authority of NY & NJ, and NYC Ferry"*) rendered in sheet footers and `Settings > About & Open Data`.
+5. **Settings Manager:** A new **Settings > Cities** screen enables:
    - Viewing installed vs available cities.
    - Manual download / storage deletion.
    - Manual active city switching.
@@ -213,15 +270,65 @@ public struct CameraBounds {
 - Generates `transit_delta_{slug}.sqlite.zst` per city.
 - Nightly cron sync downloads deltas only for currently installed city packs.
 
+### 7.3 Free-Tier Capacity & 100-City Scaling Analysis
+
+Dérivée is engineered to operate 100% within the Free Tiers of Cloudflare (R2 + CDN) and Oracle Cloud Infrastructure (OCI Always Free ARM), scaling from 2 cities to 100+ metropolitan regions with zero infrastructure cost.
+
+#### 1. Cloudflare R2 & CDN Capacity Budget (100 Cities)
+
+| Resource | Cloudflare Free Limit | 100-City Projection | Free Tier Consumption |
+| :--- | :--- | :--- | :--- |
+| **R2 Storage** | **10 GB / month** | 100 packs × ~15 MB avg compressed `.pack.zst` = **~1.5 GB** | **15.0%** |
+| **Egress Bandwidth** | **Unlimited ($0 / GB)** | 100% Free on Cloudflare R2 | **0% ($0.00)** |
+| **Class B Ops (Reads)** | **10,000,000 / month** | Packs downloaded once per city per user. Cloudflare edge CDN (`cdn.derivee.app`) caches `cities.json` and static packs, absorbing >95% of requests. | **< 2.0%** |
+| **Class A Ops (Writes)** | **1,000,000 / month** | Hourly historical delta sync: $100 \times 24 \times 30 = \mathbf{72{,}000\text{ writes/mo}}$. Nightly sync: $\mathbf{3{,}000\text{ writes/mo}}$. | **0.3% – 7.2%** |
+
+> [!IMPORTANT]
+> **R2 Class A Upload Cadence Mandate:** While single-city local development uploads `transit_delta.sqlite.zst` every 3 minutes (14.4k writes/mo), a 100-city fleet at 3-minute intervals would generate $1.44\text{M}$ writes/month (exceeding the 1M free tier by 440k ops). Therefore, multi-city historical delta uploads **must be batched hourly or nightly**. Real-time arrivals are parsed directly on-device from agency Protobuf feeds and never touch R2.
+
+#### 2. Oracle Cloud (OCI Always Free ARM) Compute Budget (100 Cities)
+
+| Resource | OCI Ampere A1 Free Limit | 100-City Observer Daemon Load | Free Tier Consumption |
+| :--- | :--- | :--- | :--- |
+| **Memory** | **24 GB RAM** | ~1.5 GB – 3.0 GB RSS across 100 in-memory trip tracking engines | **< 15.0%** |
+| **CPU** | **4 OCPUs (ARM)** | ~33 feed fetches/min; consumes ~5–10% of 1 core via Go worker goroutines | **< 5.0%** |
+| **Disk Storage** | **200 GB SSD** | 100 cities × ~70 MB static GTFS SQLite = **~7 GB** (with 30-day auto-pruning) | **3.5%** |
+| **Outbound Transfer** | **10 TB / month** | 100 cities × hourly delta uploads = **~7.2 GB / month** | **0.07%** |
+
+#### 3. Three-Tier Metro Rollout Model
+
+```mermaid
+flowchart TD
+    subgraph Tier 1: Flagship Metros [Top 10 Metros]
+        T1[NYC, London, Tokyo, Paris, Chicago, Boston, SF/Bay Area, Berlin, Madrid, Toronto]
+        T1_Feats[Full Observer 24/7 EWT + Sparklines + Static GTFS + Live RT]
+    end
+
+    subgraph Tier 2: Major Regional Metros [Next 30 Metros]
+        T2[Seattle, Philly, DC, Montreal, Melbourne, Sydney, Vancouver, Milan, etc.]
+        T2_Feats[Hourly/Daily Batched Reliability Sync + On-Device RT]
+    end
+
+    subgraph Tier 3: Mid/Regional Metros [Next 60 Metros]
+        T3[Standard GTFS Static Schedule Packs + On-Device RT]
+        T3_Feats[Zero Observer Backend Overhead — 100% Client-Side]
+    end
+```
+
+1. **Tier 1 (Flagship Metros — Top 10):** High-density subway/bus trunk lines. Full 24/7 historical reliability calculation, headway variance matrices, and real-time transit sheets.
+2. **Tier 2 (Major Regional Metros — Next 30):** Standardized GTFS/GTFS-RT feeds with hourly or daily batched reliability aggregations.
+3. **Tier 3 (Mid/Regional Metros — Next 60+):** Static schedule matrix bundles (`city-{slug}.pack.zst`) with live on-device Protobuf arrival parsing. These require **zero continuous server computing** on the Observer daemon.
+
 ---
 
 ## 8. Wave L Implementation Roadmap
 
 | Sub-Wave | Task ID | Deliverable | Scope |
 |:---|:---|:---|:---:|
-| **L.1** | `WL1-CITY-PACK-INFRA` | `CityPackManager`, decompression, R2 manifest fetcher, bundled NYC pack | **M** |
-| **L.2** | `WL2-DYNAMIC-BOUNDS-FOG` | Dynamic `CameraBounds`, per-city `explored_hexes_{slug}`, fog recomputation | **M** |
-| **L.3** | `WL3-TRANSIT-HOT-SWAP` | SQLite `DETACH`/`ATTACH` engine, fallback empty states, GRDB observation survival | **S** |
-| **L.4** | `WL4-GEOJSON-SUBWAY-LOADER` | GeoJSON shape loader, retire `MtaSubwayNetworkData.swift`, NYC pack migration | **M** |
-| **L.5** | `WL5-CITY-DETECTION-UX` | `CLGeocoder` city trigger, download prompt sheet, Settings city manager | **M** |
-| **L.6** | `WL6-BOSTON-MBTA-PACK` | MBTA GTFS pipeline, `city-bos.pack.zst` build, R2 upload, end-to-end field test | **M** |
+| **L.1** | `WL1-CITY-PACK-INFRA` | `CityPackManager`, decompression, R2 manifest fetcher, multi-modal `city_config.json`, bundled NYC pack | **M** |
+| **L.2** | `WL2-DYNAMIC-BOUNDS-FOG` | Dynamic `CameraBounds`, per-city `explored_hexes_{slug}`, land-only water fog masking | **M** |
+| **L.3** | `WL3-TRANSIT-HOT-SWAP` | SQLite `DETACH`/`ATTACH` engine, multi-modal `transit.sqlite` (Subway+PATH+Ferry+Bus), $\pm 7$ day timetable navigation | **M** |
+| **L.4** | `WL4-GEOJSON-TRANSIT-LOADER` | Multi-modal GeoJSON loader (Subway/PATH/Maritime Ferry), retire `MtaSubwayNetworkData.swift` | **M** |
+| **L.5** | `WL5-CITY-DETECTION-UX` | `CLGeocoder` city trigger, download prompt sheet, agency attributions, Settings city manager | **M** |
+| **L.6** | `WL6-BOSTON-MBTA-PACK` | MBTA GTFS multi-modal pipeline (Subway+LRT+BRT+Ferry), `city-bos.pack.zst`, R2 upload | **M** |
+

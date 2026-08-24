@@ -459,6 +459,18 @@ final class TransitRealtimeService: @unchecked Sendable {
             return isNorthOrUptown
                 ? ("The Hub - 149 St / 3 Ave", "Eastbound")
                 : ("Manhattanville - 12 St / St Clair Pl", "Westbound")
+        case "B32":
+            return isNorthOrUptown
+                ? ("Long Island City - Queens Plaza", "Northbound & Queens")
+                : ("Williamsburg Bridge Plaza", "Southbound & Williamsburg")
+        case "B24":
+            return isNorthOrUptown
+                ? ("Greenpoint - Manhattan Ave", "Northbound & Greenpoint")
+                : ("Williamsburg Bridge Plaza", "Southbound & Williamsburg")
+        case "B43":
+            return isNorthOrUptown
+                ? ("Greenpoint - Box St", "Northbound & Greenpoint")
+                : ("Lefferts Gardens - Lincoln Rd", "Southbound & Prospect Park")
         case "B41":
             return isNorthOrUptown
                 ? ("Downtown Brooklyn - Cadman Plaza", "Northbound & Downtown")
@@ -475,6 +487,14 @@ final class TransitRealtimeService: @unchecked Sendable {
             return isNorthOrUptown
                 ? ("Riverdale - 246 St", "Northbound & Bronx")
                 : ("Mott Haven - 136 St / Lincoln Ave", "Southbound & Hub")
+        case "Q54":
+            return isNorthOrUptown
+                ? ("Jamaica - 170 St / Jamaica Ave", "Queens-bound")
+                : ("Williamsburg Bridge Plaza", "Brooklyn-bound")
+        case "Q59":
+            return isNorthOrUptown
+                ? ("Rego Park - 63 Dr / Queens Blvd", "Queens-bound")
+                : ("Williamsburg Bridge Plaza", "Brooklyn-bound")
         case "Q32":
             return isNorthOrUptown
                 ? ("Jackson Heights - 82 St / Northern Blvd", "Queens-bound")
