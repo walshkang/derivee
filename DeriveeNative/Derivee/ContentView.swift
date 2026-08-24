@@ -34,7 +34,7 @@ struct ContentView: View {
         if let theme = BasemapTheme(rawValue: storedTheme) {
             return theme
         }
-        return colorScheme == .dark ? .night : .day
+        return .day
     }
     
     private var stationMarkerStyle: SubwayStationMarkerStyle {
@@ -206,7 +206,7 @@ struct ContentView: View {
                 }
             }
         }
-        .preferredColorScheme(currentTheme == .day ? .light : .dark)
+        .preferredColorScheme(.light)
     }
     
     private func scanNearbyBuses(force: Bool = false) {

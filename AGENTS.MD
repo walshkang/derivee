@@ -16,16 +16,16 @@
 ## 2. Visual & UI Guidelines
 - **SwiftUI Exclusively:** All UI must be built with SwiftUI. No UIKit storyboards or `UIViewController` wrappers unless absolutely necessary for complex MapLibre integrations.
 - **Map Focus:** The map is the UI. Avoid heavy persistent HUDs, tab bars, or manual "Start/Stop Tracking" buttons.
-- **Aesthetics:** Follow the Day/Night cycle guidelines and use native materials (`.ultraThinMaterial`).
+- **Aesthetics:** Follow the pure Light Mode guidelines (`.preferredColorScheme(.light)`) with Standard Exploration (`#F9F9F6`) and Transit Navigation (`#FFFFFF`) themes, Electric Amber (`#FFB300`) universal accent, and native frosted glass materials (`.ultraThinMaterial`).
 
 ## 3. Testing Mandates
 - **Split-Target Architecture:**
   - **`DeriveeCoreTests` (No App Host):** Tests core logic (GRDB SQLite transactions, Uber H3 spatial math, multipath GPS noise rejection, multi-threading deadlocks). Runs in milliseconds, completely headlessly without a simulator. Cooperative Task yield testing should be restricted purely to these core database logic tests.
-  - **`DeriveeSnapshotTests` (Requires App Host):** Tests SwiftUI layouts (`StatsView`, `TransitRevealSheet`, Day/Night color accuracy) using `swift-snapshot-testing`. Boots an iPhone simulator in the background on GitHub Actions to prevent visual UI regressions from agent vibe-coding.
+  - **`DeriveeSnapshotTests` (Requires App Host):** Tests SwiftUI layouts (`StatsView`, `TransitRevealSheet`, color accuracy) using `swift-snapshot-testing`. Boots an iPhone simulator in the background on GitHub Actions to prevent visual UI regressions from agent vibe-coding.
 - **Data vs Snapshot Assertions:** Use `swift-snapshot-testing` exclusively for SwiftUI visual layers. Keep pure native data assertions (e.g. `interiorPolygons?.count`) for the MapLibre Fog Polygon Math—do not use snapshot/dump diffing for MapLibre structural objects or OpenGL renders.
 - **CI/CD Enforcement (Phase 4):** Both test targets run in CI using **GitHub Actions**. Do NOT use Xcode Cloud due to its rigid `.xcodeproj` expectations which conflict with our dynamic `xcodegen` setup. CI acts as a post-push safety net on `main` to catch regressions immediately.
 - **Simulator Environment:** The local development environment has advanced to iOS 26.5. When running tests via `xcodebuild`, you MUST explicitly specify a valid simulator destination (e.g., `-destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest'`). Do not use legacy devices like the iPhone 15 Pro.
 
 ## 4. Backend & Ecosystem Directives
 - **Go Observer Daemon:** Do NOT containerize/Dockerize the Observer daemon. Deploy the raw compiled Go binary directly to the Oracle Cloud ARM instance via `systemd` to avoid virtualized filesystem overhead and maximize SQLite write speeds.
-- **Web MVP Brand Sync:** The web app must mirror the iOS aesthetic exactly. Hardcode Day/Night hex colors (`#F9F9F6` / `#12121A`) in MapLibre, use Electric Amber (`#FFB300`) for sparklines, and pure black/white for text contrast.
+- **Web MVP Brand Sync:** The web app must mirror the iOS aesthetic exactly. Hardcode daytime parchment / white colors (`#F9F9F6` / `#FFFFFF`) in MapLibre, use Electric Amber (`#FFB300`) for sparklines and accents, and pure black/white for text contrast.

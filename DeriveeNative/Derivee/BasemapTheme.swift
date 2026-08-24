@@ -4,8 +4,6 @@ import MapLibre
 /// Available basemap visual themes
 public enum BasemapTheme: String, CaseIterable, Identifiable, Codable {
     case day = "day"
-    case night = "night"
-    case oled = "oled"
     case transit = "transit"
     
     public var id: String { rawValue }
@@ -13,8 +11,6 @@ public enum BasemapTheme: String, CaseIterable, Identifiable, Codable {
     public var displayName: String {
         switch self {
         case .day: return "Standard Day"
-        case .night: return "Standard Night"
-        case .oled: return "OLED Ultra Dark"
         case .transit: return "Transit Network"
         }
     }
@@ -56,65 +52,27 @@ public struct BasemapPalette: Equatable {
         fogColor: UIColor(hex: "#1C1C1E")
     )
     
-    public static let night = BasemapPalette(
-        backgroundColor: UIColor(hex: "#12121A"),
-        waterColor: UIColor(hex: "#0A0A12"),
-        parkColor: UIColor(hex: "#151B18"),
-        landuseColor: UIColor(hex: "#14141E"),
-        buildingColor: UIColor(hex: "#181822"),
-        building3DColor: UIColor(hex: "#242436"),
-        building3DOpacity: 0.75,
-        roadColor: UIColor(hex: "#222433"),
-        roadCasingColor: UIColor(hex: "#161722"),
-        railColor: UIColor(hex: "#4E5366"),
-        railLineWidth: 1.5,
-        railOpacity: 0.8,
-        labelTextColor: UIColor(hex: "#FFFFFF"),
-        labelHaloColor: UIColor(hex: "#12121A"),
-        fogColor: UIColor(hex: "#000000")
-    )
-    
-    public static let oled = BasemapPalette(
-        backgroundColor: UIColor(hex: "#000000"),
-        waterColor: UIColor(hex: "#050508"),
-        parkColor: UIColor(hex: "#080D0A"),
-        landuseColor: UIColor(hex: "#06060A"),
-        buildingColor: UIColor(hex: "#0A0A10"),
-        building3DColor: UIColor(hex: "#161622"),
-        building3DOpacity: 0.8,
-        roadColor: UIColor(hex: "#1C1C24"),
-        roadCasingColor: UIColor(hex: "#0D0D12"),
-        railColor: UIColor(hex: "#3A3A4A"),
-        railLineWidth: 1.5,
-        railOpacity: 0.8,
-        labelTextColor: UIColor(hex: "#D1D1D6"),
-        labelHaloColor: UIColor(hex: "#000000"),
-        fogColor: UIColor(hex: "#000000")
-    )
-    
     public static let transit = BasemapPalette(
-        backgroundColor: UIColor(hex: "#0D0F14"),
-        waterColor: UIColor(hex: "#06080C"),
-        parkColor: UIColor(hex: "#0E1410"),
-        landuseColor: UIColor(hex: "#101318"),
-        buildingColor: UIColor(hex: "#13161D"),
-        building3DColor: UIColor(hex: "#1A1F2B"),
-        building3DOpacity: 0.7,
-        roadColor: UIColor(hex: "#181B22"),
-        roadCasingColor: UIColor(hex: "#0F1116"),
+        backgroundColor: UIColor(hex: "#FFFFFF"),
+        waterColor: UIColor(hex: "#DDE7ED"),
+        parkColor: UIColor(hex: "#EDF3E8"),
+        landuseColor: UIColor(hex: "#F5F6F8"),
+        buildingColor: UIColor(hex: "#F1F3F5"),
+        building3DColor: UIColor(hex: "#E5E8EB"),
+        building3DOpacity: 0.5,
+        roadColor: UIColor(hex: "#F0F2F5"),
+        roadCasingColor: UIColor(hex: "#E4E7EB"),
         railColor: UIColor(hex: "#FFB300"),
         railLineWidth: 3.0,
         railOpacity: 0.95,
-        labelTextColor: UIColor(hex: "#E2E8F0"),
-        labelHaloColor: UIColor(hex: "#0D0F14"),
-        fogColor: UIColor(hex: "#0A0C10")
+        labelTextColor: UIColor(hex: "#1C1C1E"),
+        labelHaloColor: UIColor(hex: "#FFFFFF"),
+        fogColor: UIColor(hex: "#1C1C1E")
     )
     
     public static func forTheme(_ theme: BasemapTheme) -> BasemapPalette {
         switch theme {
         case .day: return .day
-        case .night: return .night
-        case .oled: return .oled
         case .transit: return .transit
         }
     }

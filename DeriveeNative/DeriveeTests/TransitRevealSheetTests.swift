@@ -409,6 +409,7 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 375, height: 600)
         
         let vc = UIHostingController(rootView: view)
+        vc.overrideUserInterfaceStyle = .light
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
     }
     
@@ -439,6 +440,7 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 375, height: 600)
         
         let vc = UIHostingController(rootView: view)
+        vc.overrideUserInterfaceStyle = .light
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
     }
 

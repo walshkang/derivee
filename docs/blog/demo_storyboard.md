@@ -67,11 +67,11 @@
 - **Visual:** Settings interface, pushed from the Exploration Stats gear icon.
 - **Your Action on Screen:**
   1. From Exploration Stats, tap the top-right **Gear icon** to push into **Settings**.
-  2. Toggle between **Day Mode** (Parchment `#F9F9F6`) and **Night Mode** (Midnight Slate `#12121A`), showcasing the instant 600ms GPU basemap crossfade with zero style destruction.
-  3. Drag the **Fog Opacity slider** back and forth (demonstrating instant MapLibre GPU fragment shader response with zero geometry rebuilds).
+  2. Toggle between **Standard Day** (Parchment `#F9F9F6`) and **Transit Network** (Porcelain White `#FFFFFF`), showcasing the instant 600ms GPU basemap crossfade with auto-adapting 40% fog opacity.
+  3. Drag the **Fog Opacity slider** (40%–98%) back and forth (demonstrating instant MapLibre GPU fragment shader response with zero geometry rebuilds).
   4. Dismiss back to the map.
 - **Spoken Voiceover / Subtitle:**
-  > *"The interface shifts dynamically between Day Parchment and Midnight Slate based on solar ephemeris, while shader updates adjust opacity instantly without geometry recomputation."*
+  > *"The interface transitions instantly between Standard Day exploration and high-contrast Transit Navigation, while fragment shader controls adjust fog density in real-time with zero geometry recomputation."*
 
 ---
 

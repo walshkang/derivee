@@ -37,8 +37,6 @@ final class BasemapThemeTests: XCTestCase {
     
     func testBasemapPaletteCompleteness() {
         let day = BasemapPalette.day
-        let night = BasemapPalette.night
-        let oled = BasemapPalette.oled
         let transit = BasemapPalette.transit
         
         // Day Palette Assertions
@@ -47,19 +45,9 @@ final class BasemapThemeTests: XCTestCase {
         XCTAssertEqual(day.labelTextColor, UIColor(hex: "#1C1C1E"), "Day label should be dark")
         XCTAssertEqual(day.building3DColor, UIColor(hex: "#DCDCD6"), "Day 3D buildings should match building color")
         
-        // Night Palette Assertions
-        XCTAssertEqual(night.backgroundColor, UIColor(hex: "#12121A"), "Night background should be midnight slate #12121A")
-        XCTAssertEqual(night.fogColor, UIColor(hex: "#000000"), "Night fog should be pure black #000000")
-        XCTAssertEqual(night.labelTextColor, UIColor(hex: "#FFFFFF"), "Night label should be white")
-        XCTAssertEqual(night.building3DColor, UIColor(hex: "#242436"), "Night 3D buildings should have high visual contrast against dark fog")
-        
-        // OLED Palette Assertions
-        XCTAssertEqual(oled.backgroundColor, UIColor(hex: "#000000"), "OLED background should be pure black #000000")
-        XCTAssertEqual(oled.fogColor, UIColor(hex: "#000000"), "OLED fog should be pure black #000000")
-        XCTAssertEqual(oled.buildingColor, UIColor(hex: "#0A0A10"), "OLED buildings should be deep charcoal #0A0A10")
-        XCTAssertEqual(oled.building3DColor, UIColor(hex: "#161622"), "OLED 3D buildings should be visible above pure black base")
-        
-        // Transit Palette Assertions
+        // Transit Palette Assertions (High-Contrast Light Navigation)
+        XCTAssertEqual(transit.backgroundColor, UIColor(hex: "#FFFFFF"), "Transit background should be pure porcelain white #FFFFFF")
+        XCTAssertEqual(transit.fogColor, UIColor(hex: "#1C1C1E"), "Transit fog should be graphite #1C1C1E")
         XCTAssertEqual(transit.railColor, UIColor(hex: "#FFB300"), "Transit rail color should be Electric Amber #FFB300")
         XCTAssertEqual(transit.railLineWidth, 3.0, "Transit rail line width should be 3.0pt for prominent visibility")
         XCTAssertEqual(transit.railOpacity, 0.95, "Transit rail opacity should be 0.95")
@@ -67,8 +55,6 @@ final class BasemapThemeTests: XCTestCase {
     
     func testBasemapPaletteForThemeMapping() {
         XCTAssertEqual(BasemapPalette.forTheme(.day), BasemapPalette.day)
-        XCTAssertEqual(BasemapPalette.forTheme(.night), BasemapPalette.night)
-        XCTAssertEqual(BasemapPalette.forTheme(.oled), BasemapPalette.oled)
         XCTAssertEqual(BasemapPalette.forTheme(.transit), BasemapPalette.transit)
     }
     
@@ -76,10 +62,8 @@ final class BasemapThemeTests: XCTestCase {
     
     func testBasemapThemeEnumCases() {
         let allThemes = BasemapTheme.allCases
-        XCTAssertEqual(allThemes.count, 4, "Must have exactly 4 basemap themes")
+        XCTAssertEqual(allThemes.count, 2, "Must have exactly 2 light basemap themes")
         XCTAssertTrue(allThemes.contains(.day))
-        XCTAssertTrue(allThemes.contains(.night))
-        XCTAssertTrue(allThemes.contains(.oled))
         XCTAssertTrue(allThemes.contains(.transit))
     }
     

@@ -117,19 +117,19 @@ For backend data flows, native constraints, and library stacks, see [architectur
 </svg>
 ```
 
-### 1.1 The Dynamic Environmental Shift (Day/Night Cycle)
+### 1.1 Pure Light Aesthetic & Dual Daytime Modes
 
-The interface automatically transitions between Light and Dark modes based on local **First Light (Sunrise)** and **Last Light (Sunset)** calculated via the background GPS coordinate, eliminating screen glare on dark street corners or inside subway cars.
+The interface is built exclusively around a pure, high-contrast Light Mode design (`.preferredColorScheme(.light)`), eliminating dark-mode visual confusion and screen glare. Dérivée offers two specialized daytime cartographic experiences:
 
-* **Day Mode (First Light to Last Light — "Clear Morning"):**
-  * **Base Map:** Soft parchment whites (`#F9F9F6`) and clean muted light grays.
-  * **The Fog (Layer 4):** Inky, matte graphite clouds (`#1C1C1E`) with high translucency. Major geographic arteries (coastlines, rivers, arterial bridges) are faintly visible beneath as subtle, unlabelled vectors, acting as natural lures.
+* **Standard Exploration (Default — "Parchment Discovery"):**
+  * **Base Map:** Soft warm parchment whites (`#F9F9F6`), gentle sage parks (`#E3ECD9`), and calm slate blue water (`#C8D7DE`).
+  * **The Fog (Layer 4):** Inky, matte graphite clouds (`#1C1C1E`) defaulting to **85% opacity**. Major geographic arteries (coastlines, rivers, arterial bridges) are faintly visible beneath as subtle, unlabelled vectors, acting as natural lures for neighborhood exploration.
   * **UI Materials:** Apple's native `.ultraThinMaterial` (Light). Text and icons rendered in high-contrast pure black (`#000000`).
 
-* **Night Mode (Last Light to First Light — "Midnight Grid"):**
-  * **Base Map:** Deep midnight slate (`#12121A`).
-  * **The Fog (Layer 4):** Pure OLED Black (`#000000`) with a heavy cloud-like blur mask, absorbing light while cleared hexes provide subtle illumination.
-  * **UI Materials:** Apple's native `.ultraThinMaterial` (Dark). Text and icons rendered in clean, crisp white (`#FFFFFF`).
+* **Transit Navigation ("High-Contrast White Blueprint"):**
+  * **Base Map:** Crisp pure porcelain white (`#FFFFFF`) with desaturated roads (`#F0F2F5`) and faint buildings (`#F1F3F5`) to push background cartography into the sub-plane.
+  * **Subway & Transit Network:** Rendered with maximum color saturation and 3pt stroke weight in official MTA line colors.
+  * **The Fog (Layer 4):** Softened graphite fog (`#1C1C1E`) defaulting to **40% opacity**, allowing the city's transit skeleton to serve as clear orienting vectors for navigation while preserving hex tracking.
 
 * **The Universal Accent Color (`#FFB300` — Electric Amber):**
   * Shared across both modes. Used for the live GPS indicator dot, boundary borders, exploration milestone glows, and active vicinity bubbles.
@@ -471,7 +471,7 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 | G6 | **Native UI Components Only:** All touchable elements use native SwiftUI buttons and gestures. | Prevents gesture conflicts with MapLibre and bottom sheets. |
 | G7 | **Thread Yielding for Lists:** Complex lists (Neighborhood Stats, Session History) must process data in background tasks before binding to `@Observable` UI. | Prevents frame drops during screen transitions. |
 | G8 | **No Serif Fonts:** Strictly modern geometric sans-serif (SF Pro / Inter). | Design system consistency. |
-| G9 | **Dynamic Day/Night Cycle:** Interface automatically shifts between Day Mode ("Clear Morning" — parchment whites, graphite fog) and Night Mode ("Midnight Grid" — midnight slate, OLED black fog) based on local First Light / Last Light. **Electric Amber (`#FFB300`)** is the universal accent color across both modes. | Brand identity: Dérivée calculates the rate of change of your presence across the city — the environment shifts with you. |
+| G9 | **Pure Light Mode & Dual Daytime Modes:** Interface is locked to `.preferredColorScheme(.light)` with two curated daytime themes: Standard Exploration (Parchment white, graphite fog) and Transit Navigation (Porcelain white, high-contrast transit, 40% fog). **Electric Amber (`#FFB300`)** is the universal accent color across both modes. | Brand identity & clarity: Eliminates dark-mode visual confusion while optimizing for exploration and effortless transit navigation. |
 | G10 | **Screen Enumeration is Exhaustive:** Screens 0–3 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. | Prevents scope creep and hallucinated features. |
 
 ---
@@ -529,9 +529,8 @@ This section defines visual and interaction standards for upcoming Wave J featur
 
 ### 9.3 Map Base Layer & Bundled Composite Style Switching (`WJ4-BASEMAP-SWITCHER`)
 * **Available Styles:**
-  1. *Standard Day/Night:* Parchment White (`#F9F9F6`) / Midnight Slate (`#12121A`).
-  2. *Ultra Dark (OLED Minimalist):* Deep `#000000` / `#0A0A10` base for maximum contrast and battery conservation.
-  3. *Transit Network Overlay:* Emphasizes subway, heavy rail, and bus route paths with official agency line colors.
+  1. *Standard Exploration (Default):* Warm Parchment White (`#F9F9F6`) with sage parks and slate water.
+  2. *Transit Navigation:* Pure Porcelain White (`#FFFFFF`) high-contrast base with desaturated roads and buildings, prioritizing official MTA line colors and stations.
 * **Delivery:** All layer definitions for all themes are bundled in a single local `composite_style.json` shipped in the iOS app bundle with a shared `maptiler_streets` vector source. The MapTiler API key is injected at runtime — zero remote style endpoint dependency.
 * **Zero-Freeze Transition:** Executed entirely via GPU layer property interpolation (`fillColorTransition`, `lineOpacityTransition`, `backgroundColorTransition`) using `MLNTransition(duration: 0.6)`. Zero style destruction, zero `MLNShapeSource` unmounting, zero data source re-hydration.
 
@@ -539,9 +538,9 @@ This section defines visual and interaction standards for upcoming Wave J featur
 * **Location:** Dedicated "Map Aesthetics & Exploration" and "Transit & Wayfinding" sections in `SettingsView` (Screen 3). The primary map screen remains free of settings controls, consistent with the "map is the UI" philosophy.
 * **Persistence:** All preferences stored via `@AppStorage` keys for instant reactivity and cross-launch persistence.
 * **Controls:**
-  * **Fog Opacity Slider:** Variable alpha (`0.60` to `0.98`) updating fragment shaders in real-time (`fillOpacityTransition = MLNTransition(duration: 0)`).
+  * **Fog Opacity Slider:** Variable alpha (`0.40` to `0.98`) updating fragment shaders in real-time (`fillOpacityTransition = MLNTransition(duration: 0)`).
   * **Hex / Boundary Styling:** Toggle subtle hex grid border lines and boundary highlights via an `MLNLineStyleLayer` attached directly to the existing `fog-source` geometry (`fillOpacityTransition = MLNTransition(duration: 0)`).
-  * **Basemap Theme Picker:** Selection of Day, Night, OLED Ultra Dark, or Transit Network theme, triggering the GPU crossfade defined in §9.3.
+  * **Basemap Theme Picker:** Selection of Standard Day or Transit Network theme, triggering the GPU crossfade defined in §9.3 and automatically adapting fog opacity between 85% and 40%.
   * **Subway Thoroughfares Toggle:** Toggles MTA trunk track geometries (`subwayLinesLayerId` & casing) beneath the fog.
   * **Station Markers Picker (`SubwayStationMarkerStyle`):**
     * *Explored Only (Default):* Explored stations render above the fog in Electric Amber (`#FFB300`) with 1pt white stroke at zoom $\ge 11.0$; unexplored stations within 1,000m pulse with ambient lure glow.

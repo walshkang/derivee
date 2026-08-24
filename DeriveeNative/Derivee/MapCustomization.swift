@@ -30,8 +30,9 @@ public enum MapCustomizationDefaults {
     
     // Fog Opacity
     public static let defaultFogOpacity: Double = 0.85
-    public static let minFogOpacity: Double = 0.60
+    public static let minFogOpacity: Double = 0.40
     public static let maxFogOpacity: Double = 0.98
+    public static let transitFogOpacity: Double = 0.40
     
     // Boundary Borders
     public static let defaultShowBoundaryBorders: Bool = false

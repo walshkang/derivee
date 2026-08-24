@@ -28,8 +28,9 @@ final class CustomizationSettingsTests: XCTestCase {
     }
     
     func testMapCustomizationDefaultsBounds() {
-        XCTAssertEqual(MapCustomizationDefaults.minFogOpacity, 0.60, "Minimum fog opacity should be 0.60")
+        XCTAssertEqual(MapCustomizationDefaults.minFogOpacity, 0.40, "Minimum fog opacity should be 0.40")
         XCTAssertEqual(MapCustomizationDefaults.maxFogOpacity, 0.98, "Maximum fog opacity should be 0.98")
+        XCTAssertEqual(MapCustomizationDefaults.transitFogOpacity, 0.40, "Transit fog opacity should default to 0.40")
         
         XCTAssertGreaterThanOrEqual(MapCustomizationDefaults.defaultFogOpacity, MapCustomizationDefaults.minFogOpacity)
         XCTAssertLessThanOrEqual(MapCustomizationDefaults.defaultFogOpacity, MapCustomizationDefaults.maxFogOpacity)

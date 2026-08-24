@@ -29,6 +29,17 @@ struct SettingsView: View {
                         Text(theme.displayName).tag(theme.rawValue)
                     }
                 }
+                .onChange(of: storedTheme) { _, newTheme in
+                    if newTheme == BasemapTheme.transit.rawValue {
+                        withAnimation {
+                            fogOpacity = MapCustomizationDefaults.transitFogOpacity
+                        }
+                    } else if newTheme == BasemapTheme.day.rawValue {
+                        withAnimation {
+                            fogOpacity = MapCustomizationDefaults.defaultFogOpacity
+                        }
+                    }
+                }
                 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -43,7 +54,7 @@ struct SettingsView: View {
                         in: MapCustomizationDefaults.minFogOpacity...MapCustomizationDefaults.maxFogOpacity,
                         step: 0.01
                     )
-                    .tint(colorScheme == .dark ? .white : .black)
+                    .tint(Color.primary)
                 }
                 .padding(.vertical, 4)
                 

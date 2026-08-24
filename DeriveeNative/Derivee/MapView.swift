@@ -332,7 +332,7 @@ struct MapView: UIViewRepresentable {
             style.addSource(subwaySource)
             
             let subwayCasingLayer = MLNLineStyleLayer(identifier: subwayLinesCasingLayerId, source: subwaySource)
-            let casingColor = parent.selectedTheme == .day ? UIColor(hex: "#FFFFFF") : UIColor(hex: "#222433")
+            let casingColor = UIColor(hex: "#FFFFFF")
             subwayCasingLayer.lineColor = NSExpression(forConstantValue: casingColor)
             subwayCasingLayer.lineWidth = NSExpression(forConstantValue: 4.5)
             subwayCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 0.75 : 0.0)
@@ -353,8 +353,8 @@ struct MapView: UIViewRepresentable {
             style.addSource(bulletsSource)
             
             let bulletsLayer = MLNCircleStyleLayer(identifier: subwayStationBulletsLayerId, source: bulletsSource)
-            let bulletFillColor = parent.selectedTheme == .day ? UIColor(hex: "#1C1C1E") : UIColor(hex: "#FFFFFF")
-            let bulletStrokeColor = parent.selectedTheme == .day ? UIColor(hex: "#FFFFFF") : UIColor(hex: "#222433")
+            let bulletFillColor = UIColor(hex: "#1C1C1E")
+            let bulletStrokeColor = UIColor(hex: "#FFFFFF")
             bulletsLayer.circleColor = NSExpression(forConstantValue: bulletFillColor)
             bulletsLayer.circleRadius = NSExpression(forConstantValue: 4.5)
             bulletsLayer.circleStrokeColor = NSExpression(forConstantValue: bulletStrokeColor)
@@ -379,7 +379,7 @@ struct MapView: UIViewRepresentable {
             style.addSource(fogSource)
             
             let fogLayer = MLNFillStyleLayer(identifier: fogLayerId, source: fogSource)
-            let colorHex = parent.colorScheme == .dark ? "#000000" : "#1C1C1E"
+            let colorHex = "#1C1C1E"
             fogLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
             fogLayer.fillOpacity = NSExpression(forConstantValue: parent.fogOpacity)
             style.insertLayer(fogLayer, above: bulletsLayer)
@@ -462,7 +462,7 @@ struct MapView: UIViewRepresentable {
         
         func updateSubwayThoroughfares(show: Bool, theme: BasemapTheme, in style: MLNStyle) {
             guard isMapStyleLoaded else { return }
-            let casingColor = theme == .day ? UIColor(hex: "#FFFFFF") : UIColor(hex: "#222433")
+            let casingColor = UIColor(hex: "#FFFFFF")
             
             if let casingLayer = style.layer(withIdentifier: subwayLinesCasingLayerId) as? MLNLineStyleLayer {
                 casingLayer.lineColor = NSExpression(forConstantValue: casingColor)
@@ -476,8 +476,8 @@ struct MapView: UIViewRepresentable {
         func updateSubwayStationBullets(style markerStyle: SubwayStationMarkerStyle, theme: BasemapTheme, in style: MLNStyle) {
             guard isMapStyleLoaded else { return }
             if let bulletsLayer = style.layer(withIdentifier: subwayStationBulletsLayerId) as? MLNCircleStyleLayer {
-                let bulletFillColor = theme == .day ? UIColor(hex: "#1C1C1E") : UIColor(hex: "#FFFFFF")
-                let bulletStrokeColor = theme == .day ? UIColor(hex: "#FFFFFF") : UIColor(hex: "#222433")
+                let bulletFillColor = UIColor(hex: "#1C1C1E")
+                let bulletStrokeColor = UIColor(hex: "#FFFFFF")
                 bulletsLayer.circleColor = NSExpression(forConstantValue: bulletFillColor)
                 bulletsLayer.circleStrokeColor = NSExpression(forConstantValue: bulletStrokeColor)
                 bulletsLayer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)

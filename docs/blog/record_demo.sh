@@ -77,7 +77,7 @@ echo "🚶 1. Real-Time Walk: The blue dot will walk 5 hexes (~18 seconds) and s
 echo "👆 2. Manual Demo: After it stops, interact at your own pace:"
 echo "      - Tap 59th St Station -> View Multi-Route Badges, Live Arrivals & Full Timetable tab"
 echo "      - Tap Bus Capsule (preview stops) -> Tap top-right Profile FAB -> Stats & Milestones"
-echo "      - Tap Gear icon -> Toggle Day/Night & drag Fog Opacity slider -> Dismiss back to map"
+echo "      - Tap Gear icon -> Switch Standard Day / Transit Network & drag Fog Opacity slider -> Dismiss back to map"
 echo "      - Zoom out -> Full clamped NYC skyline overview (~5km rubber-band margin)"
 echo "🛑 3. Finish: Press [ENTER] or Ctrl+C in this terminal to render video."
 echo "======================================================================"
