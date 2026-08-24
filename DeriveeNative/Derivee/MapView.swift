@@ -751,14 +751,20 @@ struct MapView: UIViewRepresentable {
         @objc func handleMapTap(_ gesture: UITapGestureRecognizer) {
             guard let mapView = mapView else { return }
             let point = gesture.location(in: mapView)
-            let features = mapView.visibleFeatures(at: point, styleLayerIdentifiers: [activeLayerId, archiveLayerId, subwayStationBulletsLayerId, nearbyBusStopsLayerId])
+            let hitBox = TransitHitTest.hitBox(for: point)
+            let targetLayers: Set<String> = [
+                activeLayerId,
+                archiveLayerId,
+                subwayStationBulletsLayerId,
+                nearbyBusStopsLayerId
+            ]
+            let features = mapView.visibleFeatures(in: hitBox, styleLayerIdentifiers: targetLayers)
             
-            if let first = features.first {
-                if let stopId = first.attributes["id"] as? String {
-                    DispatchQueue.main.async {
-                        self.parent.selectedTransitStop = stopId
-                        self.parent.showTransitSheet = true
-                    }
+            if let closest = TransitHitTest.closestFeature(to: point, among: features, in: mapView),
+               let stopId = closest.attributes["id"] as? String {
+                DispatchQueue.main.async {
+                    self.parent.selectedTransitStop = stopId
+                    self.parent.showTransitSheet = true
                 }
             }
         }
