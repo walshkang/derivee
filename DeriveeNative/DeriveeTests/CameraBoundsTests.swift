@@ -90,13 +90,13 @@ final class CameraBoundsTests: XCTestCase {
     // MARK: - Rubber Band Elastic Limits
     
     func testRubberBandLimits() {
-        // Slightly North within elastic margin (41.5 + 0.2 < 41.85)
-        let rubberBandNorth = CLLocationCoordinate2D(latitude: 41.70, longitude: -73.8)
+        // Slightly North within elastic margin (41.5 + 0.03 < 41.55)
+        let rubberBandNorth = CLLocationCoordinate2D(latitude: 41.53, longitude: -73.8)
         XCTAssertFalse(CameraBounds.isWithinBounds(rubberBandNorth))
         XCTAssertTrue(CameraBounds.isWithinRubberBandLimit(rubberBandNorth), "Should be within rubber band elastic limit")
         
-        // Far North exceeding elastic margin (41.5 + 0.4 > 41.85)
-        let extremeNorth = CLLocationCoordinate2D(latitude: 41.90, longitude: -73.8)
+        // Far North exceeding elastic margin (41.5 + 0.10 > 41.55)
+        let extremeNorth = CLLocationCoordinate2D(latitude: 41.60, longitude: -73.8)
         XCTAssertFalse(CameraBounds.isWithinBounds(extremeNorth))
         XCTAssertFalse(CameraBounds.isWithinRubberBandLimit(extremeNorth), "Should exceed rubber band elastic limit")
     }
@@ -113,8 +113,8 @@ final class CameraBoundsTests: XCTestCase {
     
     func testShouldAllowCameraChangeDuringGestureRubberBand() {
         let oldCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 41.4, longitude: -74.0), altitude: 1000, pitch: 0, heading: 0)
-        // Moving slightly beyond north border into rubber-band buffer
-        let newCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 41.65, longitude: -74.0), altitude: 1000, pitch: 0, heading: 0)
+        // Moving slightly beyond north border into rubber-band buffer (41.53 < 41.55)
+        let newCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 41.53, longitude: -74.0), altitude: 1000, pitch: 0, heading: 0)
         
         let allowedPan = CameraBounds.shouldAllowCameraChange(from: oldCam, to: newCam, reason: .gesturePan)
         XCTAssertTrue(allowedPan, "Gestures within rubber-band margin must be permitted for fluid damping physics")
@@ -122,7 +122,7 @@ final class CameraBoundsTests: XCTestCase {
         let allowedPinch = CameraBounds.shouldAllowCameraChange(from: oldCam, to: newCam, reason: .gesturePinch)
         XCTAssertTrue(allowedPinch, "Pinch gestures within rubber-band margin must be permitted")
         
-        // Moving beyond rubber band limit
+        // Moving beyond rubber band limit (43.0 > 41.55)
         let farCam = MLNMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 43.0, longitude: -74.0), altitude: 1000, pitch: 0, heading: 0)
         let allowedFar = CameraBounds.shouldAllowCameraChange(from: oldCam, to: farCam, reason: .gesturePan)
         XCTAssertFalse(allowedFar, "Gestures beyond rubber band margin must be rejected to prevent drifting into oblivion")

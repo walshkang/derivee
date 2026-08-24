@@ -8,8 +8,8 @@ public struct CameraBounds {
     public static let minLongitude: Double = -74.5
     public static let maxLongitude: Double = -73.0
     
-    /// Maximum allowable elastic margin beyond the hard boundary during active gestures (~38 km)
-    public static let rubberBandMargin: Double = 0.35
+    /// Maximum allowable elastic margin beyond the hard boundary during active gestures (~5 km)
+    public static let rubberBandMargin: Double = 0.05
     
     /// Checks if a coordinate is strictly within the active fog boundary envelope.
     public static func isWithinBounds(_ coordinate: CLLocationCoordinate2D) -> Bool {
