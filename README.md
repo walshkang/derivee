@@ -69,7 +69,7 @@ Built as a **pure native iOS application** under the **Sleepy Hermes** paradigm 
 
 ## 📍 Current Status
 
-The project has fully completed the **Pure Native iOS Migration**, **Design Alignment** (Waves E–H.1, W15), and **Fog Reliability Hardening** (Waves I.1–I.10a). Current focus is on **Untethered On-Device Field Walk Testing** (Wave I.10b) followed by **Exploration, Performance & Map Customization** (Wave J).
+The project has fully completed the **Pure Native iOS Migration**, **Design Alignment** (Waves E–H.1, W15), **Fog Reliability Hardening** (Waves I.1–I.10c), and **Exploration, Performance & Map Customization** (Wave J — 16 sub-waves). Current focus is on **Post-Wave J Field Fixes & UX Polish** (Wave K).
 
 | Phase | Status |
 | --- | --- |
@@ -79,9 +79,10 @@ The project has fully completed the **Pure Native iOS Migration**, **Design Alig
 | **Native Migration: Ambient Tracking Engine** | ✅ Done |
 | **Design Alignment & Ship Prep (Waves E–H.1)** | ✅ Done |
 | **Dynamic Island & Live Activities (W15)** | ✅ Done |
-| **Fog Reliability & Startup Performance (I.1–I.10a)** | ✅ Done |
-| **Untethered Field Walk Diagnostics (I.10b–I.10c)** | Planned (Ready) |
-| **Exploration, Performance & Map Customization (Wave J)** | Planned |
+| **Fog Reliability & Startup Performance (I.1–I.10c)** | ✅ Done |
+| **Exploration, Performance & Map Customization (Wave J)** | ✅ Done |
+| **Post-Wave J Field Fixes & UX Polish (Wave K)** | 🔨 Active |
+| **Multi-City Architecture (Wave L)** | Deferred |
 
 Full details in [`ROADMAP.MD`](ROADMAP.MD).
 
@@ -91,7 +92,7 @@ Full details in [`ROADMAP.MD`](ROADMAP.MD).
 
 ### Prerequisites
 
-* macOS with Xcode 15+
+* macOS with Xcode 16+
 * Homebrew (to install `xcodegen`)
 * MapTiler API Key (for base tiles)
 
@@ -136,8 +137,17 @@ derivee/
 │   │   ├── SpatialDatabaseManager.swift# GRDB SQLite manager
 │   │   ├── SpatialStore.swift          # Observable UI store
 │   │   ├── ContentView.swift           # Root SwiftUI view
+│   │   ├── MapView.swift               # MapLibre UIViewRepresentable + Coordinator
+│   │   ├── TransitRevealSheet.swift     # Transit bottom sheet (Screen 2)
+│   │   ├── TransitRealtimeService.swift # GTFS-RT Protobuf feed parser
+│   │   ├── ReliabilityHeatmapCanvas.swift # 24×7 OTP heatmap (Canvas)
+│   │   ├── DepartureMatrixView.swift    # Full 24h departure timetable
+│   │   ├── NearbyBusesCapsule.swift     # Floating bus quick lens
+│   │   ├── CameraBounds.swift           # Viewport clamping & rubber-band
+│   │   ├── ColdStartLocationFilter.swift# Multi-stage GPS drift gate
+│   │   ├── BasemapTheme.swift           # Day/Night/OLED theme engine
 │   │   └── Info.plist                  # Permissions & Config
-│   ├── DeriveeTests/       # Unit & Snapshot test suite (35 tests)
+│   ├── DeriveeTests/       # Unit & Snapshot test suite (132 tests across 20 files)
 │   ├── project.yml         # XcodeGen configuration
 │   └── Derivee.xcodeproj   # Generated Xcode Project
 ├── observer/               # Go daemon for GTFS-RT ingestion & historical sparklines
