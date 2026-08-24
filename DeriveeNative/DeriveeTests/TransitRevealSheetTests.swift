@@ -291,6 +291,80 @@ final class TransitRevealSheetTests: XCTestCase {
         }
     }
 
+    func testStopDetailsMultiRouteParsing() async throws {
+        let details = try await dbManager.fetchStopDetails(for: "stop_lorimer")
+        XCTAssertEqual(details.name, "Lorimer St Station")
+        XCTAssertEqual(details.routeId, "L")
+        XCTAssertEqual(details.routeIds, ["L", "G"], "Multi-route stations must parse all comma-separated routes into routeIds array.")
+    }
+    
+    func testMultiRouteFeedMessageParsing() throws {
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = 1736337600
+        feedMessage.header = header
+        
+        // Trip 1: Route N
+        var entity1 = TransitRealtime_FeedEntity()
+        entity1.id = "TRIP_N_1"
+        var tripUpdate1 = TransitRealtime_TripUpdate()
+        var trip1 = TransitRealtime_TripDescriptor()
+        trip1.tripID = "TRIP_N"
+        trip1.routeID = "N"
+        tripUpdate1.trip = trip1
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "stop_times_sq"
+        var arr1 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr1.time = 1736337600 + 180 // 3 min
+        stu1.arrival = arr1
+        tripUpdate1.stopTimeUpdate = [stu1]
+        entity1.tripUpdate = tripUpdate1
+        
+        // Trip 2: Route W (sibling)
+        var entity2 = TransitRealtime_FeedEntity()
+        entity2.id = "TRIP_W_1"
+        var tripUpdate2 = TransitRealtime_TripUpdate()
+        var trip2 = TransitRealtime_TripDescriptor()
+        trip2.tripID = "TRIP_W"
+        trip2.routeID = "W"
+        tripUpdate2.trip = trip2
+        var stu2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2.stopID = "stop_times_sq"
+        var arr2 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr2.time = 1736337600 + 360 // 6 min
+        stu2.arrival = arr2
+        tripUpdate2.stopTimeUpdate = [stu2]
+        entity2.tripUpdate = tripUpdate2
+        
+        feedMessage.entity = [entity1, entity2]
+        let data = try feedMessage.serializedData()
+        
+        let parsed = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "stop_times_sq",
+            targetRouteIds: ["N", "Q", "R", "W"],
+            referenceDate: Date(timeIntervalSince1970: 1736337600)
+        )
+        
+        XCTAssertEqual(parsed.count, 2, "Protobuf parser must extract both sibling line arrivals.")
+        XCTAssertEqual(parsed[0].line, "N")
+        XCTAssertEqual(parsed[0].minutes, 3)
+        XCTAssertEqual(parsed[1].line, "W")
+        XCTAssertEqual(parsed[1].minutes, 6)
+    }
+    
+    func testMultiRouteTimetableFallback() async throws {
+        let timetable = try await dbManager.fetchTimetable(for: "stop_union_sq", routeIds: ["N", "Q", "R", "W"], directionId: 0)
+        XCTAssertEqual(timetable.count, 24)
+        let allPills = timetable.flatMap { $0.departures }
+        let uniqueRoutes = Set(allPills.map { $0.routeId })
+        XCTAssertTrue(uniqueRoutes.contains("N"))
+        XCTAssertTrue(uniqueRoutes.contains("Q"))
+        XCTAssertTrue(uniqueRoutes.contains("R"))
+        XCTAssertTrue(uniqueRoutes.contains("W"))
+    }
+
     func testTransitRevealSheetDirectionalSnapshot() throws {
         let mockDetails = SpatialDatabaseManager.StopDetails(
             stopId: "stop_bedford",
@@ -320,6 +394,34 @@ final class TransitRevealSheetTests: XCTestCase {
         let vc = UIHostingController(rootView: view)
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
     }
+    
+    func testTransitRevealSheetMultiRouteSnapshot() throws {
+        let multiDetails = SpatialDatabaseManager.StopDetails(
+            stopId: "stop_canal",
+            name: "Canal St",
+            routeId: "N",
+            routeIds: ["N", "Q", "R", "W"],
+            routeType: 1,
+            arrivals: [
+                SpatialDatabaseManager.ArrivalInfo(line: "N", destination: "Astoria - Ditmars Blvd", minutes: 2, direction: "Uptown & Queens", distanceDescription: "Approaching"),
+                SpatialDatabaseManager.ArrivalInfo(line: "R", destination: "Forest Hills - 71 Av", minutes: 4, direction: "Uptown & Queens", distanceDescription: "1 stop away"),
+                SpatialDatabaseManager.ArrivalInfo(line: "W", destination: "Astoria - Ditmars Blvd", minutes: 7, direction: "Uptown & Queens", distanceDescription: "2 stops away"),
+                SpatialDatabaseManager.ArrivalInfo(line: "Q", destination: "96 St - 2nd Ave", minutes: 9, direction: "Uptown & Queens", distanceDescription: "3 stops away"),
+                SpatialDatabaseManager.ArrivalInfo(line: "N", destination: "Coney Island", minutes: 3, direction: "Downtown & Brooklyn", distanceDescription: "Approaching"),
+                SpatialDatabaseManager.ArrivalInfo(line: "R", destination: "Bay Ridge - 95 St", minutes: 8, direction: "Downtown & Brooklyn", distanceDescription: "3 stops away")
+            ]
+        )
+        
+        let view = TransitRevealSheet(
+            stopId: "stop_canal",
+            initialDetails: multiDetails,
+            initialLiveArrivals: multiDetails.arrivals
+        )
+        .frame(width: 375, height: 600)
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
+    }
 
     func testDepartureMatrixViewSnapshot() throws {
         let sampleDepartures = [
@@ -342,6 +444,41 @@ final class TransitRevealSheetTests: XCTestCase {
             stopId: "stop_bedford",
             liveArrivals: [
                 SpatialDatabaseManager.ArrivalInfo(line: "L", destination: "8th Ave", minutes: 3, direction: "Manhattan-bound")
+            ]
+        )
+        .frame(width: 375, height: 620)
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620))))
+    }
+    
+    func testDepartureMatrixViewMultiRouteSnapshot() throws {
+        var sampleDepartures: [SpatialDatabaseManager.DeparturePillRecord] = []
+        let routes = ["N", "Q", "R", "W"]
+        for (i, r) in routes.enumerated() {
+            sampleDepartures.append(
+                SpatialDatabaseManager.DeparturePillRecord(
+                    id: "DEP_\(r)_\(i)",
+                    tripId: "TRIP_\(r)_\(i)",
+                    routeId: r,
+                    destination: "Astoria",
+                    minute: 5 + i * 12,
+                    isExpress: (r == "N" || r == "Q")
+                )
+            )
+        }
+        
+        let sampleHours = (0..<24).map { h in
+            SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: sampleDepartures)
+        }
+        
+        let view = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "N",
+            routeIds: ["N", "Q", "R", "W"],
+            stopId: "stop_canal",
+            liveArrivals: [
+                SpatialDatabaseManager.ArrivalInfo(line: "N", destination: "Astoria", minutes: 2, direction: "Uptown & Queens")
             ]
         )
         .frame(width: 375, height: 620)

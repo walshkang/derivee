@@ -79,26 +79,59 @@ final class TransitRealtimeService: @unchecked Sendable {
     
     /// Fetches live GTFS-RT feed for a given route and parses arrivals matching `stopId`.
     func fetchLiveArrivals(for stopId: String, routeId: String) async throws -> [SpatialDatabaseManager.ArrivalInfo] {
-        let feed = SubwayFeed.feed(for: routeId)
-        guard let url = URL(string: feed.rawValue) else {
-            return []
+        return try await fetchLiveArrivals(for: stopId, routeIds: [routeId])
+    }
+    
+    /// Fetches live GTFS-RT feeds for multiple co-located routes, multiplexing across distinct feeds in parallel.
+    func fetchLiveArrivals(for stopId: String, routeIds: [String]) async throws -> [SpatialDatabaseManager.ArrivalInfo] {
+        guard !routeIds.isEmpty else { return [] }
+        let uniqueFeeds = Array(Set(routeIds.map { SubwayFeed.feed(for: $0) }))
+        
+        var allArrivals: [SpatialDatabaseManager.ArrivalInfo] = []
+        
+        try await withThrowingTaskGroup(of: [SpatialDatabaseManager.ArrivalInfo].self) { group in
+            for feed in uniqueFeeds {
+                group.addTask {
+                    guard let url = URL(string: feed.rawValue) else { return [] }
+                    var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 10)
+                    request.httpMethod = "GET"
+                    
+                    let (data, response) = try await self.session.data(for: request)
+                    guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+                        return []
+                    }
+                    return try self.parseFeedMessage(data: data, stopId: stopId, targetRouteIds: routeIds)
+                }
+            }
+            
+            for try await feedArrivals in group {
+                allArrivals.append(contentsOf: feedArrivals)
+            }
         }
         
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 10)
-        request.httpMethod = "GET"
-        
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        
-        return try parseFeedMessage(data: data, stopId: stopId, targetRouteId: routeId)
+        allArrivals.sort { $0.minutes < $1.minutes }
+        return Array(allArrivals.prefix(12))
     }
     
     /// Parses binary Protobuf GTFS-RT feed message data into `SpatialDatabaseManager.ArrivalInfo` models
-    func parseFeedMessage(data: Data, stopId: String, targetRouteId: String, referenceDate: Date = Date()) throws -> [SpatialDatabaseManager.ArrivalInfo] {
+    func parseFeedMessage(
+        data: Data,
+        stopId: String,
+        targetRouteId: String = "",
+        targetRouteIds: [String] = [],
+        referenceDate: Date = Date()
+    ) throws -> [SpatialDatabaseManager.ArrivalInfo] {
         let feedMessage = try TransitRealtime_FeedMessage(serializedBytes: data)
         let nowEpoch = Int64(referenceDate.timeIntervalSince1970)
+        
+        let allowedRoutes: Set<String> = {
+            var set = Set(targetRouteIds.map { $0.uppercased().trimmingCharacters(in: .whitespacesAndNewlines) })
+            let cleanTarget = targetRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cleanTarget.isEmpty {
+                set.insert(cleanTarget)
+            }
+            return set
+        }()
         
         var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?)] = []
         let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
@@ -106,7 +139,13 @@ final class TransitRealtimeService: @unchecked Sendable {
         for entity in feedMessage.entity {
             guard entity.hasTripUpdate else { continue }
             let tripUpdate = entity.tripUpdate
-            let tripRouteId = tripUpdate.trip.hasRouteID ? tripUpdate.trip.routeID : targetRouteId
+            let tripRouteId = tripUpdate.trip.hasRouteID ? tripUpdate.trip.routeID : (targetRouteIds.first ?? targetRouteId)
+            
+            if !allowedRoutes.isEmpty {
+                let cleanTripRoute = tripRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                let isAllowed = allowedRoutes.contains(cleanTripRoute) || allowedRoutes.contains(where: { cleanTripRoute.hasPrefix($0) || $0.hasPrefix(cleanTripRoute) })
+                guard isAllowed else { continue }
+            }
             
             // Match stop updates
             for (idx, stopUpdate) in tripUpdate.stopTimeUpdate.enumerated() {
@@ -156,11 +195,13 @@ final class TransitRealtimeService: @unchecked Sendable {
     }
     
     private func isStopMatch(currentStopId: String, targetStopId: String) -> Bool {
-        if currentStopId == targetStopId { return true }
-        if currentStopId.hasPrefix(targetStopId) || targetStopId.hasPrefix(currentStopId) { return true }
+        let cleanCurrent = currentStopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
+        let cleanTarget = targetStopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
+        if cleanCurrent == cleanTarget { return true }
+        if cleanCurrent.hasPrefix(cleanTarget) || cleanTarget.hasPrefix(cleanCurrent) { return true }
         // Handle North/Southbound suffixes e.g. "L08N" vs "L08"
-        let baseCurrent = currentStopId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
-        let baseTarget = targetStopId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
+        let baseCurrent = cleanCurrent.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
+        let baseTarget = cleanTarget.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
         if !baseCurrent.isEmpty && baseCurrent == baseTarget { return true }
         return false
     }
@@ -236,6 +277,20 @@ final class TransitRealtimeService: @unchecked Sendable {
         default:
             return []
         }
+    }
+    
+    public func fetchServiceAlerts(for routeIds: [String]) async -> [TransitAlert] {
+        var alerts: [TransitAlert] = []
+        var seen = Set<String>()
+        for rId in routeIds {
+            for alert in await fetchServiceAlerts(for: rId) {
+                if !seen.contains(alert.id) {
+                    seen.insert(alert.id)
+                    alerts.append(alert)
+                }
+            }
+        }
+        return alerts
     }
     
     private func resolveDestination(tripUpdate: TransitRealtime_TripUpdate, line: String, stopId: String) -> String {

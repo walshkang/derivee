@@ -537,13 +537,15 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         public let stopId: String
         public let name: String
         public let routeId: String
+        public let routeIds: [String]
         public let routeType: Int // 1: Subway, 3: Bus
         public let arrivals: [ArrivalInfo]
         
-        public init(stopId: String, name: String, routeId: String, routeType: Int, arrivals: [ArrivalInfo]) {
+        public init(stopId: String, name: String, routeId: String, routeIds: [String] = [], routeType: Int, arrivals: [ArrivalInfo]) {
             self.stopId = stopId
             self.name = name
             self.routeId = routeId
+            self.routeIds = routeIds.isEmpty ? [routeId] : routeIds
             self.routeType = routeType
             self.arrivals = arrivals
         }
@@ -814,19 +816,21 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     let isBus = locationType == 0 || stopId.hasPrefix("BUS_") || name.contains("/")
                     let routeType = isBus ? 3 : 1
                     
-                    let routeId: String
-                    if isBus {
-                        if let rStr = routesStr, !rStr.isEmpty, let firstRoute = rStr.components(separatedBy: ",").first, !firstRoute.isEmpty {
-                            routeId = firstRoute
-                        } else {
-                            routeId = self.inferBusRoutes(from: name, stopId: stopId).first ?? "M15"
-                        }
+                    let routeIds: [String]
+                    if let rStr = routesStr, !rStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        let parsed = rStr.components(separatedBy: ",")
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+                        routeIds = parsed.isEmpty ? (isBus ? self.inferBusRoutes(from: name, stopId: stopId) : [self.inferRouteId(from: stopId, name: name)]) : parsed
+                    } else if isBus {
+                        routeIds = self.inferBusRoutes(from: name, stopId: stopId)
                     } else {
-                        routeId = self.inferRouteId(from: stopId, name: name)
+                        routeIds = [self.inferRouteId(from: stopId, name: name)]
                     }
                     
-                    let arrivals = isBus ? self.generateBusArrivals(for: routeId, stopName: name) : self.generateArrivals(for: routeId)
-                    return StopDetails(stopId: stopId, name: name, routeId: routeId, routeType: routeType, arrivals: arrivals)
+                    let primaryRouteId = routeIds.first ?? (isBus ? "M15" : "L")
+                    let arrivals = isBus ? self.generateBusArrivals(for: primaryRouteId, stopName: name) : self.generateArrivals(for: primaryRouteId)
+                    return StopDetails(stopId: stopId, name: name, routeId: primaryRouteId, routeIds: routeIds, routeType: routeType, arrivals: arrivals)
                 }
             } catch let error as DatabaseError {
                 print("⚠️ Transit DB table missing or unattached: \(error.message). Using fallback.")
@@ -960,7 +964,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    public func fetchTimetable(for stopId: String, routeId: String? = nil, directionId: Int = 0) async throws -> [HourScheduleRecord] {
+    public func fetchTimetable(for stopId: String, routeId: String? = nil, routeIds: [String] = [], directionId: Int = 0) async throws -> [HourScheduleRecord] {
         let startTime = CFAbsoluteTimeGetCurrent()
         defer {
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
@@ -971,15 +975,21 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             do {
                 let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_stops)")
                 if !columns.isEmpty {
-                    let sql = """
+                    var sql = """
                         SELECT strftime('%H', departure_time) as dep_hour,
                                strftime('%M', departure_time) as dep_min,
                                trip_id, route_id, headsign, direction_id
                         FROM transit.scheduled_stops
                         WHERE stop_id = ? AND direction_id = ?
-                        ORDER BY departure_time ASC
                     """
-                    let rows = try Row.fetchAll(db, sql: sql, arguments: [stopId, directionId])
+                    var args: [DatabaseValueConvertible] = [stopId, directionId]
+                    if let rId = routeId, !rId.isEmpty {
+                        sql += " AND route_id = ?"
+                        args.append(rId)
+                    }
+                    sql += " ORDER BY departure_time ASC"
+                    
+                    let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
                     if !rows.isEmpty {
                         var hourMap: [Int: [DeparturePillRecord]] = [:]
                         for hour in 0..<24 {
@@ -1020,8 +1030,20 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 throw error
             }
             
-            let effectiveRoute = routeId ?? self.inferRouteId(from: stopId, name: stopId)
-            return self.generateFallbackTimetable(for: stopId, routeId: effectiveRoute, directionId: directionId)
+            let effectiveRoutes: [String]
+            if !routeIds.isEmpty {
+                effectiveRoutes = routeIds
+            } else if let rId = routeId, !rId.isEmpty {
+                effectiveRoutes = [rId]
+            } else {
+                effectiveRoutes = [self.inferRouteId(from: stopId, name: stopId)]
+            }
+            
+            if effectiveRoutes.count <= 1 {
+                return self.generateFallbackTimetable(for: stopId, routeId: effectiveRoutes.first ?? "L", directionId: directionId)
+            } else {
+                return self.generateMultiRouteFallbackTimetable(for: stopId, routeIds: effectiveRoutes, directionId: directionId)
+            }
         }
     }
     
@@ -1240,6 +1262,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 stopId: stopId,
                 name: "1 Av & E 14 St",
                 routeId: "M15-SBS",
+                routeIds: ["M15-SBS", "M15"],
                 routeType: 3,
                 arrivals: [
                     ArrivalInfo(line: "M15-SBS", destination: "South Ferry", minutes: 2, direction: "Southbound", distanceDescription: "0.3 mi away"),
@@ -1252,6 +1275,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 stopId: stopId,
                 name: "E 14 St & 2 Av",
                 routeId: "M14A-SBS",
+                routeIds: ["M14A-SBS", "M14D-SBS"],
                 routeType: 3,
                 arrivals: [
                     ArrivalInfo(line: "M14A-SBS", destination: "Lower East Side", minutes: 4, direction: "Eastbound", distanceDescription: "0.4 mi away"),
@@ -1263,6 +1287,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 stopId: stopId,
                 name: "1 Av & E 18 St",
                 routeId: "M15",
+                routeIds: ["M15", "M101"],
                 routeType: 3,
                 arrivals: [
                     ArrivalInfo(line: "M15", destination: "East Harlem", minutes: 5, direction: "Northbound", distanceDescription: "0.6 mi away"),
@@ -1275,10 +1300,12 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             let routeId = isBus ? "M15" : "L"
             let routeType = isBus ? 3 : 1
             let name = isBus ? "Bus Stop (\(stopId))" : "Transit Station (\(stopId))"
+            let routeIds = isBus ? [routeId] : (stopId == "stop_lorimer" ? ["L", "G"] : [routeId])
             return StopDetails(
                 stopId: stopId,
                 name: name,
                 routeId: routeId,
+                routeIds: routeIds,
                 routeType: routeType,
                 arrivals: isBus ? self.generateBusArrivals(for: routeId, stopName: name) : self.generateArrivals(for: routeId)
             )
@@ -1462,6 +1489,27 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
         
         return hourRecords
+    }
+    
+    private func generateMultiRouteFallbackTimetable(for stopId: String, routeIds: [String], directionId: Int) -> [HourScheduleRecord] {
+        var mergedHourMap: [Int: [DeparturePillRecord]] = [:]
+        for h in 0..<24 {
+            mergedHourMap[h] = []
+        }
+        
+        for rId in routeIds {
+            let singleTimetable = generateFallbackTimetable(for: stopId, routeId: rId, directionId: directionId)
+            for hourRec in singleTimetable {
+                mergedHourMap[hourRec.hourOfDay]?.append(contentsOf: hourRec.departures)
+            }
+        }
+        
+        var result: [HourScheduleRecord] = []
+        for h in 0..<24 {
+            let sortedDepartures = (mergedHourMap[h] ?? []).sorted { $0.minute < $1.minute }
+            result.append(HourScheduleRecord(hourOfDay: h, departures: sortedDepartures))
+        }
+        return result
     }
 }
 

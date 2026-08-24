@@ -150,23 +150,64 @@ struct TransitRevealSheet: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .center, spacing: 12) {
                         if isBus {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color(hex: "#00A1DE"))
-                                .frame(width: 42, height: 38)
-                                .overlay(
-                                    Image(systemName: "bus.fill")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.white)
-                                )
+                            if details.routeIds.count > 1 {
+                                HStack(spacing: 4) {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color(hex: "#00A1DE"))
+                                        .frame(width: 32, height: 32)
+                                        .overlay(
+                                            Image(systemName: "bus.fill")
+                                                .font(.system(size: 14, weight: .bold))
+                                                .foregroundColor(.white)
+                                        )
+                                    
+                                    ForEach(details.routeIds, id: \.self) { rId in
+                                        Text(rId)
+                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 4)
+                                            .background(Color(hex: "#00A1DE").opacity(0.15))
+                                            .foregroundColor(Color(hex: "#00A1DE"))
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                            } else {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color(hex: "#00A1DE"))
+                                    .frame(width: 42, height: 38)
+                                    .overlay(
+                                        Image(systemName: "bus.fill")
+                                            .font(.system(size: 18, weight: .bold))
+                                            .foregroundColor(.white)
+                                    )
+                            }
                         } else {
-                            Circle()
-                                .fill(routeInfo.color)
-                                .frame(width: 38, height: 38)
-                                .overlay(
-                                    Text(routeInfo.name)
-                                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                                        .foregroundColor(Color(hex: routeInfo.textColorHex))
-                                )
+                            if details.routeIds.count > 1 {
+                                HStack(spacing: 4) {
+                                    ForEach(details.routeIds, id: \.self) { rId in
+                                        let lineInfo = TransitRouteData.lineInfo(for: rId)
+                                        let diameter: CGFloat = details.routeIds.count > 4 ? 26 : (details.routeIds.count > 2 ? 30 : 34)
+                                        let fontSize: CGFloat = details.routeIds.count > 4 ? 12 : (details.routeIds.count > 2 ? 14 : 16)
+                                        Circle()
+                                            .fill(lineInfo.color)
+                                            .frame(width: diameter, height: diameter)
+                                            .overlay(
+                                                Text(lineInfo.name)
+                                                    .font(.system(size: fontSize, weight: .bold, design: .rounded))
+                                                    .foregroundColor(Color(hex: lineInfo.textColorHex))
+                                            )
+                                    }
+                                }
+                            } else {
+                                Circle()
+                                    .fill(routeInfo.color)
+                                    .frame(width: 38, height: 38)
+                                    .overlay(
+                                        Text(routeInfo.name)
+                                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                                            .foregroundColor(Color(hex: routeInfo.textColorHex))
+                                    )
+                            }
                         }
                         
                         VStack(alignment: .leading, spacing: 2) {
@@ -386,6 +427,7 @@ struct TransitRevealSheet: View {
                             DepartureMatrixView(
                                 records: timetableSchedule,
                                 routeId: details.routeId,
+                                routeIds: details.routeIds,
                                 stopId: stopId,
                                 liveArrivals: liveArrivals,
                                 selectedDirection: $selectedDirection
@@ -420,7 +462,7 @@ struct TransitRevealSheet: View {
         .onChange(of: selectedDirection) { _, newDir in
             Task {
                 if let details = stopDetails {
-                    let timetable = try? await SpatialDatabaseManager.shared.fetchTimetable(for: stopId, routeId: details.routeId, directionId: newDir)
+                    let timetable = try? await SpatialDatabaseManager.shared.fetchTimetable(for: stopId, routeId: details.routeId, routeIds: details.routeIds, directionId: newDir)
                     if let timetable = timetable {
                         await MainActor.run {
                             self.timetableSchedule = timetable
@@ -433,22 +475,22 @@ struct TransitRevealSheet: View {
     
     @MainActor
     private func triggerManualRefresh() {
-        guard !isRefreshing, let routeId = stopDetails?.routeId else { return }
+        guard !isRefreshing, let details = stopDetails else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         pollGeneration += 1
         let currentGen = pollGeneration
         self.pollProgress = 0.0
         Task {
-            await performLiveFetch(routeId: routeId)
-            await runPollingLoop(routeId: routeId, currentGen: currentGen)
+            await performLiveFetch(routeIds: details.routeIds)
+            await runPollingLoop(routeIds: details.routeIds, currentGen: currentGen)
         }
     }
     
     @MainActor
-    private func performLiveFetch(routeId: String) async {
+    private func performLiveFetch(routeIds: [String]) async {
         isRefreshing = true
         do {
-            let live = try await TransitRealtimeService.shared.fetchLiveArrivals(for: stopId, routeId: routeId)
+            let live = try await TransitRealtimeService.shared.fetchLiveArrivals(for: stopId, routeIds: routeIds)
             if !Task.isCancelled {
                 if !live.isEmpty {
                     self.liveArrivals = live
@@ -465,7 +507,7 @@ struct TransitRevealSheet: View {
     }
     
     @MainActor
-    private func runPollingLoop(routeId: String, currentGen: Int) async {
+    private func runPollingLoop(routeIds: [String], currentGen: Int) async {
         while !Task.isCancelled && pollGeneration == currentGen {
             let pollDuration: Double = 15.0
             let stepInterval: Double = 0.25
@@ -479,7 +521,7 @@ struct TransitRevealSheet: View {
             
             if Task.isCancelled || pollGeneration != currentGen { return }
             self.pollProgress = 1.0
-            await performLiveFetch(routeId: routeId)
+            await performLiveFetch(routeIds: routeIds)
             self.pollProgress = 0.0
         }
     }
@@ -490,7 +532,7 @@ struct TransitRevealSheet: View {
         let details = try? await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
         let hw = try? await SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
         let rel = try? await SpatialDatabaseManager.shared.fetchHourlyReliability(for: stopId, routeId: details?.routeId)
-        let timetable = try? await SpatialDatabaseManager.shared.fetchTimetable(for: stopId, routeId: details?.routeId, directionId: selectedDirection)
+        let timetable = try? await SpatialDatabaseManager.shared.fetchTimetable(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [], directionId: selectedDirection)
         
         self.stopDetails = details
         if let hw = hw {
@@ -503,17 +545,17 @@ struct TransitRevealSheet: View {
             self.timetableSchedule = timetable
         }
         
-        guard let routeId = details?.routeId else { return }
+        guard let details = details else { return }
         
-        // Load initial service alerts
-        let alerts = await TransitRealtimeService.shared.fetchServiceAlerts(for: routeId)
+        // Load initial service alerts across all serving lines
+        let alerts = await TransitRealtimeService.shared.fetchServiceAlerts(for: details.routeIds)
         self.serviceAlerts = alerts
         
         // 2. Fetch initial live arrivals & start generational polling loop
         pollGeneration += 1
         let currentGen = pollGeneration
-        await performLiveFetch(routeId: routeId)
-        await runPollingLoop(routeId: routeId, currentGen: currentGen)
+        await performLiveFetch(routeIds: details.routeIds)
+        await runPollingLoop(routeIds: details.routeIds, currentGen: currentGen)
     }
 }
 

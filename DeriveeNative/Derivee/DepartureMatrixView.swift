@@ -3,21 +3,25 @@ import SwiftUI
 struct DepartureMatrixView: View {
     let records: [SpatialDatabaseManager.HourScheduleRecord]
     let routeId: String
+    let routeIds: [String]
     let stopId: String
     let liveArrivals: [SpatialDatabaseManager.ArrivalInfo]
     
     @Binding var selectedDirection: Int
+    @State private var selectedRouteFilter: String = "ALL"
     @State private var isPulsing: Bool = false
     
     init(
         records: [SpatialDatabaseManager.HourScheduleRecord],
         routeId: String,
+        routeIds: [String] = [],
         stopId: String,
         liveArrivals: [SpatialDatabaseManager.ArrivalInfo] = [],
         selectedDirection: Binding<Int> = .constant(0)
     ) {
         self.records = records
         self.routeId = routeId
+        self.routeIds = routeIds.isEmpty ? [routeId] : routeIds
         self.stopId = stopId
         self.liveArrivals = liveArrivals
         self._selectedDirection = selectedDirection
@@ -57,19 +61,39 @@ struct DepartureMatrixView: View {
         }
     }
     
+    private var filteredRecords: [SpatialDatabaseManager.HourScheduleRecord] {
+        if selectedRouteFilter == "ALL" {
+            return records
+        }
+        return records.map { hourRec in
+            let filteredDeps = hourRec.departures.filter { dep in
+                dep.routeId.uppercased() == selectedRouteFilter.uppercased()
+            }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: hourRec.hourOfDay, departures: filteredDeps)
+        }
+    }
+    
     /// Reconciles static scheduled departures with active GTFS-RT arrivals
     private var reconciledRecords: [SpatialDatabaseManager.HourScheduleRecord] {
         let calendar = Calendar.current
         let currentHour = calendar.component(.hour, from: Date())
         let currentMinute = calendar.component(.minute, from: Date())
         
-        return records.map { hourRec in
+        let filteredLiveArrivals = (selectedRouteFilter == "ALL")
+            ? liveArrivals
+            : liveArrivals.filter { $0.line.uppercased() == selectedRouteFilter.uppercased() }
+        
+        return filteredRecords.map { hourRec in
             let updatedDepartures = hourRec.departures.map { dep -> SpatialDatabaseManager.DeparturePillRecord in
                 var modPill = dep
                 
                 // Match live arrival if in the current hour and close minute
                 if hourRec.hourOfDay == currentHour {
-                    if let matchedArrival = liveArrivals.first(where: { arr in
+                    if let matchedArrival = filteredLiveArrivals.first(where: { arr in
+                        let sameRoute = (dep.routeId.uppercased() == arr.line.uppercased())
+                        let arrivalMinute = (currentMinute + arr.minutes) % 60
+                        return sameRoute && abs(arrivalMinute - dep.minute) <= 3
+                    }) ?? filteredLiveArrivals.first(where: { arr in
                         let arrivalMinute = (currentMinute + arr.minutes) % 60
                         return abs(arrivalMinute - dep.minute) <= 3
                     }) {
@@ -89,18 +113,83 @@ struct DepartureMatrixView: View {
     }
     
     private var totalDeparturesCount: Int {
-        records.reduce(0) { $0 + $1.departures.count }
+        filteredRecords.reduce(0) { $0 + $1.departures.count }
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Direction Selector & Metric Bar
+            // Direction Selector, Route Filter & Metric Bar
             VStack(spacing: 8) {
                 Picker("Direction", selection: $selectedDirection) {
                     Text(directionNames[0]).tag(0)
                     Text(directionNames[1]).tag(1)
                 }
                 .pickerStyle(.segmented)
+                
+                // Horizontal Route Filter Strip (for co-located / multi-route lines)
+                if routeIds.count > 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    selectedRouteFilter = "ALL"
+                                }
+                            } label: {
+                                Text("All Routes")
+                                    .font(.system(size: 11, weight: selectedRouteFilter == "ALL" ? .bold : .medium, design: .rounded))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(
+                                        Capsule()
+                                            .fill(selectedRouteFilter == "ALL" ? Color(hex: "#FFB300").opacity(0.18) : Color.primary.opacity(0.05))
+                                    )
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(selectedRouteFilter == "ALL" ? Color(hex: "#FFB300") : Color.primary.opacity(0.08), lineWidth: 1)
+                                    )
+                                    .foregroundColor(selectedRouteFilter == "ALL" ? Color(hex: "#FFB300") : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            
+                            ForEach(routeIds, id: \.self) { rId in
+                                let rInfo = TransitRouteData.lineInfo(for: rId)
+                                let isSelected = selectedRouteFilter.uppercased() == rId.uppercased()
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        selectedRouteFilter = rId
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(rInfo.color)
+                                            .frame(width: 14, height: 14)
+                                            .overlay(
+                                                Text(rInfo.name)
+                                                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                                                    .foregroundColor(Color(hex: rInfo.textColorHex))
+                                            )
+                                        
+                                        Text(rInfo.name)
+                                            .font(.system(size: 11, weight: isSelected ? .bold : .medium, design: .rounded))
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(
+                                        Capsule()
+                                            .fill(isSelected ? rInfo.color.opacity(0.18) : Color.primary.opacity(0.05))
+                                    )
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(isSelected ? rInfo.color : Color.primary.opacity(0.08), lineWidth: 1)
+                                    )
+                                    .foregroundColor(isSelected ? .primary : .secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
                 
                 HStack {
                     HStack(spacing: 4) {
