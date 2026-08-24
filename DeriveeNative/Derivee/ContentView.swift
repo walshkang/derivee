@@ -206,6 +206,7 @@ struct ContentView: View {
                 }
             }
         }
+        .preferredColorScheme(currentTheme == .day ? .light : .dark)
     }
     
     private func scanNearbyBuses(force: Bool = false) {

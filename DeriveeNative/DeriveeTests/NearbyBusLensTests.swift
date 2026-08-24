@@ -92,7 +92,111 @@ final class NearbyBusLensTests: XCTestCase {
         XCTAssertEqual(arrivals.count, 1)
         XCTAssertEqual(arrivals[0].line, "M15")
         XCTAssertEqual(arrivals[0].minutes, 4)
-        XCTAssertEqual(arrivals[0].direction, "Southbound")
+        XCTAssertTrue(arrivals[0].direction?.contains("Southbound") == true)
+        XCTAssertEqual(arrivals[0].destination, "South Ferry - Whitehall St")
+    }
+    
+    func testM10BusTerminalResolution() {
+        let (northDest, northDir) = TransitRealtimeService.resolveBusDestination(routeId: "M10", directionId: 0)
+        XCTAssertEqual(northDest, "Harlem - 159 St / Frederick Douglass Blvd")
+        XCTAssertEqual(northDir, "Uptown & Northbound")
+        
+        let (southDest, southDir) = TransitRealtimeService.resolveBusDestination(routeId: "M10", directionId: 1)
+        XCTAssertEqual(southDest, "Columbus Circle - 58 St / 8 Ave")
+        XCTAssertEqual(southDir, "Downtown & Southbound")
+    }
+    
+    func testBusRealtimeHorizonClampingRejects100MinuteArrivals() throws {
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = 1700000000
+        feedMessage.header = header
+        
+        var entity = TransitRealtime_FeedEntity()
+        entity.id = "trip_future_100min"
+        
+        var tripUpdate = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "trip_M10_future"
+        trip.routeID = "M10"
+        tripUpdate.trip = trip
+        
+        let now = Date(timeIntervalSince1970: 1700000000)
+        
+        var stopUpdate = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stopUpdate.stopID = "401014"
+        var arrival = TransitRealtime_TripUpdate.StopTimeEvent()
+        arrival.time = 1700000000 + 6000 // 100 minutes later
+        stopUpdate.arrival = arrival
+        
+        tripUpdate.stopTimeUpdate = [stopUpdate]
+        entity.tripUpdate = tripUpdate
+        feedMessage.entity = [entity]
+        
+        let data = try feedMessage.serializedData()
+        let arrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "401014",
+            targetRouteId: "M10",
+            referenceDate: now
+        )
+        
+        XCTAssertTrue(arrivals.isEmpty, "Arrivals 100 minutes away must be clamped and rejected from live arrival stream.")
+    }
+    
+    func testNoCrossRoutePrefixPollution() throws {
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = 1700000000
+        feedMessage.header = header
+        
+        var entity = TransitRealtime_FeedEntity()
+        entity.id = "trip_M104"
+        
+        var tripUpdate = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "trip_M104_001"
+        trip.routeID = "M104"
+        tripUpdate.trip = trip
+        
+        let now = Date(timeIntervalSince1970: 1700000000)
+        
+        var stopUpdate = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stopUpdate.stopID = "401348"
+        var arrival = TransitRealtime_TripUpdate.StopTimeEvent()
+        arrival.time = 1700000000 + 300 // 5 min later
+        stopUpdate.arrival = arrival
+        
+        tripUpdate.stopTimeUpdate = [stopUpdate]
+        entity.tripUpdate = tripUpdate
+        feedMessage.entity = [entity]
+        
+        let data = try feedMessage.serializedData()
+        // Querying for target M10 must NOT match M104 trip
+        let arrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "401348",
+            targetRouteId: "M10",
+            referenceDate: now
+        )
+        
+        XCTAssertTrue(arrivals.isEmpty, "Querying for M10 should not match M104 trip due to prefix collision.")
+    }
+    
+    func testSubwayPlatformsExcludedFromBusLens() {
+        let dbManager = SpatialDatabaseManager.shared
+        XCTAssertTrue(dbManager.isSubwayPlatformId("125N"))
+        XCTAssertTrue(dbManager.isSubwayPlatformId("125S"))
+        XCTAssertTrue(dbManager.isSubwayPlatformId("A24N"))
+        XCTAssertTrue(dbManager.isSubwayPlatformId("L03N"))
+        XCTAssertTrue(dbManager.isSubwayPlatformId("R14S"))
+        
+        XCTAssertFalse(dbManager.isSubwayPlatformId("401014"))
+        XCTAssertFalse(dbManager.isSubwayPlatformId("401348"))
+        XCTAssertFalse(dbManager.isSubwayPlatformId("BUS_001"))
+        XCTAssertFalse(dbManager.isSubwayPlatformId("STOP_WILLIS"))
     }
     
     @MainActor

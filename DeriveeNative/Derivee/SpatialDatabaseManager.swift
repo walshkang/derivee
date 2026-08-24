@@ -779,13 +779,17 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 
                 let userLoc = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
                 for row in rows {
+                    let stopId: String = row["stop_id"]
+                    if self.isSubwayPlatformId(stopId) {
+                        continue
+                    }
+                    
                     let lat: Double = row["stop_lat"]
                     let lon: Double = row["stop_lon"]
                     let stopLoc = CLLocation(latitude: lat, longitude: lon)
                     let dist = userLoc.distance(from: stopLoc)
                     
                     if dist <= radiusMeters {
-                        let stopId: String = row["stop_id"]
                         let stopName: String = row["stop_name"]
                         let routesStr: String = (row["routes"] as? String) ?? ""
                         let routes: [String]
@@ -814,6 +818,19 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             nearbyList.sort { $0.distanceMeters < $1.distanceMeters }
             return Array(nearbyList.prefix(8))
         }
+    }
+    
+    public func isSubwayPlatformId(_ stopId: String) -> Bool {
+        let clean = stopId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.hasPrefix("BUS_") { return false }
+        if clean.count == 6 && clean.allSatisfy({ $0.isNumber }) { return false }
+        if clean.count == 5 && clean.allSatisfy({ $0.isNumber }) { return false }
+        if clean.hasSuffix("N") || clean.hasSuffix("S") || clean.hasSuffix("E") || clean.hasSuffix("W") {
+            let base = String(clean.dropLast())
+            if base.count <= 4 { return true }
+        }
+        if clean.count <= 4 && !clean.allSatisfy({ $0.isNumber }) { return true }
+        return false
     }
     
     public func fetchStopDetails(for stopId: String) async throws -> StopDetails {
@@ -1112,8 +1129,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                                   let minStr: String = row["dep_min"], let min = Int(minStr) else { continue }
                             let tripId: String = row["trip_id"] ?? "TRIP_\(idx)"
                             let rId: String = row["route_id"] ?? (routeId ?? "L")
-                            let dest: String = row["headsign"] ?? "Terminal"
                             let dir: Int = row["direction_id"] ?? directionId
+                            let dest: String = row["headsign"] ?? (TransitRealtimeService.SubwayFeed.isBusRoute(rId) ? TransitRealtimeService.resolveBusDestination(routeId: rId, directionId: dir).destination : "Terminal")
                             let isExp = rId.contains("X") || rId.contains("SBS") || (rId == "2" || rId == "4" || rId == "5" || rId == "A")
                             let isFirst = idx == 0
                             let isLast = idx == rows.count - 1
@@ -1370,6 +1387,19 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     
     private func inferBusRoutes(from stopName: String, stopId: String) -> [String] {
         let upper = stopName.uppercased()
+        if upper.contains("CENTRAL PARK WEST") || upper.contains("CPW") || upper.contains("8 AV") || upper.contains("FREDERICK DOUGLASS") { return ["M10", "M20"] }
+        if upper.contains("CENTRAL PARK SOUTH") || upper.contains("59 ST") || upper.contains("COLUMBUS CIRCLE") { return ["M10", "M20", "M104"] }
+        if upper.contains("7 AV") || upper.contains("SEVENTH") { return ["M7", "M20", "M104"] }
+        if upper.contains("57 ST") { return ["M57", "M31"] }
+        if upper.contains("66 ST") || upper.contains("65 ST") { return ["M66", "M72"] }
+        if upper.contains("72 ST") { return ["M72"] }
+        if upper.contains("79 ST") { return ["M79-SBS"] }
+        if upper.contains("86 ST") { return ["M86-SBS"] }
+        if upper.contains("96 ST") { return ["M96"] }
+        if upper.contains("125 ST") { return ["M60-SBS", "M125", "Bx15"] }
+        if upper.contains("5 AV") || upper.contains("MADISON") { return ["M1", "M2", "M3", "M4"] }
+        if upper.contains("LEXINGTON") || upper.contains("3 AV") { return ["M101", "M102", "M103"] }
+        if upper.contains("42 ST") { return ["M42"] }
         if upper.contains("1 AV") || upper.contains("2 AV") { return ["M15-SBS", "M15"] }
         if upper.contains("14 ST") { return ["M14A-SBS", "M14D-SBS"] }
         if upper.contains("23 ST") { return ["M23-SBS"] }
@@ -1378,7 +1408,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         if upper.contains("GRAND CONCOURSE") { return ["Bx1", "Bx2"] }
         if upper.contains("BROADWAY") { return ["M104", "B57"] }
         if upper.contains("FLATBUSH") { return ["B41"] }
-        return ["M15", "M101"]
+        if upper.contains("AMSTERDAM") || upper.contains("COLUMBUS AV") { return ["M7", "M11", "M104"] }
+        return ["M10", "M104"]
     }
     
     private func inferBusDirection(from stopName: String) -> String {
@@ -1391,12 +1422,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     private func generateBusArrivals(for routeId: String, stopName: String) -> [ArrivalInfo] {
-        let upper = stopName.uppercased()
-        let isEastWest = (upper.contains("ST") && !upper.contains("AV")) || upper.contains("CROSSTOWN") || upper.contains("14 ST") || upper.contains("23 ST") || upper.contains("34 ST")
-        let dir1 = isEastWest ? "Eastbound" : "Southbound"
-        let dir2 = isEastWest ? "Westbound" : "Northbound"
-        let dest1 = isEastWest ? "Lower East Side / FDR" : "South Ferry / Downtown"
-        let dest2 = isEastWest ? "Chelsea Piers / 11 Ave" : "East Harlem / Uptown"
+        let (dest1, dir1) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 0, stopName: stopName)
+        let (dest2, dir2) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 1, stopName: stopName)
         return [
             ArrivalInfo(line: routeId, destination: dest1, minutes: 3, direction: dir1, distanceDescription: "0.4 mi away"),
             ArrivalInfo(line: routeId, destination: dest1, minutes: 11, direction: dir1, distanceDescription: "1.2 mi away"),
@@ -1524,6 +1551,14 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 ArrivalInfo(line: "SIR", destination: "Tottenville", minutes: 12, direction: "Outbound (Tottenville)", distanceDescription: "7 stops away")
             ]
         default:
+            if TransitRealtimeService.SubwayFeed.isBusRoute(routeId) {
+                let (dest1, dir1) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 0)
+                let (dest2, dir2) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 1)
+                return [
+                    ArrivalInfo(line: routeId, destination: dest1, minutes: 3, direction: dir1, distanceDescription: "2 stops away"),
+                    ArrivalInfo(line: routeId, destination: dest2, minutes: 8, direction: dir2, distanceDescription: "5 stops away")
+                ]
+            }
             return [
                 ArrivalInfo(line: routeId, destination: "Uptown / Terminal", minutes: 3, direction: "Uptown & Northbound", distanceDescription: "2 stops away"),
                 ArrivalInfo(line: routeId, destination: "Downtown / Terminal", minutes: 8, direction: "Downtown & Southbound", distanceDescription: "5 stops away")
@@ -1573,8 +1608,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         let isBus = stopId.hasPrefix("BUS_") || routeId.contains("-")
         
         let destination: String
-        if isBus {
-            destination = directionId == 0 ? "Terminal / Uptown" : "Terminal / Downtown"
+        if isBus || TransitRealtimeService.SubwayFeed.isBusRoute(routeId) {
+            destination = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: directionId).destination
         } else {
             switch routeId {
             case "L":

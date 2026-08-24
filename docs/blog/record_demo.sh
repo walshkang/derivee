@@ -7,10 +7,11 @@ set -euo pipefail
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SIMULATOR_NAME="${1:-booted}"
 TMP_RAW="/tmp/derivee_demo_raw.mp4"
 OUTPUT_FINAL="${SCRIPT_DIR}/derivee_demo_final.mp4"
-GPX_PATH="$(cd "${SCRIPT_DIR}/../../DeriveeNative" && pwd)/NYC_Walk.gpx"
+GPX_PATH="${REPO_ROOT}/DeriveeNative/NYC_Walk.gpx"
 
 echo "======================================================================"
 echo "🎬 Dérivée Demo Video Recording Automation"
@@ -50,6 +51,7 @@ xcrun simctl status_bar "${SIMULATOR_NAME}" override \
     --batteryState "charged" \
     --batteryLevel 100 2>/dev/null || true
 
+xcrun simctl install "${SIMULATOR_NAME}" "${REPO_ROOT}/DeriveeNative/build/Build/Products/Debug-iphonesimulator/Derivee.app" 2>/dev/null || true
 xcrun simctl launch "${SIMULATOR_NAME}" com.derivee.Derivee -isTrackingEnabled YES -selectedBasemapTheme day 2>/dev/null || true
 sleep 2
 

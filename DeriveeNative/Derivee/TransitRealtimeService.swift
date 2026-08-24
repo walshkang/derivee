@@ -144,7 +144,9 @@ final class TransitRealtimeService: @unchecked Sendable {
             
             if !allowedRoutes.isEmpty {
                 let cleanTripRoute = tripRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-                let isAllowed = allowedRoutes.contains(cleanTripRoute) || allowedRoutes.contains(where: { cleanTripRoute.hasPrefix($0) || $0.hasPrefix(cleanTripRoute) })
+                let isAllowed = allowedRoutes.contains { target in
+                    self.routesMatch(cleanTripRoute, target)
+                }
                 guard isAllowed else { continue }
             }
             
@@ -166,6 +168,10 @@ final class TransitRealtimeService: @unchecked Sendable {
                     // Filter out arrivals departed more than 30 seconds ago (30s boarding grace window)
                     let diffSec = arrivalEpoch - nowEpoch
                     guard diffSec >= -30 else { continue }
+                    
+                    // Clamping: In real-time arrival feeds, filter out far-future scheduled predictions (> 45 min)
+                    // to prevent ghost/off-shift block schedules showing as immediate arrivals
+                    guard diffSec <= 2700 else { continue }
                     
                     let destination = resolveDestination(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
                     let direction = resolveDirection(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
@@ -206,11 +212,31 @@ final class TransitRealtimeService: @unchecked Sendable {
         return Array(arrivals)
     }
     
+    private func routesMatch(_ feedRoute: String, _ targetRoute: String) -> Bool {
+        let f = feedRoute.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = targetRoute.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if f == t { return true }
+        // Clean agency prefixes like "MTA NYCT_M10" -> "M10"
+        let cleanFeed = f.components(separatedBy: "_").last ?? f
+        let cleanTarget = t.components(separatedBy: "_").last ?? t
+        if cleanFeed == cleanTarget { return true }
+        // Match exact SBS variant or express variant e.g. "M15-SBS" vs "M15" or "7X" vs "7"
+        if cleanFeed == "\(cleanTarget)-SBS" || cleanTarget == "\(cleanFeed)-SBS" { return true }
+        if cleanFeed == "\(cleanTarget)X" || cleanTarget == "\(cleanFeed)X" { return true }
+        if cleanFeed == "\(cleanTarget)+" || cleanTarget == "\(cleanFeed)+" { return true }
+        return false
+    }
+    
     private func isStopMatch(currentStopId: String, targetStopId: String) -> Bool {
-        let cleanCurrent = currentStopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
-        let cleanTarget = targetStopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
+        let cleanCurrent = currentStopId.uppercased()
+            .replacingOccurrences(of: "STOP_", with: "")
+            .replacingOccurrences(of: "BUS_", with: "")
+            .components(separatedBy: "_").last ?? currentStopId.uppercased()
+        let cleanTarget = targetStopId.uppercased()
+            .replacingOccurrences(of: "STOP_", with: "")
+            .replacingOccurrences(of: "BUS_", with: "")
+            .components(separatedBy: "_").last ?? targetStopId.uppercased()
         if cleanCurrent == cleanTarget { return true }
-        if cleanCurrent.hasPrefix(cleanTarget) || cleanTarget.hasPrefix(cleanCurrent) { return true }
         // Handle North/Southbound suffixes e.g. "L08N" vs "L08"
         let baseCurrent = cleanCurrent.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
         let baseTarget = cleanTarget.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
@@ -223,6 +249,12 @@ final class TransitRealtimeService: @unchecked Sendable {
         let isSouthbound = stopId.hasSuffix("S")
         let isEastbound = stopId.hasSuffix("E")
         let isWestbound = stopId.hasSuffix("W")
+        
+        if SubwayFeed.isBusRoute(line) {
+            let dirId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
+            let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : (isEastbound ? "Eastbound" : (isWestbound ? "Westbound" : nil)))
+            return Self.resolveBusDestination(routeId: line, directionId: dirId, directionHint: hint).direction
+        }
         
         switch line.uppercased() {
         case "L":
@@ -264,9 +296,6 @@ final class TransitRealtimeService: @unchecked Sendable {
         if isEastbound { return "Eastbound" }
         if isWestbound { return "Westbound" }
         
-        if SubwayFeed.isBusRoute(line) {
-            return "Southbound"
-        }
         return "Uptown / Downtown"
     }
     
@@ -305,9 +334,181 @@ final class TransitRealtimeService: @unchecked Sendable {
         return alerts
     }
     
+    public static func resolveBusDestination(routeId: String, directionId: Int? = nil, directionHint: String? = nil, stopName: String? = nil) -> (destination: String, direction: String) {
+        let cleanRoute = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let isNorthOrUptown: Bool = {
+            if let dir = directionId { return dir == 0 }
+            if let hint = directionHint?.uppercased() {
+                if hint.contains("NORTH") || hint.contains("NB") || hint.contains("UPTOWN") || hint.contains("EAST") || hint.contains("EB") { return true }
+                if hint.contains("SOUTH") || hint.contains("SB") || hint.contains("DOWNTOWN") || hint.contains("WEST") || hint.contains("WB") { return false }
+            }
+            if let name = stopName?.uppercased() {
+                if name.contains("NB") || name.contains("NORTH") || name.contains("EB") || name.contains("EAST") { return true }
+                if name.contains("SB") || name.contains("SOUTH") || name.contains("WB") || name.contains("WEST") { return false }
+            }
+            return true
+        }()
+        
+        switch cleanRoute {
+        case "M10":
+            return isNorthOrUptown
+                ? ("Harlem - 159 St / Frederick Douglass Blvd", "Uptown & Northbound")
+                : ("Columbus Circle - 58 St / 8 Ave", "Downtown & Southbound")
+        case "M104":
+            return isNorthOrUptown
+                ? ("Harlem - 129 St / Amsterdam Ave", "Uptown & Northbound")
+                : ("Times Square - 41 St / 7 Ave", "Downtown & Southbound")
+        case "M20":
+            return isNorthOrUptown
+                ? ("Lincoln Center - 66 St", "Uptown & Northbound")
+                : ("South Ferry - Whitehall St", "Downtown & Southbound")
+        case "M7":
+            return isNorthOrUptown
+                ? ("Harlem - 147 St", "Uptown & Northbound")
+                : ("Chelsea - 14 St / 6 Ave", "Downtown & Southbound")
+        case "M5":
+            return isNorthOrUptown
+                ? ("GWB Bus Station - 178 St", "Uptown & Northbound")
+                : ("Midtown - 31 St / 5 Ave", "Downtown & Southbound")
+        case "M55":
+            return isNorthOrUptown
+                ? ("Midtown - 44 St / 6 Ave", "Uptown & Northbound")
+                : ("South Ferry - State St", "Downtown & Southbound")
+        case "M1":
+            return isNorthOrUptown
+                ? ("Harlem - 147 St", "Uptown & Northbound")
+                : ("East Village - 8 St", "Downtown & Southbound")
+        case "M2":
+            return isNorthOrUptown
+                ? ("Washington Heights - 168 St", "Uptown & Northbound")
+                : ("East Village - 8 St", "Downtown & Southbound")
+        case "M3":
+            return isNorthOrUptown
+                ? ("Fort George - 193 St", "Uptown & Northbound")
+                : ("East Village - 8 St", "Downtown & Southbound")
+        case "M4":
+            return isNorthOrUptown
+                ? ("The Cloisters / Fort Tryon Park", "Uptown & Northbound")
+                : ("Midtown - 32 St", "Downtown & Southbound")
+        case "M11":
+            return isNorthOrUptown
+                ? ("Riverbank Park - 145 St", "Uptown & Northbound")
+                : ("West Village - Abingdon Sq", "Downtown & Southbound")
+        case "M12":
+            return isNorthOrUptown
+                ? ("Columbus Circle - 58 St", "Uptown & Northbound")
+                : ("West Village - Abingdon Sq", "Downtown & Southbound")
+        case "M15", "M15-SBS":
+            return isNorthOrUptown
+                ? ("East Harlem - 125 St", "Uptown & Northbound")
+                : ("South Ferry - Whitehall St", "Downtown & Southbound")
+        case "M14A-SBS":
+            return isNorthOrUptown
+                ? ("Lower East Side - Grand St", "Eastbound")
+                : ("Chelsea Piers - 11 Ave", "Westbound")
+        case "M14D-SBS":
+            return isNorthOrUptown
+                ? ("Lower East Side - Delancey St", "Eastbound")
+                : ("Chelsea Piers - 11 Ave", "Westbound")
+        case "M23-SBS":
+            return isNorthOrUptown
+                ? ("East Midtown - 23 St / FDR", "Eastbound")
+                : ("Chelsea Piers - 12 Ave", "Westbound")
+        case "M34-SBS", "M34A-SBS":
+            return isNorthOrUptown
+                ? ("FDR Drive - 34 St Ferry", "Eastbound")
+                : ("Hudson Yards / Javits Center - 12 Ave", "Westbound")
+        case "M42":
+            return isNorthOrUptown
+                ? ("United Nations - 1 Ave", "Eastbound")
+                : ("Circle Line - 12 Ave", "Westbound")
+        case "M50":
+            return isNorthOrUptown
+                ? ("East Midtown - 49 St / 1 Ave", "Eastbound")
+                : ("Pier 92 / 12 Ave", "Westbound")
+        case "M57":
+            return isNorthOrUptown
+                ? ("East Midtown - York Ave / 60 St", "Eastbound")
+                : ("Upper West Side - West End Ave / 57 St", "Westbound")
+        case "M60-SBS":
+            return isNorthOrUptown
+                ? ("LaGuardia Airport - Terminals B/C", "Eastbound & Airport")
+                : ("West Harlem - Broadway / 106 St", "Westbound & Harlem")
+        case "M66":
+            return isNorthOrUptown
+                ? ("Yorkville - York Ave / 68 St", "Eastbound")
+                : ("Lincoln Center - West End Ave / 66 St", "Westbound")
+        case "M72":
+            return isNorthOrUptown
+                ? ("Upper East Side - York Ave / 72 St", "Eastbound")
+                : ("Upper West Side - Freedom Pl / 68 St", "Westbound")
+        case "M79-SBS":
+            return isNorthOrUptown
+                ? ("East Side - York Ave / 79 St", "Eastbound")
+                : ("West Side - Riverside Dr / 79 St", "Westbound")
+        case "M86-SBS":
+            return isNorthOrUptown
+                ? ("Yorkville - York Ave / 87 St", "Eastbound")
+                : ("West Side - West End Ave / 87 St", "Westbound")
+        case "M96":
+            return isNorthOrUptown
+                ? ("East Side - 1 Ave / 96 St", "Eastbound")
+                : ("West Side - West End Ave / 96 St", "Westbound")
+        case "M101", "M102", "M103":
+            return isNorthOrUptown
+                ? ("Fort George - 193 St / Amsterdam Ave", "Uptown & Northbound")
+                : ("East Village - Cooper Sq / City Hall", "Downtown & Southbound")
+        case "M116":
+            return isNorthOrUptown
+                ? ("East Harlem - FDR Dr", "Eastbound")
+                : ("Morningside Hts - Broadway / 106 St", "Westbound")
+        case "M125":
+            return isNorthOrUptown
+                ? ("The Hub - 149 St / 3 Ave", "Eastbound")
+                : ("Manhattanville - 12 St / St Clair Pl", "Westbound")
+        case "B41":
+            return isNorthOrUptown
+                ? ("Downtown Brooklyn - Cadman Plaza", "Northbound & Downtown")
+                : ("Kings Plaza / Bergen Beach", "Southbound & Flatbush")
+        case "B44-SBS":
+            return isNorthOrUptown
+                ? ("Williamsburg Bridge Plaza", "Northbound & Williamsburg")
+                : ("Sheepshead Bay - Knapp St", "Southbound & Sheepshead Bay")
+        case "B62":
+            return isNorthOrUptown
+                ? ("Long Island City - Queens Plaza", "Northbound & Queens")
+                : ("Downtown Brooklyn - Boerum Pl", "Southbound & Downtown")
+        case "Bx1", "Bx2":
+            return isNorthOrUptown
+                ? ("Riverdale - 246 St", "Northbound & Bronx")
+                : ("Mott Haven - 136 St / Lincoln Ave", "Southbound & Hub")
+        case "Q32":
+            return isNorthOrUptown
+                ? ("Jackson Heights - 82 St / Northern Blvd", "Queens-bound")
+                : ("Midtown - Penn Station", "Manhattan-bound")
+        case "Q70-SBS":
+            return isNorthOrUptown
+                ? ("LaGuardia Airport - Terminals B/C", "Eastbound & Airport")
+                : ("Woodside - 61 St / 74 St-Broadway", "Westbound & Subway")
+        case "S79-SBS":
+            return isNorthOrUptown
+                ? ("Bay Ridge - 86 St (Subway R)", "Northbound & Brooklyn")
+                : ("Staten Island Mall", "Southbound & Staten Island")
+        default:
+            let dirStr = isNorthOrUptown ? "Northbound" : "Southbound"
+            return ("\(cleanRoute) - \(dirStr)", isNorthOrUptown ? "Uptown & Northbound" : "Downtown & Southbound")
+        }
+    }
+    
     private func resolveDestination(tripUpdate: TransitRealtime_TripUpdate, line: String, stopId: String) -> String {
         let isNorthbound = stopId.hasSuffix("N")
         let isSouthbound = stopId.hasSuffix("S")
+        
+        if SubwayFeed.isBusRoute(line) {
+            let dirId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
+            let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : nil)
+            return Self.resolveBusDestination(routeId: line, directionId: dirId, directionHint: hint).destination
+        }
         
         switch line.uppercased() {
         case "L":
@@ -355,9 +556,6 @@ final class TransitRealtimeService: @unchecked Sendable {
             if isNorthbound { return "Queens - Jamaica Center" }
             return "Manhattan - Broad St"
         default:
-            if SubwayFeed.isBusRoute(line) {
-                return "\(line) Terminal"
-            }
             return isNorthbound ? "Uptown / Terminal" : "Downtown / Terminal"
         }
     }

@@ -91,9 +91,15 @@ struct NearbyBusesCapsule: View {
                                                     .clipShape(Capsule())
                                             }
                                             
-                                            Text("• \(Int(round(stop.distanceMeters)))m")
-                                                .font(.system(size: 11, design: .monospaced))
-                                                .foregroundColor(.secondary)
+                                            HStack(spacing: 3) {
+                                                Text("•")
+                                                    .foregroundColor(.secondary)
+                                                Image(systemName: "figure.walk")
+                                                    .font(.system(size: 9, weight: .semibold))
+                                                Text("\(Int(round(stop.distanceMeters)))m away")
+                                                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                                            }
+                                            .foregroundColor(.secondary)
                                         }
                                     }
                                     
