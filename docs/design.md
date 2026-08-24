@@ -475,7 +475,7 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 | G7 | **Thread Yielding for Lists:** Complex lists (Neighborhood Stats, Session History) must process data in background tasks before binding to `@Observable` UI. | Prevents frame drops during screen transitions. |
 | G8 | **No Serif Fonts:** Strictly modern geometric sans-serif (SF Pro / Inter). | Design system consistency. |
 | G9 | **Pure Light Mode & Dual Daytime Modes:** Interface is locked to `.preferredColorScheme(.light)` with two curated daytime themes: Standard Exploration (Parchment white, graphite fog) and Transit Navigation (Porcelain white, high-contrast transit, 40% fog). **Electric Amber (`#FFB300`)** is the universal accent color across both modes. | Brand identity & clarity: Eliminates dark-mode visual confusion while optimizing for exploration and effortless transit navigation. |
-| G10 | **Screen Enumeration is Exhaustive:** Screens 0–3 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. | Prevents scope creep and hallucinated features. |
+| G10 | **Screen Enumeration is Exhaustive:** Screens 0–3 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. Multi-city UI surfaces (City Selector, `CityDownloadPromptSheet`, `Settings > Cities & Storage`) are sub-views within existing Screens 1 and 3 per §11 — they do not constitute new top-level screens. | Prevents scope creep and hallucinated features. |
 
 ---
 
@@ -658,5 +658,83 @@ To provide clear visual distinction between live streaming GTFS-RT telemetry and
 
 Following Google Maps and Apple Maps open transit compliance standards, Dérivée provides transparent agency citations:
 
-* **Sheet Footer Citation:** At the bottom of `TransitRevealSheet` (below the matrix/arrivals list), a subtle monospaced attribution label renders in `.secondary` (e.g. *"Data provided by MTA New York City Transit, Port Authority of NY & NJ, and NYC Ferry"*).
+* **Sheet Footer Citation:** At the bottom of `TransitRevealSheet` (below the matrix/arrivals list), a subtle monospaced attribution label renders in `.secondary` (e.g. *"Data provided by MTA New York City Transit, Port Authority of NY & NJ, and NYC Ferry"*). Attribution strings are loaded dynamically from the active city pack's `city_config.json > transit.attributions` array.
 * **Settings Directory:** `Settings > About & Open Data` contains full agency licenses, static GTFS revision timestamps, and official public feed endpoints for all installed city packs.
+
+---
+
+## 11. Multi-City Screens & User Flows (Wave L)
+
+> [!NOTE]
+> All multi-city UI surfaces exist as **sub-views within the existing 4-screen hierarchy** (Screens 0–3), preserving Guardrail G10. No new top-level screens are introduced. For the complete backend architecture, database topology, and city pack format, see [docs/multi-city.md](file:///Volumes/T7ssd/derivee/docs/multi-city.md).
+
+### 11.1 City Download Prompt (`CityDownloadPromptSheet` — Screen 1 Overlay)
+
+When the GPS auto-detection system identifies that the user has arrived in a new, uninstalled metropolitan area:
+
+* **Presentation:** Non-blocking SwiftUI bottom sheet over Screen 1 (`.sheet(presentationDetents: [.fraction(0.35)])`), presented above the ambient map. The map remains fully interactive behind the sheet.
+* **Header:** City name in bold SF Pro (e.g. *"Exploring Boston?"*).
+* **Body:** *"Download transit routes, stations, and offline timetable data (≈22 MB)."*
+* **Primary Action:** `[ Download Now ]` — Electric Amber (`#FFB300`) filled button. On tap, transforms in-place into an inline progress bar with byte counter (SF Mono) and checkmark animation on completion.
+* **Secondary Action:** `[ Not Now ]` — Text-only `.secondary` button. Dismisses immediately.
+* **Nag Prevention:** Tapping "Not Now" suppresses automatic prompts for that specific city for **7 days** or until manually triggered via `Settings > Cities`.
+* **Silent Auto-Switch (Installed Packs):** If the detected city is already installed, no sheet is presented. The app silently switches active city and displays a transient 3-second `DiscoveryToast` at the top of Screen 1: *"Welcome to Boston • Switched active city"*.
+* **Fallback Tracking:** If the user declines or is offline, ambient tracking continues normally. Newly discovered H3 hexes are recorded under a generic local fog envelope for that city. Zero exploration data is lost.
+
+### 11.2 Screen 3: City Selector & Multi-Metro Stats
+
+Screen 3 (`StatsView`) gains a top-level **City Selector** for browsing per-city exploration stats:
+
+* **City Selector Pill:** A frosted-glass `.ultraThinMaterial` menu pill positioned at the top of Screen 3, below the navigation bar:
+  - Active state: `[ 🟢 New York City ▾ ]` (green dot = physically present via GPS).
+  - Browsing state: `[ 📍 Boston ▾ ]` (pin = browsing remotely).
+  - Tapping opens a native `Menu` listing all installed cities plus an *"All Metros Summary"* option.
+* **Per-City View:**
+  - **Macro Metrics Header:** City-scoped unlocked hexes, exploration percentage, total walkable land area ($km^2$).
+  - **Neighborhoods Tab:** Loads that city's neighborhood leaderboard sorted by completion %. *"View on Map"* action on any neighborhood row sets the active city (hot-swaps `CameraBounds`, `transit.sqlite`, and fog envelope) and pans Screen 1 to the neighborhood's centroid.
+  - **Journal & Milestones Tab:** Loads that city's curated transit hubs and landmarks (e.g. Boston: *South Station, Park St, Freedom Trail, Fenway*).
+* **"All Metros Summary" Mode:**
+  - Lifetime totals: global hexes unlocked, total drift distance ($km$), cities explored count.
+  - Per-city overview cards with individual completion rings (compact `CircularProgressView` in Electric Amber).
+* **Smart Multi-City GPX Import:**
+  - The *"Upload Previous Workouts"* button uses geographic bounding-box partitioning: a single GPX file spanning walks across NYC, Boston, and London automatically routes coordinates to `explored_hexes_nyc`, `explored_hexes_bos`, and `explored_hexes_lon` in a single atomic SQLite transaction.
+
+### 11.3 Settings > Cities & Storage Manager
+
+A new section in `SettingsView` provides transparent, user-facing city pack lifecycle management:
+
+* **Section Header:** *"Cities & Storage"*
+* **Installed Cities List:** Each row displays:
+  - City name and active version number.
+  - Transparent disk footprint breakdown in SF Mono: compressed download size, uncompressed on-disk size, and component split (transit DB, GeoJSON lines, config).
+  - `[ Update Available ]` badge (amber accent) when a newer timetable version is published on R2.
+  - Swipe-to-delete gesture or explicit `[ Delete Pack ]` button.
+* **Available Cities (R2 Catalog):** Lists uninstalled metros from `cities.json` with download size badge and `[ Download ]` action.
+* **Decoupled Deletion & Exploration Preservation:**
+  - Deleting a city pack removes **only** the static transit assets (`~/Documents/CityPacks/{slug}/`), freeing ~20–40 MB.
+  - The user's personal exploration history (`explored_hexes_{slug}`) remains **permanently intact** in the main database. Re-downloading the pack later restores full transit functionality with all previously cleared fog preserved.
+  - A separate, destructive *"Reset Exploration Data for [City]"* action is hidden under an advanced prompt with explicit double-confirmation.
+* **NYC Core Protection:** NYC row is labelled *"Bundled (Core Metro)"* and the delete action is disabled.
+
+### 11.4 Screen 2: Multi-Modal Capsule Badging
+
+For cities with co-located multi-modal transit (e.g. Boston's Park Street serves heavy rail Red Line and light rail Green Line branches), `TransitRevealSheet` renders stacked or wrapping mode-aware route capsules in official agency brand colors:
+
+| Transit Mode | Capsule Examples | Color |
+|:---|:---|:---|
+| Heavy Rail Subway | `[ Red ]`, `[ Orange ]`, `[ Blue ]` | Official agency hex (e.g. `#DA291C`, `#ED8B00`, `#003DA5`) |
+| Light Rail (LRT) | `[ Green B ]`, `[ Green C ]`, `[ Green D ]`, `[ Green E ]` | `#00843D` |
+| Bus Rapid Transit (BRT) | `[ SL1 ]`, `[ SL2 ]`, `[ SL3 ]` | `#7C878E` (Silver) |
+| Maritime Ferry | `[ Ferry F4 ]` | `#00A3E0` (Cyan) |
+
+* Capsule rendering is data-driven from `transit.routes` in the active city pack's `transit.sqlite`.
+* The `[ Live Arrivals | Full Timetable ]` segmented picker and horizontal route pill selector strip from K.3 are preserved and extended to multi-modal route types.
+
+### 11.5 Quiet Water Gliding (Ferry Transit Visual Behavior)
+
+During ferry transits across open water bodies (Boston Harbor, East River, Charles River):
+
+* The live GPS indicator puck **glides quietly** over the dark, fog-covered water surface. No hex unlocks fire. No fog clearing occurs.
+* The puck follows its standard Electric Amber styling with heading cone.
+* Fog clearance resumes only when the GPS coordinate enters a terrestrial hex at the destination pier or landing.
+* This ensures crisp natural coastlines are preserved and prevents jagged ocean hex holes.

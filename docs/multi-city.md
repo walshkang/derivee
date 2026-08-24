@@ -1,8 +1,9 @@
 # Dérivée — Multi-City Architecture RFC
 
-> **Status:** Proposed / Approved via Grilling Session (2024-08-24)  
+> **Status:** Approved via Grilling Session (2026-08-24)  
 > **Target Release:** Wave L (Sub-waves L.1–L.6)  
 > **Primary Author:** Antigravity / Derivee Core Team  
+> **Last Updated:** 2026-08-24 — Incorporated all 7 grilling decisions + 3 architectural blind spot refinements  
 
 ---
 
@@ -24,21 +25,27 @@ City detection operates automatically without requiring manual user configuratio
 
 ```mermaid
 flowchart TD
-    A[Cold Start / GPS Fix] --> B{Within Current Active City Bounds?}
-    B -- Yes --> C[Resume Normal Exploration]
-    B -- No --> D[Reverse Geocode via CLGeocoder]
-    D --> E{Match in cities.json Manifest?}
-    E -- No --> F[Maintain Generic Fog Envelope / No Transit CTA]
-    E -- Yes --> G{City Pack Already Installed?}
-    G -- Yes --> H[Hot-Swap Active City Pack]
-    G -- No --> I[Present Download Prompt Sheet]
+    A[Cold Start / GPS Fix] --> B{Within Any Known City Bounds?}
+    B -- Yes, Current Active --> C[Resume Normal Exploration]
+    B -- Yes, Different City --> D{City Pack Installed?}
+    B -- No Known City --> E[CLGeocoder Reverse Geocode]
+    E --> F{Match in cities.json?}
+    F -- No --> G[Generic Fog Envelope / No Transit]
+    F -- Yes --> D
+    D -- Installed --> H[Silent Auto-Switch + 3s Toast]
+    D -- Not Installed --> I[Non-Blocking CityDownloadPromptSheet]
+    I -- Download Now --> J[Streamed Download + Hot-Swap]
+    I -- Not Now --> K[Fallback: Track Under Local Envelope]
+    K --> L[Badge in Screen 3 City Selector]
 ```
 
-1. **Cold-Start Check:** On obtaining the first high-accuracy GPS fix ($\le 25\text{m}$), `AmbientTrackingEngine` evaluates if the coordinate lies within `CameraBounds.isWithinBounds()`.
-2. **Significant Location Change Trigger:** While backgrounded, `CLMonitor` / Significant Location Change service wakes the app if the user travels $> 50\text{km}$ (e.g. airport departure/arrival).
-3. **Reverse Geocoding:** `CLGeocoder.reverseGeocodeLocation` resolves the locality (e.g. "Boston", "Chicago", "London").
-4. **Manifest Resolution:** Matches the locality against the cached `cities.json` manifest hosted on Cloudflare R2.
-5. **Prompt Presentation:** If uninstalled, presents the non-blocking `CityDownloadPromptSheet`.
+1. **Fast Offline Bounding-Box Check (Primary):** On first high-accuracy GPS fix ($\le 25\text{m}$), evaluate coordinates against cached `cities.json` bounding boxes locally. This is a pure arithmetic comparison with zero network dependency — no reverse geocoding needed for known cities.
+2. **CLGeocoder Fallback (Ambiguous Zones):** `CLGeocoder.reverseGeocodeLocation` is invoked only when coordinates lie outside all known bounding boxes, to resolve localities not yet in the manifest.
+3. **Significant Location Change Trigger:** While backgrounded, `CLMonitor` / Significant Location Change service wakes the app if the user travels $> 50\text{km}$ (e.g. airport departure/arrival).
+4. **Silent Auto-Switch (Installed Packs):** If the detected city pack is already installed, the app **silently auto-switches** the active city (`CameraBounds`, `transit.sqlite` hot-swap, fog envelope) and displays a transient 3-second top toast: *"Welcome to Boston • Switched active city"*.
+5. **Non-Blocking Download Prompt (Uninstalled Packs):** Presents `CityDownloadPromptSheet` as a bottom sheet over Screen 1 with `[ Download Now ]` and `[ Not Now ]` actions.
+6. **Fallback Ambient Tracking (Decline / Offline):** If the user taps "Not Now" or is offline, Dérivée **still tracks their walk**. It dynamically creates `explored_hexes_{slug}` and records H3 hexes under a generic local fog envelope. Zero exploration data is lost. A badge appears in Screen 3's City Selector prompting later download.
+7. **Nag Prevention:** Tapping "Not Now" suppresses automatic prompts for that city for **7 days** or until manually triggered via `Settings > Cities`.
 
 ---
 
@@ -189,6 +196,13 @@ DETACH DATABASE transit;
 ATTACH DATABASE '/var/mobile/.../Documents/CityPacks/bos/transit.sqlite' AS transit;
 ```
 
+> [!CAUTION]
+> **WAL Locking Safety (Critical Blind Spot):** In `PRAGMA journal_mode = WAL;`, `DETACH DATABASE transit` requires an exclusive schema lock. If `AmbientTrackingEngine` is mid-transaction writing to `explored_hexes` or if GRDB's connection pool holds an open `ValueObservation` reader on `transit.*`, SQLite will throw `SQLITE_LOCKED` or `SQLITE_BUSY`, potentially crashing the observation pipeline. The following safety protocol is **mandatory**:
+>
+> 1. **Pre-Swap Teardown:** Cancel/suspend all active foreground transit queries (`TransitRevealSheet` polling, `NearbyBusesCapsule` 400m query, `DepartureMatrixView` timetable reads) before invoking `DETACH`.
+> 2. **GRDB Write Barrier:** Execute the `DETACH` + `ATTACH` sequence inside a serial `dbWriter.writeWithoutTransaction { db in ... }` barrier. This guarantees background writes from `CLLocationUpdates` wait in the serial queue until the schema swap completes.
+> 3. **Prepared Statement Cache Flush:** Reset GRDB's cached prepared statements after `ATTACH` to prevent dangling reader connections from referencing the detached file descriptor.
+
 ### 4.2 Query Independence
 All existing database read methods (`fetchStopDetails`, `fetchStopEvents`, `fetchHeadwayData`, `inferBusRoutes`) remain **100% unchanged** because they query tables using the schema alias `transit.stops`, `transit.stop_events`, and `transit.routes`.
 
@@ -197,6 +211,16 @@ Exploration history is permanently preserved per city using dedicated tables in 
 - `explored_hexes_nyc (h3_index TEXT PRIMARY KEY)`
 - `explored_hexes_bos (h3_index TEXT PRIMARY KEY)`
 - `SpatialStore` observes only the active city's table, avoiding cross-city H3 dissolution overhead.
+
+### 4.4 Coordinate-Routed Background Tracking
+Live GPS tracking remains fully decoupled from the "active view" city. If a user is physically in NYC but browsing Boston stats in Screen 3, newly discovered GPS hexes are always routed to the correct `explored_hexes_{slug}` table based on bounding-box coordinate math, preventing corrupt cross-city hex inserts.
+
+### 4.5 Zero-Downtime Schema Migration (Upgrade Path)
+On first launch with Wave L, if the legacy single-city `explored_hexes` table exists and `explored_hexes_nyc` does not:
+```sql
+ALTER TABLE explored_hexes RENAME TO explored_hexes_nyc;
+```
+This preserves 100% of existing user exploration data instantly in $<1\text{ms}$ with zero data loss or re-computation. The migration runs inside `SpatialDatabaseManager.migrate()` during app init.
 
 ---
 
@@ -221,6 +245,23 @@ public struct CameraBounds {
 ### 5.2 Dynamic Fog Bounds & Water Fog Policy
 - `FogPolygonMath.makeBounds(for config: CityConfig)` computes the 5-point rectangular exterior bounds directly from `activeConfig.bounds`.
 - **Strict Land-Only Fog Policy:** Open water bodies (rivers, bays, ocean) are excluded from the H3 exploration tracking engine. Ferry trips across water do not punch holes through open water polygons; exploration clearance occurs strictly on terrestrial landmass, pedestrian bridges, and ferry landing piers.
+- **Quiet Water Gliding:** During ferry transits, the live GPS indicator puck glides smoothly over dark water without triggering any hex unlocks or fog clearing. Fog clearance resumes only when the GPS coordinate enters a terrestrial hex at the destination pier.
+
+> [!CAUTION]
+> **MapLibre Geometry Cache Invalidation (Critical Blind Spot):** MapLibre Native's C++ tessellation engine aggressively caches triangulation meshes for `MLNShapeSource` geometries. When switching cities, the outer bounding box changes entirely. The following protocol prevents the GPU from falsely assuming the polygon topology is unchanged:
+>
+> 1. **Explicit Source Re-assignment:** Assign a newly initialized `MLNShapeCollectionFeature` with updated coordinate arrays (not an in-place mutation of existing feature coordinates).
+> 2. **Atomic Viewport Handshake:** Coordinate the camera transition (`mapView.setCenter(cityCenter, zoomLevel: defaultZoom, animated: false)`) synchronously on `@MainActor` with `shapeSource.shape = newFogShape`, preventing intermediate frames where a new city's camera renders over stale bounding coordinates.
+
+### 5.2.1 GIS Bridge Preservation in Walkable Polygon Mask
+
+The boolean geographic subtraction used during city pack compilation must strictly preserve pedestrian and cycling bridges. A naive water subtraction (e.g., subtracting the Charles River in Boston) would eliminate bridge hexes, making $100\%$ neighborhood completion impossible for waterfront neighborhoods.
+
+**Mandatory Pipeline Formula:**
+$$\text{Walkable\_Mask} = (\text{Neighborhood\_Polygon} \setminus \text{Water\_Polygons}) \cup \text{Pedestrian\_Bridges}$$
+
+- **OSM Bridge Ingestion:** The static GIS compilation script must query OpenStreetMap for pedestrian-accessible bridges (`bridge=yes` with `highway=footway | cycleway | pedestrian | primary/secondary with sidewalk`).
+- **Verification:** Each city pack compilation must assert that `total_hexes` for waterfront neighborhoods includes bridge hexes (e.g., Longfellow Bridge hexes are present in both Beacon Hill and Kendall Square denominators).
 
 ### 5.3 Unified GeoJSON Multi-Modal Transit Loader
 1. Delete hardcoded `MtaSubwayNetworkData.swift`.
@@ -236,24 +277,56 @@ public struct CameraBounds {
 
 ## 6. User Experience, Timetable Navigation & Attributions
 
-1. **Non-Blocking Modal Presentation:** When a new city is detected, a bottom sheet appears above the map:
-   - *"Exploring Boston? Download transit network & offline map (≈22 MB)."*
-   - Actions: `[ Download Now ]` (Primary) / `[ Not Now ]` (Secondary).
-2. **Download & Verification:**
-   - Streamed download via `URLSessionDownloadTask` with progress tracking.
-   - Decompressed via native `libcompression` into `~/Documents/CityPacks/{slug}/`.
-   - Verified against `sha256` checksum before activating.
-   - **Zero-Download NYC First Launch:** The base app bundle includes `city-nyc.pack.zst`, uncompressed locally on first launch in <200ms with zero network dependency.
-3. **$\pm 7$ Day Timetable Navigation (Observed Reality Replay):**
-   - **Today (Live):** Real-time GTFS-RT countdown overlays, delay badges (`+4m`), and pulsing live indicators.
-   - **Future Days ($+1 \dots +7$):** Pure scheduled baseline for that day of week.
-   - **Past Days ($-7 \dots -1$):** **Observed Reality Replay** rendering green/amber/red departure pills with actual recorded arrival times from `stop_events`.
-4. **Transit Agency Attributions:**
-   - Data source citations (e.g. *"Data provided by MTA New York City Transit, Port Authority of NY & NJ, and NYC Ferry"*) rendered in sheet footers and `Settings > About & Open Data`.
-5. **Settings Manager:** A new **Settings > Cities** screen enables:
-   - Viewing installed vs available cities.
-   - Manual download / storage deletion.
-   - Manual active city switching.
+### 6.1 City Download Prompt (`CityDownloadPromptSheet`)
+When an uninstalled city is detected, a non-blocking bottom sheet appears over Screen 1:
+- **Header:** *"Exploring Boston?"*
+- **Body:** *"Download transit routes, stations, and offline timetable data (≈22 MB)."*
+- **Primary Action:** `[ Download Now ]` — transforms into an inline progress bar with byte counter and checkmark animation on completion.
+- **Secondary Action:** `[ Not Now ]` — dismisses immediately, suppresses re-prompts for 7 days.
+- **Download & Verification:** Streamed via `URLSessionDownloadTask`, decompressed via native `libcompression` into `~/Documents/CityPacks/{slug}/`, verified against `sha256` checksum before activating.
+- **Zero-Download NYC First Launch:** The base app bundle includes `city-nyc.pack.zst`, decompressed locally on first launch in $<200\text{ms}$ with zero network dependency.
+
+### 6.2 Screen 3: Multi-City Stats & City Selector
+Screen 3 (`StatsView`) gains a top-level **City Selector** enabling per-city exploration browsing without leaving the 4-screen hierarchy:
+- **City Selector Pill:** Frosted-glass menu at the top of Screen 3 (`[ 🟢 New York City ▾ ]`). Tapping opens a native `Menu` listing installed cities plus an *"All Metros Summary"* option.
+- **Per-City View:** Macro header shows that city's unlocked hexes, exploration percentage, and total land area ($km^2$). Neighborhoods tab loads that city's leaderboard. Journal & Milestones tab loads that city's curated transit hubs and landmarks.
+- **"All Metros Summary" Mode:** Displays lifetime totals (global hexes unlocked, total drift distance in $km$) and overview cards per city with individual completion rings.
+- **"View on Map" Action:** Tapping a neighborhood or city card sets the active city (hot-swaps `CameraBounds`, `transit.sqlite`, and fog envelope) and pans Screen 1 to the target coordinates.
+- **Smart Multi-City GPX Import:** The *"Upload Previous Workouts"* button partitions GPX waypoints by geographic bounding-box, routing coordinates to `explored_hexes_nyc`, `explored_hexes_bos`, etc. in a single atomic SQLite transaction.
+
+### 6.3 Settings > Cities & Storage Manager
+A new section in `SettingsView` provides transparent city pack management:
+- **Installed Cities Section:** Lists installed packs with:
+  - Disk footprint breakdown (compressed download size vs. uncompressed on-disk size, component split: transit DB, GeoJSON lines, config).
+  - Active version number and `[ Update Available ]` badge when a newer timetable is published on R2.
+  - Swipe-to-delete or `[ Delete Pack ]` action.
+- **Available Cities Section (R2 Catalog):** Lists uninstalled metros from `cities.json` with download size badge and `[ Download ]` action.
+- **Decoupled Deletion & Exploration Preservation:**
+  - Deleting a city pack removes **only** the heavy static assets (`~/Documents/CityPacks/{slug}/`), freeing ~20–40 MB.
+  - The user's exploration history (`explored_hexes_{slug}`) remains **permanently intact** in the main database. Re-downloading the pack later restores full transit functionality with all previously cleared fog preserved.
+  - A separate, destructive action (*"Reset Exploration Data for [City]"*) is accessible via an advanced prompt with explicit double-confirmation.
+- **NYC Core Protection:** NYC is labelled *Bundled (Core Metro)* and cannot be deleted.
+
+### 6.4 Multi-Modal Transit Capsule Badging (Screen 2)
+Screen 2 (`TransitRevealSheet`) renders mode-aware route capsules in official agency brand colors for co-located multi-modal stations:
+- **Heavy Rail Subway:** `[ Red ]` (`#DA291C`), `[ Orange ]` (`#ED8B00`), `[ Blue ]` (`#003DA5`)
+- **Light Rail (LRT):** `[ Green B ]`, `[ Green C ]`, `[ Green D ]`, `[ Green E ]` (`#00843D`)
+- **Bus Rapid Transit (BRT):** `[ SL1 ]`, `[ SL2 ]`, `[ SL3 ]` (`#7C878E` Silver)
+- **Maritime Ferry:** `[ Ferry F4 ]` (`#00A3E0` Cyan)
+- Capsule rendering is data-driven from `transit.routes` in the active city pack.
+
+### 6.5 $\pm 7$ Day Timetable Navigation & Honest Fallback
+The `DepartureMatrixView` supports uniform $\pm 7$ day scrubbing across all metros:
+- **Today (Live):** Full on-device GTFS-RT Protobuf stream with live countdowns, boarding indicators, and delay pills.
+- **Future Days ($+1 \dots +7$):** Static scheduled baseline loaded in $<0.5\text{ms}$ from compact `scheduled_hourly_patterns`.
+- **Past Days ($-7 \dots -1$):**
+  - **If historical `stop_events` exist (e.g. NYC):** Observed Reality Replay with green/amber/red performance pills and actual recorded arrival times.
+  - **If historical data not yet recorded (e.g. Boston in Wave L.6):** Displays the scheduled timetable for that past day with a clean, honest header banner: *"Scheduled Timetable • Real-time history recording launches in Phase 2"*.
+  - Never fakes delay metrics. Preserves uniform 7-day scrubbing UX across all cities.
+
+### 6.6 Transit Agency Attributions
+- Data source citations (e.g. *"Data provided by MTA New York City Transit, Port Authority of NY & NJ, and NYC Ferry"*) rendered in `TransitRevealSheet` footers and `Settings > About & Open Data`.
+- Attribution strings are loaded dynamically from the active city pack's `city_config.json > transit.attributions` array.
 
 ---
 
@@ -325,10 +398,10 @@ flowchart TD
 
 | Sub-Wave | Task ID | Deliverable | Scope |
 |:---|:---|:---|:---:|
-| **L.1** | `WL1-CITY-PACK-INFRA` | `CityPackManager`, decompression, R2 manifest fetcher, multi-modal `city_config.json`, bundled NYC pack | **M** |
-| **L.2** | `WL2-DYNAMIC-BOUNDS-FOG` | Dynamic `CameraBounds`, per-city `explored_hexes_{slug}`, land-only water fog masking | **M** |
-| **L.3** | `WL3-TRANSIT-HOT-SWAP` | SQLite `DETACH`/`ATTACH` engine, multi-modal `transit.sqlite` (Subway+PATH+Ferry+Bus), $\pm 7$ day timetable navigation | **M** |
-| **L.4** | `WL4-GEOJSON-TRANSIT-LOADER` | Multi-modal GeoJSON loader (Subway/PATH/Maritime Ferry), retire `MtaSubwayNetworkData.swift` | **M** |
-| **L.5** | `WL5-CITY-DETECTION-UX` | `CLGeocoder` city trigger, download prompt sheet, agency attributions, Settings city manager | **M** |
-| **L.6** | `WL6-BOSTON-MBTA-PACK` | MBTA GTFS multi-modal pipeline (Subway+LRT+BRT+Ferry), `city-bos.pack.zst`, R2 upload | **M** |
+| **L.1** | `WL1-CITY-PACK-INFRA` | `CityPackManager`, Zstandard decompression, R2 `cities.json` manifest fetcher, multi-modal `city_config.json` schema, compact `scheduled_hourly_patterns` schema, bundled `city-nyc.pack.zst` | **M** |
+| **L.2** | `WL2-DYNAMIC-BOUNDS-FOG` | Dynamic `CameraBounds` from `city_config.json`, per-city `explored_hexes_{slug}` tables, zero-downtime schema migration (`ALTER TABLE RENAME`), land-only water fog masking, quiet water gliding, MapLibre geometry cache invalidation protocol, GIS bridge preservation pipeline | **M** |
+| **L.3** | `WL3-TRANSIT-HOT-SWAP` | SQLite `DETACH`/`ATTACH` engine with WAL write barrier safety, pre-swap transit query teardown, prepared statement cache flush, multi-modal `transit.sqlite`, $\pm 7$ day timetable navigation with honest scheduled fallback for new cities | **M** |
+| **L.4** | `WL4-GEOJSON-TRANSIT-LOADER` | Dynamic `MLNShapeSource` multi-modal GeoJSON loader (Subway/PATH/LRT/BRT/Maritime Ferry), retire `MtaSubwayNetworkData.swift` | **M** |
+| **L.5** | `WL5-CITY-DETECTION-UX` | Bounding-box fast detection + `CLGeocoder` fallback, `CityDownloadPromptSheet` with 7-day snooze, silent auto-switch with toast, fallback ambient tracking for uninstalled cities, Screen 3 City Selector + "All Metros" mode, multi-modal capsule badging, `Settings > Cities & Storage` manager with transparent sizing and decoupled deletion, agency attributions, smart multi-city GPX import | **M** |
+| **L.6** | `WL6-BOSTON-MBTA-PACK` | MBTA static GTFS multi-modal pipeline (Subway Red/Orange/Blue + Green Line LRT + Silver Line BRT + Harbor Ferries), OSM bridge ingestion for walkable polygon mask, `city-bos.pack.zst` compilation, R2 upload, `cities.json` update, end-to-end field validation | **M** |
 
