@@ -644,6 +644,9 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         public var liveDeltaMinutes: Int?
         public var delaySeconds: Int?
         public var isLive: Bool
+        public var isPast: Bool
+        public var isUnscheduled: Bool
+        public var isBoarding: Bool
         
         public init(
             id: String,
@@ -657,7 +660,10 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             isLastDeparture: Bool = false,
             liveDeltaMinutes: Int? = nil,
             delaySeconds: Int? = nil,
-            isLive: Bool = false
+            isLive: Bool = false,
+            isPast: Bool = false,
+            isUnscheduled: Bool = false,
+            isBoarding: Bool = false
         ) {
             self.id = id
             self.tripId = tripId
@@ -671,6 +677,9 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             self.liveDeltaMinutes = liveDeltaMinutes
             self.delaySeconds = delaySeconds
             self.isLive = isLive
+            self.isPast = isPast
+            self.isUnscheduled = isUnscheduled
+            self.isBoarding = isBoarding
         }
     }
     
@@ -692,14 +701,27 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         public let minutes: Int
         public let direction: String?
         public let distanceDescription: String?
+        public let arrivalDate: Date
+        public let tripId: String?
         
-        public init(id: UUID = UUID(), line: String, destination: String, minutes: Int, direction: String? = nil, distanceDescription: String? = nil) {
+        public init(
+            id: UUID = UUID(),
+            line: String,
+            destination: String,
+            minutes: Int,
+            direction: String? = nil,
+            distanceDescription: String? = nil,
+            arrivalDate: Date = Date(),
+            tripId: String? = nil
+        ) {
             self.id = id
             self.line = line
             self.destination = destination
             self.minutes = minutes
             self.direction = direction
             self.distanceDescription = distanceDescription
+            self.arrivalDate = arrivalDate
+            self.tripId = tripId
         }
     }
     

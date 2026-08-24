@@ -133,13 +133,14 @@ final class TransitRealtimeService: @unchecked Sendable {
             return set
         }()
         
-        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?)] = []
+        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?)] = []
         let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         
         for entity in feedMessage.entity {
             guard entity.hasTripUpdate else { continue }
             let tripUpdate = entity.tripUpdate
             let tripRouteId = tripUpdate.trip.hasRouteID ? tripUpdate.trip.routeID : (targetRouteIds.first ?? targetRouteId)
+            let rawTripId = tripUpdate.trip.hasTripID ? tripUpdate.trip.tripID : nil
             
             if !allowedRoutes.isEmpty {
                 let cleanTripRoute = tripRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -162,15 +163,15 @@ final class TransitRealtimeService: @unchecked Sendable {
                         continue
                     }
                     
-                    // Filter out arrivals in the past (> 60s ago)
+                    // Filter out arrivals departed more than 30 seconds ago (30s boarding grace window)
                     let diffSec = arrivalEpoch - nowEpoch
-                    guard diffSec >= -60 else { continue }
+                    guard diffSec >= -30 else { continue }
                     
                     let destination = resolveDestination(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
                     let direction = resolveDirection(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
-                    let stopsAway = idx > 0 ? "\(idx) stops away" : "Approaching"
+                    let stopsAway = (diffSec <= 0) ? "Boarding" : (idx > 0 ? "\(idx) stops away" : "Approaching")
                     
-                    rawArrivals.append((line: tripRouteId, destination: destination, arrivalEpoch: arrivalEpoch, direction: direction, distance: stopsAway))
+                    rawArrivals.append((line: tripRouteId, destination: destination, arrivalEpoch: arrivalEpoch, direction: direction, distance: stopsAway, tripId: rawTripId))
                 }
             }
         }
@@ -181,13 +182,24 @@ final class TransitRealtimeService: @unchecked Sendable {
         // Convert to ArrivalInfo
         let arrivals = rawArrivals.prefix(12).map { item -> SpatialDatabaseManager.ArrivalInfo in
             let diffSec = item.arrivalEpoch - nowEpoch
-            let minutes = max(0, Int(ceil(Double(diffSec) / 60.0)))
+            let minutes: Int
+            let distance: String?
+            if diffSec <= 0 {
+                minutes = 0
+                distance = "Boarding"
+            } else {
+                minutes = max(0, Int(ceil(Double(diffSec) / 60.0)))
+                distance = item.distance
+            }
+            
             return SpatialDatabaseManager.ArrivalInfo(
                 line: item.line,
                 destination: item.destination,
                 minutes: minutes,
                 direction: item.direction,
-                distanceDescription: item.distance
+                distanceDescription: distance,
+                arrivalDate: Date(timeIntervalSince1970: TimeInterval(item.arrivalEpoch)),
+                tripId: item.tripId
             )
         }
         

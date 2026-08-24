@@ -32,6 +32,7 @@ struct TransitRevealSheet: View {
     @State private var lastUpdated: Date? = nil
     @State private var isLivePulsing: Bool = false
     @State private var isRefreshing: Bool = false
+    let referenceDate: Date?
     @State private var pollProgress: Double = 0.0
     @State private var pollGeneration: Int = 0
     
@@ -40,7 +41,8 @@ struct TransitRevealSheet: View {
         initialDetails: SpatialDatabaseManager.StopDetails? = nil,
         initialLiveArrivals: [SpatialDatabaseManager.ArrivalInfo] = [],
         initialAlerts: [TransitAlert] = [],
-        initialAvailableDirections: Set<Int> = [0, 1]
+        initialAvailableDirections: Set<Int> = [0, 1],
+        referenceDate: Date? = nil
     ) {
         self.stopId = stopId
         self._stopDetails = State(initialValue: initialDetails)
@@ -48,6 +50,7 @@ struct TransitRevealSheet: View {
         self._serviceAlerts = State(initialValue: initialAlerts)
         self._availableDirections = State(initialValue: initialAvailableDirections)
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
+        self.referenceDate = referenceDate
     }
     
     var displayedArrivals: [SpatialDatabaseManager.ArrivalInfo] {
@@ -400,13 +403,30 @@ struct TransitRevealSheet: View {
                                                         
                                                         Spacer()
                                                         
-                                                        HStack(spacing: 3) {
-                                                            Text("\(arrival.minutes)")
-                                                                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                                                .foregroundColor(.primary)
-                                                            Text("min")
-                                                                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                                                .foregroundColor(.secondary)
+                                                        if arrival.minutes == 0 {
+                                                            HStack(spacing: 4) {
+                                                                Circle()
+                                                                    .fill(Color(hex: "#FFB300"))
+                                                                    .frame(width: 5, height: 5)
+                                                                    .opacity(isLivePulsing ? 1.0 : 0.35)
+                                                                    .shadow(color: Color(hex: "#FFB300").opacity(0.8), radius: 2)
+                                                                Text("BOARDING")
+                                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                                    .foregroundColor(Color(hex: "#FFB300"))
+                                                            }
+                                                            .padding(.horizontal, 6)
+                                                            .padding(.vertical, 3)
+                                                            .background(Color(hex: "#FFB300").opacity(0.12))
+                                                            .clipShape(Capsule())
+                                                        } else {
+                                                            HStack(spacing: 3) {
+                                                                Text("\(arrival.minutes)")
+                                                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                                                    .foregroundColor(.primary)
+                                                                Text("min")
+                                                                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                                                    .foregroundColor(.secondary)
+                                                            }
                                                         }
                                                     }
                                                     .padding(.vertical, 3)
@@ -434,7 +454,8 @@ struct TransitRevealSheet: View {
                                 stopId: stopId,
                                 liveArrivals: liveArrivals,
                                 availableDirections: availableDirections,
-                                selectedDirection: $selectedDirection
+                                selectedDirection: $selectedDirection,
+                                referenceDate: referenceDate
                             )
                         }
                     }

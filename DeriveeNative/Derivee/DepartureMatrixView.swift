@@ -7,6 +7,7 @@ struct DepartureMatrixView: View {
     let stopId: String
     let liveArrivals: [SpatialDatabaseManager.ArrivalInfo]
     let availableDirections: Set<Int>
+    let referenceDate: Date?
     
     @Binding var selectedDirection: Int
     @State private var selectedRouteFilter: String = "ALL"
@@ -19,7 +20,8 @@ struct DepartureMatrixView: View {
         stopId: String,
         liveArrivals: [SpatialDatabaseManager.ArrivalInfo] = [],
         availableDirections: Set<Int> = [0, 1],
-        selectedDirection: Binding<Int> = .constant(0)
+        selectedDirection: Binding<Int> = .constant(0),
+        referenceDate: Date? = nil
     ) {
         self.records = records
         self.routeId = routeId
@@ -28,6 +30,7 @@ struct DepartureMatrixView: View {
         self.liveArrivals = liveArrivals
         let effectiveDirs = availableDirections.isEmpty ? Set([0, 1]) : availableDirections
         self.availableDirections = effectiveDirs
+        self.referenceDate = referenceDate
         self._selectedDirection = selectedDirection
         
         if !effectiveDirs.contains(selectedDirection.wrappedValue), let firstAvailable = effectiveDirs.sorted().first {
@@ -97,42 +100,161 @@ struct DepartureMatrixView: View {
         }
     }
     
-    /// Reconciles static scheduled departures with active GTFS-RT arrivals
-    private var reconciledRecords: [SpatialDatabaseManager.HourScheduleRecord] {
+    // MARK: - Circular Math Helpers
+    
+    private func signedMinuteDiff(from tSched: Int, to tEst: Int) -> Int {
+        var diff = (tEst - tSched) % 1440
+        if diff > 720 {
+            diff -= 1440
+        } else if diff < -720 {
+            diff += 1440
+        }
+        return diff
+    }
+    
+    private func circularMinuteDiff(_ t1: Int, _ t2: Int) -> Int {
+        return abs(signedMinuteDiff(from: t1, to: t2))
+    }
+    
+    /// Reconciles static scheduled departures with active GTFS-RT arrivals at a given reference timestamp
+    func reconciledRecords(at currentDate: Date) -> [SpatialDatabaseManager.HourScheduleRecord] {
         let calendar = Calendar.current
-        let currentHour = calendar.component(.hour, from: Date())
-        let currentMinute = calendar.component(.minute, from: Date())
+        let currentHour = calendar.component(.hour, from: currentDate)
+        let currentMinute = calendar.component(.minute, from: currentDate)
+        let nowMinutes = currentHour * 60 + currentMinute
         
         let filteredLiveArrivals = (selectedRouteFilter == "ALL")
             ? liveArrivals
             : liveArrivals.filter { $0.line.uppercased() == selectedRouteFilter.uppercased() }
         
-        return filteredRecords.map { hourRec in
-            let updatedDepartures = hourRec.departures.map { dep -> SpatialDatabaseManager.DeparturePillRecord in
-                var modPill = dep
+        var matchedArrivalIds = Set<UUID>()
+        var pillMatchMap: [String: SpatialDatabaseManager.ArrivalInfo] = [:]
+        
+        // Flatten all scheduled pills for matching
+        let allPills = filteredRecords.flatMap { hourRec in
+            hourRec.departures.map { (hour: hourRec.hourOfDay, pill: $0) }
+        }
+        
+        // Tier 1: Match by exact Trip ID if available
+        for (h, pill) in allPills {
+            if !pill.tripId.isEmpty {
+                if let match = filteredLiveArrivals.first(where: { arr in
+                    !matchedArrivalIds.contains(arr.id) && arr.tripId == pill.tripId
+                }) {
+                    pillMatchMap[pill.id] = match
+                    matchedArrivalIds.insert(match.id)
+                }
+            }
+        }
+        
+        // Tier 2: Match by route and circular minute proximity / delay window
+        for arr in filteredLiveArrivals {
+            guard !matchedArrivalIds.contains(arr.id) else { continue }
+            let arrHour = calendar.component(.hour, from: arr.arrivalDate)
+            let arrMin = calendar.component(.minute, from: arr.arrivalDate)
+            let tEst = arrHour * 60 + arrMin
+            
+            var bestPillId: String? = nil
+            var smallestDiff = 9999
+            
+            for (h, pill) in allPills {
+                guard pillMatchMap[pill.id] == nil else { continue }
+                let sameRoute = (pill.routeId.uppercased() == arr.line.uppercased())
+                guard sameRoute else { continue }
                 
-                // Match live arrival if in the current hour and close minute
-                if hourRec.hourOfDay == currentHour {
-                    if let matchedArrival = filteredLiveArrivals.first(where: { arr in
-                        let sameRoute = (dep.routeId.uppercased() == arr.line.uppercased())
-                        let arrivalMinute = (currentMinute + arr.minutes) % 60
-                        return sameRoute && abs(arrivalMinute - dep.minute) <= 3
-                    }) ?? filteredLiveArrivals.first(where: { arr in
-                        let arrivalMinute = (currentMinute + arr.minutes) % 60
-                        return abs(arrivalMinute - dep.minute) <= 3
-                    }) {
-                        modPill.isLive = true
-                        modPill.liveDeltaMinutes = matchedArrival.minutes
-                        // If live minutes differ from schedule by >= 3 min, show delay
-                        let scheduledDelta = (dep.minute >= currentMinute) ? (dep.minute - currentMinute) : (dep.minute + 60 - currentMinute)
-                        if matchedArrival.minutes > scheduledDelta + 2 {
-                            modPill.delaySeconds = (matchedArrival.minutes - scheduledDelta) * 60
-                        }
+                let tSched = h * 60 + pill.minute
+                let delay = signedMinuteDiff(from: tSched, to: tEst)
+                
+                // Allow matches from 5 min early to 25 min delayed, or circular diff within 10 min
+                if (delay >= -5 && delay <= 25) || circularMinuteDiff(tSched, tEst) <= 10 {
+                    let absDiff = abs(delay)
+                    if absDiff < smallestDiff {
+                        smallestDiff = absDiff
+                        bestPillId = pill.id
                     }
                 }
-                return modPill
             }
-            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: hourRec.hourOfDay, departures: updatedDepartures)
+            
+            if let bestId = bestPillId {
+                pillMatchMap[bestId] = arr
+                matchedArrivalIds.insert(arr.id)
+            }
+        }
+        
+        // Build updated HourScheduleRecords
+        var resultMap: [Int: [SpatialDatabaseManager.DeparturePillRecord]] = [:]
+        for h in 0..<24 {
+            resultMap[h] = []
+        }
+        
+        for hourRec in filteredRecords {
+            let h = hourRec.hourOfDay
+            for dep in hourRec.departures {
+                var modPill = dep
+                let tSched = h * 60 + dep.minute
+                
+                if let matchedArrival = pillMatchMap[dep.id] {
+                    let arrHour = calendar.component(.hour, from: matchedArrival.arrivalDate)
+                    let arrMin = calendar.component(.minute, from: matchedArrival.arrivalDate)
+                    let tEst = arrHour * 60 + arrMin
+                    
+                    modPill.isLive = true
+                    modPill.liveDeltaMinutes = matchedArrival.minutes
+                    modPill.isBoarding = (matchedArrival.minutes == 0)
+                    
+                    let delayMin = signedMinuteDiff(from: tSched, to: tEst)
+                    if delayMin >= 3 {
+                        modPill.delaySeconds = delayMin * 60
+                    }
+                    
+                    // Delay-aware liveness: remains active if arrival time is in future or within 30s boarding grace
+                    let isExpired = matchedArrival.arrivalDate.timeIntervalSince(currentDate) < -30.0
+                    modPill.isPast = isExpired
+                } else {
+                    // Check if scheduled time passed in current operating day
+                    let pastDiff = signedMinuteDiff(from: tSched, to: nowMinutes)
+                    modPill.isPast = (pastDiff > 0)
+                }
+                
+                resultMap[h]?.append(modPill)
+            }
+        }
+        
+        // Tier 3: Inject unmatched ad-hoc GTFS-RT arrivals into target hour row
+        for arr in filteredLiveArrivals {
+            guard !matchedArrivalIds.contains(arr.id) else { continue }
+            let arrHour = calendar.component(.hour, from: arr.arrivalDate)
+            let arrMin = calendar.component(.minute, from: arr.arrivalDate)
+            
+            let adHocPill = SpatialDatabaseManager.DeparturePillRecord(
+                id: "adhoc_\(arr.id.uuidString)",
+                tripId: arr.tripId ?? "adhoc_\(arr.line)_\(arrHour)_\(arrMin)",
+                routeId: arr.line,
+                destination: arr.destination,
+                minute: arrMin,
+                isExpress: false,
+                isFirstDeparture: false,
+                isLastDeparture: false,
+                liveDeltaMinutes: arr.minutes,
+                delaySeconds: nil,
+                isLive: true,
+                isPast: false,
+                isUnscheduled: true,
+                isBoarding: (arr.minutes == 0)
+            )
+            
+            resultMap[arrHour % 24]?.append(adHocPill)
+        }
+        
+        // Return sorted 24-hour records
+        return (0..<24).map { h in
+            let sortedDeps = (resultMap[h] ?? []).sorted { p1, p2 in
+                if p1.minute != p2.minute {
+                    return p1.minute < p2.minute
+                }
+                return p1.id < p2.id
+            }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: sortedDeps)
         }
     }
     
@@ -141,6 +263,20 @@ struct DepartureMatrixView: View {
     }
     
     var body: some View {
+        if let fixedDate = referenceDate {
+            matrixContent(for: fixedDate)
+        } else {
+            TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
+                matrixContent(for: timeline.date)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func matrixContent(for currentDate: Date) -> some View {
+        let reconciled = reconciledRecords(at: currentDate)
+        let currentHour = Calendar.current.component(.hour, from: currentDate)
+        
         VStack(alignment: .leading, spacing: 14) {
             // Direction Selector, Route Filter & Metric Bar
             VStack(spacing: 8) {
@@ -274,11 +410,12 @@ struct DepartureMatrixView: View {
             ScrollViewReader { scrollProxy in
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(reconciledRecords) { hourRec in
+                        ForEach(reconciled) { hourRec in
                             HourRowView(
                                 hourRecord: hourRec,
                                 routeId: routeId,
-                                isPulsing: isPulsing
+                                isPulsing: isPulsing,
+                                currentHour: currentHour
                             )
                             .id(hourRec.hourOfDay)
                             
@@ -292,7 +429,6 @@ struct DepartureMatrixView: View {
                 }
                 .frame(maxHeight: 380)
                 .onAppear {
-                    let currentHour = Calendar.current.component(.hour, from: Date())
                     // Scroll to current hour if within operating window
                     withAnimation {
                         scrollProxy.scrollTo(max(0, currentHour - 1), anchor: .top)
@@ -330,9 +466,10 @@ private struct HourRowView: View {
     let hourRecord: SpatialDatabaseManager.HourScheduleRecord
     let routeId: String
     let isPulsing: Bool
+    let currentHour: Int
     
     private var isCurrentHour: Bool {
-        Calendar.current.component(.hour, from: Date()) == hourRecord.hourOfDay
+        currentHour == hourRecord.hourOfDay
     }
     
     var body: some View {
@@ -400,18 +537,18 @@ private struct DeparturePillView: View {
             // 2-Digit Monospace Minute
             Text(String(format: "%02d", pill.minute))
                 .font(.system(size: 12, weight: pill.isExpress ? .heavy : .semibold, design: .monospaced))
-                .foregroundColor(pill.isExpress ? Color(hex: routeInfo.textColorHex) : .primary)
+                .foregroundColor(pill.isPast ? .secondary : (pill.isExpress ? Color(hex: routeInfo.textColorHex) : .primary))
             
             // Express Tag
             if pill.isExpress {
                 Text("EXP")
                     .font(.system(size: 8, weight: .bold, design: .rounded))
-                    .foregroundColor(Color(hex: routeInfo.textColorHex).opacity(0.9))
+                    .foregroundColor(Color(hex: routeInfo.textColorHex).opacity(pill.isPast ? 0.5 : 0.9))
             }
             
             // Live Countdown Overlay
             if let delta = pill.liveDeltaMinutes {
-                Text("\(delta)m")
+                Text(delta == 0 ? "0m" : "\(delta)m")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(Color(hex: "#FFB300"))
             }
@@ -420,17 +557,18 @@ private struct DeparturePillView: View {
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(pill.isExpress ? routeInfo.color : Color.primary.opacity(0.06))
+                .fill(pill.isExpress ? (pill.isPast ? routeInfo.color.opacity(0.4) : routeInfo.color) : Color.primary.opacity(pill.isPast ? 0.03 : 0.06))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .stroke(
                     pill.isFirstDeparture || pill.isLastDeparture
-                        ? Color(hex: "#FFB300")
-                        : (pill.isLive ? Color(hex: "#FFB300").opacity(0.5) : Color.primary.opacity(0.08)),
+                        ? Color(hex: "#FFB300").opacity(pill.isPast ? 0.35 : 1.0)
+                        : (pill.isLive ? Color(hex: "#FFB300").opacity(pill.isPast ? 0.3 : 0.6) : (pill.isUnscheduled ? Color(hex: "#FFB300").opacity(0.4) : Color.primary.opacity(pill.isPast ? 0.04 : 0.08))),
                     lineWidth: (pill.isFirstDeparture || pill.isLastDeparture) ? 1.5 : 1
                 )
         )
+        .opacity(pill.isPast ? 0.35 : 1.0)
         .overlay(alignment: .topTrailing) {
             // Delay Badge
             if let delay = pill.delaySeconds, delay >= 180 {
