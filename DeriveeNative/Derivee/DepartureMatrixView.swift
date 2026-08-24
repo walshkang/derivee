@@ -6,6 +6,7 @@ struct DepartureMatrixView: View {
     let routeIds: [String]
     let stopId: String
     let liveArrivals: [SpatialDatabaseManager.ArrivalInfo]
+    let availableDirections: Set<Int>
     
     @Binding var selectedDirection: Int
     @State private var selectedRouteFilter: String = "ALL"
@@ -17,6 +18,7 @@ struct DepartureMatrixView: View {
         routeIds: [String] = [],
         stopId: String,
         liveArrivals: [SpatialDatabaseManager.ArrivalInfo] = [],
+        availableDirections: Set<Int> = [0, 1],
         selectedDirection: Binding<Int> = .constant(0)
     ) {
         self.records = records
@@ -24,14 +26,22 @@ struct DepartureMatrixView: View {
         self.routeIds = routeIds.isEmpty ? [routeId] : routeIds
         self.stopId = stopId
         self.liveArrivals = liveArrivals
+        let effectiveDirs = availableDirections.isEmpty ? Set([0, 1]) : availableDirections
+        self.availableDirections = effectiveDirs
         self._selectedDirection = selectedDirection
+        
+        if !effectiveDirs.contains(selectedDirection.wrappedValue), let firstAvailable = effectiveDirs.sorted().first {
+            DispatchQueue.main.async {
+                selectedDirection.wrappedValue = firstAvailable
+            }
+        }
     }
     
     private var isBus: Bool {
         stopId.hasPrefix("BUS_") || routeId.contains("-")
     }
     
-    private var directionNames: [String] {
+    private var baseDirectionNames: [String] {
         if isBus {
             return ["Northbound / Inbound", "Southbound / Outbound"]
         }
@@ -58,6 +68,20 @@ struct DepartureMatrixView: View {
             return ["Inbound (St. George)", "Outbound (Tottenville)"]
         default:
             return ["Uptown / Northbound", "Downtown / Southbound"]
+        }
+    }
+    
+    private func directionLabel(for dir: Int) -> String {
+        let baseName = (dir >= 0 && dir < baseDirectionNames.count) ? baseDirectionNames[dir] : "Direction \(dir)"
+        if !availableDirections.contains(dir) {
+            return "\(baseName) (No Service)"
+        }
+        return baseName
+    }
+    
+    private func autoSelectValidDirectionIfNeeded() {
+        if !availableDirections.contains(selectedDirection), let firstAvailable = availableDirections.sorted().first {
+            selectedDirection = firstAvailable
         }
     }
     
@@ -120,11 +144,44 @@ struct DepartureMatrixView: View {
         VStack(alignment: .leading, spacing: 14) {
             // Direction Selector, Route Filter & Metric Bar
             VStack(spacing: 8) {
-                Picker("Direction", selection: $selectedDirection) {
-                    Text(directionNames[0]).tag(0)
-                    Text(directionNames[1]).tag(1)
+                // Direction Selector Segmented Control
+                HStack(spacing: 0) {
+                    ForEach([0, 1], id: \.self) { dir in
+                        let isAvailable = availableDirections.contains(dir)
+                        let isSelected = selectedDirection == dir
+                        let label = directionLabel(for: dir)
+                        
+                        Button {
+                            if isAvailable {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    selectedDirection = dir
+                                }
+                            }
+                        } label: {
+                            Text(label)
+                                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 7)
+                                .padding(.horizontal, 4)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .fill(isSelected ? Color(uiColor: .systemBackground) : Color.clear)
+                                        .shadow(color: isSelected ? Color.black.opacity(0.12) : Color.clear, radius: 2, y: 1)
+                                )
+                                .foregroundColor(isSelected ? .primary : (isAvailable ? .secondary : .secondary.opacity(0.6)))
+                                .opacity(isAvailable ? 1.0 : 0.35)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!isAvailable)
+                    }
                 }
-                .pickerStyle(.segmented)
+                .padding(2)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(uiColor: .secondarySystemFill))
+                )
                 
                 // Horizontal Route Filter Strip (for co-located / multi-route lines)
                 if routeIds.count > 1 {
@@ -256,9 +313,13 @@ struct DepartureMatrixView: View {
             LegendFooterView(routeId: routeId)
         }
         .onAppear {
+            autoSelectValidDirectionIfNeeded()
             withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
+        }
+        .onChange(of: availableDirections) { _, _ in
+            autoSelectValidDirectionIfNeeded()
         }
     }
 }

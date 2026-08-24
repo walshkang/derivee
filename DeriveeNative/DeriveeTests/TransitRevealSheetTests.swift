@@ -117,6 +117,19 @@ final class TransitRevealSheetTests: XCTestCase {
                     """, arguments: [timeStr])
                 }
             }
+            
+            // Seed single-direction terminal stop (Direction 1 only)
+            try db.execute(sql: """
+                INSERT INTO scheduled_stops
+                VALUES ('stop_terminal_dir1', 'TRIP_DIR1_1', 'L', '2025-01-08 08:00:00', 'Brooklyn - Canarsie', 1);
+            """)
+            
+            // Seed bidirectional stop (Direction 0 and 1)
+            try db.execute(sql: """
+                INSERT INTO scheduled_stops
+                VALUES ('stop_bidirectional', 'TRIP_BI_0', 'L', '2025-01-08 08:00:00', 'Manhattan - 8th Ave', 0),
+                       ('stop_bidirectional', 'TRIP_BI_1', 'L', '2025-01-08 08:05:00', 'Brooklyn - Canarsie', 1);
+            """)
         }
         
         // Initialize SpatialDatabaseManager with attached transit DB
@@ -480,6 +493,94 @@ final class TransitRevealSheetTests: XCTestCase {
             liveArrivals: [
                 SpatialDatabaseManager.ArrivalInfo(line: "N", destination: "Astoria", minutes: 2, direction: "Uptown & Queens")
             ]
+        )
+        .frame(width: 375, height: 620)
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620))))
+    }
+    
+    func testFetchAvailableDirectionsInDatabase() async throws {
+        // stop_terminal_dir1 was seeded with only direction_id = 1
+        let dirs1 = try await dbManager.fetchAvailableDirections(for: "stop_terminal_dir1", routeId: "L")
+        XCTAssertEqual(dirs1, Set([1]), "Stop with only Direction 1 departures should return Set([1]).")
+        
+        // stop_bedford was seeded with only direction_id = 0
+        let dirs0 = try await dbManager.fetchAvailableDirections(for: "stop_bedford", routeId: "L")
+        XCTAssertEqual(dirs0, Set([0]), "Stop with only Direction 0 departures should return Set([0]).")
+        
+        // stop_bidirectional was seeded with both direction 0 and 1
+        let dirsBi = try await dbManager.fetchAvailableDirections(for: "stop_bidirectional", routeId: "L")
+        XCTAssertEqual(dirsBi, Set([0, 1]), "Bidirectional stop should return Set([0, 1]).")
+    }
+    
+    func testFallbackAvailableDirectionsForTerminalStops() async throws {
+        // 8th Ave L is Manhattan terminal -> Direction 1 only (Brooklyn-bound)
+        let dirs8th = try await dbManager.fetchAvailableDirections(for: "stop_8th_ave", routeId: "L")
+        XCTAssertEqual(dirs8th, Set([1]))
+        
+        // South Ferry 1 is Downtown terminal -> Direction 0 only (Uptown-bound)
+        let dirsSouthFerry = try await dbManager.fetchAvailableDirections(for: "stop_south_ferry", routeId: "1")
+        XCTAssertEqual(dirsSouthFerry, Set([0]))
+        
+        // General non-terminal unknown stop defaults to [0, 1]
+        let dirsGeneral = try await dbManager.fetchAvailableDirections(for: "stop_general_station", routeId: "L")
+        XCTAssertEqual(dirsGeneral, Set([0, 1]))
+    }
+    
+    func testDepartureMatrixViewAutoSelectsValidDirection() {
+        var selectedDir = 0
+        let binding = Binding<Int>(
+            get: { selectedDir },
+            set: { selectedDir = $0 }
+        )
+        
+        let sampleHours = (0..<24).map { h in
+            SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+        
+        let _ = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_8th_ave",
+            availableDirections: Set([1]),
+            selectedDirection: binding
+        )
+        
+        // Wait for main thread async dispatch in init
+        let exp = expectation(description: "Auto-select valid direction")
+        DispatchQueue.main.async {
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+        
+        XCTAssertEqual(selectedDir, 1, "DepartureMatrixView must auto-select valid direction 1 when direction 0 is unavailable.")
+    }
+    
+    func testDepartureMatrixViewDisabledDirectionSnapshot() throws {
+        let sampleDepartures = [
+            SpatialDatabaseManager.DeparturePillRecord(id: "1", tripId: "T1", routeId: "L", destination: "Canarsie - Rockaway Pkwy", minute: 6, isExpress: false, isFirstDeparture: true),
+            SpatialDatabaseManager.DeparturePillRecord(id: "2", tripId: "T2", routeId: "L", destination: "Canarsie - Rockaway Pkwy", minute: 16, isExpress: false, liveDeltaMinutes: 4, isLive: true),
+            SpatialDatabaseManager.DeparturePillRecord(id: "3", tripId: "T3", routeId: "L", destination: "Canarsie - Rockaway Pkwy", minute: 26, isExpress: false),
+            SpatialDatabaseManager.DeparturePillRecord(id: "4", tripId: "T4", routeId: "L", destination: "Canarsie - Rockaway Pkwy", minute: 36, isExpress: false, delaySeconds: 180),
+            SpatialDatabaseManager.DeparturePillRecord(id: "5", tripId: "T5", routeId: "L", destination: "Canarsie - Rockaway Pkwy", minute: 46, isExpress: false),
+            SpatialDatabaseManager.DeparturePillRecord(id: "6", tripId: "T6", routeId: "L", destination: "Canarsie - Rockaway Pkwy", minute: 56, isExpress: false, isLastDeparture: true)
+        ]
+        
+        let sampleHours = (0..<24).map { h in
+            SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: sampleDepartures)
+        }
+        
+        // Direction 0 disabled (No Service at 8th Ave terminal), Direction 1 selected
+        let view = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_8th_ave",
+            liveArrivals: [
+                SpatialDatabaseManager.ArrivalInfo(line: "L", destination: "Canarsie", minutes: 4, direction: "Brooklyn-bound")
+            ],
+            availableDirections: Set([1]),
+            selectedDirection: .constant(1)
         )
         .frame(width: 375, height: 620)
         

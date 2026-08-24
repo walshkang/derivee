@@ -821,11 +821,41 @@ When an iPhone user force-closed Dérivée from the App Switcher while ambient t
 5. **Documentation (`docs/architecture.md`, `docs/design.md`, `ROADMAP.MD`):**
    * Documented Section 3.6 in `architecture.md` and Section 6 in `design.md`.
 
+---
+
+## Wave K.5 — Grey Out Unavailable Direction in Full Timetable [Shipped]
+
+**Task ID:** `WK5-DIRECTION-GREYING`  
+**Depends on:** Wave K.4 (Bus Terminal Name Resolution), Wave 11.7b (Full Timetable Matrix).
+
+### Problem Statement
+In GTFS transit feeds, terminal stations (e.g. 8th Ave L, South Ferry 1, Hudson Yards 7) and one-way bus routes only serve departures in a single direction. Previously, `DepartureMatrixView` rendered a standard 2-segment picker where both tabs appeared selectable, even when one direction had 0 scheduled departures. Selecting the empty direction showed empty timetable rows ("No scheduled service") for every hour of the day, and initializing with `selectedDirection = 0` on a terminal stop landed users on an empty timetable.
+
+### What Shipped
+1. **Direction Availability Detection (`SpatialDatabaseManager.swift`):**
+   * Implemented `fetchAvailableDirections(for:routeId:routeIds:)` querying `SELECT DISTINCT direction_id FROM transit.scheduled_stops WHERE stop_id = ?`.
+   * Added `generateFallbackAvailableDirections(for:routeId:)` with deterministic terminal stop pattern detection (`stop_8th_ave`, `stop_south_ferry`, `stop_flushing_main_st`, `stop_hudson_yards`, etc.).
+   * Updated `generateFallbackTimetable` to return empty departures when querying an unavailable direction.
+2. **Native Custom Segmented Control (`DepartureMatrixView.swift`):**
+   * Replaced SwiftUI `Picker` with custom `DirectionSegmentedPicker` matching iOS system segmented control metrics.
+   * Renders unavailable directions with `.disabled(true)`, `.opacity(0.35)`, and `" (No Service)"` label suffix.
+   * Auto-selects the first available valid direction on appear and when `availableDirections` changes.
+3. **Transit Sheet Integration (`TransitRevealSheet.swift`):**
+   * Added `availableDirections: Set<Int>` state.
+   * Loads available directions in `startPollingLifecycle()`, resolves initial valid direction before timetable query, and passes `availableDirections` to `DepartureMatrixView`.
+4. **Test Suite (`TransitRevealSheetTests.swift`):**
+   * Added `testFetchAvailableDirectionsInDatabase`: Validates `Set([1])` for single-direction terminal stops, `Set([0])` for direction 0 stops, and `Set([0, 1])` for bidirectional stops in SQLite.
+   * Added `testFallbackAvailableDirectionsForTerminalStops`: Validates terminal fallback detection.
+   * Added `testDepartureMatrixViewAutoSelectsValidDirection`: Validates auto-selection of active direction 1 when direction 0 is unavailable.
+   * Added `testDepartureMatrixViewDisabledDirectionSnapshot`: Snapshot verification of disabled Direction 0 tab with `(No Service)` suffix and active Direction 1 timetable.
+
 ### Files Modified
-* `DeriveeNative/Derivee/AmbientTrackingEngine.swift`
-* `DeriveeNative/DeriveeTests/TrackingEngineTests.swift`
-* `docs/architecture.md`
-* `docs/design.md`
+* `DeriveeNative/Derivee/SpatialDatabaseManager.swift`
+* `DeriveeNative/Derivee/DepartureMatrixView.swift`
+* `DeriveeNative/Derivee/TransitRevealSheet.swift`
+* `DeriveeNative/DeriveeTests/TransitRevealSheetTests.swift`
 * `ROADMAP.MD`
+* `archive/shipped-waves-archive.md`
+
 
 

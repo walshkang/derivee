@@ -22,6 +22,7 @@ struct TransitRevealSheet: View {
     @State private var headways: [Double] = []
     @State private var hourlyReliability: [SpatialDatabaseManager.HourlyReliabilityRecord] = []
     @State private var timetableSchedule: [SpatialDatabaseManager.HourScheduleRecord] = []
+    @State private var availableDirections: Set<Int> = [0, 1]
     @State private var selectedDirection: Int = 0
     @State private var selectedRecord: SpatialDatabaseManager.HourlyReliabilityRecord? = nil
     @State private var liveArrivals: [SpatialDatabaseManager.ArrivalInfo] = []
@@ -38,12 +39,14 @@ struct TransitRevealSheet: View {
         stopId: String,
         initialDetails: SpatialDatabaseManager.StopDetails? = nil,
         initialLiveArrivals: [SpatialDatabaseManager.ArrivalInfo] = [],
-        initialAlerts: [TransitAlert] = []
+        initialAlerts: [TransitAlert] = [],
+        initialAvailableDirections: Set<Int> = [0, 1]
     ) {
         self.stopId = stopId
         self._stopDetails = State(initialValue: initialDetails)
         self._liveArrivals = State(initialValue: initialLiveArrivals)
         self._serviceAlerts = State(initialValue: initialAlerts)
+        self._availableDirections = State(initialValue: initialAvailableDirections)
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
     }
     
@@ -430,6 +433,7 @@ struct TransitRevealSheet: View {
                                 routeIds: details.routeIds,
                                 stopId: stopId,
                                 liveArrivals: liveArrivals,
+                                availableDirections: availableDirections,
                                 selectedDirection: $selectedDirection
                             )
                         }
@@ -532,9 +536,20 @@ struct TransitRevealSheet: View {
         let details = try? await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
         let hw = try? await SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
         let rel = try? await SpatialDatabaseManager.shared.fetchHourlyReliability(for: stopId, routeId: details?.routeId)
-        let timetable = try? await SpatialDatabaseManager.shared.fetchTimetable(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [], directionId: selectedDirection)
+        let availDirs = (try? await SpatialDatabaseManager.shared.fetchAvailableDirections(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [])) ?? [0, 1]
+        
+        let initialDir: Int
+        if !availDirs.contains(selectedDirection), let firstAvail = availDirs.sorted().first {
+            initialDir = firstAvail
+            self.selectedDirection = firstAvail
+        } else {
+            initialDir = selectedDirection
+        }
+        
+        let timetable = try? await SpatialDatabaseManager.shared.fetchTimetable(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [], directionId: initialDir)
         
         self.stopDetails = details
+        self.availableDirections = availDirs
         if let hw = hw {
             self.headways = hw
         }

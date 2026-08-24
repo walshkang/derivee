@@ -1137,6 +1137,43 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    public func fetchAvailableDirections(for stopId: String, routeId: String? = nil, routeIds: [String] = []) async throws -> Set<Int> {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        defer {
+            let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+            print("⏱️ fetchAvailableDirections for \(stopId) executed in \(String(format: "%.2f", elapsed))ms")
+        }
+        
+        return try await dbWriter.read { db in
+            do {
+                let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_stops)")
+                if !columns.isEmpty {
+                    var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_stops WHERE stop_id = ?"
+                    var args: [DatabaseValueConvertible] = [stopId]
+                    if let rId = routeId, !rId.isEmpty {
+                        sql += " AND route_id = ?"
+                        args.append(rId)
+                    }
+                    let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
+                    if !rows.isEmpty {
+                        let dirs = rows.compactMap { row -> Int? in
+                            row["direction_id"]
+                        }
+                        if !dirs.isEmpty {
+                            return Set(dirs)
+                        }
+                    }
+                }
+            } catch let error as DatabaseError {
+                print("⚠️ Transit scheduled_stops query for available directions failed: \(error.message). Returning fallback directions.")
+            } catch {
+                throw error
+            }
+            
+            return self.generateFallbackAvailableDirections(for: stopId, routeId: routeId ?? "L")
+        }
+    }
+    
     public func fetchRouteCoordinates(for routeId: String) async throws -> [CLLocationCoordinate2D]? {
         return try await dbWriter.read { db in
             do {
@@ -1485,7 +1522,30 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         ]
     }
     
+    private func generateFallbackAvailableDirections(for stopId: String, routeId: String) -> Set<Int> {
+        let lower = stopId.lowercased()
+        // Single-direction terminal patterns or one-way stops
+        if lower.contains("8th_ave") || lower.contains("eighth_ave") || lower.contains("van_cortlandt") || lower.contains("wakefield") || lower.contains("inwood") || lower.contains("flushing") || lower.contains("pelham") || lower.contains("norwood") || lower.contains("dir1_only") {
+            return [1] // Southbound / Brooklyn / Outbound only
+        }
+        if lower.contains("canarsie") || lower.contains("rockaway") || lower.contains("south_ferry") || lower.contains("flatbush") || lower.contains("coney_island") || lower.contains("church_ave") || lower.contains("hudson_yards") || lower.contains("world_trade") || lower.contains("broad_st") || lower.contains("tottenville") || lower.contains("dir0_only") {
+            return [0] // Northbound / Manhattan / Inbound only
+        }
+        if lower.contains("1way_sb") || lower.contains("1way_south") {
+            return [1]
+        }
+        if lower.contains("1way_nb") || lower.contains("1way_north") {
+            return [0]
+        }
+        return [0, 1]
+    }
+    
     private func generateFallbackTimetable(for stopId: String, routeId: String, directionId: Int) -> [HourScheduleRecord] {
+        let availableDirs = generateFallbackAvailableDirections(for: stopId, routeId: routeId)
+        if !availableDirs.contains(directionId) {
+            return (0..<24).map { HourScheduleRecord(hourOfDay: $0, departures: []) }
+        }
+        
         var hourRecords: [HourScheduleRecord] = []
         let seed = abs(stopId.hashValue ^ routeId.hashValue ^ (directionId * 79))
         let isBus = stopId.hasPrefix("BUS_") || routeId.contains("-")
