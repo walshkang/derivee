@@ -96,7 +96,10 @@ struct StatsView: View {
             }
             .sheet(isPresented: $showSettings) {
                 NavigationStack {
-                    SettingsView(trackingEngine: trackingEngine, spatialStore: spatialStore)
+                    SettingsView(trackingEngine: trackingEngine, spatialStore: spatialStore, onDismissToMap: {
+                        showSettings = false
+                        dismiss()
+                    })
                 }
             }
             .task {

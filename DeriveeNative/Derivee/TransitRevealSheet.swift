@@ -467,6 +467,7 @@ struct TransitRevealSheet: View {
                 TransitSheetSkeletonView()
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: stopDetails != nil)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationContentInteraction(.scrolls)
@@ -686,34 +687,34 @@ private struct TransitSheetSkeletonView: View {
             // Header Skeleton
             HStack(alignment: .center, spacing: 12) {
                 Circle()
-                    .fill(Color.primary.opacity(0.08))
+                    .fill(Color(UIColor.secondarySystemFill))
                     .frame(width: 38, height: 38)
                 
                 VStack(alignment: .leading, spacing: 6) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.primary.opacity(0.12))
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(UIColor.secondarySystemFill))
                         .frame(width: 180, height: 18)
                     
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.primary.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(UIColor.tertiarySystemFill))
                         .frame(width: 100, height: 12)
                 }
                 
                 Spacer()
             }
-            .padding(.top, 14)
+            .padding(.top, 16)
             
             // Tab Picker Skeleton
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.primary.opacity(0.06))
+                .fill(Color(UIColor.secondarySystemFill))
                 .frame(height: 32)
             
             Divider()
                 .padding(.top, 2)
             
             // Section Title Skeleton
-            RoundedRectangle(cornerRadius: 3)
-                .fill(Color.primary.opacity(0.06))
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(UIColor.tertiarySystemFill))
                 .frame(width: 130, height: 11)
                 .padding(.top, 4)
             
@@ -721,18 +722,18 @@ private struct TransitSheetSkeletonView: View {
             ForEach(0..<4, id: \.self) { _ in
                 HStack(spacing: 12) {
                     Circle()
-                        .fill(Color.primary.opacity(0.08))
-                        .frame(width: 22, height: 22)
+                        .fill(Color(UIColor.secondarySystemFill))
+                        .frame(width: 24, height: 24)
                     
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.primary.opacity(0.08))
-                        .frame(width: 150, height: 14)
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(UIColor.secondarySystemFill))
+                        .frame(width: 150, height: 16)
                     
                     Spacer()
                     
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.primary.opacity(0.08))
-                        .frame(width: 36, height: 14)
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(UIColor.tertiarySystemFill))
+                        .frame(width: 40, height: 16)
                 }
                 .padding(.vertical, 6)
             }
@@ -740,9 +741,9 @@ private struct TransitSheetSkeletonView: View {
             Spacer()
         }
         .padding(.horizontal, 20)
-        .opacity(isPulsing ? 0.45 : 0.85)
+        .opacity(isPulsing ? 0.4 : 0.85)
         .onAppear {
-            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
         }

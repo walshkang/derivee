@@ -181,9 +181,15 @@ struct ContentView: View {
                         }
                     }
                 }
-                .sheet(isPresented: $showTransitSheet, onDismiss: {
-                    selectedTransitStop = nil
-                }) {
+                .sheet(isPresented: Binding(
+                    get: { showTransitSheet && selectedTransitStop != nil },
+                    set: { newValue in
+                        showTransitSheet = newValue
+                        if !newValue {
+                            selectedTransitStop = nil
+                        }
+                    }
+                )) {
                     if let stopId = selectedTransitStop {
                         TransitRevealSheet(stopId: stopId)
                             .presentationDetents([.medium, .large])

@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject var trackingEngine: AmbientTrackingEngine
     var spatialStore: SpatialStore
+    var onDismissToMap: (() -> Void)? = nil
     
     @AppStorage(AppStorageKeys.selectedBasemapTheme) private var storedTheme: String = BasemapTheme.day.rawValue
     @AppStorage(AppStorageKeys.fogOpacity) private var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
@@ -193,7 +194,11 @@ struct SettingsView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Done") {
-                    dismiss()
+                    if let onDismissToMap = onDismissToMap {
+                        onDismissToMap()
+                    } else {
+                        dismiss()
+                    }
                 }
             }
         }
