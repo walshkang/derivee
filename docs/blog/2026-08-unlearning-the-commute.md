@@ -38,7 +38,8 @@ Raw GPS fixes in dense urban canyons (like Midtown Manhattan) can bounce 80 mete
 Rather than relying on naive speed thresholds, Dérivée routes fixes through `ColdStartLocationFilter`:
 * **Staleness check:** Fixes older than 5.0 seconds are dropped immediately.
 * **Rayleigh uncertainty bound:** Rejects any fix where `horizontalAccuracy` exceeds 25.0 meters (the radius of an Uber H3 Resolution 11 hexagon is ~28m).
-* **Warmup convergence:** Requires 2 consecutive bounded fixes before committing an unlock.
+* **Instant high-accuracy unlock:** Fixes with $\le 12.0\text{m}$ accuracy unlock the initial hex immediately at $t=0$.
+* **Stationary dwell fallback:** Intermediate fixes ($12.0\text{m} < \text{hAcc} \le 25.0\text{m}$) unlock automatically after 3.0 seconds if the device remains stationary, or resolve immediately upon continuous walking.
 * **Subway emergence classifier:** When emerging from underground transit, coordinates jump drastically. If the temporal gap $\Delta t \ge 15.0\text{s}$, the filter classifies the jump as a legitimate transit emergence, resetting the velocity baseline without discarding the fix.
 
 ### SQLite Concurrency Without Priority Inversion

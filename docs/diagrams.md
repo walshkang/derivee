@@ -185,10 +185,12 @@ classDiagram
         <<Sendable Struct>>
         +maxStaleness: TimeInterval
         +targetAccuracy: CLLocationAccuracy
-        +requiredWarmupFixes: Int
+        +highAccuracyThreshold: CLLocationAccuracy
+        +dwellDuration: TimeInterval
         +maxPedestrianSpeed: Double
         +temporalGapThreshold: TimeInterval
         +process(location) → FilterResult
+        +commitDwell()
         +reset()
     }
 
