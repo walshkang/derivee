@@ -3,17 +3,33 @@ import GRDB
 import CoreLocation
 import H3
 
-final class SpatialDatabaseManager: @unchecked Sendable {
-    static let shared = SpatialDatabaseManager()
+public final class SpatialDatabaseManager: @unchecked Sendable {
+    public static let shared = SpatialDatabaseManager()
     
-    let dbWriter: any DatabaseWriter
+    public let dbWriter: any DatabaseWriter
     
-    var configuredQoS: DispatchQoS {
+    public var configuredQoS: DispatchQoS {
         dbWriter.configuration.qos
     }
     
+    private let transitLock = NSLock()
+    private var _currentTransitDBURL: URL?
+    
+    public var currentTransitDBURL: URL? {
+        get {
+            transitLock.lock()
+            defer { transitLock.unlock() }
+            return _currentTransitDBURL
+        }
+        set {
+            transitLock.lock()
+            defer { transitLock.unlock() }
+            _currentTransitDBURL = newValue
+        }
+    }
+    
 #if DEBUG
-    static func makeForTesting(inMemory: Bool = true, customTransitURL: URL? = nil) -> SpatialDatabaseManager {
+    public static func makeForTesting(inMemory: Bool = true, customTransitURL: URL? = nil) -> SpatialDatabaseManager {
         SpatialDatabaseManager(inMemory: inMemory, customTransitURL: customTransitURL)
     }
 #endif
@@ -23,10 +39,19 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             let fileManager = FileManager.default
             let appSupportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let databaseURL = appSupportURL.appendingPathComponent("derivee_spatial.sqlite")
-            let transitDBURL = customTransitURL ?? appSupportURL.appendingPathComponent("derivee_transit.sqlite")
+            let defaultPackTransitURL = CityPackManager.shared.transitDatabaseURL(for: "nyc")
+            let transitDBURL: URL
+            if let custom = customTransitURL {
+                transitDBURL = custom
+            } else if fileManager.fileExists(atPath: defaultPackTransitURL.path) {
+                transitDBURL = defaultPackTransitURL
+            } else {
+                transitDBURL = appSupportURL.appendingPathComponent("derivee_transit.sqlite")
+            }
             let neighborhoodDBURL = appSupportURL.appendingPathComponent("derivee_neighborhood.sqlite")
+            _currentTransitDBURL = transitDBURL
             
-            if customTransitURL == nil {
+            if customTransitURL == nil && !fileManager.fileExists(atPath: defaultPackTransitURL.path) {
                 Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["derivee_transit", "transit_delta"], targetURL: transitDBURL, fileManager: fileManager)
             }
             
@@ -254,9 +279,68 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    // MARK: - Transit Database Hot-Swap (Wave L-B.3)
+    
+    /// Ensures that the connection has the current target transit database attached.
+    public func ensureTransitAttached(in db: Database) throws {
+        guard let targetURL = currentTransitDBURL else { return }
+        let rows = try Row.fetchAll(db, sql: "PRAGMA database_list")
+        let transitEntry = rows.first { ($0["name"] as? String) == "transit" }
+        let attachedFile = transitEntry?["file"] as? String
+        
+        if attachedFile != targetURL.path {
+            if transitEntry != nil {
+                try db.execute(sql: "DETACH DATABASE transit;")
+            }
+            if FileManager.default.fileExists(atPath: targetURL.path) {
+                try db.execute(sql: "ATTACH DATABASE ? AS transit;", arguments: [targetURL.path])
+                try db.execute(sql: "PRAGMA transit.optimize;")
+            }
+        }
+    }
+    
+    /// Checks if the `transit` database schema is currently attached.
+    public func isTransitAttached() async throws -> Bool {
+        try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            let attached = try Row.fetchAll(db, sql: "PRAGMA database_list")
+            return attached.contains { ($0["name"] as? String) == "transit" }
+        }
+    }
+    
+    /// Returns the file path of the currently attached `transit` database, if any.
+    public func attachedTransitPath() async throws -> String? {
+        try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            let attached = try Row.fetchAll(db, sql: "PRAGMA database_list")
+            return attached.first { ($0["name"] as? String) == "transit" }?["file"] as? String
+        }
+    }
+    
+    /// Safely hot-swaps the attached `transit.sqlite` database using the Coordinated Two-Phase Barrier protocol.
+    /// Drains memory/prepared statements across reader connections and executes DETACH/ATTACH/OPTIMIZE
+    /// inside a serialized `writeWithoutTransaction` block to avoid SQLITE_LOCKED and 0xdead10cc.
+    public func hotSwapTransitDatabase(to targetTransitDBURL: URL) async throws {
+        logPipeline("🔄 [SpatialDatabaseManager] Starting Transit DB Hot-Swap to: \(targetTransitDBURL.path)")
+        currentTransitDBURL = targetTransitDBURL
+        
+        // 1. Drain internal caches and prepared statements across all reader connections in the GRDB pool
+        if let pool = dbWriter as? DatabasePool {
+            pool.releaseMemory()
+        } else if let queue = dbWriter as? DatabaseQueue {
+            queue.releaseMemory()
+        }
+        
+        // 2. Execute DETACH + ATTACH + PRAGMA transit.optimize; inside serialized writeWithoutTransaction barrier
+        try await dbWriter.writeWithoutTransaction { db in
+            try self.ensureTransitAttached(in: db)
+            logPipeline("✅ [SpatialDatabaseManager] Transit DB Hot-Swap complete & optimizer warmed")
+        }
+    }
+    
     // Asynchronous write
     @discardableResult
-    func insertDiscoveredHex(h3Index: String, citySlug: String = "nyc", enforceLandOnly: Bool = true) async throws -> Bool {
+    public func insertDiscoveredHex(h3Index: String, citySlug: String = "nyc", enforceLandOnly: Bool = true) async throws -> Bool {
         let table = Self.tableName(for: citySlug)
         return try await dbWriter.write { db in
             if enforceLandOnly {
@@ -280,26 +364,26 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    func isHydrationComplete() async throws -> Bool {
+    public func isHydrationComplete() async throws -> Bool {
         return try await dbWriter.read { db in
             let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM meta WHERE key = 'hydration_complete' AND value = '1'") ?? 0
             return count > 0
         }
     }
     
-    func setHydrationComplete() async throws {
+    public func setHydrationComplete() async throws {
         try await dbWriter.write { db in
             try db.execute(sql: "INSERT OR REPLACE INTO meta (key, value) VALUES ('hydration_complete', '1')")
         }
     }
     
-    func clearLocalCache() async throws {
+    public func clearLocalCache() async throws {
         try await dbWriter.write { db in
             try db.execute(sql: "DELETE FROM meta WHERE key = 'hydration_complete'")
         }
     }
     
-    func resetExplorationData(citySlug: String? = nil) async throws {
+    public func resetExplorationData(citySlug: String? = nil) async throws {
         try await dbWriter.write { db in
             if let slug = citySlug {
                 let table = Self.tableName(for: slug)
@@ -317,7 +401,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    func fetchExploredHexes(citySlug: String = "nyc") async throws -> Set<String> {
+    public func fetchExploredHexes(citySlug: String = "nyc") async throws -> Set<String> {
         let table = Self.tableName(for: citySlug)
         return try await dbWriter.read { db in
             guard try db.tableExists(table) else { return [] }
@@ -326,7 +410,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    func insertHexesBatch(h3Indices: [String], citySlug: String = "nyc", enforceLandOnly: Bool = false) async throws {
+    public func insertHexesBatch(h3Indices: [String], citySlug: String = "nyc", enforceLandOnly: Bool = false) async throws {
         let table = Self.tableName(for: citySlug)
         try await dbWriter.write { db in
             try Self.ensureExploredHexesTableExists(for: citySlug, in: db)
@@ -341,7 +425,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     /// Single atomic SQLite transaction partitioning and inserting hexes across multiple city tables.
-    func batchInsertMultiCityHexes(_ partitionedHexes: [String: [String]], enforceLandOnly: Bool = false) async throws {
+    public func batchInsertMultiCityHexes(_ partitionedHexes: [String: [String]], enforceLandOnly: Bool = false) async throws {
         try await dbWriter.write { db in
             for (slug, hexList) in partitionedHexes {
                 guard !hexList.isEmpty else { continue }
@@ -623,6 +707,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             var unlockedTransitStations = 0
             
             do {
+                try self.ensureTransitAttached(in: db)
                 let stopsSQL = "SELECT stop_id, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1"
                 let stopRows = try Row.fetchAll(db, sql: stopsSQL)
                 if !stopRows.isEmpty {
@@ -846,6 +931,14 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    public enum ScheduleRelationship: Int, Sendable, Codable, Equatable {
+        case scheduled = 0
+        case added = 1
+        case unscheduled = 2
+        case canceled = 3
+        case duplicated = 4
+    }
+    
     public struct DeparturePillRecord: Identifiable, Sendable, Equatable {
         public let id: String
         public let tripId: String
@@ -862,6 +955,9 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         public var isPast: Bool
         public var isUnscheduled: Bool
         public var isBoarding: Bool
+        public var scheduleRelationship: ScheduleRelationship
+        public var isHistoricalEvent: Bool
+        public var historicalDelaySeconds: Int?
         
         public init(
             id: String,
@@ -878,7 +974,10 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             isLive: Bool = false,
             isPast: Bool = false,
             isUnscheduled: Bool = false,
-            isBoarding: Bool = false
+            isBoarding: Bool = false,
+            scheduleRelationship: ScheduleRelationship = .scheduled,
+            isHistoricalEvent: Bool = false,
+            historicalDelaySeconds: Int? = nil
         ) {
             self.id = id
             self.tripId = tripId
@@ -895,6 +994,9 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             self.isPast = isPast
             self.isUnscheduled = isUnscheduled
             self.isBoarding = isBoarding
+            self.scheduleRelationship = scheduleRelationship
+            self.isHistoricalEvent = isHistoricalEvent
+            self.historicalDelaySeconds = historicalDelaySeconds
         }
     }
     
@@ -909,6 +1011,25 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    public struct TimetableResult: Sendable, Equatable {
+        public let records: [HourScheduleRecord]
+        public let isHistoricalFallback: Bool
+        public let isObservedReplay: Bool
+        public let totalDepartures: Int
+        
+        public init(
+            records: [HourScheduleRecord],
+            isHistoricalFallback: Bool = false,
+            isObservedReplay: Bool = false,
+            totalDepartures: Int? = nil
+        ) {
+            self.records = records
+            self.isHistoricalFallback = isHistoricalFallback
+            self.isObservedReplay = isObservedReplay
+            self.totalDepartures = totalDepartures ?? records.reduce(0) { $0 + $1.departures.count }
+        }
+    }
+    
     public struct ArrivalInfo: Identifiable, Sendable {
         public let id: UUID
         public let line: String
@@ -918,6 +1039,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         public let distanceDescription: String?
         public let arrivalDate: Date
         public let tripId: String?
+        public let scheduleRelationship: ScheduleRelationship
         
         public init(
             id: UUID = UUID(),
@@ -927,7 +1049,8 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             direction: String? = nil,
             distanceDescription: String? = nil,
             arrivalDate: Date = Date(),
-            tripId: String? = nil
+            tripId: String? = nil,
+            scheduleRelationship: ScheduleRelationship = .scheduled
         ) {
             self.id = id
             self.line = line
@@ -937,6 +1060,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             self.distanceDescription = distanceDescription
             self.arrivalDate = arrivalDate
             self.tripId = tripId
+            self.scheduleRelationship = scheduleRelationship
         }
     }
     
@@ -979,6 +1103,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             var nearbyList: [NearbyBusStop] = []
             
             do {
+                try self.ensureTransitAttached(in: db)
                 let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stops)")
                 let hasRoutes = columns.contains { ($0["name"] as? String) == "routes" }
                 let routesSelect = hasRoutes ? "routes" : "'' AS routes"
@@ -1092,6 +1217,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         
         return try await dbWriter.read { db in
             do {
+                try self.ensureTransitAttached(in: db)
                 let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stops)")
                 let hasRoutes = columns.contains { ($0["name"] as? String) == "routes" }
                 let hasLocationType = columns.contains { ($0["name"] as? String) == "location_type" }
@@ -1214,10 +1340,11 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     /// Fetches route information from `transit.routes` table if attached, falling back to static catalog.
-    public func fetchRouteInfo(for routeId: String) async -> TransitRouteData.LineInfo {
+    func fetchRouteInfo(for routeId: String) async -> TransitRouteData.LineInfo {
         let fallback = TransitRouteData.lineInfo(for: routeId)
         do {
             return try await dbWriter.read { db in
+                try self.ensureTransitAttached(in: db)
                 let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(routes)")
                 guard !columns.isEmpty else { return fallback }
                 
@@ -1294,6 +1421,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         
         return try await dbWriter.read { db in
             do {
+                try self.ensureTransitAttached(in: db)
                 let sql = "SELECT headway_min FROM transit.headway_history WHERE stop_id = ? ORDER BY day_offset ASC LIMIT 7"
                 let rows = try Double.fetchAll(db, sql: sql, arguments: [stopId])
                 if !rows.isEmpty {
@@ -1317,6 +1445,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         
         return try await dbWriter.read { db in
             do {
+                try self.ensureTransitAttached(in: db)
                 var sql = """
                     SELECT route_id, stop_id, direction_id, hour_of_day, day_of_week, 
                            median_delay_sec, p90_delay_sec, median_headway_sec, headway_stddev_sec, 
@@ -1370,6 +1499,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         
         return try await dbWriter.read { db in
             do {
+                try self.ensureTransitAttached(in: db)
                 let sql = """
                     SELECT event_id, trip_id, route_id, stop_id, scheduled_time, actual_time, delay_seconds, observed_at, direction_id
                     FROM transit.stop_events
@@ -1407,17 +1537,180 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    public func fetchTimetable(for stopId: String, routeId: String? = nil, routeIds: [String] = [], directionId: Int = 0) async throws -> [HourScheduleRecord] {
+    public func fetchTimetableResult(
+        for stopId: String,
+        routeId: String? = nil,
+        routeIds: [String] = [],
+        directionId: Int = 0,
+        dayOffset: Int = 0,
+        referenceDate: Date = Date()
+    ) async throws -> TimetableResult {
         let startTime = CFAbsoluteTimeGetCurrent()
         defer {
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
-            print("⏱️ fetchTimetable for \(stopId) dir=\(directionId) executed in \(String(format: "%.2f", elapsed))ms")
+            print("⏱️ fetchTimetableResult for \(stopId) dir=\(directionId) dayOffset=\(dayOffset) executed in \(String(format: "%.2f", elapsed))ms")
         }
         
         return try await dbWriter.read { db in
             do {
-                let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_stops)")
-                if !columns.isEmpty {
+                try self.ensureTransitAttached(in: db)
+                
+                let calendar = Calendar.current
+                let targetDate = calendar.date(byAdding: .day, value: dayOffset, to: referenceDate) ?? referenceDate
+                let startOfDay = calendar.startOfDay(for: targetDate)
+                let startOfDayEpoch = Int64(startOfDay.timeIntervalSince1970)
+                let endOfDayEpoch = startOfDayEpoch + 86400
+                
+                // Past days ($dayOffset < 0): Try Observed Reality Replay from stop_events
+                if dayOffset < 0 {
+                    let eventColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stop_events)")
+                    if !eventColumns.isEmpty {
+                        var eventSql = """
+                            SELECT event_id, trip_id, route_id, stop_id, scheduled_time, actual_time, delay_seconds, observed_at, direction_id
+                            FROM transit.stop_events
+                            WHERE stop_id = ? AND direction_id = ? AND observed_at >= ? AND observed_at < ?
+                        """
+                        var eventArgs: [DatabaseValueConvertible] = [stopId, directionId, startOfDayEpoch, endOfDayEpoch]
+                        if let rId = routeId, !rId.isEmpty {
+                            eventSql += " AND route_id = ?"
+                            eventArgs.append(rId)
+                        } else if !routeIds.isEmpty {
+                            let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
+                            eventSql += " AND route_id IN (\(placeholders))"
+                            eventArgs.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
+                        }
+                        eventSql += " ORDER BY observed_at ASC"
+                        
+                        let eventRows = try Row.fetchAll(db, sql: eventSql, arguments: StatementArguments(eventArgs))
+                        if !eventRows.isEmpty {
+                            var hourMap: [Int: [DeparturePillRecord]] = [:]
+                            for hour in 0..<24 {
+                                hourMap[hour] = []
+                            }
+                            for (idx, row) in eventRows.enumerated() {
+                                let actualEpoch: Int64 = row["actual_time"] ?? row["observed_at"]
+                                let actualDate = Date(timeIntervalSince1970: TimeInterval(actualEpoch))
+                                let depHour = calendar.component(.hour, from: actualDate)
+                                let depMin = calendar.component(.minute, from: actualDate)
+                                
+                                let tripId: String = row["trip_id"] ?? "EVENT_\(idx)"
+                                let rId: String = row["route_id"] ?? (routeId ?? "L")
+                                let dir: Int = row["direction_id"] ?? directionId
+                                let delaySec: Int = row["delay_seconds"] ?? 0
+                                let dest: String = TransitRealtimeService.SubwayFeed.isBusRoute(rId) ? TransitRealtimeService.resolveBusDestination(routeId: rId, directionId: dir).destination : "Terminal"
+                                
+                                let pill = DeparturePillRecord(
+                                    id: "\(tripId)_\(depHour)_\(depMin)",
+                                    tripId: tripId,
+                                    routeId: rId,
+                                    destination: dest,
+                                    directionId: dir,
+                                    minute: depMin,
+                                    isExpress: rId.contains("X") || rId.contains("SBS"),
+                                    isFirstDeparture: idx == 0,
+                                    isLastDeparture: idx == eventRows.count - 1,
+                                    delaySeconds: delaySec,
+                                    isPast: true,
+                                    scheduleRelationship: .scheduled,
+                                    isHistoricalEvent: true,
+                                    historicalDelaySeconds: delaySec
+                                )
+                                hourMap[depHour % 24]?.append(pill)
+                            }
+                            let records = (0..<24).map { h in
+                                HourScheduleRecord(hourOfDay: h, departures: hourMap[h] ?? [])
+                            }
+                            return TimetableResult(records: records, isHistoricalFallback: false, isObservedReplay: true)
+                        }
+                    }
+                }
+                
+                // Static Timetable via scheduled_hourly_patterns (Wave L-A.1 static compactor)
+                let patternColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_hourly_patterns)")
+                if !patternColumns.isEmpty {
+                    var sql = """
+                        SELECT hour_of_day, minute_offsets, route_id, headsign, direction_id, service_mask, baseline_days_of_week
+                        FROM transit.scheduled_hourly_patterns
+                        WHERE stop_id = ? AND direction_id = ?
+                    """
+                    var args: [DatabaseValueConvertible] = [stopId, directionId]
+                    if let rId = routeId, !rId.isEmpty {
+                        sql += " AND route_id = ?"
+                        args.append(rId)
+                    } else if !routeIds.isEmpty {
+                        let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
+                        sql += " AND route_id IN (\(placeholders))"
+                        args.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
+                    }
+                    sql += " ORDER BY hour_of_day ASC"
+                    
+                    let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
+                    if !rows.isEmpty {
+                        let bitIndex = dayOffset + 7
+                        let weekday = calendar.component(.weekday, from: targetDate) // 1=Sun, 2=Mon ... 7=Sat
+                        let baselineWeekdayIndex = weekday - 1 // 0=Sun ... 6=Sat
+                        
+                        var hourMap: [Int: [DeparturePillRecord]] = [:]
+                        for hour in 0..<24 {
+                            hourMap[hour] = []
+                        }
+                        
+                        for row in rows {
+                            let hour: Int = row["hour_of_day"]
+                            let serviceMask: Int = row["service_mask"]
+                            let baselineMask: Int = row["baseline_days_of_week"]
+                            let minOffsets: String = row["minute_offsets"]
+                            let rId: String = row["route_id"]
+                            let headsign: String = row["headsign"]
+                            let dir: Int = row["direction_id"]
+                            
+                            var isActive = false
+                            if bitIndex >= 0 && bitIndex < 14 {
+                                if (serviceMask & (1 << bitIndex)) != 0 {
+                                    isActive = true
+                                }
+                            } else if baselineMask > 0 {
+                                if (baselineMask & (1 << baselineWeekdayIndex)) != 0 {
+                                    isActive = true
+                                }
+                            }
+                            
+                            guard isActive else { continue }
+                            
+                            let mins = minOffsets.components(separatedBy: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                            for min in mins {
+                                let isExp = rId.contains("X") || rId.contains("SBS") || (rId == "2" || rId == "4" || rId == "5" || rId == "A")
+                                let pill = DeparturePillRecord(
+                                    id: "\(rId)_\(dir)_\(hour)_\(min)",
+                                    tripId: "\(rId)_\(dir)_\(hour)_\(min)",
+                                    routeId: rId,
+                                    destination: headsign.isEmpty ? "Terminal" : headsign,
+                                    directionId: dir,
+                                    minute: min,
+                                    isExpress: isExp
+                                )
+                                hourMap[hour % 24]?.append(pill)
+                            }
+                        }
+                        
+                        var allPillsCount = 0
+                        var records: [HourScheduleRecord] = []
+                        for h in 0..<24 {
+                            let sortedPills = (hourMap[h] ?? []).sorted { $0.minute < $1.minute }
+                            allPillsCount += sortedPills.count
+                            records.append(HourScheduleRecord(hourOfDay: h, departures: sortedPills))
+                        }
+                        
+                        if allPillsCount > 0 {
+                            let isHistFallback = (dayOffset < 0)
+                            return TimetableResult(records: records, isHistoricalFallback: isHistFallback, isObservedReplay: false, totalDepartures: allPillsCount)
+                        }
+                    }
+                }
+                
+                // Legacy scheduled_stops fallback
+                let legacyColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_stops)")
+                if !legacyColumns.isEmpty {
                     var sql = """
                         SELECT strftime('%H', departure_time) as dep_hour,
                                strftime('%M', departure_time) as dep_min,
@@ -1429,6 +1722,10 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     if let rId = routeId, !rId.isEmpty {
                         sql += " AND route_id = ?"
                         args.append(rId)
+                    } else if !routeIds.isEmpty {
+                        let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
+                        sql += " AND route_id IN (\(placeholders))"
+                        args.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
                     }
                     sql += " ORDER BY departure_time ASC"
                     
@@ -1462,13 +1759,14 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                             )
                             hourMap[hour]?.append(pill)
                         }
-                        return (0..<24).map { h in
+                        let records = (0..<24).map { h in
                             HourScheduleRecord(hourOfDay: h, departures: hourMap[h] ?? [])
                         }
+                        return TimetableResult(records: records, isHistoricalFallback: dayOffset < 0, isObservedReplay: false)
                     }
                 }
             } catch let error as DatabaseError {
-                print("⚠️ Transit scheduled_stops query failed: \(error.message). Returning fallback timetable.")
+                print("⚠️ Transit timetable query failed: \(error.message). Returning fallback timetable.")
             } catch {
                 throw error
             }
@@ -1482,12 +1780,26 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 effectiveRoutes = [self.inferRouteId(from: stopId, name: stopId)]
             }
             
+            let fallbackRecords: [HourScheduleRecord]
             if effectiveRoutes.count <= 1 {
-                return self.generateFallbackTimetable(for: stopId, routeId: effectiveRoutes.first ?? "L", directionId: directionId)
+                fallbackRecords = self.generateFallbackTimetable(for: stopId, routeId: effectiveRoutes.first ?? "L", directionId: directionId)
             } else {
-                return self.generateMultiRouteFallbackTimetable(for: stopId, routeIds: effectiveRoutes, directionId: directionId)
+                fallbackRecords = self.generateMultiRouteFallbackTimetable(for: stopId, routeIds: effectiveRoutes, directionId: directionId)
             }
+            return TimetableResult(records: fallbackRecords, isHistoricalFallback: dayOffset < 0, isObservedReplay: false)
         }
+    }
+    
+    public func fetchTimetable(
+        for stopId: String,
+        routeId: String? = nil,
+        routeIds: [String] = [],
+        directionId: Int = 0,
+        dayOffset: Int = 0,
+        referenceDate: Date = Date()
+    ) async throws -> [HourScheduleRecord] {
+        let result = try await fetchTimetableResult(for: stopId, routeId: routeId, routeIds: routeIds, directionId: directionId, dayOffset: dayOffset, referenceDate: referenceDate)
+        return result.records
     }
     
     public func fetchAvailableDirections(for stopId: String, routeId: String? = nil, routeIds: [String] = []) async throws -> Set<Int> {
@@ -1499,6 +1811,31 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         
         return try await dbWriter.read { db in
             do {
+                try self.ensureTransitAttached(in: db)
+                
+                // 1. Check scheduled_hourly_patterns
+                let patternCols = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_hourly_patterns)")
+                if !patternCols.isEmpty {
+                    var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_hourly_patterns WHERE stop_id = ?"
+                    var args: [DatabaseValueConvertible] = [stopId]
+                    if let rId = routeId, !rId.isEmpty {
+                        sql += " AND route_id = ?"
+                        args.append(rId)
+                    } else if !routeIds.isEmpty {
+                        let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
+                        sql += " AND route_id IN (\(placeholders))"
+                        args.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
+                    }
+                    let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
+                    if !rows.isEmpty {
+                        let dirs = rows.compactMap { row -> Int? in row["direction_id"] }
+                        if !dirs.isEmpty {
+                            return Set(dirs)
+                        }
+                    }
+                }
+                
+                // 2. Check legacy scheduled_stops
                 let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_stops)")
                 if !columns.isEmpty {
                     var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_stops WHERE stop_id = ?"
@@ -1506,6 +1843,10 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     if let rId = routeId, !rId.isEmpty {
                         sql += " AND route_id = ?"
                         args.append(rId)
+                    } else if !routeIds.isEmpty {
+                        let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
+                        sql += " AND route_id IN (\(placeholders))"
+                        args.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
                     }
                     let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
                     if !rows.isEmpty {
@@ -1530,6 +1871,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
     public func fetchRouteCoordinates(for routeId: String) async throws -> [CLLocationCoordinate2D]? {
         return try await dbWriter.read { db in
             do {
+                try self.ensureTransitAttached(in: db)
                 let sql = "SELECT lat, lon FROM transit.route_shapes WHERE route_id = ? ORDER BY sequence ASC"
                 let rows = try Row.fetchAll(db, sql: sql, arguments: [routeId])
                 if !rows.isEmpty {
