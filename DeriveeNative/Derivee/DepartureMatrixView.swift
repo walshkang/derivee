@@ -353,14 +353,7 @@ struct DepartureMatrixView: View {
                                     }
                                 } label: {
                                     HStack(spacing: 4) {
-                                        Circle()
-                                            .fill(rInfo.color)
-                                            .frame(width: 14, height: 14)
-                                            .overlay(
-                                                Text(rInfo.name)
-                                                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                                                    .foregroundColor(Color(hex: rInfo.textColorHex))
-                                            )
+                                        TransitRouteBadge(routeId: rId, lineInfo: rInfo, size: .filter, isSelected: isSelected)
                                         
                                         Text(rInfo.name)
                                             .font(.system(size: 11, weight: isSelected ? .bold : .medium, design: .rounded))

@@ -6,6 +6,60 @@ import MapLibre
 
 final class TransitCartographyTests: XCTestCase {
     
+    func testTransitModalClassNormalization() {
+        // Standard GTFS route_type codes
+        XCTAssertEqual(TransitModalClass.from(routeType: 0), .lightRail, "route_type 0 is Tram/Light Rail")
+        XCTAssertEqual(TransitModalClass.from(routeType: 1), .subway, "route_type 1 is Subway")
+        XCTAssertEqual(TransitModalClass.from(routeType: 2), .subway, "route_type 2 is Rail (Metro/Subway envelope)")
+        XCTAssertEqual(TransitModalClass.from(routeType: 3), .bus, "route_type 3 is Bus")
+        XCTAssertEqual(TransitModalClass.from(routeType: 4), .ferry, "route_type 4 is Ferry")
+        XCTAssertEqual(TransitModalClass.from(routeType: 5), .bus, "route_type 5 is Cable Tram/Bus")
+        XCTAssertEqual(TransitModalClass.from(routeType: 11), .bus, "route_type 11 is Trolleybus")
+        
+        // Extended GTFS / HVT codes
+        // 100-199: Commuter Rail / Railway
+        XCTAssertEqual(TransitModalClass.from(routeType: 100), .subway)
+        XCTAssertEqual(TransitModalClass.from(routeType: 101), .subway)
+        // 400-499: Urban Rail / Underground / Monorail
+        XCTAssertEqual(TransitModalClass.from(routeType: 401), .subway, "HVT 401 is Metro")
+        XCTAssertEqual(TransitModalClass.from(routeType: 402), .subway, "HVT 402 is Underground")
+        XCTAssertEqual(TransitModalClass.from(routeType: 405), .subway, "HVT 405 is Monorail")
+        // 700-899: Bus / Express Bus / Trolleybus
+        XCTAssertEqual(TransitModalClass.from(routeType: 700), .bus, "HVT 700 is Bus")
+        XCTAssertEqual(TransitModalClass.from(routeType: 702), .bus, "HVT 702 is Express Bus")
+        XCTAssertEqual(TransitModalClass.from(routeType: 800), .bus, "HVT 800 is Trolleybus")
+        // 900-999: Tram / LRT
+        XCTAssertEqual(TransitModalClass.from(routeType: 900), .lightRail, "HVT 900 is Tram")
+        XCTAssertEqual(TransitModalClass.from(routeType: 901), .lightRail, "HVT 901 is City Tram")
+        XCTAssertEqual(TransitModalClass.from(routeType: 904), .lightRail, "HVT 904 is LRT")
+        // 1000-1299: Maritime Ferry / Water Transport
+        XCTAssertEqual(TransitModalClass.from(routeType: 1000), .ferry, "HVT 1000 is Water Transport")
+        XCTAssertEqual(TransitModalClass.from(routeType: 1200), .ferry, "HVT 1200 is Ferry Service")
+    }
+    
+    func testTransitModalStylingMetrics() {
+        // Subway metrics
+        let subway = TransitModalClass.subway
+        XCTAssertEqual(subway.cartographyLineWidth, 4.0)
+        XCTAssertEqual(subway.cartographyCasingWidth, 6.0)
+        XCTAssertNil(subway.cartographyLineDashPattern)
+        XCTAssertNil(subway.cartographyCasingDashPattern)
+        
+        // Light Rail metrics (solid line, dashed casing)
+        let lrt = TransitModalClass.lightRail
+        XCTAssertEqual(lrt.cartographyLineWidth, 4.0)
+        XCTAssertEqual(lrt.cartographyCasingWidth, 6.0)
+        XCTAssertNil(lrt.cartographyLineDashPattern)
+        XCTAssertEqual(lrt.cartographyCasingDashPattern, [3.0, 2.0])
+        
+        // Ferry metrics (dashed line over water, no casing)
+        let ferry = TransitModalClass.ferry
+        XCTAssertEqual(ferry.cartographyLineWidth, 2.5)
+        XCTAssertEqual(ferry.cartographyCasingWidth, 0.0)
+        XCTAssertEqual(ferry.cartographyLineDashPattern, [4.0, 3.0])
+        XCTAssertNil(ferry.cartographyCasingDashPattern)
+    }
+    
     func testBundledSubwayGeoJSONLoading() {
         let shapeCollection = TransitCartographyLoader.loadTransitLinesShapeSync()
         XCTAssertGreaterThan(shapeCollection.shapes.count, 0, "Bundled transit lines should contain features.")
@@ -19,6 +73,7 @@ final class TransitCartographyTests: XCTestCase {
             XCTAssertNotNil(feature.attributes["color_hex"], "Feature must have color_hex attribute.")
             XCTAssertNotNil(feature.attributes["color"] as? UIColor, "Feature must have color UIColor attribute.")
             XCTAssertNotNil(feature.attributes["casing_color_hex"], "Feature must have casing_color_hex attribute.")
+            XCTAssertNotNil(feature.attributes["modal_class"], "Feature must have modal_class attribute.")
             
             let pointCount: UInt
             if let poly = shape as? MLNPolylineFeature {
@@ -104,6 +159,22 @@ final class TransitCartographyTests: XCTestCase {
                   [-71.0450, 42.3600]
                 ]
               }
+            },
+            {
+              "type": "Feature",
+              "properties": {
+                "route_id": "Orange",
+                "route_short_name": "OL",
+                "color_hex": "#ED8B00",
+                "route_type": 401
+              },
+              "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                  [-71.0600, 42.3600],
+                  [-71.0700, 42.3500]
+                ]
+              }
             }
           ]
         }
@@ -112,7 +183,7 @@ final class TransitCartographyTests: XCTestCase {
         let data = Data(geoJSONString.utf8)
         let shapeCollection = TransitCartographyLoader.parseGeoJSONData(data)
         
-        XCTAssertEqual(shapeCollection.shapes.count, 3, "Parsed shape collection must contain 3 features.")
+        XCTAssertEqual(shapeCollection.shapes.count, 4, "Parsed shape collection must contain 4 features.")
         
         // 1. Red Line (Heavy Rail Subway)
         guard let redFeature = shapeCollection.shapes[0] as? MLNFeature else {
@@ -144,6 +215,15 @@ final class TransitCartographyTests: XCTestCase {
         XCTAssertEqual(ferryFeature.attributes["color_hex"] as? String, "#00A3E0")
         XCTAssertEqual(ferryFeature.attributes["casing_color_hex"] as? String, "#FFFFFF")
         XCTAssertEqual(ferryFeature.attributes["modal_class"] as? Int, 3)
+        
+        // 4. Orange Line (Inferred from HVT 401 Metro without explicit modal_class)
+        guard let orangeFeature = shapeCollection.shapes[3] as? MLNFeature else {
+            XCTFail("Feature 3 must conform to MLNFeature")
+            return
+        }
+        XCTAssertEqual(orangeFeature.attributes["route_id"] as? String, "Orange")
+        XCTAssertEqual(orangeFeature.attributes["color_hex"] as? String, "#ED8B00")
+        XCTAssertEqual(orangeFeature.attributes["modal_class"] as? Int, 0, "HVT 401 should infer modal_class 0 (subway)")
     }
     
     func testCorruptAndEmptyDataHandling() {
@@ -159,5 +239,26 @@ final class TransitCartographyTests: XCTestCase {
     func testSubwayLineColorExpressionEvaluation() {
         let expr = MapView.Coordinator.subwayLineColorExpression()
         XCTAssertNotNil(expr, "Subway line color expression must be valid.")
+    }
+    
+    func testMultiModalRouteDataCatalog() {
+        let red = TransitRouteData.lineInfo(for: "Red")
+        XCTAssertEqual(red.modalClass, .subway)
+        XCTAssertEqual(red.colorHex, "#DA291C")
+        
+        let greenB = TransitRouteData.lineInfo(for: "Green-B")
+        XCTAssertEqual(greenB.modalClass, .lightRail)
+        XCTAssertEqual(greenB.colorHex, "#00843D")
+        
+        let silverLine = TransitRouteData.lineInfo(for: "SL1")
+        XCTAssertEqual(silverLine.modalClass, .bus)
+        XCTAssertEqual(silverLine.colorHex, "#7C878E")
+        
+        let ferry = TransitRouteData.lineInfo(for: "F4")
+        XCTAssertEqual(ferry.modalClass, .ferry)
+        XCTAssertEqual(ferry.colorHex, "#00A3E0")
+        
+        let path = TransitRouteData.lineInfo(for: "PATH")
+        XCTAssertEqual(path.modalClass, .subway)
     }
 }

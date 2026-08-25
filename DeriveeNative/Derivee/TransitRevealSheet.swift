@@ -146,6 +146,26 @@ struct TransitRevealSheet: View {
         return nil
     }
     
+    private func stationSubtitle(for details: SpatialDatabaseManager.StopDetails) -> String {
+        let modes = Set(details.routeIds.map { TransitRouteData.lineInfo(for: $0).modalClass })
+        if modes.contains(.subway) && modes.contains(.lightRail) {
+            return "Subway & Light Rail Station"
+        }
+        if modes.contains(.ferry) {
+            return "Maritime Ferry Terminal"
+        }
+        if modes.contains(.lightRail) {
+            return "Light Rail Station"
+        }
+        if details.routeType == 3 || (modes.contains(.bus) && modes.count == 1) {
+            return "MTA Bus Stop"
+        }
+        if modes.contains(.subway) || details.routeType == 1 {
+            return "MTA Subway Station"
+        }
+        return "Transit Station"
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Pinned Header: Line Badge + Station Name + Tab Picker
@@ -155,8 +175,8 @@ struct TransitRevealSheet: View {
                 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .center, spacing: 12) {
-                        if isBus {
-                            if details.routeIds.count > 1 {
+                        if details.routeIds.count > 1 {
+                            if details.modalClass == .bus {
                                 HStack(spacing: 4) {
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                                         .fill(Color(hex: "#00A1DE"))
@@ -168,52 +188,19 @@ struct TransitRevealSheet: View {
                                         )
                                     
                                     ForEach(details.routeIds, id: \.self) { rId in
-                                        Text(rId)
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 4)
-                                            .background(Color(hex: "#00A1DE").opacity(0.15))
-                                            .foregroundColor(Color(hex: "#00A1DE"))
-                                            .clipShape(Capsule())
+                                        TransitRouteBadge(routeId: rId, size: .regular)
                                     }
                                 }
                             } else {
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color(hex: "#00A1DE"))
-                                    .frame(width: 42, height: 38)
-                                    .overlay(
-                                        Image(systemName: "bus.fill")
-                                            .font(.system(size: 18, weight: .bold))
-                                            .foregroundColor(.white)
-                                    )
-                            }
-                        } else {
-                            if details.routeIds.count > 1 {
                                 HStack(spacing: 4) {
                                     ForEach(details.routeIds, id: \.self) { rId in
                                         let lineInfo = TransitRouteData.lineInfo(for: rId)
-                                        let diameter: CGFloat = details.routeIds.count > 4 ? 26 : (details.routeIds.count > 2 ? 30 : 34)
-                                        let fontSize: CGFloat = details.routeIds.count > 4 ? 12 : (details.routeIds.count > 2 ? 14 : 16)
-                                        Circle()
-                                            .fill(lineInfo.color)
-                                            .frame(width: diameter, height: diameter)
-                                            .overlay(
-                                                Text(lineInfo.name)
-                                                    .font(.system(size: fontSize, weight: .bold, design: .rounded))
-                                                    .foregroundColor(Color(hex: lineInfo.textColorHex))
-                                            )
+                                        TransitRouteBadge(routeId: rId, lineInfo: lineInfo, size: details.routeIds.count > 4 ? .compact : .regular)
                                     }
                                 }
-                            } else {
-                                Circle()
-                                    .fill(routeInfo.color)
-                                    .frame(width: 38, height: 38)
-                                    .overlay(
-                                        Text(routeInfo.name)
-                                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                                            .foregroundColor(Color(hex: routeInfo.textColorHex))
-                                    )
                             }
+                        } else {
+                            TransitRouteBadge(routeId: details.routeId, lineInfo: routeInfo, size: .large)
                         }
                         
                         VStack(alignment: .leading, spacing: 2) {
@@ -224,7 +211,7 @@ struct TransitRevealSheet: View {
                                 .lineLimit(2)
                                 .minimumScaleFactor(0.85)
                             
-                            Text(isBus ? "MTA Bus Stop" : "MTA Subway Station")
+                            Text(stationSubtitle(for: details))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -355,25 +342,7 @@ struct TransitRevealSheet: View {
                                                 ForEach(group.arrivals) { arrival in
                                                     HStack(alignment: .center, spacing: 10) {
                                                         let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
-                                                        
-                                                        if TransitRouteData.isBusRoute(arrival.line) {
-                                                            Text(arrival.line)
-                                                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                                                .padding(.horizontal, 6)
-                                                                .padding(.vertical, 3)
-                                                                .background(Color(hex: "#00A1DE").opacity(0.15))
-                                                                .foregroundColor(Color(hex: "#00A1DE"))
-                                                                .clipShape(Capsule())
-                                                        } else {
-                                                            Circle()
-                                                                .fill(arrivalInfo.color)
-                                                                .frame(width: 22, height: 22)
-                                                                .overlay(
-                                                                    Text(arrivalInfo.name)
-                                                                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                                                                        .foregroundColor(Color(hex: arrivalInfo.textColorHex))
-                                                                )
-                                                        }
+                                                        TransitRouteBadge(routeId: arrival.line, lineInfo: arrivalInfo, size: .compact)
                                                         
                                                         VStack(alignment: .leading, spacing: 1) {
                                                             HStack(spacing: 4) {

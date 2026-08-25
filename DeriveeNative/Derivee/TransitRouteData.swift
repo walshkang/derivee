@@ -3,11 +3,29 @@ import CoreLocation
 import MapLibre
 
 struct TransitRouteData {
-    struct LineInfo {
+    struct LineInfo: Sendable, Equatable {
         let routeId: String
         let name: String
         let colorHex: String
         let textColorHex: String
+        let modalClass: TransitModalClass
+        let routeType: Int
+        
+        init(
+            routeId: String,
+            name: String,
+            colorHex: String,
+            textColorHex: String,
+            modalClass: TransitModalClass = .subway,
+            routeType: Int = 1
+        ) {
+            self.routeId = routeId
+            self.name = name
+            self.colorHex = colorHex
+            self.textColorHex = textColorHex
+            self.modalClass = modalClass
+            self.routeType = routeType
+        }
         
         var color: Color {
             Color(hex: colorHex)
@@ -21,41 +39,94 @@ struct TransitRouteData {
     static func lineInfo(for routeId: String) -> LineInfo {
         let cleanId = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         
+        // 1. Boston MBTA Multi-Modal Trunks
+        switch cleanId {
+        case "RED":
+            return LineInfo(routeId: "Red", name: "Red", colorHex: "#DA291C", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
+        case "ORANGE":
+            return LineInfo(routeId: "Orange", name: "Orange", colorHex: "#ED8B00", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
+        case "BLUE":
+            return LineInfo(routeId: "Blue", name: "Blue", colorHex: "#003DA5", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
+        case "GREEN-B", "GREEN_B":
+            return LineInfo(routeId: "Green-B", name: "Green B", colorHex: "#00843D", textColorHex: "#FFFFFF", modalClass: .lightRail, routeType: 0)
+        case "GREEN-C", "GREEN_C":
+            return LineInfo(routeId: "Green-C", name: "Green C", colorHex: "#00843D", textColorHex: "#FFFFFF", modalClass: .lightRail, routeType: 0)
+        case "GREEN-D", "GREEN_D":
+            return LineInfo(routeId: "Green-D", name: "Green D", colorHex: "#00843D", textColorHex: "#FFFFFF", modalClass: .lightRail, routeType: 0)
+        case "GREEN-E", "GREEN_E":
+            return LineInfo(routeId: "Green-E", name: "Green E", colorHex: "#00843D", textColorHex: "#FFFFFF", modalClass: .lightRail, routeType: 0)
+        case "MATTAPAN":
+            return LineInfo(routeId: "Mattapan", name: "Mattapan", colorHex: "#DA291C", textColorHex: "#FFFFFF", modalClass: .lightRail, routeType: 0)
+        case "SL1", "SL2", "SL3", "SL4", "SL5", "SLW":
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#7C878E", textColorHex: "#FFFFFF", modalClass: .bus, routeType: 3)
+        case "F4", "F1", "F2H", "CHARLESTOWN FERRY", "HINGHAM FERRY":
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00A3E0", textColorHex: "#FFFFFF", modalClass: .ferry, routeType: 4)
+        case "NWK-WTC", "JSQ-33", "HOB-WTC", "HOB-33", "PATH":
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#EE352E", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
+        case "ER", "RW", "SB", "AST", "SV", "SG", "RES", "FERRY":
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00A3E0", textColorHex: "#FFFFFF", modalClass: .ferry, routeType: 4)
+        default:
+            break
+        }
+        
+        // 2. NYC Subway Trunks & Lines
         switch cleanId {
         case "1", "2", "3":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#EE352E", textColorHex: "#FFFFFF")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#EE352E", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
         case "4", "5", "6", "6X":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00933C", textColorHex: "#FFFFFF")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00933C", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
         case "7", "7X":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#B933AD", textColorHex: "#FFFFFF")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#B933AD", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
         case "A", "C", "E":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#0039A6", textColorHex: "#FFFFFF")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#0039A6", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
         case "B", "D", "F", "FX", "M":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#FF6319", textColorHex: "#FFFFFF")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#FF6319", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
         case "G":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#6CBE45", textColorHex: "#FFFFFF")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#6CBE45", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
         case "J", "Z":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#996633", textColorHex: "#FFFFFF")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#996633", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
         case "L":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#A7A9AC", textColorHex: "#000000")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#A7A9AC", textColorHex: "#000000", modalClass: .subway, routeType: 1)
         case "N", "Q", "R", "W":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#FCCC0A", textColorHex: "#000000")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#FCCC0A", textColorHex: "#000000", modalClass: .subway, routeType: 1)
         case "S", "GS", "FS", "H":
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#808183", textColorHex: "#FFFFFF")
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#808183", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
         case "SIR":
-            return LineInfo(routeId: cleanId, name: "SIR", colorHex: "#0078C6", textColorHex: "#FFFFFF")
+            return LineInfo(routeId: cleanId, name: "SIR", colorHex: "#0078C6", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
         default:
-            if isBusRoute(cleanId) {
-                return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00A1DE", textColorHex: "#FFFFFF")
+            if isFerryRoute(cleanId) {
+                return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00A3E0", textColorHex: "#FFFFFF", modalClass: .ferry, routeType: 4)
             }
-            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#FFB300", textColorHex: "#000000")
+            if isLightRailRoute(cleanId) {
+                return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00843D", textColorHex: "#FFFFFF", modalClass: .lightRail, routeType: 0)
+            }
+            if isBusRoute(cleanId) {
+                return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00A1DE", textColorHex: "#FFFFFF", modalClass: .bus, routeType: 3)
+            }
+            return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#FFB300", textColorHex: "#000000", modalClass: .subway, routeType: 1)
         }
     }
     
-    /// Determines whether a given route identifier or stop ID corresponds to an MTA Bus route
+    /// Determines whether a given route identifier or stop ID corresponds to a Maritime Ferry route
+    public static func isFerryRoute(_ routeId: String) -> Bool {
+        let clean = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.hasPrefix("FERRY") || clean.hasPrefix("BOAT") || clean.contains("FERRY") { return true }
+        if ["F1", "F2", "F2H", "F4", "ER", "RW", "SB", "AST", "SV", "SG", "RES"].contains(clean) { return true }
+        return false
+    }
+    
+    /// Determines whether a given route identifier corresponds to a Light Rail / Tram route
+    public static func isLightRailRoute(_ routeId: String) -> Bool {
+        let clean = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.hasPrefix("GREEN") || clean == "MATTAPAN" || clean.hasPrefix("LRT") || clean.hasPrefix("TRAM") { return true }
+        return false
+    }
+    
+    /// Determines whether a given route identifier or stop ID corresponds to an MTA or metropolitan Bus route
     public static func isBusRoute(_ routeId: String) -> Bool {
         let clean = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         if clean.hasPrefix("BUS_") { return true }
+        if clean.hasPrefix("SL") && clean.count <= 4 { return true } // Boston Silver Line BRT
         if clean.hasPrefix("BX") && clean.count > 2 && clean.dropFirst(2).first?.isNumber == true { return true }
         if clean.hasPrefix("SIM") && clean.count > 3 && clean.dropFirst(3).first?.isNumber == true { return true }
         if (clean.hasPrefix("M") || clean.hasPrefix("B") || clean.hasPrefix("Q") || clean.hasPrefix("S")) && clean.count > 1 && clean.dropFirst().first?.isNumber == true {
@@ -342,7 +413,7 @@ struct TransitRouteData {
 }
 
 extension Color {
-    init(hex: String) {
+    public init(hex: String) {
         var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
 

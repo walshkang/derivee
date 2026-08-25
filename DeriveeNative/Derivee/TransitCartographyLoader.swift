@@ -99,6 +99,24 @@ public enum TransitCartographyLoader: Sendable {
                 if attrs["casing_color_hex"] == nil {
                     attrs["casing_color_hex"] = "#FFFFFF"
                 }
+                
+                // Extract or infer modal_class for MapLibre layer predicates
+                let modalClassRaw: Int
+                if let raw = attrs["modal_class"] as? Int {
+                    modalClassRaw = raw
+                } else if let num = attrs["modal_class"] as? NSNumber {
+                    modalClassRaw = num.intValue
+                } else if let str = attrs["modal_class"] as? String, let parsed = Int(str) {
+                    modalClassRaw = parsed
+                } else if let routeType = attrs["route_type"] as? Int {
+                    modalClassRaw = TransitModalClass.from(routeType: routeType).rawValue
+                } else if let routeTypeNum = attrs["route_type"] as? NSNumber {
+                    modalClassRaw = TransitModalClass.from(routeType: routeTypeNum.intValue).rawValue
+                } else {
+                    modalClassRaw = TransitModalClass.subway.rawValue
+                }
+                attrs["modal_class"] = modalClassRaw
+                
                 feature.attributes = attrs
             }
         }

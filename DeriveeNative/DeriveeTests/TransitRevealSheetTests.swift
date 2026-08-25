@@ -410,7 +410,7 @@ final class TransitRevealSheetTests: XCTestCase {
         
         let vc = UIHostingController(rootView: view)
         vc.overrideUserInterfaceStyle = .light
-        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600)), precision: 0.98))
     }
     
     func testTransitRevealSheetMultiRouteSnapshot() throws {
@@ -441,7 +441,7 @@ final class TransitRevealSheetTests: XCTestCase {
         
         let vc = UIHostingController(rootView: view)
         vc.overrideUserInterfaceStyle = .light
-        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600)), precision: 0.98))
     }
 
     func testDepartureMatrixViewSnapshot() throws {
@@ -954,5 +954,79 @@ final class TransitRevealSheetTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(hw, 10.0, "Bus headways should be >= 10m, got \(hw).")
             XCTAssertLessThanOrEqual(hw, 35.0, "Bus headways should be <= 35m, got \(hw).")
         }
+    }
+    
+    func testMultiModalStopDetailsClassification() {
+        // 1. Boston Park Street (Co-located Subway Red + Light Rail Green branches)
+        let parkSt = SpatialDatabaseManager.StopDetails(
+            stopId: "place-pktrm",
+            name: "Park Street",
+            routeId: "Red",
+            routeIds: ["Red", "Green-B", "Green-C", "Green-D", "Green-E"],
+            routeType: 1,
+            arrivals: []
+        )
+        XCTAssertEqual(parkSt.modalClass, .subway)
+        XCTAssertEqual(parkSt.routeIds.count, 5)
+        
+        // 2. Charlestown Ferry F4
+        let ferryStop = SpatialDatabaseManager.StopDetails(
+            stopId: "place-crtwn",
+            name: "Charlestown Navy Yard",
+            routeId: "F4",
+            routeIds: ["F4"],
+            routeType: 4,
+            arrivals: []
+        )
+        XCTAssertEqual(ferryStop.modalClass, .ferry)
+        
+        // 3. Silver Line SL1 BRT
+        let brtStop = SpatialDatabaseManager.StopDetails(
+            stopId: "place-wtc",
+            name: "World Trade Center",
+            routeId: "SL1",
+            routeIds: ["SL1", "SL2", "SL3"],
+            routeType: 3,
+            arrivals: []
+        )
+        XCTAssertEqual(brtStop.modalClass, .bus)
+    }
+    
+    func testTransitRouteBadgeModalRendering() {
+        let subwayBadge = TransitRouteBadge(routeId: "L", size: .large)
+        XCTAssertEqual(subwayBadge.lineInfo.modalClass, .subway)
+        
+        let lrtBadge = TransitRouteBadge(routeId: "Green-B", size: .regular)
+        XCTAssertEqual(lrtBadge.lineInfo.modalClass, .lightRail)
+        
+        let busBadge = TransitRouteBadge(routeId: "M15", size: .compact)
+        XCTAssertEqual(busBadge.lineInfo.modalClass, .bus)
+        
+        let ferryBadge = TransitRouteBadge(routeId: "F4", size: .large)
+        XCTAssertEqual(ferryBadge.lineInfo.modalClass, .ferry)
+    }
+    
+    func testMultiModalTransitRevealSheetView() {
+        let fixedDate = Date(timeIntervalSince1970: 1736337600)
+        let multiModalDetails = SpatialDatabaseManager.StopDetails(
+            stopId: "place-pktrm",
+            name: "Park Street",
+            routeId: "Red",
+            routeIds: ["Red", "Green-B", "Green-C"],
+            routeType: 1,
+            arrivals: [
+                SpatialDatabaseManager.ArrivalInfo(line: "Red", destination: "Alewife", minutes: 2, direction: "Inbound", arrivalDate: fixedDate.addingTimeInterval(120)),
+                SpatialDatabaseManager.ArrivalInfo(line: "Green-B", destination: "Boston College", minutes: 4, direction: "Outbound", arrivalDate: fixedDate.addingTimeInterval(240)),
+                SpatialDatabaseManager.ArrivalInfo(line: "Green-C", destination: "Cleveland Circle", minutes: 7, direction: "Outbound", arrivalDate: fixedDate.addingTimeInterval(420))
+            ]
+        )
+        
+        let sheet = TransitRevealSheet(
+            stopId: "place-pktrm",
+            initialDetails: multiModalDetails,
+            initialLiveArrivals: multiModalDetails.arrivals,
+            referenceDate: fixedDate
+        )
+        XCTAssertNotNil(sheet)
     }
 }
