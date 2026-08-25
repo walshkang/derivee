@@ -569,6 +569,25 @@ erDiagram
         INTEGER location_type
     }
 
+    stop_resolution {
+        TEXT parent_stop_id PK "Composite PK col 1"
+        TEXT child_stop_id PK "Composite PK col 2"
+        INTEGER is_parent "0 or 1"
+        TEXT platform_code "Optional platform label"
+        INTEGER wheelchair_boarding "0 = unknown"
+    }
+
+    scheduled_hourly_patterns {
+        TEXT stop_id PK "Composite PK col 1"
+        TEXT route_id PK "Composite PK col 2"
+        INTEGER direction_id PK "Composite PK col 3"
+        INTEGER hour_of_day PK "0..23"
+        INTEGER service_mask "uint16 14-day bitmask"
+        INTEGER baseline_days_of_week "uint8 7-bit fallback"
+        TEXT minute_offsets "e.g. 04,16,28,40,52"
+        TEXT headsign
+    }
+
     headway_history {
         TEXT stop_id FK
         INTEGER day_offset
@@ -578,12 +597,14 @@ erDiagram
     neighborhood_stats ||--o{ neighborhood_hexes : "contains"
     neighborhood_hexes }o--o| explored_hexes : "JOIN on h3_index"
     stops ||--o{ headway_history : "has history"
+    stops ||--o{ stop_resolution : "parent lookup"
+    stops ||--o{ scheduled_hourly_patterns : "timetable"
 ```
 
 | Database File | Attached As | Tables |
 |:---|:---|:---|
 | `derivee_spatial.sqlite` | *(main)* | `explored_hexes`, `meta`, `discovered_pois` |
-| `derivee_transit.sqlite` | `transit` | `stops`, `headway_history` |
+| `derivee_transit.sqlite` | `transit` | `stops`, `stop_resolution` (**WITHOUT ROWID**), `scheduled_hourly_patterns`, `headway_history` |
 | `derivee_neighborhood.sqlite` | `neighborhood` | `neighborhood_stats`, `neighborhood_hexes` |
 
 ---
@@ -706,11 +727,24 @@ classDiagram
         +liveDeltas: [String: Int]
     }
 
+    class TransitScheduleState {
+        <<Enum>>
+        SCHEDULED
+        CANCELED
+        ADDED
+        UNSCHEDULED
+        DUPLICATED
+        +opacity: Double
+        +badge: String?
+        +textStyle: TextStyle
+    }
+
     class SpatialDatabaseManager {
         <<Thread-Safe Actor / GRDB Pool>>
         +fetchHourlyReliability(stopId) async throws
         +fetchStopEvents(stopId, hour, dow) async throws
         +fetchTimetable(stopId) async throws
+        +resolveStopHierarchy(stopId) async throws
     }
 
     TransitRevealSheet --> ReliabilityHeatmapCanvas : embeds (Live Tab)
@@ -720,5 +754,5 @@ classDiagram
     TransitMatrixInspectorView ..> SpatialDatabaseManager : queries metrics
     TripLedgerView ..> SpatialDatabaseManager : queries raw events
     DepartureMatrixView ..> SpatialDatabaseManager : queries scheduled timetable
+    DepartureMatrixView --> TransitScheduleState : renders per-trip state
 ```
-

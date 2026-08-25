@@ -40,6 +40,15 @@ The `SpatialStore` (`@Observable`) acts as the bridge between GRDB and SwiftUI. 
 ### 2.4 Async Read Mandate
 All `SpatialDatabaseManager` read methods exposed to callers **must** use `async`/`await` (`try await dbWriter.read`). Synchronous `dbWriter.read { }` calls on the main thread cause priority inversion hangs when the background `AmbientTrackingEngine` holds a pool connection. The only acceptable synchronous reads are internal to GRDB's `ValueObservation` callbacks, which manage their own threading.
 
+### 2.5 Pre-Compiled Query Optimizer Statistics (`sqlite_stat1`)
+When the Swift client mounts a City Pack via `ATTACH DATABASE '<path>/transit.sqlite' AS transit`, SQLite cannot enforce foreign key constraints across schema boundaries. Cross-database JOIN operations (e.g. `explored_hexes` $\bowtie$ `transit.stops`, `transit.stop_resolution`) default to full-table scans if the SQLite query planner lacks index selectivity statistics. The Observer pre-compiles `sqlite_stat1` into every distributed `transit.sqlite` by running `PRAGMA analysis_limit = 1000; ANALYZE; PRAGMA optimize(0x10000); VACUUM;` before Zstandard compression. See [docs/multi-city.md §3.7](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full optimization pipeline.
+
+### 2.6 iOS Lifecycle Safety & `0xdead10cc` Avoidance
+iOS terminates backgrounded processes with exception code `0xdead10cc` if an application holds an open file lock on an SQLite database (under WAL or attached schemas) during suspension. The `CityPackManager` hot-swap protocol executes a **Coordinated Two-Phase Barrier**: Phase 1 tears down all in-flight foreground transit queries (`TransitRealtimeService` feed polling, `NearbyBusesCapsule` spatial scans, `TransitRevealSheet` if open), then Phase 2 invokes `dbPool.releaseMemory()` followed by the `DETACH`/`ATTACH` sequence inside a serial `dbWriter.writeWithoutTransaction` barrier. See [docs/multi-city.md §4.1](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full reference implementation.
+
+### 2.7 `WITHOUT ROWID` Applicability Nuance
+The prohibition on `WITHOUT ROWID` tables (documented in AGENTS.md) applies strictly to **mutable tables in the primary database** that are observed by GRDB `ValueObservation` (e.g., `explored_hexes`). `WITHOUT ROWID` breaks the SQLite update hook region tracking that GRDB relies on to fire `onChange` callbacks. However, **static read-only lookup tables in attached databases** (e.g., `transit.stop_resolution`) are never mutated or observed by `ValueObservation`, and benefit from `WITHOUT ROWID`'s clustered B-Tree leaf storage for $\mathcal{O}(1)$ point reads.
+
 ---
 
 ## 3. The Ambient Tracking Engine
@@ -168,10 +177,11 @@ Because the native Xcode project is generated immutably via `xcodegen`:
 While the primary mobile client is pure native iOS, the surrounding ecosystem supports offline-first data generation and web accessibility.
 
 ### 7.1 Observer Daemon (Go)
-To provide users with offline-first historical transit reliability data, a standalone daemon aggregates live GTFS-RT feeds.
+To provide users with offline-first historical transit reliability data and automated static GTFS city packs, a standalone daemon aggregates live GTFS-RT feeds and compiles static schedules.
 - **Deployment:** The Go Observer is compiled as a single, statically linked binary and deployed directly to an Oracle Cloud ARM instance (OCI Always Free Ampere A1, 4 OCPU, 24 GB RAM).
 - **No Docker:** Containerization is explicitly avoided. Running the raw binary via `systemd` eliminates virtualized filesystem overhead and maximizes SQLite write performance.
-- **Output & R2 Upload Cadence:** A Zstandard-compressed SQLite database (`transit_delta.sqlite.zst`) containing 7-day headways, uploaded to Cloudflare R2 (`fog-of-transit` bucket) for mobile client synchronization.
+- **Static Timetable Compaction:** Flattens millions of relational `stop_times` rows into compact `scheduled_hourly_patterns` (<3.8 MB uncompressed for NYC, <1.2 MB .zst) with a 14-day `service_mask uint16` rolling calendar bitmask and universal distance-based linear interpolation for `timepoint = 0`. Achieves sub-0.12ms single-row reads in GRDB.
+- **Output & R2 Upload Cadence:** Compiles Zstandard-compressed city packs (`city-{slug}.pack.zst`) and historical deltas (`transit_delta.sqlite.zst`), uploaded to Cloudflare R2 for mobile client synchronization. Feed delta detection operates on a 12-hour cron using HTTP ETags and SHA-1 hashes.
 - **Multi-City Scaling Constraint:** While local single-city development pushes every 3 minutes, production multi-city fleet deployments batch historical delta uploads hourly or nightly. This ensures 100+ metros stay within Cloudflare R2's 1,000,000 monthly Class A write limit (<7.2% capacity) and 10 GB storage budget (<25% capacity). See [docs/multi-city.md §7.3](file:///Volumes/T7ssd/derivee/docs/multi-city.md#73-free-tier-capacity--100-city-scaling-analysis) for the complete 100-city capacity specification.
 
 ### 7.2 Web MVP
@@ -298,12 +308,37 @@ This section defines the implementation parameters and algorithmic constraints e
     CREATE INDEX idx_patterns_lookup ON scheduled_hourly_patterns(stop_id, route_id, direction_id);
     ```
     Pre-aggregating static GTFS timetables into compact minute-offset strings shrinks `transit.sqlite` from ~110 MB down to **~4.5 MB uncompressed** (< 1.2 MB Zstandard compressed) with sub-millisecond query performance.
-  - **Multi-Agency Realtime Multiplexing (`TransitRealtimeService`):**
-    - Feed endpoints are declared per modal key in `city_config.json` (`subway`, `bus`, `path`, `ferry`).
+  - **Parent-Station Resolution (`stop_resolution`):**
+    - Pre-compiled `WITHOUT ROWID` lookup table in `transit.sqlite` with reflexive transitive closure across the GTFS `stops.txt` parent-child hierarchy ($\mathcal{O}(1)$ clustered B-Tree point reads).
+    - Swift client queries `transit.stop_resolution` as the authoritative source for platform disambiguation in `fetchStopDetails` and GTFS-RT feed matching, with legacy 3-tier fallback retained for databases lacking the table.
+    - See [docs/multi-city.md §3.3](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full schema and transitive closure rules.
+  - **Data-Driven Realtime Feed Routing:**
+    - Feed endpoints are declared as structured `realtimeEndpoints` array entries in `city_config.json` with per-endpoint `feedId`, `url`, `pollIntervalSeconds`, and `headers`.
+    - Per-route feed resolution uses `feedRouteMapping` (e.g. `"B": "nyct_bdfm"`) — fully data-driven with zero hardcoded Swift switch tables.
     - Feeds are polled in parallel via detached Swift `TaskGroup` workers with a strict 5.0s timeout per feed.
     - **Isolated Failure Isolation:** An outage or network timeout on one agency's endpoint (e.g. Ferry) immediately degrades only that modal sheet to `SCHEDULED` fallback mode, while Subway and Bus feeds continue streaming real-time countdowns without latency or UI stutter.
   - **$\pm 7$ Day Time-Machine Timetable Engine:**
     - Combines future static schedules from `scheduled_hourly_patterns`, live streaming reconciler for today, and historical departure receipts from `stop_events` ($-7$ to $-1$ days) color-coded by arrival punctuality (Green $\le 2\text{m}$, Amber $2\text{m}–5\text{m}$, Red $> 5\text{m}$).
   - **Zero-Download Cold Start & Hot-Swap Lifecycle:**
     - `city-nyc.pack.zst` is bundled directly inside the iOS app bundle. On first launch, `CityPackManager` decompresses it into `~/Documents/CityPacks/nyc/` in < 200ms.
-    - City switching executes `DETACH DATABASE transit; ATTACH DATABASE '.../Documents/CityPacks/{slug}/transit.sqlite' AS transit;` with zero changes required in `SpatialDatabaseManager` read methods.
+    - City switching executes `DETACH DATABASE transit; ATTACH DATABASE '.../Documents/CityPacks/{slug}/transit.sqlite' AS transit;` via the Coordinated Two-Phase Barrier protocol (§2.6) with zero changes required in `SpatialDatabaseManager` read methods.
+
+### 8.10 GTFS-RT Dynamic Trip Lifecycle & `ScheduleRelationship` Visual Treatments
+GTFS-Realtime `TripUpdate.ScheduleRelationship` conveys 5 dynamic trip states. The departure matrix renders each state in-situ with semantic dimming to prevent rider confusion:
+
+| `ScheduleRelationship` | Visual Treatment | Opacity | Badge |
+| :--- | :--- | :---: | :--- |
+| `SCHEDULED` (0) | Calculated arrival time with delay delta | 1.0 | None / `+3m` |
+| `CANCELED` (3) | Strikethrough on departure minute; tap disabled | 0.4 | `CANCELED` (Red) |
+| `ADDED` (1) | Bold insertion into timeline sorted by live ETA | 1.0 | `ADDED` (Accent) |
+| `UNSCHEDULED` (2) | Italic with LIVE pulse, no timetable comparison | 1.0 | `LIVE` (Blue) |
+| `DUPLICATED` (4) | Merged with canonical trip container | 1.0 | `DUPLICATE` (Neutral) |
+
+### 8.11 Topology-Preserving Polyline Simplification (Visvalingam-Whyatt Arc Engine)
+Standard Ramer-Douglas-Peucker simplification evaluates overlapping transit routes independently, causing vertex divergence and GPU Z-fighting in MapLibre Native (e.g. 4/5/6 on Lexington Ave, MBTA Green Line B/C/D/E). The Observer instead processes geometry via a **Planar Arc-Topology Engine**:
+1. Extract intersections and terminals across all routes; lock as fixed junction nodes ($A = \infty$).
+2. Split route line strings into shared **Arcs** bounded by locked nodes.
+3. Simplify each Arc independently via **Visvalingam-Whyatt** (iterative elimination of smallest effective triangle area $A_i$) with mode-adaptive thresholds: $\approx 10^{-9}\text{ deg}^2$ (Subway), $5 \times 10^{-9}$ (LRT), $10^{-8}$ (Ferry), $5 \times 10^{-8}$ (Commuter Rail). Bus routes excluded (handled by 400m Quick Lens).
+4. Re-assemble route features — overlapping routes share identical Arc vertices, guaranteeing zero Z-fighting.
+
+See [docs/multi-city.md §5.4](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full mathematical formulation and mode-adaptive threshold table.
