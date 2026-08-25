@@ -718,13 +718,37 @@ flowchart TD
 
 ---
 
-## 8. Wave L Implementation Roadmap
+## 8. Wave L Parallelized Implementation Roadmap
 
+Wave L is decomposed into **4 concurrent execution tracks** that can proceed in parallel:
+
+### Track A: Data & GIS Compilation Tooling (Go / CLI / Offline)
 | Sub-Wave | Task ID | Deliverable | Scope |
 | :--- | :--- | :--- | :---: |
-| **L.1** | `WL1-CITY-PACK-INFRA` | `CityPackManager`, Zstandard decompression, R2 `cities.json` manifest fetcher, multi-modal `city_config.json` schema, compact `scheduled_hourly_patterns` schema with `service_mask uint16` ($\pm 7\text{d}$ window) + `baseline_days_of_week uint8`, bundled `city-nyc.pack.zst` | **M** |
-| **L.2** | `WL2-DYNAMIC-BOUNDS-FOG` | Dynamic `CameraBounds` from `city_config.json`, per-city `explored_hexes_{slug}` tables, zero-downtime schema migration (`ALTER TABLE RENAME`), land-only water fog masking, quiet water gliding, MapLibre geometry cache invalidation protocol, GIS bridge preservation pipeline (`(Neighborhood \ Water) ∪ Bridges`) | **M** |
-| **L.3** | `WL3-TRANSIT-HOT-SWAP` | SQLite `DETACH`/`ATTACH` engine with WAL write barrier safety, pre-swap transit query teardown, prepared statement cache flush, multi-modal `transit.sqlite`, Circular Modular Distance Matching for GTFS-RT midnight wrap-around, $\pm 7$ day timetable navigation with bitwise evaluation and honest scheduled fallback | **M** |
-| **L.4** | `WL4-GEOJSON-TRANSIT-LOADER` | Dynamic `MLNShapeSource` multi-modal GeoJSON loader (Subway/PATH/LRT/BRT/Maritime Ferry) using Extended GTFS (HVT) 4-class modal styling priority, retire `MtaSubwayNetworkData.swift` | **M** |
-| **L.5** | `WL5-CITY-DETECTION-UX` | Bounding-box fast detection + `CLGeocoder` fallback, `CityDownloadPromptSheet` with 7-day snooze, silent auto-switch with toast, fallback ambient tracking for uninstalled cities, Screen 3 City Selector + "All Metros" mode, multi-modal capsule badging, `Settings > Cities & Storage` manager with transparent sizing and decoupled deletion, agency attributions, smart multi-city GPX import | **M** |
-| **L.6** | `WL6-BOSTON-MBTA-PACK` | MBTA static GTFS multi-modal pipeline (Subway Red/Orange/Blue + Green Line LRT `frequencies.txt` expansion + Silver Line BRT + Harbor Ferries), OSM bridge ingestion for walkable polygon mask, `city-bos.pack.zst` compilation, R2 upload, `cities.json` update, end-to-end field validation | **M** |
+| **L-A.1** | `WLA1-GTFS-COMPACTION` | Static GTFS 14-day calendar compactor (`service_mask uint16` $\pm 7\text{d}$ + `baseline_days_of_week uint8`), `stop_resolution` reflexive closure (`WITHOUT ROWID`), `sqlite_stat1` optimizer embedding (`OptimizeDatabase()`), `city_config.json` schema, bundled `city-nyc.pack.zst` | **M** |
+| **L-A.2** | `WLA2-ARC-TOPOLOGY` | Planar Arc-Topology Visvalingam-Whyatt Simplification Engine with junction node locking ($A = \infty$) and mode-adaptive thresholds, generating 0-Z-fighting `transit-lines.geojson` | **M** |
+| **L-A.3** | `WLA3-GIS-BRIDGES` | GIS OpenStreetMap pedestrian bridge preservation pipeline ($\text{Walkable\_Mask} = (\text{Neighborhood} \setminus \text{Water}) \cup \text{Pedestrian\_Bridges}$) | **S** |
+| **L-A.4** | `WLA4-BOSTON-MBTA-PACK` | Boston (MBTA) multi-modal pack compilation (`city-bos.pack.zst`), R2 upload, and `cities.json` manifest update | **M** |
+
+### Track B: iOS Core Storage & Spatial Engine (Swift / GRDB / H3)
+| Sub-Wave | Task ID | Deliverable | Scope |
+| :--- | :--- | :--- | :---: |
+| **L-B.1** | `WLB1-CITY-PACK-MANAGER` | `CityPackManager` Zstd decompression via `libcompression`, SHA-256 verification, and bundled pack first-launch extraction | **M** |
+| **L-B.2** | `WLB2-DYNAMIC-BOUNDS-MIGRATION` | Dynamic `CameraBounds` & `FogPolygonMath` from `CityConfig`, per-city `explored_hexes_{slug}` tables, zero-downtime migration (`ALTER TABLE RENAME`), land-only water fog policy | **M** |
+| **L-B.3** | `WLB3-TRANSIT-HOT-SWAP` | Coordinated Two-Phase Hot-Swap Barrier (`prepareForCitySwap` + `releaseMemory()` + `DETACH`/`ATTACH` serialized in `writeWithoutTransaction` + `PRAGMA transit.optimize;` for `0xdead10cc` avoidance), coordinate-routed background tracking | **M** |
+
+### Track C: SwiftUI UI & Experience Components (SwiftUI / State)
+| Sub-Wave | Task ID | Deliverable | Scope |
+| :--- | :--- | :--- | :---: |
+| **L-C.1** | `WLC1-CITY-PROMPT-SHEET` | GPS city detection, `CityDownloadPromptSheet` with 7-day nag snooze, silent auto-switch toast, fallback ambient tracking | **M** |
+| **L-C.2** | `WLC2-CITY-SELECTOR-STATS` | Screen 3 City Selector menu pill (`[ 🟢 NYC ▾ ]`), per-city stats/journal, "All Metros Summary" mode, multi-city GPX partition | **M** |
+| **L-C.3** | `WLC3-STORAGE-MANAGER` | `Settings > Cities & Storage` manager with disk breakdown, decoupled deletion preserving `explored_hexes_{slug}`, NYC core protection | **M** |
+| **L-C.4** | `WLC4-TIMETABLE-RECONCILER` | $\pm 7$ day bitwise timetable navigation, Circular Modular Distance Matching for midnight wrap ($\tau = 10\text{m}/15\text{m}$), and `ScheduleRelationship` in-situ visual badges | **M** |
+
+### Track D: MapLibre Cartography Layer (Swift / MapLibre Native)
+| Sub-Wave | Task ID | Deliverable | Scope |
+| :--- | :--- | :--- | :---: |
+| **L-D.1** | `WLD1-GEOJSON-LOADER` | Dynamic `MLNShapeSource` line loader reading `transit-lines.geojson`, retire `MtaSubwayNetworkData.swift` | **M** |
+| **L-D.2** | `WLD2-MODAL-STYLING` | 4-tier Extended GTFS (HVT) visual cartography (Subway/PATH 6px silver casing + 4px line, LRT dashed casing, BRT/bus dots, Maritime Ferry dashed cyan line) | **S** |
+| **L-D.3** | `WLD3-FOG-CACHE-HANDSHAKE` | MapLibre fog geometry cache reset (fresh `MLNShapeCollectionFeature` allocation + atomic `@MainActor` viewport handshake) | **S** |
+

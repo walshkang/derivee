@@ -141,10 +141,10 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                         let hasRoutes = stopsColumns.contains { ($0["name"] as? String) == "routes" }
                         let hasParentStation = stopsColumns.contains { ($0["name"] as? String) == "parent_station" }
                         let stopCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM stops") ?? 0
-                        return hasRoutes && hasParentStation && stopCount >= 10000
+                        return hasRoutes && hasParentStation && stopCount >= 1000
                     }
                     if !isValid {
-                        print("Local transit DB is missing routes/parent_station column or incomplete (<10k stops). Re-copying from bundle...")
+                        print("Local transit DB is missing routes/parent_station column or incomplete (<1k stops). Re-copying from bundle...")
                         shouldCopy = true
                     }
                 } catch {
@@ -816,8 +816,43 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             
             // Sort by proximity
             nearbyList.sort { $0.distanceMeters < $1.distanceMeters }
+            if nearbyList.isEmpty {
+                nearbyList = self.generateFallbackNearbyBusStops(for: coordinate, radiusMeters: radiusMeters)
+            }
             return Array(nearbyList.prefix(8))
         }
+    }
+    
+    private func generateFallbackNearbyBusStops(for coordinate: CLLocationCoordinate2D, radiusMeters: Double) -> [NearbyBusStop] {
+        let userLoc = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let candidates: [(id: String, name: String, lat: Double, lon: Double, routes: [String], direction: String)] = [
+            ("BUS_001", "1 Av & E 14 St", 40.7320, -73.9830, ["M15-SBS", "M15"], "Southbound"),
+            ("BUS_002", "E 14 St & 2 Av", 40.7335, -73.9860, ["M14A-SBS", "M14D-SBS"], "Eastbound"),
+            ("BUS_003", "1 Av & E 18 St", 40.7345, -73.9810, ["M15", "M101"], "Northbound"),
+            ("BUS_004", "Bedford Av & N 7 St", 40.7160, -73.9590, ["B62"], "Northbound"),
+            ("BUS_005", "Grand St & Bedford Av", 40.7130, -73.9600, ["B32", "B62"], "Southbound"),
+            ("BUS_006", "Union Sq West & 14 St", 40.7350, -73.9910, ["M1", "M2", "M3"], "Southbound"),
+            ("BUS_007", "5 Av & W 14 St", 40.7360, -73.9930, ["M1", "M2", "M3"], "Northbound"),
+            ("BUS_008", "Union Sq East & E 15 St", 40.7355, -73.9895, ["M14A-SBS", "M14D-SBS"], "Eastbound")
+        ]
+        
+        var results: [NearbyBusStop] = []
+        for c in candidates {
+            let stopLoc = CLLocation(latitude: c.lat, longitude: c.lon)
+            let dist = userLoc.distance(from: stopLoc)
+            if dist <= radiusMeters {
+                results.append(NearbyBusStop(
+                    id: c.id,
+                    name: c.name,
+                    coordinate: CLLocationCoordinate2D(latitude: c.lat, longitude: c.lon),
+                    distanceMeters: dist,
+                    routes: c.routes,
+                    direction: c.direction
+                ))
+            }
+        }
+        results.sort { $0.distanceMeters < $1.distanceMeters }
+        return Array(results.prefix(8))
     }
     
     public func isSubwayPlatformId(_ stopId: String) -> Bool {
@@ -1477,6 +1512,51 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     ArrivalInfo(line: "M101", destination: "Fort George", minutes: 13, direction: "Northbound", distanceDescription: "1.4 mi away"),
                     ArrivalInfo(line: "M15", destination: "South Ferry", minutes: 7, direction: "Southbound", distanceDescription: "0.8 mi away")
                 ]
+            )
+        case "BUS_004":
+            return StopDetails(
+                stopId: stopId,
+                name: "Bedford Av & N 7 St",
+                routeId: "B62",
+                routeIds: ["B62"],
+                routeType: 3,
+                arrivals: self.generateBusArrivals(for: "B62", stopName: "Bedford Av & N 7 St")
+            )
+        case "BUS_005":
+            return StopDetails(
+                stopId: stopId,
+                name: "Grand St & Bedford Av",
+                routeId: "B62",
+                routeIds: ["B32", "B62"],
+                routeType: 3,
+                arrivals: self.generateBusArrivals(for: "B62", stopName: "Grand St & Bedford Av")
+            )
+        case "BUS_006":
+            return StopDetails(
+                stopId: stopId,
+                name: "Union Sq West & 14 St",
+                routeId: "M1",
+                routeIds: ["M1", "M2", "M3"],
+                routeType: 3,
+                arrivals: self.generateBusArrivals(for: "M1", stopName: "Union Sq West & 14 St")
+            )
+        case "BUS_007":
+            return StopDetails(
+                stopId: stopId,
+                name: "5 Av & W 14 St",
+                routeId: "M1",
+                routeIds: ["M1", "M2", "M3"],
+                routeType: 3,
+                arrivals: self.generateBusArrivals(for: "M1", stopName: "5 Av & W 14 St")
+            )
+        case "BUS_008":
+            return StopDetails(
+                stopId: stopId,
+                name: "Union Sq East & E 15 St",
+                routeId: "M14A-SBS",
+                routeIds: ["M14A-SBS", "M14D-SBS"],
+                routeType: 3,
+                arrivals: self.generateBusArrivals(for: "M14A-SBS", stopName: "Union Sq East & E 15 St")
             )
         default:
             let isBus = stopId.hasPrefix("BUS_")

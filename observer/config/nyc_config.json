@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "slug": "nyc",
+  "displayName": "New York City",
+  "region": "New York, USA",
+  "bounds": {
+    "minLatitude": 40.48,
+    "maxLatitude": 40.95,
+    "minLongitude": -74.28,
+    "maxLongitude": -73.68
+  },
+  "center": {
+    "latitude": 40.7128,
+    "longitude": -74.0060,
+    "defaultZoom": 13.0
+  },
+  "transit": {
+    "agencyName": "Metropolitan Transportation Authority",
+    "attributions": [
+      "MTA New York City Transit",
+      "Port Authority of NY & NJ",
+      "NYC Ferry by Hornblower",
+      "Roosevelt Island Operating Corp"
+    ],
+    "realtimeEndpoints": [
+      {
+        "feedId": "nyct_numbered",
+        "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "nyct_ace",
+        "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "nyct_bdfm",
+        "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "nyct_g",
+        "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "nyct_jz",
+        "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "nyct_nqrw",
+        "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "nyct_l",
+        "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l",
+        "pollIntervalSeconds": 10
+      },
+      {
+        "feedId": "nyct_sir",
+        "url": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "nyct_bus",
+        "url": "https://gtfsrt.prod.obanyc.com/tripUpdates",
+        "pollIntervalSeconds": 30
+      },
+      {
+        "feedId": "path",
+        "url": "https://path.api.panynj.gov/gtfsrealtime",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "nyc_ferry",
+        "url": "https://api.ferry.nyc/gtfs-rt",
+        "pollIntervalSeconds": 30
+      }
+    ],
+    "feedRouteMapping": {
+      "1": "nyct_numbered",
+      "2": "nyct_numbered",
+      "3": "nyct_numbered",
+      "4": "nyct_numbered",
+      "5": "nyct_numbered",
+      "6": "nyct_numbered",
+      "6X": "nyct_numbered",
+      "7": "nyct_numbered",
+      "7X": "nyct_numbered",
+      "S": "nyct_numbered",
+      "GS": "nyct_numbered",
+      "A": "nyct_ace",
+      "C": "nyct_ace",
+      "E": "nyct_ace",
+      "H": "nyct_ace",
+      "FS": "nyct_ace",
+      "B": "nyct_bdfm",
+      "D": "nyct_bdfm",
+      "F": "nyct_bdfm",
+      "FX": "nyct_bdfm",
+      "M": "nyct_bdfm",
+      "G": "nyct_g",
+      "J": "nyct_jz",
+      "Z": "nyct_jz",
+      "N": "nyct_nqrw",
+      "Q": "nyct_nqrw",
+      "R": "nyct_nqrw",
+      "W": "nyct_nqrw",
+      "L": "nyct_l",
+      "SIR": "nyct_sir"
+    },
+    "scheduleValidity": {
+      "startDate": "2026-06-01",
+      "endDate": "2026-09-01",
+      "seasonLabel": "Summer 2026 Timetable"
+    }
+  }
+}
