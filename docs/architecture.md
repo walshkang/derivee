@@ -342,3 +342,17 @@ Standard Ramer-Douglas-Peucker simplification evaluates overlapping transit rout
 4. Re-assemble route features — overlapping routes share identical Arc vertices, guaranteeing zero Z-fighting.
 
 See [docs/multi-city.md §5.4](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full mathematical formulation and mode-adaptive threshold table.
+
+### 8.12 Navigation Orientation Cluster, Ambient Dismissals & Terminus Dwell (Wave M)
+- **Bottom-Right Orientation Cluster:**
+  - MapLibre native compass (`mapView.compassViewPosition = .bottomRight`) is aligned directly above the 50×50pt `RecenterFAB` (`CGPoint(x: 20, y: 102 + safeAreaInsets.bottom)`).
+  - Preserves MapLibre's 120Hz native bearing animation, tap-to-North bearing reset, and automatic fade-in/fade-out (needle hidden in North-Up, visible when rotated).
+- **Ambient Map Dismissal Contract ("Map is the UI"):**
+  - Tapping empty ambient map space (`closest == nil` in `MapView.Coordinator.handleMapTap`) collapses floating quick lenses (`NearbyBusesCapsule`) and dismisses transient toasts (`newlyDiscoveredPOIName = nil`).
+  - Initiating user gesture pan/drag (`mapViewRegionWillChange` with gesture reason) auto-collapses expanded capsules to maintain an uncluttered viewport during navigation.
+- **Terminus Dwell & Realtime Ground Truth:**
+  - In `TransitRealtimeService`, vehicles at their initial scheduled stop/origin cross-reference `VehiclePosition.VehicleStopStatus` (`STOPPED_AT`, `INCOMING_AT`, `IN_TRANSIT_TO`).
+  - Trips dwelling at terminus or waiting for scheduled departure render as `"At Terminus"` / `"Scheduled"` rather than misleading `"x stops away"` until the vehicle physically begins transit (`IN_TRANSIT_TO` or sequence > 1).
+- **Sheet Scroll Interaction Priority:**
+  - All bottom sheets and inspector sub-sheets (`TransitRevealSheet`, `TransitMatrixInspectorView`, `TripLedgerView`) apply `.presentationContentInteraction(.scrolls)` and `.scrollBounceBehavior(.basedOnSize)` to ensure vertical dragging on scrollable metrics or timetables does not trigger interactive sheet dismissal.
+

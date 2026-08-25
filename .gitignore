@@ -37,3 +37,7 @@ observer/*.zst
 *.sqlite-wal
 *.sqlite-shm
 
+# Derived data
+.derivedData/
+
+

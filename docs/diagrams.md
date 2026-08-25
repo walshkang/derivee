@@ -286,7 +286,9 @@ classDiagram
     ContentView *-- MapView : shows (Screen 1)
     ContentView *-- TransitRevealSheet : .sheet (Screen 2)
     ContentView *-- StatsView : .sheet (Screen 3)
+    ContentView *-- NearbyBusesCapsule : overlay (Screen 1 quick lens)
     ContentView *-- DiscoveryToast : overlay
+    MapView *-- ApertureCompassNeedle : native ornament (.bottomRight)
 
     StatsView *-- SettingsView : NavigationLink (Screen 3b)
     SettingsView *-- PhilosophyView : NavigationLink (Screen 3c)
@@ -453,9 +455,13 @@ stateDiagram-v2
         MapIdle --> MapIdle: tracking runs ambiently
         MapIdle --> TransitTap: tap Ghost POI (within 200m)
         MapIdle --> Recenter: tap Recenter FAB
+        MapIdle --> ResetNorth: tap Compass Needle (reorient to 0° bearing)
+        MapIdle --> ExpandBuses: tap Nearby Buses Capsule
+        ExpandBuses --> MapIdle: ambient map tap / gesture pan
         MapIdle --> OpenStats: tap Profile FAB
         MapIdle --> DeepLink: derivee://progress
         Recenter --> MapIdle: camera animates (300ms)
+        ResetNorth --> MapIdle: bearing animates to North (needle fades)
     }
 
     Screen1_AmbientMap --> Screen2_TransitReveal: TransitTap

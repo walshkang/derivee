@@ -264,13 +264,18 @@ The app has exactly **four** screens. If a screen is not enumerated below, the a
 * **The Fog Layer:** Dark, volumetric masking polygon (see §2 3-Tier logic).
 * **The User Marker:** A native-feeling, smoothly interpolating Electric Amber (`#FFB300`) pulsing dot. Must use MapLibre's built-in user location layer with custom styling — not a custom SwiftUI view overlaid on the map.
 * **Ghost POI Nodes:** Transit beacons visible **only** within the 200m Active Vicinity Bubble. Rendered as unbranded, glowing geometric nodes (dots, diamonds) — never as traditional teardrop map pins or icons with text labels.
-* **Floating Action Buttons (FABs):** Two minimalist, translucent circular buttons floating over the map:
+* **Floating Action Buttons (FABs) & Navigation Cluster:** Minimalist, translucent circular controls floating over the map:
+  * **Profile FAB (Top-Right):** Navigates to Screen 3 (Stats and Profile). Houses **Variation A (Micro-Glyph)** in `.ultraThinMaterial`.
+  * **Bottom-Right Orientation Cluster:**
+    * **Recenter FAB (Bottom-Right):** Anchored at trailing = 20pt, bottom = 40pt. Smooth camera animation to user location (enforcing `pitch: 0.0`). Transitions between outlined and filled states based on centering.
+    * **Native MapLibre Compass Needle:** Configured at `.bottomRight`, floating directly above the Recenter FAB (`x: 20pt`, `y: 102pt + safeAreaInsets.bottom`). Styled via `ApertureCompassNeedle`. MapLibre natively manages 120Hz rotation, touch reorient (tap-to-North), and auto-fading (hidden in North-Up, visible when rotated).
 * **Subway Thoroughfares (Ambient Sub-Context):** Complete NYC subway lines rendered beneath the fog layer with day/night adaptive casings. Explored sections glow vibrantly in true MTA line colors, while unexplored sections act as orienting sub-context under the fog.
 * **Nearby Buses Quick Lens (`NearbyBusesCapsule`):** A floating frosted-glass capsule in the bottom-left of the HUD providing on-demand transit discovery within 400m:
   * **Dynamic Badge Counter:** Displays the number of nearby bus stops; refreshes automatically when walking drift exceeds 150m.
   * **Expanded Quick Card:** Lists up to 3 nearest stops with line capsules (e.g. `M15-SBS`, `B62`), walk distances (in meters), and directions.
   * **Live Protobuf Integration:** Tapping any bus stop opens Screen 2 (Transit Reveal) with live arrivals and destination details.
   * **Manual Refresh (↻):** Allows instant on-demand rescan. Displays *"Acquiring GPS position..."* during cold startup until GPS fix is locked.
+  * **Ambient Dismissal:** Automatically collapses on ambient map tap (outside POIs) or map drag/pan gestures.
 * **Camera Model (Strict 2D Orthographic Top-Down):** The camera is hard-locked to nadir view (`pitch = 0.0`). Two-finger tilt gestures are disabled (`allowsTilting = false`), and `CameraBounds.shouldAllowCameraChange` rejects any `.gestureTilt` or `pitch > 0` transition. Buildings render as crisp flat 2D footprints across all close zoom levels ($z = 13..24$), eliminating 3D perspective distortion, depth-buffer z-fighting, or building extrusions clipping through the ground-level Fog of War polygon.
 
 **Ambient Tracking:** Tracking begins silently and automatically via the native Swift `AmbientTrackingEngine` the moment Screen 1 mounts. There is **no** manual "Start/Stop Tracking" button. The app is always tracking.
@@ -279,7 +284,9 @@ The app has exactly **four** screens. If a screen is not enumerated below, the a
 * **Tap Ghost POI or Bus Stop:** Triggers a geospatial Point-in-Polygon (PiP) check or quick lens selection, opening Screen 2 (Transit Reveal native `.sheet`).
 * **Tap Nearby Buses Capsule:** Expands the quick discovery card or triggers an immediate rescan.
 * **Tap Recenter FAB:** Smooth camera animation to user location (enforcing `pitch: 0.0`).
-* **Pan & Zoom:** Smooth 2D panning and pinch-to-zoom bounded by the NYC envelope ($40.0^\circ\text{N} \le \text{lat} \le 41.5^\circ\text{N}$, $-74.5^\circ\text{W} \le \text{lon} \le -73.0^\circ\text{W}$) with $0.35^\circ$ elastic rubber-band margin and automatic `.easeOut` rollback.
+* **Tap Compass Needle:** Smoothly animates bearing back to $0^\circ$ North-Up and auto-fades needle.
+* **Ambient Tap / Map Pan:** Tapping empty map space collapses expanded capsules and dismisses transient banners. Panning/dragging also collapses expanded capsules.
+* **Pan & Zoom:** Smooth 2D panning and pinch-to-zoom bounded by the active city envelope with elastic rubber-band margin and automatic `.easeOut` rollback.
 * **Tap Profile FAB:** Navigate to Screen 3.
 * **Long-press map:** Reserved for future use. No action.
 
@@ -303,8 +310,12 @@ The app has exactly **four** screens. If a screen is not enumerated below, the a
 **UI Elements:**
 * A native iOS-style bottom sheet (via SwiftUI `.sheet`) slides up over the map.
 * **Station/Stop Name:** Large, bold SF Pro heading.
-* **Real-Time Arrivals:** GTFS-RT countdown list (e.g., "L train → Manhattan — 3 min", "8 min").
-* **Historical Reliability Sparkline:** A compact 7-day sparkline chart showing headway reliability, queried locally from the SQLite transit delta database in < 12ms.
+* **Real-Time Arrivals (Ground Truth Fidelity):** GTFS-RT countdown list with verified transit state:
+  * **In Transit:** Dynamic count (e.g., `"L train → Manhattan — 3 min"`, `"3 stops away"`).
+  * **Dwelling at Terminus:** Vehicles at their initial scheduled stop/origin display `"At Terminus"` / `"Scheduled"` rather than active momentum until physically transitioning to `IN_TRANSIT_TO`.
+  * **Platform Boarding:** Trains dwelling at platform ($0 \le \Delta t \le 30\text{s}$) display an amber `"Boarding"` pulse badge before departure.
+* **Historical Reliability Sparkline / 24×7 Heatmap:** Compact reliability overview and inspector sub-sheet.
+* **Scroll & Gesture Interaction:** All sheets and inspector modals use `.presentationContentInteraction(.scrolls)` and `.scrollBounceBehavior(.basedOnSize)` so vertical scrolls within timetables and metrics are never swallowed by the sheet's interactive drag-to-dismiss gesture.
 
 **Map Interaction (Ephemeral Route Line):**
 When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top** of the MapLibre layer stack, tracing the entire transit route across the map — cutting visually through the fog. This line:
@@ -319,11 +330,11 @@ When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top*
 
 **Definition of Done:**
 - [ ] Sheet triggers instantly upon tapping a Subway or Bus Ghost POI node (only when within 200m proximity).
-- [ ] Real-time GTFS-RT countdowns populate accurately for the selected stop.
+- [ ] Real-time GTFS-RT countdowns populate accurately for the selected stop with ground-truth terminus dwell states.
 - [ ] Historical sparkline renders from local SQLite data in < 12ms.
 - [ ] Ephemeral route `LineLayer` injects on open and unmounts on dismiss with no stale artifacts.
 - [ ] Sheet is dismissible via swipe-down and map tap.
-- [ ] Uses native SwiftUI `.sheet(presentationDetents: ...)` modifier.
+- [ ] Uses native SwiftUI `.sheet(presentationDetents: ...)` with `.presentationContentInteraction(.scrolls)`.
 
 ---
 
@@ -424,6 +435,7 @@ When a user uploads a heavy GPX file containing hundreds of new hexes, the bridg
 * **Entry:** Native SwiftUI `.spring` animation (e.g., `.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0)`). No bounce.
 * **Exit:** Smooth deceleration swipe-to-dismiss. The ephemeral route `LineLayer` must fade out with a 200ms opacity transition so it dissolves gracefully (matching the bottom sheet's spring physics) rather than unmounting instantly.
 * **Backdrop:** Dim the map slightly (`opacity: 0.3` dark overlay) when the sheet is at its expanded snap point, creating focus hierarchy.
+* **Scroll Priority:** All bottom sheets housing scrollable content enforce `.presentationContentInteraction(.scrolls)` so child vertical drags within nested views (`ScrollView`, lists, or pickers) scroll content without triggering early sheet interactive dismissal.
 
 ### 5.3 FAB Interactions
 
