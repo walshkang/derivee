@@ -13,6 +13,11 @@ public enum AppStorageKeys {
     public static let showSubwayThoroughfares = "showSubwayThoroughfares"
     public static let subwayStationMarkerStyle = "subwayStationMarkerStyle"
     public static let showNearbyBusesLens = "showNearbyBusesLens"
+    
+    // Multi-City & Pack Management (Wave L)
+    public static let activeCitySlug = "activeCitySlug"
+    public static let cityPromptSnoozeTimestamps = "cityPromptSnoozeTimestamps"
+    public static let installedCityPacks = "installedCityPacks"
 }
 
 /// Subway station bullet presentation styles

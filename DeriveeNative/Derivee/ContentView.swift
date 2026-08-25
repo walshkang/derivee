@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var isCheckingHydration = true
     @StateObject private var trackingEngine = AmbientTrackingEngine()
     @State private var spatialStore = SpatialStore()
+    @State private var cityDetectionService = CityDetectionService()
     @State private var showTransitSheet = false
     @State private var selectedTransitStop: String? = nil
     @State private var isMapCentered = true
@@ -146,26 +147,58 @@ struct ContentView: View {
                             }
                         }
                     }
+                    
+                    if let autoSwitch = cityDetectionService.autoSwitchToast, isReadyForToasts {
+                        VStack {
+                            CityAutoSwitchToast(cityName: autoSwitch.cityName, message: autoSwitch.message) {
+                                cityDetectionService.autoSwitchToast = nil
+                            }
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            
+                            Spacer()
+                        }
+                        .padding(.top, 50)
+                        .zIndex(3)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                if cityDetectionService.autoSwitchToast?.id == autoSwitch.id {
+                                    withAnimation {
+                                        cityDetectionService.autoSwitchToast = nil
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                         isReadyForToasts = true
+                    }
+                    if let loc = trackingEngine.lastKnownLocation {
+                        cityDetectionService.evaluateLocation(loc)
                     }
                     if showNearbyBusesLens {
                         scanNearbyBuses()
                     }
                 }
                 .onChange(of: currentUserLocation?.latitude) {
+                    if let cur = currentUserLocation {
+                        cityDetectionService.evaluateLocation(CLLocation(latitude: cur.latitude, longitude: cur.longitude))
+                    }
                     if showNearbyBusesLens {
                         scanNearbyBuses()
                     }
                 }
-                .onChange(of: trackingEngine.lastKnownLocation) {
+                .onChange(of: trackingEngine.lastKnownLocation) { _, newLoc in
+                    if let loc = newLoc {
+                        cityDetectionService.evaluateLocation(loc)
+                    }
                     if showNearbyBusesLens {
                         scanNearbyBuses()
                     }
                 }
                 .animation(.spring(), value: spatialStore.newlyDiscoveredPOIName)
+                .animation(.spring(), value: cityDetectionService.autoSwitchToast)
                 .onChange(of: spatialStore.newlyUnlockedHexLocation != nil) {
                     if spatialStore.newlyUnlockedHexLocation != nil {
                         glowScale = 1.0
@@ -180,6 +213,24 @@ struct ContentView: View {
                             spatialStore.newlyUnlockedHexLocation = nil
                         }
                     }
+                }
+                .sheet(item: $cityDetectionService.promptCity) { city in
+                    CityDownloadPromptSheet(
+                        city: city,
+                        onDownloadComplete: { installedCity in
+                            cityDetectionService.markCityInstalled(installedCity.slug)
+                            cityDetectionService.performAutoSwitch(to: installedCity)
+                        },
+                        onDismiss: {
+                            cityDetectionService.promptCity = nil
+                        },
+                        onSnooze: { snoozedCity in
+                            cityDetectionService.snoozeCity(slug: snoozedCity.slug)
+                        }
+                    )
+                    .presentationDetents([.fraction(0.38), .medium])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(.ultraThinMaterial)
                 }
                 .sheet(isPresented: Binding(
                     get: { showTransitSheet && selectedTransitStop != nil },
