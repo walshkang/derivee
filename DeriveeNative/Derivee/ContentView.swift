@@ -249,7 +249,18 @@ struct ContentView: View {
                     }
                 }
                 .sheet(isPresented: $showStatsView) {
-                    StatsView(trackingEngine: trackingEngine, spatialStore: spatialStore, targetCoordinate: $targetCoordinate)
+                    StatsView(
+                        trackingEngine: trackingEngine,
+                        spatialStore: spatialStore,
+                        cityDetectionService: cityDetectionService,
+                        onSwitchCity: { slug, coord in
+                            if let coord = coord {
+                                targetCoordinate = coord
+                                isMapCentered = false
+                            }
+                        },
+                        targetCoordinate: $targetCoordinate
+                    )
                 }
                 .onOpenURL { url in
                     guard url.scheme == "derivee" && url.host == "progress" else { return }

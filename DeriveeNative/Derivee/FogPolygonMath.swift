@@ -28,13 +28,24 @@ public enum FogPolygonMath {
     
     /// Generates the standard 50km NYC metropolitan bounding box coordinates with optional sub-pixel jitter.
     public static func makeDefaultBounds(jitter: Double = 0.0) -> [CLLocationCoordinate2D] {
+        makeBounds(for: CityConfig.nycDefault.bounds, jitter: jitter)
+    }
+    
+    /// Generates bounding box coordinates for a specific CityBounds with optional sub-pixel jitter.
+    /// Preserves strict Clockwise (CW) winding order required by MapLibre Native.
+    public static func makeBounds(for bounds: CityBounds, jitter: Double = 0.0) -> [CLLocationCoordinate2D] {
         [
-            CLLocationCoordinate2D(latitude: 41.5 + jitter, longitude: -74.5 - jitter), // Top Left
-            CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0),                  // Top Right
-            CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0),                  // Bottom Right
-            CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5),                  // Bottom Left
-            CLLocationCoordinate2D(latitude: 41.5 + jitter, longitude: -74.5 - jitter)   // Top Left (closed)
+            CLLocationCoordinate2D(latitude: bounds.maxLatitude + jitter, longitude: bounds.minLongitude - jitter), // Top Left
+            CLLocationCoordinate2D(latitude: bounds.maxLatitude, longitude: bounds.maxLongitude),                  // Top Right
+            CLLocationCoordinate2D(latitude: bounds.minLatitude, longitude: bounds.maxLongitude),                  // Bottom Right
+            CLLocationCoordinate2D(latitude: bounds.minLatitude, longitude: bounds.minLongitude),                  // Bottom Left
+            CLLocationCoordinate2D(latitude: bounds.maxLatitude + jitter, longitude: bounds.minLongitude - jitter)   // Top Left (closed)
         ]
+    }
+    
+    /// Generates bounding box coordinates for a specific CityConfig with optional sub-pixel jitter.
+    public static func makeBounds(for config: CityConfig, jitter: Double = 0.0) -> [CLLocationCoordinate2D] {
+        makeBounds(for: config.bounds, jitter: jitter)
     }
     
     /// Calculates the signed area of a 2D coordinate loop using the Shoelace formula.
@@ -180,9 +191,23 @@ public enum FogPolygonMath {
         return geom.worldMaskPolygon
     }
     
+    /// Generates a complete fog `MLNPolygon` spanning the specified city's bounding box with dissolved interior holes.
+    public static func generateFogPolygon(hexes: Set<String>, config: CityConfig, jitter: Double = 0.0) -> MLNPolygon {
+        let bounds = makeBounds(for: config.bounds, jitter: jitter)
+        let geom = dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
+        return geom.worldMaskPolygon
+    }
+    
     /// Generates a complete composite fog `MLNShape` (including interior unvisited islands) spanning the NYC bounding box.
     public static func generateFogShape(hexes: Set<String>, jitter: Double = 0.0) -> MLNShape {
         let bounds = makeDefaultBounds(jitter: jitter)
+        let geom = dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
+        return geom.compositeShape
+    }
+    
+    /// Generates a complete composite fog `MLNShape` (including interior unvisited islands) spanning the specified city's bounding box.
+    public static func generateFogShape(hexes: Set<String>, config: CityConfig, jitter: Double = 0.0) -> MLNShape {
+        let bounds = makeBounds(for: config.bounds, jitter: jitter)
         let geom = dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
         return geom.compositeShape
     }

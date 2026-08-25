@@ -9,7 +9,7 @@ final class GRDBObservationTests: XCTestCase {
         let dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
         
         let observation = ValueObservation.tracking { db in
-            try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes")
+            try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes_nyc")
         }
         
         let expectation = XCTestExpectation(description: "Observation fired")
@@ -30,7 +30,7 @@ final class GRDBObservationTests: XCTestCase {
         try await Task.sleep(nanoseconds: 100_000_000) // Wait for initial fetch
         
         print("🧪 [MINIMAL TEST] Inserting hex...")
-        let inserted = try await dbManager.insertDiscoveredHex(h3Index: "testhex")
+        let inserted = try await dbManager.insertDiscoveredHex(h3Index: "testhex", enforceLandOnly: false)
         print("🧪 [MINIMAL TEST] Insert returned: \(inserted)")
         
         await fulfillment(of: [expectation], timeout: 2.0)

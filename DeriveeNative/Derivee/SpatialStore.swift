@@ -6,6 +6,9 @@ import H3
 
 @Observable
 final class SpatialStore: @unchecked Sendable {
+    var activeCitySlug: String = "nyc"
+    var activeCityConfig: CityConfig = .nycDefault
+    
     var exploredHexes: Set<String> = []
     
     var newlyUnlockedHexLocation: CLLocationCoordinate2D? = nil
@@ -26,14 +29,18 @@ final class SpatialStore: @unchecked Sendable {
     @ObservationIgnored private let observationScheduler: ValueObservationScheduler
     
     init(
-        dbManager: SpatialDatabaseManager = .shared, 
+        dbManager: SpatialDatabaseManager = .shared,
+        cityConfig: CityConfig = .nycDefault,
         liveUpdatePriority: TaskPriority = .userInitiated,
         observationScheduler: ValueObservationScheduler = .async(onQueue: .main)
     ) {
         self.dbManager = dbManager
+        self.activeCityConfig = cityConfig
+        self.activeCitySlug = cityConfig.slug
         self.liveUpdatePriority = liveUpdatePriority
         self.observationScheduler = observationScheduler
-        startObservation(dbManager: dbManager)
+        CameraBounds.setActiveConfig(cityConfig)
+        startObservation(for: cityConfig.slug)
         
         Task {
             do {
@@ -51,36 +58,49 @@ final class SpatialStore: @unchecked Sendable {
         print("🔴 [SpatialStore] deinit fired! Instance deallocated: \(ObjectIdentifier(self))")
     }
     
-    private struct ExploredHex: TableRecord, FetchableRecord {
-        static let databaseTableName = "explored_hexes"
-        let h3_index: String
+    @MainActor
+    func setActiveCity(_ config: CityConfig) {
+        guard config.slug != activeCitySlug else { return }
+        logPipeline("🏙️ [SpatialStore] Hot-swapping active city to: \(config.displayName) (\(config.slug))")
+        self.activeCityConfig = config
+        self.activeCitySlug = config.slug
+        CameraBounds.setActiveConfig(config)
+        self.previousCount = 0
+        self.previousHexes.removeAll()
+        self.exploredHexes.removeAll()
+        self.currentFogShape = nil
+        self.transientHexShape = nil
+        self.newlyUnlockedHexLocation = nil
         
-        init(row: GRDB.Row) {
-            h3_index = row["h3_index"]
-        }
+        startObservation(for: config.slug)
     }
     
-    private func startObservation(dbManager: SpatialDatabaseManager) {
-        print("🔍 [SpatialStore] startObservation attaching to dbWriter pool: \(ObjectIdentifier(dbManager.dbWriter as AnyObject))")
+    private func startObservation(for citySlug: String) {
+        observationTask?.cancel()
+        observationTask = nil
+        
+        let tableName = SpatialDatabaseManager.tableName(for: citySlug)
+        logPipeline("🔍 [SpatialStore] startObservation attaching to table \(tableName) in dbWriter pool: \(ObjectIdentifier(dbManager.dbWriter as AnyObject))")
+        
         let observation = ValueObservation.tracking { db in
-            let hexes = try ExploredHex.fetchAll(db).map { $0.h3_index }
-            print("🔍 [GRDB Pipeline] ValueObservation fetched \(hexes.count) hexes on Thread: \(Thread.current)")
+            let hexes = try String.fetchAll(db, sql: "SELECT h3_index FROM \(tableName)")
+            logPipeline("🔍 [GRDB Pipeline] ValueObservation fetched \(hexes.count) hexes from \(tableName) on Thread: \(Thread.current)")
             return hexes
         }
         .handleEvents(
-            willTrackRegion: { region in print("🔍 [GRDB Pipeline] willTrackRegion: \(region)") },
-            databaseDidChange: { print("🔍 [GRDB Pipeline] databaseDidChange fired!") }
+            willTrackRegion: { region in logPipeline("🔍 [GRDB Pipeline] willTrackRegion: \(region)") },
+            databaseDidChange: { logPipeline("🔍 [GRDB Pipeline] databaseDidChange fired for \(tableName)!") }
         )
         
         observationTask = observation.start(
             in: dbManager.dbWriter,
             scheduling: self.observationScheduler,
             onError: { error in
-                print("SpatialStore Observation error: \(error)")
+                logPipeline("SpatialStore Observation error on \(tableName): \(error)")
             },
             onChange: { [weak self] hexesArray in
-                logPipeline("📍 [S4 - onChange] fired with \(hexesArray.count) hexes on Thread: \(Thread.current)")
                 guard let self = self else { return }
+                logPipeline("📍 [S4 - onChange] fired with \(hexesArray.count) hexes for \(citySlug) on Thread: \(Thread.current)")
                 
                 let newSet = Set(hexesArray)
                 let newCount = newSet.count
@@ -106,6 +126,7 @@ final class SpatialStore: @unchecked Sendable {
     private func recomputeFogShape(hexes: Set<String>, newlyUnlockedCell: UInt64?, isInitial: Bool = false) {
         polygonTask?.cancel()
         let taskPriority: TaskPriority = isInitial ? .userInitiated : self.liveUpdatePriority
+        let currentBounds = self.activeCityConfig.bounds
         polygonTask = Task.detached(priority: taskPriority) {
             logPipeline("📍 [S5 - recomputeFogShape ENTER] at \(Date()), priority=\(taskPriority), hexCount=\(hexes.count), isCancelled=\(Task.isCancelled)")
             // VERIFIED: MapLibre Native (iOS) requires Clockwise (CW) winding order for exterior bounds.
@@ -114,13 +135,7 @@ final class SpatialStore: @unchecked Sendable {
             // hasn't changed. We jitter the top-left corner slightly to force a cache invalidation 
             // and redraw the new holes.
             let jitter = Double.random(in: 0...0.00001)
-            let bounds = [
-                CLLocationCoordinate2D(latitude: 41.5 + jitter, longitude: -74.5 - jitter), // Top Left
-                CLLocationCoordinate2D(latitude: 41.5, longitude: -73.0), // Top Right
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0), // Bottom Right
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -74.5), // Bottom Left
-                CLLocationCoordinate2D(latitude: 41.5 + jitter, longitude: -74.5 - jitter)  // Top Left (closed)
-            ]
+            let bounds = FogPolygonMath.makeBounds(for: currentBounds, jitter: jitter)
             
             let fogGeometry = FogPolygonMath.dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
             
@@ -173,12 +188,13 @@ final class SpatialStore: @unchecked Sendable {
         }
     }
     
-    func insertHex(_ h3Index: String) {
+    func insertHex(_ h3Index: String, citySlug: String? = nil, enforceLandOnly: Bool = true) {
+        let targetSlug = citySlug ?? activeCitySlug
         Task {
             do {
-                try await self.dbManager.insertDiscoveredHex(h3Index: h3Index)
+                try await self.dbManager.insertDiscoveredHex(h3Index: h3Index, citySlug: targetSlug, enforceLandOnly: enforceLandOnly)
             } catch {
-                print("Failed to insert hex \(h3Index): \(error)")
+                print("Failed to insert hex \(h3Index) for \(targetSlug): \(error)")
             }
         }
     }

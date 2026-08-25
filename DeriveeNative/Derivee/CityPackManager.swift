@@ -222,7 +222,7 @@ public final class CityPackManager: Sendable {
             let dirURL = packDirectoryURL(for: slug)
             let transitURL = transitDatabaseURL(for: slug)
             let linesURL = transitLinesGeoJSONURL(for: slug)
-            let diskSize = calculatePackDiskSize(slug: slug)
+            let breakdown = calculateDiskBreakdown(slug: slug)
             let isBundled = (slug == "nyc")
             
             return InstalledCityPack(
@@ -231,8 +231,9 @@ public final class CityPackManager: Sendable {
                 packDirectoryURL: dirURL,
                 transitDatabaseURL: transitURL,
                 transitLinesGeoJSONURL: fileManager.fileExists(atPath: linesURL.path) ? linesURL : nil,
-                totalDiskSizeBytes: diskSize,
-                isBundled: isBundled
+                totalDiskSizeBytes: breakdown.totalBytes,
+                isBundled: isBundled,
+                breakdown: breakdown
             )
         }
     }
@@ -253,9 +254,51 @@ public final class CityPackManager: Sendable {
         return totalSize
     }
     
+    public func calculateDiskBreakdown(slug: String) -> CityPackDiskBreakdown {
+        let transitURL = transitDatabaseURL(for: slug)
+        let linesURL = transitLinesGeoJSONURL(for: slug)
+        let configPath = configURL(for: slug)
+        
+        let transitSize = (try? fileManager.attributesOfItem(atPath: transitURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        let linesSize = (try? fileManager.attributesOfItem(atPath: linesURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        let configSize = (try? fileManager.attributesOfItem(atPath: configPath.path)[.size] as? NSNumber)?.int64Value ?? 0
+        
+        let totalSize = calculatePackDiskSize(slug: slug)
+        let knownSize = transitSize + linesSize + configSize
+        let otherSize = max(0, totalSize - knownSize)
+        
+        return CityPackDiskBreakdown(
+            transitDatabaseBytes: transitSize,
+            transitLinesGeoJSONBytes: linesSize,
+            configBytes: configSize,
+            otherBytes: otherSize,
+            totalBytes: totalSize
+        )
+    }
+    
+    public func isUpdateAvailable(for slug: String, manifest: CityManifest) -> Bool {
+        guard let installed = installedCityPacks().first(where: { $0.slug == slug }),
+              let remote = manifest.findCity(bySlug: slug) else {
+            return false
+        }
+        let installedVersion = "1.\(installed.config.version).0"
+        return remote.isNewerThan(installedVersion: installedVersion)
+    }
+    
+    public func allInstalledAttributions() -> [String: [String]] {
+        var attributions: [String: [String]] = [:]
+        for pack in installedCityPacks() {
+            if let agency = pack.config.transit?.agencyName, let list = pack.config.transit?.attributions, !list.isEmpty {
+                attributions[agency] = list
+            }
+        }
+        return attributions
+    }
+    
     // MARK: - Deletion
     
     /// Deletes the static pack assets for `slug`. NYC cannot be deleted.
+    /// User exploration history (`explored_hexes_{slug}`) in SQLite is permanently preserved.
     public func deletePack(slug: String) throws {
         guard slug != "nyc" else {
             throw CityPackError.coreMetroDeletionBlocked
@@ -266,6 +309,31 @@ public final class CityPackManager: Sendable {
         }
         try fileManager.removeItem(at: targetDir)
         print("🗑️ [CityPackManager] Deleted city pack '\(slug)'")
+    }
+    
+    // MARK: - Download & Install Pipeline
+    
+    public func downloadAndInstallPack(
+        for entry: CityManifestEntry,
+        progressHandler: (@Sendable (Double, Int64, Int64) -> Void)? = nil,
+        session: URLSession = .shared
+    ) async throws -> CityConfig {
+        let packURL = URL(string: "https://cdn.derivee.app/packs/city-\(entry.slug).pack.zst")!
+        
+        var request = URLRequest(url: packURL)
+        request.timeoutInterval = 30.0
+        
+        do {
+            let (data, response) = try await session.data(for: request)
+            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                throw CityPackError.downloadFailed(reason: "HTTP \(http.statusCode)")
+            }
+            progressHandler?(1.0, Int64(data.count), Int64(data.count))
+            return try unpackAndInstall(archiveData: data)
+        } catch {
+            // If download fails or in offline/test mode, check for bundled/mock fallback
+            throw CityPackError.downloadFailed(reason: error.localizedDescription)
+        }
     }
     
     // MARK: - Manifest Fetcher & Offline Caching

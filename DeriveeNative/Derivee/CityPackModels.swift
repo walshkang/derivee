@@ -366,6 +366,60 @@ public struct CityManifest: Codable, Sendable, Equatable {
     )
 }
 
+// MARK: - Disk Breakdown Descriptor
+
+public struct CityPackDiskBreakdown: Sendable, Equatable, Hashable {
+    public let transitDatabaseBytes: Int64
+    public let transitLinesGeoJSONBytes: Int64
+    public let configBytes: Int64
+    public let otherBytes: Int64
+    public let totalBytes: Int64
+    
+    public init(
+        transitDatabaseBytes: Int64,
+        transitLinesGeoJSONBytes: Int64,
+        configBytes: Int64,
+        otherBytes: Int64 = 0,
+        totalBytes: Int64? = nil
+    ) {
+        self.transitDatabaseBytes = transitDatabaseBytes
+        self.transitLinesGeoJSONBytes = transitLinesGeoJSONBytes
+        self.configBytes = configBytes
+        self.otherBytes = otherBytes
+        self.totalBytes = totalBytes ?? (transitDatabaseBytes + transitLinesGeoJSONBytes + configBytes + otherBytes)
+    }
+    
+    public var formattedTotal: String { CityManifest.formatBytes(totalBytes) }
+    public var formattedTransitDB: String { CityManifest.formatBytes(transitDatabaseBytes) }
+    public var formattedTransitLines: String { CityManifest.formatBytes(transitLinesGeoJSONBytes) }
+    public var formattedConfig: String { CityManifest.formatBytes(configBytes) }
+    public var formattedOther: String { CityManifest.formatBytes(otherBytes) }
+}
+
+extension CityManifestEntry {
+    /// Compares this manifest entry's version against an installed version string.
+    public func isNewerThan(installedVersion: String) -> Bool {
+        return Self.compareVersionStrings(remote: version, installed: installedVersion) > 0
+    }
+    
+    public static func compareVersionStrings(remote: String, installed: String) -> Int {
+        let remoteClean = remote.trimmingCharacters(in: CharacterSet(charactersIn: "vV "))
+        let installedClean = installed.trimmingCharacters(in: CharacterSet(charactersIn: "vV "))
+        
+        let remoteParts = remoteClean.split(separator: ".").compactMap { Int($0) }
+        let installedParts = installedClean.split(separator: ".").compactMap { Int($0) }
+        
+        let maxCount = max(remoteParts.count, installedParts.count)
+        for i in 0..<maxCount {
+            let r = i < remoteParts.count ? remoteParts[i] : 0
+            let l = i < installedParts.count ? installedParts[i] : 0
+            if r > l { return 1 }
+            if r < l { return -1 }
+        }
+        return 0
+    }
+}
+
 // MARK: - Installed City Pack Descriptor
 
 public struct InstalledCityPack: Sendable, Equatable, Identifiable {
@@ -378,6 +432,7 @@ public struct InstalledCityPack: Sendable, Equatable, Identifiable {
     public let transitLinesGeoJSONURL: URL?
     public let totalDiskSizeBytes: Int64
     public let isBundled: Bool
+    public let breakdown: CityPackDiskBreakdown
     
     public init(
         slug: String,
@@ -386,7 +441,8 @@ public struct InstalledCityPack: Sendable, Equatable, Identifiable {
         transitDatabaseURL: URL,
         transitLinesGeoJSONURL: URL?,
         totalDiskSizeBytes: Int64,
-        isBundled: Bool
+        isBundled: Bool,
+        breakdown: CityPackDiskBreakdown? = nil
     ) {
         self.slug = slug
         self.config = config
@@ -395,6 +451,13 @@ public struct InstalledCityPack: Sendable, Equatable, Identifiable {
         self.transitLinesGeoJSONURL = transitLinesGeoJSONURL
         self.totalDiskSizeBytes = totalDiskSizeBytes
         self.isBundled = isBundled
+        self.breakdown = breakdown ?? CityPackDiskBreakdown(
+            transitDatabaseBytes: 0,
+            transitLinesGeoJSONBytes: 0,
+            configBytes: 0,
+            otherBytes: 0,
+            totalBytes: totalDiskSizeBytes
+        )
     }
 }
 

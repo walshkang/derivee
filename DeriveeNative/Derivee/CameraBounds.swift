@@ -3,13 +3,25 @@ import CoreLocation
 import MapLibre
 
 public struct CameraBounds {
-    public static let minLatitude: Double = 40.0
-    public static let maxLatitude: Double = 41.5
-    public static let minLongitude: Double = -74.5
-    public static let maxLongitude: Double = -73.0
+    public static var activeConfig: CityConfig = .nycDefault
+    
+    public static var minLatitude: Double { activeConfig.bounds.minLatitude }
+    public static var maxLatitude: Double { activeConfig.bounds.maxLatitude }
+    public static var minLongitude: Double { activeConfig.bounds.minLongitude }
+    public static var maxLongitude: Double { activeConfig.bounds.maxLongitude }
     
     /// Maximum allowable elastic margin beyond the hard boundary during active gestures (~5 km)
     public static let rubberBandMargin: Double = 0.05
+    
+    /// Sets the active metropolitan configuration for camera clamping and bounds enforcement.
+    public static func setActiveConfig(_ config: CityConfig) {
+        activeConfig = config
+    }
+    
+    /// Resets the active configuration back to the default NYC metropolitan envelope.
+    public static func resetToDefault() {
+        activeConfig = .nycDefault
+    }
     
     /// Checks if a coordinate is strictly within the active fog boundary envelope.
     public static func isWithinBounds(_ coordinate: CLLocationCoordinate2D) -> Bool {

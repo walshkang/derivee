@@ -373,13 +373,16 @@ final class AmbientTrackingEngine: ObservableObject {
             
             lastSavedHex = indexString
             
+            // Coordinate-routed background tracking: Determine target city table from coordinate math
+            let targetCitySlug = CityManifest.defaultManifest.findCity(containing: validLocation.coordinate)?.slug ?? "nyc"
+            
             Task.detached { [weak self] in
                 guard let self = self else { return }
                 do {
-                    print("⚡️ [AmbientTrackingEngine] processLocation inserting hex \(indexString) using dbWriter pool: \(ObjectIdentifier(self.databaseManager.dbWriter as AnyObject))")
-                    // Hand off to the database
-                    let isNew = try await self.databaseManager.insertDiscoveredHex(h3Index: indexString)
-                    logPipeline("📍 [S3 - insertDiscoveredHex] hex=\(indexString), isNew=\(isNew)")
+                    print("⚡️ [AmbientTrackingEngine] processLocation inserting hex \(indexString) for city '\(targetCitySlug)' using dbWriter pool: \(ObjectIdentifier(self.databaseManager.dbWriter as AnyObject))")
+                    // Hand off to the database with strict land-only policy
+                    let isNew = try await self.databaseManager.insertDiscoveredHex(h3Index: indexString, citySlug: targetCitySlug, enforceLandOnly: true)
+                    logPipeline("📍 [S3 - insertDiscoveredHex] hex=\(indexString), city=\(targetCitySlug), isNew=\(isNew)")
                     let nbhd = try? await self.databaseManager.fetchNeighborhoodName(for: indexString)
                     
                     await MainActor.run {
@@ -403,7 +406,7 @@ final class AmbientTrackingEngine: ObservableObject {
                             }
                         }
                     }
-                    print("Processed hex: \(indexString) (New: \(isNew))")
+                    print("Processed hex: \(indexString) (City: \(targetCitySlug), New: \(isNew))")
                 } catch {
                     logPipeline("❌ Failed to process hex: \(error)")
                 }

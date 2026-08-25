@@ -5,6 +5,50 @@ import MapLibre
 
 final class CameraBoundsTests: XCTestCase {
     
+    override func setUp() {
+        super.setUp()
+        CameraBounds.resetToDefault()
+    }
+    
+    override func tearDown() {
+        CameraBounds.resetToDefault()
+        super.tearDown()
+    }
+    
+    // MARK: - Multi-City Dynamic Bounds Switching
+    
+    func testDynamicCitySwitching() {
+        // Default NYC
+        XCTAssertEqual(CameraBounds.activeConfig.slug, "nyc")
+        let manhattan = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
+        let bostonDowntown = CLLocationCoordinate2D(latitude: 42.3601, longitude: -71.0589)
+        
+        XCTAssertTrue(CameraBounds.isWithinBounds(manhattan))
+        XCTAssertFalse(CameraBounds.isWithinBounds(bostonDowntown))
+        
+        // Switch to Boston
+        CameraBounds.setActiveConfig(.bostonDefault)
+        XCTAssertEqual(CameraBounds.activeConfig.slug, "bos")
+        XCTAssertFalse(CameraBounds.isWithinBounds(manhattan), "Manhattan must be outside Boston bounds")
+        XCTAssertTrue(CameraBounds.isWithinBounds(bostonDowntown), "Boston downtown must be inside Boston bounds")
+        
+        // Boston Clamping
+        let northOfBoston = CLLocationCoordinate2D(latitude: 42.60, longitude: -71.0589)
+        let clampedBos = CameraBounds.clampedCoordinate(for: northOfBoston)
+        XCTAssertEqual(clampedBos.latitude, CityConfig.bostonDefault.bounds.maxLatitude, accuracy: 1e-6)
+        XCTAssertEqual(clampedBos.longitude, -71.0589, accuracy: 1e-6)
+        
+        // Boston Rubber Band
+        let slightNorthBos = CLLocationCoordinate2D(latitude: CityConfig.bostonDefault.bounds.maxLatitude + 0.03, longitude: -71.0589)
+        XCTAssertFalse(CameraBounds.isWithinBounds(slightNorthBos))
+        XCTAssertTrue(CameraBounds.isWithinRubberBandLimit(slightNorthBos))
+        
+        // Reset to default
+        CameraBounds.resetToDefault()
+        XCTAssertEqual(CameraBounds.activeConfig.slug, "nyc")
+        XCTAssertTrue(CameraBounds.isWithinBounds(manhattan))
+    }
+    
     // MARK: - Bounds Verification
     
     func testCoordinateInsideBounds() {

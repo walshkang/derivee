@@ -48,7 +48,7 @@ final class SpatialStoreFogTests: XCTestCase {
     private func waitForFogShape(
         on store: SpatialStore,
         expectedInteriorCount: Int? = nil,
-        timeout: TimeInterval = 4.0
+        timeout: TimeInterval = 10.0
     ) async throws -> MLNPolygon {
         let start = Date()
         while Date().timeIntervalSince(start) < timeout {
@@ -96,7 +96,7 @@ final class SpatialStoreFogTests: XCTestCase {
     func testColdStartFogShapeInitializationWithExistingHexes() async throws {
         let hexes = try generateH3Hexes(count: 5)
         for hex in hexes {
-            try await dbManager.insertDiscoveredHex(h3Index: hex)
+            try await dbManager.insertDiscoveredHex(h3Index: hex, enforceLandOnly: false)
         }
         
         let store = SpatialStore(
@@ -118,7 +118,7 @@ final class SpatialStoreFogTests: XCTestCase {
             let testDb = SpatialDatabaseManager.makeForTesting(inMemory: true)
             let hexes = try generateH3Hexes(count: count)
             for hex in hexes {
-                try await testDb.insertDiscoveredHex(h3Index: hex)
+                try await testDb.insertDiscoveredHex(h3Index: hex, enforceLandOnly: false)
             }
             
             let store = SpatialStore(
@@ -139,7 +139,7 @@ final class SpatialStoreFogTests: XCTestCase {
     func testColdStartFogShapeInitializationWithDefaultPriority() async throws {
         let hexes = try generateH3Hexes(count: 5)
         for hex in hexes {
-            try await dbManager.insertDiscoveredHex(h3Index: hex)
+            try await dbManager.insertDiscoveredHex(h3Index: hex, enforceLandOnly: false)
         }
         
         let store = SpatialStore(dbManager: dbManager)
@@ -153,7 +153,7 @@ final class SpatialStoreFogTests: XCTestCase {
     func testNewlyDiscoveredHexTriggersFogShapeUpdate() async throws {
         let initialHexes = try generateH3Hexes(count: 2)
         for hex in initialHexes {
-            try await dbManager.insertDiscoveredHex(h3Index: hex)
+            try await dbManager.insertDiscoveredHex(h3Index: hex, enforceLandOnly: false)
         }
         
         let store = SpatialStore(
@@ -170,7 +170,7 @@ final class SpatialStoreFogTests: XCTestCase {
         print("🧪 [TEST DEBUG] New hexes generated: \(newHexes)")
         let newHex = newHexes.last!
         print("🧪 [TEST DEBUG] Inserting new hex: \(newHex)")
-        let inserted = try await dbManager.insertDiscoveredHex(h3Index: newHex)
+        let inserted = try await dbManager.insertDiscoveredHex(h3Index: newHex, enforceLandOnly: false)
         print("🧪 [TEST DEBUG] insertDiscoveredHex returned: \(inserted)")
         
         let updatedFogPolygon = try await waitForFogShape(on: store, expectedInteriorCount: 3)

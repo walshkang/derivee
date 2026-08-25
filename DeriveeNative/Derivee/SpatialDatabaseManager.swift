@@ -200,18 +200,83 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             try db.rename(table: "explored_hexes_new", to: "explored_hexes")
         }
         
+        migrator.registerMigration("v5") { db in
+            // Wave L-B.2: Zero-downtime schema migration from explored_hexes to explored_hexes_nyc
+            let hasLegacy = try db.tableExists("explored_hexes")
+            let hasNyc = try db.tableExists("explored_hexes_nyc")
+            
+            if hasLegacy && !hasNyc {
+                try db.execute(sql: "ALTER TABLE explored_hexes RENAME TO explored_hexes_nyc;")
+            } else if !hasNyc {
+                try db.create(table: "explored_hexes_nyc") { t in
+                    t.column("h3_index", .text).primaryKey()
+                }
+            }
+            
+            for slug in ["bos", "chi", "sf", "phl", "dc"] {
+                let tbl = "explored_hexes_\(slug)"
+                if try !db.tableExists(tbl) {
+                    try db.create(table: tbl) { t in
+                        t.column("h3_index", .text).primaryKey()
+                    }
+                }
+            }
+        }
+        
         return migrator
+    }
+    
+    // MARK: - Multi-City Table Helpers
+    
+    public static func tableName(for citySlug: String) -> String {
+        let sanitized = citySlug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return "explored_hexes_\(sanitized)"
+    }
+    
+    public static func ensureExploredHexesTableExists(for citySlug: String, in db: Database) throws {
+        let tbl = tableName(for: citySlug)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS \(tbl) (
+                h3_index TEXT PRIMARY KEY
+            );
+        """)
+    }
+    
+    /// Evaluates if a given H3 index resides on a terrestrial landmass or pedestrian bridge.
+    /// Returns true if the hex is walkable land, or if no neighborhood mask is attached.
+    public func isLandHex(h3Index: String, in db: Database) throws -> Bool {
+        do {
+            let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM neighborhood.neighborhood_hexes WHERE h3_index = ? LIMIT 1", arguments: [h3Index]) ?? 0
+            return count > 0
+        } catch {
+            // If neighborhood database is not attached (e.g. testing or unmounted metro pack), allow all hexes by default
+            return true
+        }
     }
     
     // Asynchronous write
     @discardableResult
-    func insertDiscoveredHex(h3Index: String) async throws -> Bool {
+    func insertDiscoveredHex(h3Index: String, citySlug: String = "nyc", enforceLandOnly: Bool = true) async throws -> Bool {
+        let table = Self.tableName(for: citySlug)
         return try await dbWriter.write { db in
+            if enforceLandOnly {
+                let isLand = try self.isLandHex(h3Index: h3Index, in: db)
+                if !isLand {
+                    // Strict Land-Only Fog Policy: Quiet water gliding (skip insert over open water)
+                    return false
+                }
+            }
+            
+            try Self.ensureExploredHexesTableExists(for: citySlug, in: db)
+            
+            let exists = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table) WHERE h3_index = ?", arguments: [h3Index]) ?? 0
+            if exists > 0 { return false }
+            
             try db.execute(sql: """
-                INSERT OR IGNORE INTO explored_hexes (h3_index)
+                INSERT OR IGNORE INTO \(table) (h3_index)
                 VALUES (?)
             """, arguments: [h3Index])
-            return db.changesCount > 0
+            return true
         }
     }
     
@@ -234,18 +299,139 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    func resetExplorationData() async throws {
+    func resetExplorationData(citySlug: String? = nil) async throws {
         try await dbWriter.write { db in
-            try db.execute(sql: "DELETE FROM explored_hexes")
-            try db.execute(sql: "DELETE FROM discovered_pois")
+            if let slug = citySlug {
+                let table = Self.tableName(for: slug)
+                if try db.tableExists(table) {
+                    try db.execute(sql: "DELETE FROM \(table)")
+                }
+            } else {
+                let rows = try Row.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'explored_hexes_%' OR name = 'explored_hexes')")
+                for row in rows {
+                    let name: String = row["name"]
+                    try db.execute(sql: "DELETE FROM \(name)")
+                }
+                try db.execute(sql: "DELETE FROM discovered_pois")
+            }
         }
     }
     
-    func insertHexesBatch(h3Indices: [String]) async throws {
+    func fetchExploredHexes(citySlug: String = "nyc") async throws -> Set<String> {
+        let table = Self.tableName(for: citySlug)
+        return try await dbWriter.read { db in
+            guard try db.tableExists(table) else { return [] }
+            let rows = try String.fetchAll(db, sql: "SELECT h3_index FROM \(table)")
+            return Set(rows)
+        }
+    }
+    
+    func insertHexesBatch(h3Indices: [String], citySlug: String = "nyc", enforceLandOnly: Bool = false) async throws {
+        let table = Self.tableName(for: citySlug)
         try await dbWriter.write { db in
+            try Self.ensureExploredHexesTableExists(for: citySlug, in: db)
             for index in h3Indices {
-                try db.execute(sql: "INSERT OR IGNORE INTO explored_hexes (h3_index) VALUES (?)", arguments: [index])
+                if enforceLandOnly {
+                    let isLand = try self.isLandHex(h3Index: index, in: db)
+                    if !isLand { continue }
+                }
+                try db.execute(sql: "INSERT OR IGNORE INTO \(table) (h3_index) VALUES (?)", arguments: [index])
             }
+        }
+    }
+    
+    /// Single atomic SQLite transaction partitioning and inserting hexes across multiple city tables.
+    func batchInsertMultiCityHexes(_ partitionedHexes: [String: [String]], enforceLandOnly: Bool = false) async throws {
+        try await dbWriter.write { db in
+            for (slug, hexList) in partitionedHexes {
+                guard !hexList.isEmpty else { continue }
+                try Self.ensureExploredHexesTableExists(for: slug, in: db)
+                let table = Self.tableName(for: slug)
+                
+                for index in hexList {
+                    if enforceLandOnly {
+                        let isLand = try self.isLandHex(h3Index: index, in: db)
+                        if !isLand { continue }
+                    }
+                    try db.execute(sql: "INSERT OR IGNORE INTO \(table) (h3_index) VALUES (?)", arguments: [index])
+                }
+            }
+        }
+    }
+    
+    /// Fetches total count of explored hexes for a specific city.
+    func fetchExploredHexCount(citySlug: String) async throws -> Int {
+        let table = Self.tableName(for: citySlug)
+        return try await dbWriter.read { db in
+            guard try db.tableExists(table) else { return 0 }
+            return try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? 0
+        }
+    }
+    
+    /// Aggregates exploration data across all cities for the Screen 3 "All Metros Summary" mode.
+    func fetchAllMetrosSummary(
+        installedSlugs: Set<String> = ["nyc"],
+        manifest: CityManifest = .defaultManifest
+    ) async throws -> AllMetrosSummaryData {
+        return try await dbWriter.read { db in
+            var cityOverviews: [CityOverviewProgress] = []
+            var totalGlobalCleared = 0
+            var totalGlobalHexes = 0
+            var citiesExploredCount = 0
+            
+            // Baseline total hex counts per city (NYC known from neighborhood_stats, others estimated or configured)
+            let cityTotalHexEstimates: [String: Int] = [
+                "nyc": 362118,
+                "bos": 115000,
+                "chi": 220000
+            ]
+            
+            for entry in manifest.cities {
+                let slug = entry.slug
+                let table = Self.tableName(for: slug)
+                let hasTable = try db.tableExists(table)
+                let clearedCount: Int
+                if hasTable {
+                    clearedCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? 0
+                } else {
+                    clearedCount = 0
+                }
+                
+                let isInstalled = installedSlugs.contains(slug) || entry.isBundled
+                let totalHexes = cityTotalHexEstimates[slug] ?? 150000
+                let centerCoord = entry.center?.coordinate ?? CLLocationCoordinate2D(latitude: 0, longitude: 0)
+                
+                if clearedCount > 0 {
+                    citiesExploredCount += 1
+                }
+                
+                totalGlobalCleared += clearedCount
+                totalGlobalHexes += totalHexes
+                
+                let overview = CityOverviewProgress(
+                    slug: slug,
+                    displayName: entry.displayName,
+                    region: entry.region,
+                    clearedHexes: clearedCount,
+                    totalHexes: totalHexes,
+                    isInstalled: isInstalled,
+                    centerCoordinate: centerCoord,
+                    bounds: entry.bounds
+                )
+                cityOverviews.append(overview)
+            }
+            
+            // Calculate total drift distance in km: Resolution 11 hex edge ~24.9m, average step spacing between consecutive unique hexes ~45m (0.045 km)
+            let totalDriftKm = Double(totalGlobalCleared) * 0.045
+            
+            return AllMetrosSummaryData(
+                totalGlobalClearedHexes: totalGlobalCleared,
+                totalGlobalHexes: max(1, totalGlobalHexes),
+                totalDriftDistanceKm: totalDriftKm,
+                citiesExploredCount: citiesExploredCount,
+                totalCitiesCount: max(1, manifest.cities.count),
+                cityOverviews: cityOverviews
+            )
         }
     }
     
@@ -276,15 +462,22 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    func fetchNeighborhoodProgression() async throws -> [NeighborhoodProgress] {
+    func fetchNeighborhoodProgression(citySlug: String = "nyc") async throws -> [NeighborhoodProgress] {
+        let table = Self.tableName(for: citySlug)
         return try await dbWriter.read { db in
             let statsRows = try Row.fetchAll(db, sql: "SELECT id, name, total_hexes, centroid_lat, centroid_lng FROM neighborhood.neighborhood_stats")
-            let clearedRows = try Row.fetchAll(db, sql: """
-            SELECT nh.neighborhood_id, COUNT(eh.h3_index) as cleared_hexes
-            FROM explored_hexes eh
-            CROSS JOIN neighborhood.neighborhood_hexes nh ON eh.h3_index = nh.h3_index
-            GROUP BY nh.neighborhood_id
-            """)
+            let hasTable = try db.tableExists(table)
+            let clearedRows: [Row]
+            if hasTable {
+                clearedRows = try Row.fetchAll(db, sql: """
+                SELECT nh.neighborhood_id, COUNT(eh.h3_index) as cleared_hexes
+                FROM \(table) eh
+                CROSS JOIN neighborhood.neighborhood_hexes nh ON eh.h3_index = nh.h3_index
+                GROUP BY nh.neighborhood_id
+                """)
+            } else {
+                clearedRows = []
+            }
             
             var clearedMap: [String: Int] = [:]
             for row in clearedRows {
@@ -331,26 +524,38 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    func fetchExplorationJournalData() async throws -> ExplorationJournalData {
+    func fetchExplorationJournalData(citySlug: String = "nyc") async throws -> ExplorationJournalData {
         let startTime = CFAbsoluteTimeGetCurrent()
         defer {
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
             print("⏱️ fetchExplorationJournalData executed in \(String(format: "%.2f", elapsed))ms")
         }
         
+        let table = Self.tableName(for: citySlug)
         return try await dbWriter.read { db in
+            let hasTable = try db.tableExists(table)
             // 1. Fetch all explored hexes and discovered POIs
-            let exploredHexes = Set(try String.fetchAll(db, sql: "SELECT h3_index FROM explored_hexes"))
+            let exploredHexes: Set<String>
+            if hasTable {
+                exploredHexes = Set(try String.fetchAll(db, sql: "SELECT h3_index FROM \(table)"))
+            } else {
+                exploredHexes = []
+            }
             let discoveredPOIs = Set(try String.fetchAll(db, sql: "SELECT poi_id FROM discovered_pois"))
             
             // 2. Fetch neighborhood stats and cleared counts via fast indexed join
             let statsRows = try Row.fetchAll(db, sql: "SELECT id, name, total_hexes FROM neighborhood.neighborhood_stats")
-            let clearedRows = try Row.fetchAll(db, sql: """
-            SELECT nh.neighborhood_id, COUNT(eh.h3_index) as cleared_hexes
-            FROM explored_hexes eh
-            CROSS JOIN neighborhood.neighborhood_hexes nh ON eh.h3_index = nh.h3_index
-            GROUP BY nh.neighborhood_id
-            """)
+            let clearedRows: [Row]
+            if hasTable {
+                clearedRows = try Row.fetchAll(db, sql: """
+                SELECT nh.neighborhood_id, COUNT(eh.h3_index) as cleared_hexes
+                FROM \(table) eh
+                CROSS JOIN neighborhood.neighborhood_hexes nh ON eh.h3_index = nh.h3_index
+                GROUP BY nh.neighborhood_id
+                """)
+            } else {
+                clearedRows = []
+            }
             
             var clearedMap: [String: Int] = [:]
             for row in clearedRows {
@@ -539,15 +744,25 @@ final class SpatialDatabaseManager: @unchecked Sendable {
         public let name: String
         public let routeId: String
         public let routeIds: [String]
-        public let routeType: Int // 1: Subway, 3: Bus
+        public let routeType: Int // GTFS route_type (0: LRT, 1: Subway, 2: Rail, 3: Bus, 4: Ferry, etc.)
+        public let modalClass: TransitModalClass
         public let arrivals: [ArrivalInfo]
         
-        public init(stopId: String, name: String, routeId: String, routeIds: [String] = [], routeType: Int, arrivals: [ArrivalInfo]) {
+        public init(
+            stopId: String,
+            name: String,
+            routeId: String,
+            routeIds: [String] = [],
+            routeType: Int,
+            modalClass: TransitModalClass? = nil,
+            arrivals: [ArrivalInfo]
+        ) {
             self.stopId = stopId
             self.name = name
             self.routeId = routeId
             self.routeIds = routeIds.isEmpty ? [routeId] : routeIds
             self.routeType = routeType
+            self.modalClass = modalClass ?? TransitModalClass.from(routeType: routeType)
             self.arrivals = arrivals
         }
     }
@@ -883,14 +1098,16 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                 let hasParentStation = columns.contains { ($0["name"] as? String) == "parent_station" }
                 let hasLat = columns.contains { ($0["name"] as? String) == "stop_lat" }
                 let hasLon = columns.contains { ($0["name"] as? String) == "stop_lon" }
+                let hasRouteType = columns.contains { ($0["name"] as? String) == "route_type" }
                 
                 let routesSelect = hasRoutes ? "routes" : "'' AS routes"
                 let locTypeSelect = hasLocationType ? "location_type" : "1 AS location_type"
                 let parentSelect = hasParentStation ? "parent_station" : "NULL AS parent_station"
                 let latSelect = hasLat ? "stop_lat" : "NULL AS stop_lat"
                 let lonSelect = hasLon ? "stop_lon" : "NULL AS stop_lon"
+                let routeTypeSelect = hasRouteType ? "route_type" : "NULL AS route_type"
                 
-                let sql = "SELECT stop_name, \(locTypeSelect), \(routesSelect), \(parentSelect), \(latSelect), \(lonSelect) FROM transit.stops WHERE stop_id = ?"
+                let sql = "SELECT stop_name, \(locTypeSelect), \(routesSelect), \(parentSelect), \(latSelect), \(lonSelect), \(routeTypeSelect) FROM transit.stops WHERE stop_id = ?"
                 if let row = try Row.fetchOne(db, sql: sql, arguments: [stopId]) {
                     var name: String = row["stop_name"] ?? ""
                     var locationType: Int = row["location_type"] ?? 1
@@ -898,6 +1115,7 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                     let parentStationId: String? = row["parent_station"]
                     let stopLat: Double? = row["stop_lat"]
                     let stopLon: Double? = row["stop_lon"]
+                    let rawRouteType: Int? = row["route_type"]
                     
                     let isPrimaryGeneric = self.isGenericStopName(name, stopId: stopId)
                     
@@ -952,24 +1170,38 @@ final class SpatialDatabaseManager: @unchecked Sendable {
                         }
                     }
                     
-                    let isBus = locationType == 0 || stopId.hasPrefix("BUS_") || name.contains("/")
-                    let routeType = isBus ? 3 : 1
+                    let isBusLocation = locationType == 0 || stopId.hasPrefix("BUS_") || name.contains("/")
                     
                     let routeIds: [String]
                     if let rStr = routesStr, !rStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         let parsed = rStr.components(separatedBy: ",")
                             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                             .filter { !$0.isEmpty }
-                        routeIds = parsed.isEmpty ? (isBus ? self.inferBusRoutes(from: name, stopId: stopId) : [self.inferRouteId(from: stopId, name: name)]) : parsed
-                    } else if isBus {
+                        routeIds = parsed.isEmpty ? (isBusLocation ? self.inferBusRoutes(from: name, stopId: stopId) : [self.inferRouteId(from: stopId, name: name)]) : parsed
+                    } else if isBusLocation {
                         routeIds = self.inferBusRoutes(from: name, stopId: stopId)
                     } else {
                         routeIds = [self.inferRouteId(from: stopId, name: name)]
                     }
                     
+                    let routeType: Int
+                    if let raw = rawRouteType {
+                        routeType = raw
+                    } else if routeIds.contains(where: { TransitRouteData.isFerryRoute($0) }) {
+                        routeType = 4
+                    } else if routeIds.contains(where: { TransitRouteData.isLightRailRoute($0) }) {
+                        routeType = 0
+                    } else if isBusLocation || routeIds.contains(where: { TransitRouteData.isBusRoute($0) }) {
+                        routeType = 3
+                    } else {
+                        routeType = 1
+                    }
+                    
+                    let modalClass = TransitModalClass.from(routeType: routeType)
+                    let isBus = modalClass == .bus
                     let primaryRouteId = routeIds.first ?? (isBus ? "M15" : "L")
                     let arrivals = isBus ? self.generateBusArrivals(for: primaryRouteId, stopName: name) : self.generateArrivals(for: primaryRouteId)
-                    return StopDetails(stopId: stopId, name: name, routeId: primaryRouteId, routeIds: routeIds, routeType: routeType, arrivals: arrivals)
+                    return StopDetails(stopId: stopId, name: name, routeId: primaryRouteId, routeIds: routeIds, routeType: routeType, modalClass: modalClass, arrivals: arrivals)
                 }
             } catch let error as DatabaseError {
                 print("⚠️ Transit DB table missing or unattached: \(error.message). Using fallback.")
@@ -978,6 +1210,53 @@ final class SpatialDatabaseManager: @unchecked Sendable {
             }
             
             return self.generateFallbackStopDetails(for: stopId)
+        }
+    }
+    
+    /// Fetches route information from `transit.routes` table if attached, falling back to static catalog.
+    public func fetchRouteInfo(for routeId: String) async -> TransitRouteData.LineInfo {
+        let fallback = TransitRouteData.lineInfo(for: routeId)
+        do {
+            return try await dbWriter.read { db in
+                let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(routes)")
+                guard !columns.isEmpty else { return fallback }
+                
+                let sql = "SELECT route_id, route_short_name, route_long_name, route_type, route_color, route_text_color FROM transit.routes WHERE route_id = ? OR route_short_name = ? LIMIT 1"
+                if let row = try Row.fetchOne(db, sql: sql, arguments: [routeId, routeId]) {
+                    let rId: String = row["route_id"] ?? routeId
+                    let shortName: String = row["route_short_name"] ?? rId
+                    let rType: Int = row["route_type"] ?? fallback.routeType
+                    let colorHexRaw: String? = row["route_color"]
+                    let textHexRaw: String? = row["route_text_color"]
+                    
+                    let colorHex: String
+                    if let c = colorHexRaw, !c.isEmpty {
+                        colorHex = c.hasPrefix("#") ? c : "#\(c)"
+                    } else {
+                        colorHex = fallback.colorHex
+                    }
+                    
+                    let textColorHex: String
+                    if let t = textHexRaw, !t.isEmpty {
+                        textColorHex = t.hasPrefix("#") ? t : "#\(t)"
+                    } else {
+                        textColorHex = fallback.textColorHex
+                    }
+                    
+                    let modalClass = TransitModalClass.from(routeType: rType)
+                    return TransitRouteData.LineInfo(
+                        routeId: rId,
+                        name: shortName,
+                        colorHex: colorHex,
+                        textColorHex: textColorHex,
+                        modalClass: modalClass,
+                        routeType: rType
+                    )
+                }
+                return fallback
+            }
+        } catch {
+            return fallback
         }
     }
     

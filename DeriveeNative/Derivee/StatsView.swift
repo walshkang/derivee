@@ -15,67 +15,125 @@ struct StatsView: View {
     
     @ObservedObject var trackingEngine: AmbientTrackingEngine
     var spatialStore: SpatialStore
+    var cityDetectionService: CityDetectionService? = nil
+    var onSwitchCity: ((String, CLLocationCoordinate2D?) -> Void)? = nil
     
     @Binding var targetCoordinate: CLLocationCoordinate2D?
     
+    @State private var browsingMode: StatsBrowsingMode = .city(slug: "nyc")
     @State private var selectedTab: StatsTab = .neighborhoods
     @State private var neighborhoods: [SpatialDatabaseManager.NeighborhoodProgress] = []
     @State private var journalData: ExplorationJournalData? = nil
+    @State private var allMetrosSummary: AllMetrosSummaryData? = nil
+    
     @State private var isImporting = false
     @State private var importProgress: Double = 0.0
+    @State private var importSummaryAlertMessage: String? = nil
+    @State private var showImportAlert = false
     @State private var showSettings = false
     @State private var showFileImporter = false
     @State private var isLoading = true
     
+    private var availableManifestCities: [CityManifestEntry] {
+        if let manifest = cityDetectionService?.manifest {
+            let installed = cityDetectionService?.installedCitySlugs ?? ["nyc"]
+            return manifest.cities.filter { installed.contains($0.slug) || $0.isBundled }
+        }
+        return CityManifest.defaultManifest.cities
+    }
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Segmented Tab Selector
-                Picker("Section", selection: $selectedTab) {
-                    ForEach(StatsTab.allCases) { tab in
-                        Text(tab.rawValue).tag(tab)
-                    }
+                // Top City Selector Menu Pill
+                HStack {
+                    Spacer()
+                    CitySelectorPill(
+                        browsingMode: browsingMode,
+                        installedPacks: availableManifestCities,
+                        userLocation: trackingEngine.lastKnownLocation?.coordinate,
+                        onSelectMode: { newMode in
+                            browsingMode = newMode
+                            Task {
+                                await loadAllData()
+                            }
+                        },
+                        onOpenSettings: {
+                            showSettings = true
+                        }
+                    )
+                    Spacer()
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.vertical, 10)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
                 .background(Color(UIColor.systemGroupedBackground))
                 
-                if selectedTab == .neighborhoods {
-                    neighborhoodsContent
-                } else {
-                    journalContent
-                }
-                
-                if selectedTab == .neighborhoods {
-                    VStack(spacing: 16) {
-                        if isImporting {
-                            VStack(spacing: 8) {
-                                Text("Processing GPX...")
-                                    .font(.caption)
-                                ProgressView(value: importProgress)
-                            }
-                            .padding(.horizontal, 40)
-                        } else {
-                            Button(action: {
-                                showFileImporter = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "square.and.arrow.down")
-                                    Text("Upload Previous Workouts")
+                if browsingMode.isAllMetros {
+                    // Global All Metros Summary View
+                    if let summary = allMetrosSummary {
+                        AllMetrosSummaryView(
+                            summaryData: summary,
+                            onSelectCity: { slug in
+                                browsingMode = .city(slug: slug)
+                                Task {
+                                    await loadAllData()
                                 }
-                                .font(.headline)
-                                .foregroundColor(colorScheme == .dark ? .black : .white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(colorScheme == .dark ? Color.white : Color.black)
-                                .cornerRadius(12)
+                            },
+                            onViewOnMap: { slug, coord in
+                                handleViewOnMap(slug: slug, coordinate: coord)
                             }
+                        )
+                    } else {
+                        loadingView
+                    }
+                } else {
+                    // Single City Mode: Segmented Tabs (Neighborhoods vs Journal)
+                    Picker("Section", selection: $selectedTab) {
+                        ForEach(StatsTab.allCases) { tab in
+                            Text(tab.rawValue).tag(tab)
                         }
                     }
-                    .padding()
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
                     .background(Color(UIColor.systemGroupedBackground))
+                    
+                    if selectedTab == .neighborhoods {
+                        neighborhoodsContent
+                    } else {
+                        journalContent
+                    }
                 }
+                
+                // Bottom GPX Import Action Bar (Always visible in single city and All Metros modes)
+                VStack(spacing: 16) {
+                    if isImporting {
+                        VStack(spacing: 8) {
+                            Text("Processing Multi-City GPX...")
+                                .font(.caption)
+                            ProgressView(value: importProgress)
+                                .tint(Color(hex: "#FFB300"))
+                        }
+                        .padding(.horizontal, 40)
+                    } else {
+                        Button(action: {
+                            showFileImporter = true
+                        }) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.down")
+                                Text("Upload Previous Workouts")
+                            }
+                            .font(.headline)
+                            .foregroundColor(colorScheme == .dark ? .black : .white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(colorScheme == .dark ? Color.white : Color.black)
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(UIColor.systemGroupedBackground))
             }
             .navigationTitle("Exploration Stats")
             .navigationBarTitleDisplayMode(.inline)
@@ -103,6 +161,9 @@ struct StatsView: View {
                 }
             }
             .task {
+                if let activeSlug = cityDetectionService?.activeCitySlug {
+                    browsingMode = .city(slug: activeSlug)
+                }
                 await loadAllData()
             }
             .fileImporter(
@@ -116,12 +177,16 @@ struct StatsView: View {
             ) { result in
                 do {
                     guard let selectedFile = try result.get().first else { return }
-                    
                     let isSecurityScoped = selectedFile.startAccessingSecurityScopedResource()
                     importGPX(from: selectedFile, isSecurityScoped: isSecurityScoped)
                 } catch {
                     print("Error selecting file: \(error)")
                 }
+            }
+            .alert("GPX Workout Import", isPresented: $showImportAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(importSummaryAlertMessage ?? "GPX import completed.")
             }
         }
     }
@@ -179,8 +244,11 @@ struct StatsView: View {
                 Section(header: Text("Neighborhood Progression")) {
                     ForEach(neighborhoods) { nbhd in
                         Button(action: {
-                            targetCoordinate = CLLocationCoordinate2D(latitude: nbhd.centroidLat, longitude: nbhd.centroidLng)
-                            dismiss()
+                            let currentSlug = browsingMode.slug ?? "nyc"
+                            handleViewOnMap(
+                                slug: currentSlug,
+                                coordinate: CLLocationCoordinate2D(latitude: nbhd.centroidLat, longitude: nbhd.centroidLng)
+                            )
                         }) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -344,83 +412,92 @@ struct StatsView: View {
                     }
                 }
                 
-                // NYC Borough Breakdown
-                Section(header: Text("NYC Borough Footprint")) {
-                    ForEach(data.boroughProgress) { b in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(b.name)
-                                    .font(.headline)
-                                Spacer()
-                                Text("\(String(format: "%.1f", b.percentage))%")
-                                    .font(.system(.subheadline, design: .monospaced))
-                                    .bold()
+                // NYC Borough Breakdown (if borough progress exists)
+                if !data.boroughProgress.isEmpty {
+                    Section(header: Text("Regional Footprint")) {
+                        ForEach(data.boroughProgress) { b in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(b.name)
+                                        .font(.headline)
+                                    Spacer()
+                                    Text("\(String(format: "%.1f", b.percentage))%")
+                                        .font(.system(.subheadline, design: .monospaced))
+                                        .bold()
+                                }
+                                ProgressView(value: b.percentage, total: 100)
+                                    .tint(colorScheme == .dark ? .white : .black)
+                                
+                                HStack {
+                                    Text("\(b.exploredNeighborhoodCount) / \(b.neighborhoodCount) Districts")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(b.clearedHexes) / \(b.totalHexes) hexes")
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                }
                             }
-                            ProgressView(value: b.percentage, total: 100)
-                                .tint(colorScheme == .dark ? .white : .black)
-                            
-                            HStack {
-                                Text("\(b.exploredNeighborhoodCount) / \(b.neighborhoodCount) Neighborhoods")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Text("\(b.clearedHexes) / \(b.totalHexes) hexes")
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                            }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
                     }
                 }
                 
                 // Historic Landmarks Catalog
-                Section(header: Text("Historic Landmarks (\(data.landmarks.filter { $0.isDiscovered }.count)/\(data.landmarks.count))")) {
-                    ForEach(data.landmarks) { lm in
-                        HStack(spacing: 12) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(lm.isDiscovered ? Color(hex: "#FFB300").opacity(0.2) : Color.gray.opacity(0.15))
-                                    .frame(width: 36, height: 36)
-                                Image(systemName: lm.isDiscovered ? "building.columns.fill" : "lock.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(lm.isDiscovered ? Color(hex: "#FFB300") : .secondary)
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    Text(lm.name)
-                                        .font(.subheadline)
-                                        .fontWeight(lm.isDiscovered ? .semibold : .regular)
-                                        .foregroundColor(lm.isDiscovered ? .primary : .secondary)
-                                    Spacer()
-                                    Text(lm.borough)
-                                        .font(.caption2)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color.secondary.opacity(0.15))
-                                        .cornerRadius(4)
+                if !data.landmarks.isEmpty {
+                    Section(header: Text("Historic Landmarks (\(data.landmarks.filter { $0.isDiscovered }.count)/\(data.landmarks.count))")) {
+                        ForEach(data.landmarks) { lm in
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(lm.isDiscovered ? Color(hex: "#FFB300").opacity(0.2) : Color.gray.opacity(0.15))
+                                        .frame(width: 36, height: 36)
+                                    Image(systemName: lm.isDiscovered ? "building.columns.fill" : "lock.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(lm.isDiscovered ? Color(hex: "#FFB300") : .secondary)
                                 }
-                                Text(lm.landmarkDescription)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(2)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack {
+                                        Text(lm.name)
+                                            .font(.subheadline)
+                                            .fontWeight(lm.isDiscovered ? .semibold : .regular)
+                                            .foregroundColor(lm.isDiscovered ? .primary : .secondary)
+                                        Spacer()
+                                        Text(lm.borough)
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.secondary.opacity(0.15))
+                                            .cornerRadius(4)
+                                    }
+                                    Text(lm.landmarkDescription)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(2)
+                                }
                             }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
                     }
                 }
             }
             .listStyle(.insetGrouped)
         } else {
-            VStack {
-                ProgressView()
-                    .padding()
-                Text("Loading Exploration Journal...")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            loadingView
         }
+    }
+    
+    private var loadingView: some View {
+        VStack {
+            ProgressView()
+                .tint(Color(hex: "#FFB300"))
+                .padding()
+            Text("Loading Exploration Stats...")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     private var emptyStateView: some View {
@@ -443,19 +520,40 @@ struct StatsView: View {
         .frame(maxHeight: .infinity)
     }
     
+    // MARK: - Actions & Handlers
+    
+    private func handleViewOnMap(slug: String, coordinate: CLLocationCoordinate2D) {
+        targetCoordinate = coordinate
+        if let cityService = cityDetectionService, cityService.activeCitySlug != slug {
+            if let entry = cityService.manifest.findCity(bySlug: slug) {
+                cityService.performAutoSwitch(to: entry)
+            } else {
+                cityService.activeCitySlug = slug
+            }
+        }
+        onSwitchCity?(slug, coordinate)
+        dismiss()
+    }
+    
     // MARK: - Data Loading
     
     private func loadAllData() async {
         isLoading = true
+        let currentSlug = browsingMode.slug ?? "nyc"
+        let manifest = cityDetectionService?.manifest ?? .defaultManifest
+        let installedSlugs = cityDetectionService?.installedCitySlugs ?? ["nyc"]
+        
         do {
-            async let nbhdStats = SpatialDatabaseManager.shared.fetchNeighborhoodProgression()
-            async let jData = SpatialDatabaseManager.shared.fetchExplorationJournalData()
+            async let nbhdStats = SpatialDatabaseManager.shared.fetchNeighborhoodProgression(citySlug: currentSlug)
+            async let jData = SpatialDatabaseManager.shared.fetchExplorationJournalData(citySlug: currentSlug)
+            async let summaryData = SpatialDatabaseManager.shared.fetchAllMetrosSummary(installedSlugs: installedSlugs, manifest: manifest)
             
-            let (fetchedNbhds, fetchedJournal) = try await (nbhdStats, jData)
+            let (fetchedNbhds, fetchedJournal, fetchedSummary) = try await (nbhdStats, jData, summaryData)
             
             await MainActor.run {
                 self.neighborhoods = fetchedNbhds
                 self.journalData = fetchedJournal
+                self.allMetrosSummary = fetchedSummary
                 self.isLoading = false
             }
         } catch {
@@ -481,21 +579,40 @@ struct StatsView: View {
                 let coordinates = try parser.parse(url: url)
                 
                 let processor = GPXProcessor()
-                let defaultLoc = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
-                let userLoc = await MainActor.run { trackingEngine.isTracking ? defaultLoc : defaultLoc }
+                let currentLoc = await MainActor.run { trackingEngine.lastKnownLocation?.coordinate }
+                let activeSlug = await MainActor.run { cityDetectionService?.activeCitySlug ?? "nyc" }
+                let manifest = await MainActor.run { cityDetectionService?.manifest ?? .defaultManifest }
                 
-                let existingHexes = await MainActor.run { spatialStore.exploredHexes }
-                
-                processor.processAndInsert(coordinates: coordinates, userLocation: userLoc, existingHexes: existingHexes) { progress in
-                    self.importProgress = progress
-                } onComplete: {
-                    self.isImporting = false
-                    self.dismiss()
-                }
+                processor.processAndInsertMultiCity(
+                    coordinates: coordinates,
+                    manifest: manifest,
+                    defaultCitySlug: activeSlug,
+                    userLocation: currentLoc,
+                    onProgress: { progress in
+                        Task { @MainActor in
+                            self.importProgress = progress
+                        }
+                    },
+                    onComplete: { result in
+                        Task { @MainActor in
+                            self.isImporting = false
+                            if result.totalHexesImported > 0 {
+                                let cityBreakdown = result.cityHexCounts.map { "\($0.key.uppercased()): \($0.value)" }.joined(separator: ", ")
+                                self.importSummaryAlertMessage = "Successfully imported \(result.totalHexesImported) hexes across \(result.citiesCount) metro(s) (\(cityBreakdown))."
+                            } else {
+                                self.importSummaryAlertMessage = "No new exploration hexes found in GPX file."
+                            }
+                            self.showImportAlert = true
+                            await self.loadAllData()
+                        }
+                    }
+                )
             } catch {
                 print("Failed to process GPX: \(error)")
                 await MainActor.run {
                     self.isImporting = false
+                    self.importSummaryAlertMessage = "Failed to parse GPX file: \(error.localizedDescription)"
+                    self.showImportAlert = true
                 }
             }
         }

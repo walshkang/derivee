@@ -26,7 +26,7 @@ final class ExplorationResetTests: XCTestCase {
         
         // 2. Verify insertion
         let initialCount = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         XCTAssertEqual(initialCount, 2, "Database should have 2 hexes before reset.")
         
@@ -35,7 +35,7 @@ final class ExplorationResetTests: XCTestCase {
         
         // 4. Verify deletion
         let finalCount = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         XCTAssertEqual(finalCount, 0, "Database should have 0 hexes after reset.")
     }

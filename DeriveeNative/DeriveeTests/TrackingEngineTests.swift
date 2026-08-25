@@ -69,7 +69,7 @@ final class TrackingEngineTests: XCTestCase {
         try await Task.sleep(nanoseconds: 200_000_000)
         
         let count = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         
         XCTAssertGreaterThan(count, 0, "Valid walk should unlock hexes in the database.")
@@ -112,7 +112,7 @@ final class TrackingEngineTests: XCTestCase {
         try await Task.sleep(nanoseconds: 200_000_000)
         
         let count = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         
         // Point 1b completes warmup and saves a hex. Point 2 should be rejected by the drift gate.
@@ -200,7 +200,7 @@ final class TrackingEngineTests: XCTestCase {
         try await Task.sleep(nanoseconds: 300_000_000)
         
         let count = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         
         XCTAssertGreaterThan(count, 0, "GPXLocationProvider should stream coordinates through the engine to unlock hexes.")
@@ -259,7 +259,7 @@ final class TrackingEngineTests: XCTestCase {
         try await Task.sleep(nanoseconds: 150_000_000)
         
         var count = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         XCTAssertEqual(count, 1, "Cold start fixes in Brooklyn should complete warmup and unlock 1 hex.")
         
@@ -277,7 +277,7 @@ final class TrackingEngineTests: XCTestCase {
         try await Task.sleep(nanoseconds: 150_000_000)
         
         count = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         XCTAssertEqual(count, 2, "Second fix in Central Park after 30s time gap must not be dropped by drift gate and should unlock 2nd hex.")
     }
@@ -321,15 +321,15 @@ final class TrackingEngineTests: XCTestCase {
         // 1. Immediately (100ms later), hex is in dwell window and should not be committed yet
         try await Task.sleep(nanoseconds: 100_000_000)
         var count = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         XCTAssertEqual(count, 0, "Hex must not be unlocked while waiting in the 3s dwell window.")
         
-        // 2. Wait for the 3.0s dwell timer to fire (+ 250ms processing leeway)
-        try await Task.sleep(nanoseconds: 3_250_000_000)
+        // 2. Wait for the 3.0s dwell timer to fire (+ 600ms processing leeway)
+        try await Task.sleep(nanoseconds: 3_600_000_000)
         
         count = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         XCTAssertEqual(count, 1, "Hex must unlock automatically after stationary 3s dwell timer expires.")
     }
@@ -363,7 +363,7 @@ final class TrackingEngineTests: XCTestCase {
         try await Task.sleep(nanoseconds: 200_000_000)
         
         let count = try await dbManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         XCTAssertEqual(count, 1, "Moving pedestrian fix should resolve dwell early and unlock hex immediately.")
     }

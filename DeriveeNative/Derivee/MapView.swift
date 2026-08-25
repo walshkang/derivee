@@ -110,6 +110,9 @@ struct MapView: UIViewRepresentable {
         let subwayLinesSourceId = MapCustomizationDefaults.subwayLinesSourceId
         let subwayLinesCasingLayerId = MapCustomizationDefaults.subwayLinesCasingLayerId
         let subwayLinesLayerId = MapCustomizationDefaults.subwayLinesLayerId
+        let lrtLinesCasingLayerId = MapCustomizationDefaults.lrtLinesCasingLayerId
+        let lrtLinesLayerId = MapCustomizationDefaults.lrtLinesLayerId
+        let ferryLinesLayerId = MapCustomizationDefaults.ferryLinesLayerId
         let subwayStationBulletsSourceId = MapCustomizationDefaults.subwayStationBulletsSourceId
         let subwayStationBulletsLayerId = MapCustomizationDefaults.subwayStationBulletsLayerId
         let nearbyBusStopsSourceId = MapCustomizationDefaults.nearbyBusStopsSourceId
@@ -327,22 +330,59 @@ struct MapView: UIViewRepresentable {
         }
         
         func setupLayers(in style: MLNStyle) {
-            // 0. Subway Thoroughfare Network (Sub-context Layer beneath the Fog of War)
+            // 0. Multi-Modal Transit Thoroughfare Network (Sub-context Layers beneath the Fog of War)
             let subwaySource = MLNShapeSource(identifier: subwayLinesSourceId, shape: TransitCartographyLoader.loadTransitLinesShapeSync(), options: nil)
             style.addSource(subwaySource)
             
-            let subwayCasingLayer = MLNLineStyleLayer(identifier: subwayLinesCasingLayerId, source: subwaySource)
             let casingColor = UIColor(hex: "#FFFFFF")
+            
+            // 0a. Tier 4 — Maritime Ferry (2.5pt dashed cyan line over water)
+            let ferryLinesLayer = MLNLineStyleLayer(identifier: ferryLinesLayerId, source: subwaySource)
+            ferryLinesLayer.predicate = NSPredicate(format: "modal_class == 3")
+            ferryLinesLayer.lineColor = Self.subwayLineColorExpression()
+            ferryLinesLayer.lineWidth = NSExpression(forConstantValue: 2.5)
+            ferryLinesLayer.lineDashPattern = NSExpression(forConstantValue: [4.0, 3.0])
+            ferryLinesLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 0.90 : 0.0)
+            ferryLinesLayer.lineCap = NSExpression(forConstantValue: "round")
+            ferryLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
+            style.addLayer(ferryLinesLayer)
+            
+            // 0b. Tier 2 — Light Rail (LRT) Casing (6.0pt dashed casing to distinguish surface rail)
+            let lrtCasingLayer = MLNLineStyleLayer(identifier: lrtLinesCasingLayerId, source: subwaySource)
+            lrtCasingLayer.predicate = NSPredicate(format: "modal_class == 1")
+            lrtCasingLayer.lineColor = NSExpression(forConstantValue: casingColor)
+            lrtCasingLayer.lineWidth = NSExpression(forConstantValue: 6.0)
+            lrtCasingLayer.lineDashPattern = NSExpression(forConstantValue: [3.0, 2.0])
+            lrtCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 0.75 : 0.0)
+            lrtCasingLayer.lineCap = NSExpression(forConstantValue: "round")
+            lrtCasingLayer.lineJoin = NSExpression(forConstantValue: "round")
+            style.insertLayer(lrtCasingLayer, above: ferryLinesLayer)
+            
+            // 0c. Tier 2 — Light Rail (LRT) Line (4.0pt solid line)
+            let lrtLinesLayer = MLNLineStyleLayer(identifier: lrtLinesLayerId, source: subwaySource)
+            lrtLinesLayer.predicate = NSPredicate(format: "modal_class == 1")
+            lrtLinesLayer.lineColor = Self.subwayLineColorExpression()
+            lrtLinesLayer.lineWidth = NSExpression(forConstantValue: 4.0)
+            lrtLinesLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 0.95 : 0.0)
+            lrtLinesLayer.lineCap = NSExpression(forConstantValue: "round")
+            lrtLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
+            style.insertLayer(lrtLinesLayer, above: lrtCasingLayer)
+            
+            // 0d. Tier 1 — Heavy Rail Subway & PATH Casing (6.0pt solid silver casing)
+            let subwayCasingLayer = MLNLineStyleLayer(identifier: subwayLinesCasingLayerId, source: subwaySource)
+            subwayCasingLayer.predicate = NSPredicate(format: "modal_class == 0")
             subwayCasingLayer.lineColor = NSExpression(forConstantValue: casingColor)
-            subwayCasingLayer.lineWidth = NSExpression(forConstantValue: 4.5)
+            subwayCasingLayer.lineWidth = NSExpression(forConstantValue: 6.0)
             subwayCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 0.75 : 0.0)
             subwayCasingLayer.lineCap = NSExpression(forConstantValue: "round")
             subwayCasingLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.addLayer(subwayCasingLayer)
+            style.insertLayer(subwayCasingLayer, above: lrtLinesLayer)
             
+            // 0e. Tier 1 — Heavy Rail Subway & PATH Line (4.0pt solid line)
             let subwayLinesLayer = MLNLineStyleLayer(identifier: subwayLinesLayerId, source: subwaySource)
+            subwayLinesLayer.predicate = NSPredicate(format: "modal_class == 0")
             subwayLinesLayer.lineColor = Self.subwayLineColorExpression()
-            subwayLinesLayer.lineWidth = NSExpression(forConstantValue: 3.0)
+            subwayLinesLayer.lineWidth = NSExpression(forConstantValue: 4.0)
             subwayLinesLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 0.95 : 0.0)
             subwayLinesLayer.lineCap = NSExpression(forConstantValue: "round")
             subwayLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
@@ -366,13 +406,7 @@ struct MapView: UIViewRepresentable {
             // VERIFIED: MapLibre Native (iOS) initial fog shape requires CW winding order for exterior bounds.
             // Matches SpatialStore bounds order (Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left -> Top-Left).
             // Tested & hardened in Wave I.2 (WI2-WINDING).
-            let bounds = [
-                CLLocationCoordinate2D(latitude: 41.500001, longitude: -74.500001),
-                CLLocationCoordinate2D(latitude: 41.500001, longitude: -73.0),
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -73.0),
-                CLLocationCoordinate2D(latitude: 40.0, longitude: -74.500001),
-                CLLocationCoordinate2D(latitude: 41.500001, longitude: -74.500001)
-            ]
+            let bounds = FogPolygonMath.makeBounds(for: CameraBounds.activeConfig.bounds, jitter: 0.000001)
             let initialFogShape = MLNPolygon(coordinates: bounds, count: UInt(bounds.count))
             
             let fogSource = MLNShapeSource(identifier: "fog-source", shape: initialFogShape, options: nil)
@@ -472,12 +506,22 @@ struct MapView: UIViewRepresentable {
             guard isMapStyleLoaded else { return }
             let casingColor = UIColor(hex: "#FFFFFF")
             
-            if let casingLayer = style.layer(withIdentifier: subwayLinesCasingLayerId) as? MLNLineStyleLayer {
-                casingLayer.lineColor = NSExpression(forConstantValue: casingColor)
-                casingLayer.lineOpacity = NSExpression(forConstantValue: show ? 0.75 : 0.0)
+            if let subwayCasing = style.layer(withIdentifier: subwayLinesCasingLayerId) as? MLNLineStyleLayer {
+                subwayCasing.lineColor = NSExpression(forConstantValue: casingColor)
+                subwayCasing.lineOpacity = NSExpression(forConstantValue: show ? 0.75 : 0.0)
             }
-            if let linesLayer = style.layer(withIdentifier: subwayLinesLayerId) as? MLNLineStyleLayer {
-                linesLayer.lineOpacity = NSExpression(forConstantValue: show ? 0.95 : 0.0)
+            if let subwayLines = style.layer(withIdentifier: subwayLinesLayerId) as? MLNLineStyleLayer {
+                subwayLines.lineOpacity = NSExpression(forConstantValue: show ? 0.95 : 0.0)
+            }
+            if let lrtCasing = style.layer(withIdentifier: lrtLinesCasingLayerId) as? MLNLineStyleLayer {
+                lrtCasing.lineColor = NSExpression(forConstantValue: casingColor)
+                lrtCasing.lineOpacity = NSExpression(forConstantValue: show ? 0.75 : 0.0)
+            }
+            if let lrtLines = style.layer(withIdentifier: lrtLinesLayerId) as? MLNLineStyleLayer {
+                lrtLines.lineOpacity = NSExpression(forConstantValue: show ? 0.95 : 0.0)
+            }
+            if let ferryLines = style.layer(withIdentifier: ferryLinesLayerId) as? MLNLineStyleLayer {
+                ferryLines.lineOpacity = NSExpression(forConstantValue: show ? 0.90 : 0.0)
             }
         }
         

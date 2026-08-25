@@ -94,7 +94,7 @@ final class TransitHydrationTests: XCTestCase {
         try await fallbackDBManager.insertDiscoveredHex(h3Index: "8b2a10089081fff")
         
         let count = try await fallbackDBManager.dbWriter.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM explored_hexes_nyc") ?? 0
         }
         XCTAssertEqual(count, 1, "Main spatial operations must function normally even if transit DB is absent.")
     }
