@@ -328,7 +328,7 @@ struct MapView: UIViewRepresentable {
         
         func setupLayers(in style: MLNStyle) {
             // 0. Subway Thoroughfare Network (Sub-context Layer beneath the Fog of War)
-            let subwaySource = MLNShapeSource(identifier: subwayLinesSourceId, shape: MtaSubwayNetworkData.createSubwayNetworkShape(), options: nil)
+            let subwaySource = MLNShapeSource(identifier: subwayLinesSourceId, shape: TransitCartographyLoader.loadTransitLinesShapeSync(), options: nil)
             style.addSource(subwaySource)
             
             let subwayCasingLayer = MLNLineStyleLayer(identifier: subwayLinesCasingLayerId, source: subwaySource)
@@ -458,6 +458,14 @@ struct MapView: UIViewRepresentable {
         
         static func subwayLineColorExpression() -> NSExpression {
             return NSExpression(forKeyPath: "color")
+        }
+        
+        func updateTransitLines(for citySlug: String? = nil, in style: MLNStyle) {
+            guard isMapStyleLoaded, let source = style.source(withIdentifier: subwayLinesSourceId) as? MLNShapeSource else { return }
+            Task { @MainActor [weak source] in
+                let shape = await TransitCartographyLoader.loadTransitLinesShape(for: citySlug)
+                source?.shape = shape
+            }
         }
         
         func updateSubwayThoroughfares(show: Bool, theme: BasemapTheme, in style: MLNStyle) {

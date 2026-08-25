@@ -60,9 +60,10 @@ final class NearbyBusLensTests: XCTestCase {
         XCTAssertFalse(stops.isEmpty, "Should find bus stops within 400m of Union Square.")
         XCTAssertLessThanOrEqual(stops.count, 8, "Should cap returned nearby bus stops.")
         
-        // Ensure stops are sorted by proximity ascending
-        for i in 0..<(stops.count - 1) {
-            XCTAssertLessThanOrEqual(stops[i].distanceMeters, stops[i + 1].distanceMeters, "Bus stops must be sorted by distance ascending.")
+        if stops.count > 1 {
+            for i in 0..<(stops.count - 1) {
+                XCTAssertLessThanOrEqual(stops[i].distanceMeters, stops[i + 1].distanceMeters, "Bus stops must be sorted by distance ascending.")
+            }
         }
         
         // Verify stop properties
