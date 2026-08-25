@@ -133,6 +133,16 @@ struct SettingsView: View {
                 ))
             }
             
+            Section(header: Text("Cities & Storage"), footer: Text("Manage offline city packs, GTFS transit databases, and vector route lines with zero loss to your personal exploration history.")) {
+                NavigationLink(destination: CitiesStorageManagerView()) {
+                    HStack {
+                        Image(systemName: "internaldrive")
+                            .foregroundColor(Color(hex: "#FFB300"))
+                        Text("Manage Cities & Storage")
+                    }
+                }
+            }
+            
             Section(header: Text("Data Management"), footer: Text("Clearing the cache will require downloading transit and tile data on the next launch.")) {
                 Button(role: .destructive) {
                     showCacheAlert = true
@@ -174,13 +184,17 @@ struct SettingsView: View {
                         }
                     }
                 } message: {
-                    Text("This will permanently delete all your explored hexes and discovered transit stops. The fog will return entirely.")
+                    Text("This will permanently delete all your explored hexes and discovered transit stops across all cities. The fog will return entirely.")
                 }
             }
             
-            Section(header: Text("About")) {
+            Section(header: Text("About & Open Data")) {
                 NavigationLink(destination: PhilosophyView()) {
                     Text("The Philosophy")
+                }
+                
+                NavigationLink(destination: TransitAttributionsView()) {
+                    Text("Open Data & Attributions")
                 }
             }
             

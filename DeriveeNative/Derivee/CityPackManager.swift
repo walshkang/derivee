@@ -295,6 +295,20 @@ public final class CityPackManager: Sendable {
         return attributions
     }
     
+    // MARK: - Hot-Swap Integration (Wave L-B.3)
+    
+    /// Coordinates hot-swapping the active city pack database in SpatialDatabaseManager.
+    @discardableResult
+    public func hotSwapCityPack(to slug: String, databaseManager: SpatialDatabaseManager = .shared) async throws -> CityConfig {
+        let config = try loadConfig(for: slug)
+        let transitURL = transitDatabaseURL(for: slug)
+        guard fileManager.fileExists(atPath: transitURL.path) else {
+            throw CityPackError.missingRequiredFile(name: "transit.sqlite")
+        }
+        try await databaseManager.hotSwapTransitDatabase(to: transitURL)
+        return config
+    }
+    
     // MARK: - Deletion
     
     /// Deletes the static pack assets for `slug`. NYC cannot be deleted.
