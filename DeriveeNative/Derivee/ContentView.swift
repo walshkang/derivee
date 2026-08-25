@@ -48,6 +48,11 @@ struct ContentView: View {
             if isCheckingHydration {
                 Color.black.ignoresSafeArea()
                     .task {
+                        let activeSlug = cityDetectionService.activeCitySlug
+                        if activeSlug != spatialStore.activeCitySlug {
+                            let config = (try? CityPackManager.shared.loadConfig(for: activeSlug)) ?? .nycDefault
+                            spatialStore.setActiveCity(config)
+                        }
                         isHydrationComplete = (try? await SpatialDatabaseManager.shared.isHydrationComplete()) ?? false
                         isCheckingHydration = false
                     }
@@ -171,6 +176,9 @@ struct ContentView: View {
                     }
                 }
                 .onAppear {
+                    cityDetectionService.onActiveCityChanged = { [self] newSlug in
+                        self.executeCityHotSwap(to: newSlug)
+                    }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                         isReadyForToasts = true
                     }
@@ -254,6 +262,9 @@ struct ContentView: View {
                         spatialStore: spatialStore,
                         cityDetectionService: cityDetectionService,
                         onSwitchCity: { slug, coord in
+                            if spatialStore.activeCitySlug != slug {
+                                executeCityHotSwap(to: slug)
+                            }
                             if let coord = coord {
                                 targetCoordinate = coord
                                 isMapCentered = false
@@ -329,6 +340,40 @@ struct ContentView: View {
             } catch {
                 await MainActor.run {
                     self.isScanningBuses = false
+                }
+            }
+        }
+    }
+    
+    // MARK: - Coordinated Two-Phase Transit DB Hot-Swap (Wave L-B.3)
+    
+    private func executeCityHotSwap(to slug: String) {
+        logPipeline("🏙️ [ContentView] executeCityHotSwap triggered for slug: \(slug)")
+        
+        // Phase 1: Pre-Swap UI Query Teardown
+        TransitRealtimeService.shared.prepareForCitySwap()
+        showTransitSheet = false
+        selectedTransitStop = nil
+        isScanningBuses = false
+        nearbyBusStops = []
+        
+        Task {
+            // Phase 2: GRDB Serialized Write Barrier & Hot-Swap
+            let packTransitURL = CityPackManager.shared.transitDatabaseURL(for: slug)
+            if FileManager.default.fileExists(atPath: packTransitURL.path) {
+                do {
+                    try await SpatialDatabaseManager.shared.hotSwapTransitDatabase(to: packTransitURL)
+                } catch {
+                    logPipeline("⚠️ [ContentView] hotSwapTransitDatabase failed: \(error)")
+                }
+            }
+            
+            // Phase 3: Post-Swap State Sync & Re-enablement
+            let newConfig = (try? CityPackManager.shared.loadConfig(for: slug)) ?? CityConfig.nycDefault
+            await MainActor.run {
+                spatialStore.setActiveCity(newConfig)
+                if showNearbyBusesLens {
+                    scanNearbyBuses(force: true)
                 }
             }
         }

@@ -40,12 +40,13 @@ struct MapView: UIViewRepresentable {
         
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleMapTap(_:)))
         mapView.addGestureRecognizer(tapGesture)
-        mapView.compassViewPosition = .topLeft
-        mapView.compassViewMargins = CGPoint(x: 20, y: 54)
+        mapView.compassViewPosition = .bottomRight
+        let bottomInset = mapView.safeAreaInsets.bottom > 0 ? mapView.safeAreaInsets.bottom : 34.0
+        mapView.compassViewMargins = CGPoint(x: 20, y: 102 + bottomInset)
         mapView.compassView.image = ApertureCompassNeedle.makeNeedleImage()
         
         context.coordinator.mapView = mapView
-        context.coordinator.setupCompassObservation()
+        context.coordinator.setupCompass()
         
         // Resume tracking if enabled
         DispatchQueue.main.async {
@@ -57,6 +58,21 @@ struct MapView: UIViewRepresentable {
     
     func updateUIView(_ uiView: MLNMapView, context: Context) {
         context.coordinator.parent = self
+        
+        // Wave L-D.3: Check if active city has changed and coordinate atomic viewport handshake
+        if context.coordinator.lastAppliedCitySlug != spatialStore.activeCitySlug {
+            context.coordinator.performCitySwitchHandshake(
+                to: spatialStore.activeCityConfig,
+                targetCenter: targetCoordinate,
+                animated: false
+            )
+            if targetCoordinate != nil {
+                DispatchQueue.main.async {
+                    self.targetCoordinate = nil
+                }
+            }
+        }
+        
         context.coordinator.updateExploredHexes(in: uiView, with: fogShape)
         context.coordinator.updateTransientHex(shape: transientHexShape, in: uiView)
         context.coordinator.updateTransientPulse(at: spatialStore.newlyUnlockedHexLocation, in: uiView)
@@ -69,6 +85,12 @@ struct MapView: UIViewRepresentable {
             context.coordinator.updateSubwayStationBullets(style: subwayStationMarkerStyle, theme: selectedTheme, in: style)
             context.coordinator.updateNearbyBusStops(nearbyBusStops, in: style)
             context.coordinator.updatePOIs(in: style)
+        }
+        
+        let bottomInset = uiView.safeAreaInsets.bottom > 0 ? uiView.safeAreaInsets.bottom : (uiView.window?.safeAreaInsets.bottom ?? 34.0)
+        let targetCompassMargins = CGPoint(x: 20, y: 102 + bottomInset)
+        if uiView.compassViewMargins != targetCompassMargins {
+            uiView.compassViewMargins = targetCompassMargins
         }
         
         if let target = targetCoordinate {
@@ -127,9 +149,7 @@ struct MapView: UIViewRepresentable {
         var lastSelectedStop: String? = nil
         var isMapStyleLoaded: Bool = false
         var lastAppliedTheme: BasemapTheme?
-        
-        var compassHiddenObserver: NSKeyValueObservation?
-        var compassAlphaObserver: NSKeyValueObservation?
+        var lastAppliedCitySlug: String? = nil
         
         var lureTimer: Timer?
         var isLurePulsed: Bool = false
@@ -137,6 +157,7 @@ struct MapView: UIViewRepresentable {
         
         init(_ parent: MapView) {
             self.parent = parent
+            self.lastAppliedCitySlug = parent.spatialStore.activeCitySlug
             super.init()
             loadPOIs()
             
@@ -147,24 +168,70 @@ struct MapView: UIViewRepresentable {
         deinit {
             pulseTimer?.cancel()
             lureTimer?.invalidate()
-            compassHiddenObserver?.invalidate()
-            compassAlphaObserver?.invalidate()
             NotificationCenter.default.removeObserver(self)
         }
         
-        func setupCompassObservation() {
+        // MARK: - Wave L-D.3: Viewport Handshake & Fog Cache Invalidation
+        
+        /// Executes an atomic, synchronous `@MainActor` viewport handshake when switching active metropolitan regions.
+        /// Assigns a newly initialized `MLNShapeCollectionFeature` with fresh coordinate arrays to `fogSource.shape`,
+        /// invalidating MapLibre's C++ GPU tessellation cache and preventing intermediate frame glitches.
+        @MainActor
+        func performCitySwitchHandshake(
+            to config: CityConfig,
+            targetCenter: CLLocationCoordinate2D? = nil,
+            targetZoom: Double? = nil,
+            animated: Bool = false
+        ) {
+            guard let mapView = self.mapView else { return }
+            
+            logPipeline("🤝 [WLD3 Viewport Handshake] Initiating atomic switch to \(config.displayName) (\(config.slug)) on @MainActor")
+            
+            // 1. Synchronously update CameraBounds configuration
+            CameraBounds.setActiveConfig(config)
+            self.lastAppliedCitySlug = config.slug
+            
+            // 2. Generate a fresh baseline MLNShapeCollectionFeature with new coordinate arrays
+            // (Guarantees MapLibre C++ GPU tessellation cache invalidation for the new city's bounding envelope)
+            let freshFogFeature = FogPolygonMath.makeInitialFogShapeFeature(for: config)
+            
+            if let style = mapView.style {
+                if let fogSource = style.source(withIdentifier: "fog-source") as? MLNShapeSource {
+                    fogSource.shape = freshFogFeature
+                    logPipeline("🌫️ [WLD3 Viewport Handshake] Assigned fresh MLNShapeCollectionFeature to fog-source for \(config.slug)")
+                }
+                
+                // 3. Update transit lines GeoJSON for the destination city
+                updateTransitLines(for: config.slug, in: style)
+                
+                // 4. Reload station POIs and sub-fog station bullets for the destination city
+                loadPOIs(for: config.slug)
+            }
+            
+            // 5. Synchronously coordinate camera center to destination city center
+            let center = targetCenter ?? config.center.coordinate
+            let zoom = targetZoom ?? config.center.defaultZoom
+            mapView.setCenter(center, zoomLevel: zoom, animated: animated)
+            
+            // 6. Reset transient state & animations
+            lastTransientHexShape = nil
+            lastPulseLocation = nil
+            if let style = mapView.style, let pulseSource = style.source(withIdentifier: pulseSourceId) as? MLNShapeSource {
+                pulseSource.shape = nil
+            }
+            if let style = mapView.style, let transSource = style.source(withIdentifier: transientHexSourceId) as? MLNShapeSource {
+                transSource.shape = nil
+            }
+            
+            logPipeline("✅ [WLD3 Viewport Handshake] Atomic switch to \(config.displayName) complete. Center=(\(center.latitude), \(center.longitude)), Zoom=\(zoom)")
+        }
+        
+        func setupCompass() {
             guard let mapView = mapView else { return }
+            mapView.compassViewPosition = .bottomRight
+            let bottomInset = mapView.safeAreaInsets.bottom > 0 ? mapView.safeAreaInsets.bottom : (mapView.window?.safeAreaInsets.bottom ?? 34.0)
+            mapView.compassViewMargins = CGPoint(x: 20, y: 102 + bottomInset)
             mapView.compassView.image = ApertureCompassNeedle.makeNeedleImage()
-            compassHiddenObserver = mapView.compassView.observe(\.isHidden, options: [.initial, .new]) { view, _ in
-                if view.isHidden {
-                    view.isHidden = false
-                }
-            }
-            compassAlphaObserver = mapView.compassView.observe(\.alpha, options: [.initial, .new]) { view, _ in
-                if view.alpha == 0 {
-                    view.alpha = 1.0
-                }
-            }
         }
         
         @objc func appDidEnterBackground() {
@@ -197,7 +264,7 @@ struct MapView: UIViewRepresentable {
             lureLayer.circleOpacity = NSExpression(forConstantValue: opacity)
         }
         
-        func loadPOIs() {
+        func loadPOIs(for citySlug: String? = nil) {
             Task {
                 do {
                     let loadedPOIs = try await SpatialDatabaseManager.shared.dbWriter.read { db in
@@ -225,7 +292,14 @@ struct MapView: UIViewRepresentable {
                         }
                     }
                 } catch {
-                    print("⚠️ Transit POIs unavailable: \(error)")
+                    print("⚠️ Transit POIs unavailable for \(citySlug ?? "active"): \(error)")
+                    await MainActor.run {
+                        self.pois = []
+                        if let style = self.mapView?.style {
+                            self.populateSubwayStationBullets(in: style)
+                            self.updatePOIs(in: style)
+                        }
+                    }
                 }
             }
         }
