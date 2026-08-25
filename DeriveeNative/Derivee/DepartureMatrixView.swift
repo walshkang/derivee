@@ -8,8 +8,12 @@ struct DepartureMatrixView: View {
     let liveArrivals: [SpatialDatabaseManager.ArrivalInfo]
     let availableDirections: Set<Int>
     let referenceDate: Date?
+    let isHistoricalFallback: Bool
+    let isObservedReplay: Bool
+    let scheduleValidity: ScheduleValidity?
     
     @Binding var selectedDirection: Int
+    @Binding var selectedDayOffset: Int
     @State private var selectedRouteFilter: String = "ALL"
     @State private var isPulsing: Bool = false
     
@@ -21,6 +25,10 @@ struct DepartureMatrixView: View {
         liveArrivals: [SpatialDatabaseManager.ArrivalInfo] = [],
         availableDirections: Set<Int> = [0, 1],
         selectedDirection: Binding<Int> = .constant(0),
+        selectedDayOffset: Binding<Int> = .constant(0),
+        isHistoricalFallback: Bool = false,
+        isObservedReplay: Bool = false,
+        scheduleValidity: ScheduleValidity? = nil,
         referenceDate: Date? = nil
     ) {
         self.records = records
@@ -30,8 +38,12 @@ struct DepartureMatrixView: View {
         self.liveArrivals = liveArrivals
         let effectiveDirs = availableDirections.isEmpty ? Set([0, 1]) : availableDirections
         self.availableDirections = effectiveDirs
+        self.isHistoricalFallback = isHistoricalFallback
+        self.isObservedReplay = isObservedReplay
+        self.scheduleValidity = scheduleValidity
         self.referenceDate = referenceDate
         self._selectedDirection = selectedDirection
+        self._selectedDayOffset = selectedDayOffset
         
         if !effectiveDirs.contains(selectedDirection.wrappedValue), let firstAvailable = effectiveDirs.sorted().first {
             DispatchQueue.main.async {
@@ -42,6 +54,10 @@ struct DepartureMatrixView: View {
     
     private var isBus: Bool {
         stopId.hasPrefix("BUS_") || TransitRouteData.isBusRoute(routeId)
+    }
+    
+    private var matchToleranceMinutes: Int {
+        isBus ? 15 : 10
     }
     
     private var baseDirectionNames: [String] {
@@ -118,6 +134,11 @@ struct DepartureMatrixView: View {
     
     /// Reconciles static scheduled departures with active GTFS-RT arrivals at a given reference timestamp
     func reconciledRecords(at currentDate: Date) -> [SpatialDatabaseManager.HourScheduleRecord] {
+        // If not today (e.g. historical day or future day), return static/observed records directly
+        if selectedDayOffset != 0 {
+            return filteredRecords
+        }
+        
         let calendar = Calendar.current
         let currentHour = calendar.component(.hour, from: currentDate)
         let currentMinute = calendar.component(.minute, from: currentDate)
@@ -136,7 +157,7 @@ struct DepartureMatrixView: View {
         }
         
         // Tier 1: Match by exact Trip ID if available
-        for (h, pill) in allPills {
+        for (_, pill) in allPills {
             if !pill.tripId.isEmpty {
                 if let match = filteredLiveArrivals.first(where: { arr in
                     !matchedArrivalIds.contains(arr.id) && arr.tripId == pill.tripId
@@ -165,8 +186,8 @@ struct DepartureMatrixView: View {
                 let tSched = h * 60 + pill.minute
                 let delay = signedMinuteDiff(from: tSched, to: tEst)
                 
-                // Allow matches from 5 min early to 25 min delayed, or circular diff within 10 min
-                if (delay >= -5 && delay <= 25) || circularMinuteDiff(tSched, tEst) <= 10 {
+                // Allow matches from 5 min early to 25 min delayed, or circular diff within mode-adaptive tolerance
+                if (delay >= -5 && delay <= 25) || circularMinuteDiff(tSched, tEst) <= matchToleranceMinutes {
                     let absDiff = abs(delay)
                     if absDiff < smallestDiff {
                         smallestDiff = absDiff
@@ -198,18 +219,24 @@ struct DepartureMatrixView: View {
                     let arrMin = calendar.component(.minute, from: matchedArrival.arrivalDate)
                     let tEst = arrHour * 60 + arrMin
                     
-                    modPill.isLive = true
-                    modPill.liveDeltaMinutes = matchedArrival.minutes
-                    modPill.isBoarding = (matchedArrival.minutes == 0)
-                    
-                    let delayMin = signedMinuteDiff(from: tSched, to: tEst)
-                    if delayMin >= 3 {
-                        modPill.delaySeconds = delayMin * 60
+                    if matchedArrival.scheduleRelationship == .canceled {
+                        modPill.scheduleRelationship = .canceled
+                        modPill.isPast = false
+                    } else {
+                        modPill.scheduleRelationship = matchedArrival.scheduleRelationship
+                        modPill.isLive = true
+                        modPill.liveDeltaMinutes = matchedArrival.minutes
+                        modPill.isBoarding = (matchedArrival.minutes == 0)
+                        
+                        let delayMin = signedMinuteDiff(from: tSched, to: tEst)
+                        if delayMin >= 3 {
+                            modPill.delaySeconds = delayMin * 60
+                        }
+                        
+                        // Delay-aware liveness: remains active if arrival time is in future or within 30s boarding grace
+                        let isExpired = matchedArrival.arrivalDate.timeIntervalSince(currentDate) < -30.0
+                        modPill.isPast = isExpired
                     }
-                    
-                    // Delay-aware liveness: remains active if arrival time is in future or within 30s boarding grace
-                    let isExpired = matchedArrival.arrivalDate.timeIntervalSince(currentDate) < -30.0
-                    modPill.isPast = isExpired
                 } else {
                     // Check if scheduled time passed in current operating day
                     let pastDiff = signedMinuteDiff(from: tSched, to: nowMinutes)
@@ -226,6 +253,7 @@ struct DepartureMatrixView: View {
             let arrHour = calendar.component(.hour, from: arr.arrivalDate)
             let arrMin = calendar.component(.minute, from: arr.arrivalDate)
             
+            let isUnscheduled = (arr.scheduleRelationship != .added)
             let adHocPill = SpatialDatabaseManager.DeparturePillRecord(
                 id: "adhoc_\(arr.id.uuidString)",
                 tripId: arr.tripId ?? "adhoc_\(arr.line)_\(arrHour)_\(arrMin)",
@@ -239,8 +267,9 @@ struct DepartureMatrixView: View {
                 delaySeconds: nil,
                 isLive: true,
                 isPast: false,
-                isUnscheduled: true,
-                isBoarding: (arr.minutes == 0)
+                isUnscheduled: isUnscheduled,
+                isBoarding: (arr.minutes == 0),
+                scheduleRelationship: arr.scheduleRelationship
             )
             
             resultMap[arrHour % 24]?.append(adHocPill)
@@ -278,6 +307,12 @@ struct DepartureMatrixView: View {
         let currentHour = Calendar.current.component(.hour, from: currentDate)
         
         VStack(alignment: .leading, spacing: 14) {
+            // Day Scrubber (±7 Day Navigation)
+            DayScrubberView(
+                selectedDayOffset: $selectedDayOffset,
+                referenceDate: referenceDate ?? currentDate
+            )
+            
             // Direction Selector, Route Filter & Metric Bar
             VStack(spacing: 8) {
                 // Direction Selector Segmented Control
@@ -377,25 +412,62 @@ struct DepartureMatrixView: View {
                     }
                 }
                 
-                HStack {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .font(.system(size: 11, weight: .bold))
+                // Status Header or Fallback Banner
+                if selectedDayOffset < 0 && isHistoricalFallback {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color(hex: "#FFB300"))
+                        Text("Scheduled Timetable • Real-time history recording launches in Phase 2")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundColor(.secondary)
-                        Text("24-HOUR TIMETABLE")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer()
                     }
-                    
-                    Spacer()
-                    
-                    Text("\(totalDeparturesCount) DEPARTURES TODAY")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.primary.opacity(0.06))
-                        .foregroundColor(.secondary)
-                        .clipShape(Capsule())
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.primary.opacity(0.04))
+                    )
+                } else if selectedDayOffset < 0 && isObservedReplay {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color(hex: "#34C759"))
+                            .frame(width: 6, height: 6)
+                        Text("Observed Reality Replay • \(totalDeparturesCount) recorded departures")
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(hex: "#34C759").opacity(0.12))
+                    )
+                } else {
+                    HStack {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Text(selectedDayOffset == 0 ? "24-HOUR TIMETABLE" : "SCHEDULED TIMETABLE")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Text("\(totalDeparturesCount) DEPARTURES")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.primary.opacity(0.06))
+                            .foregroundColor(.secondary)
+                            .clipShape(Capsule())
+                    }
                 }
             }
             
@@ -408,7 +480,7 @@ struct DepartureMatrixView: View {
                                 hourRecord: hourRec,
                                 routeId: routeId,
                                 isPulsing: isPulsing,
-                                currentHour: currentHour
+                                currentHour: selectedDayOffset == 0 ? currentHour : -1
                             )
                             .id(hourRec.hourOfDay)
                             
@@ -422,9 +494,11 @@ struct DepartureMatrixView: View {
                 }
                 .frame(maxHeight: 380)
                 .onAppear {
-                    // Scroll to current hour if within operating window
-                    withAnimation {
-                        scrollProxy.scrollTo(max(0, currentHour - 1), anchor: .top)
+                    // Scroll to current hour if today
+                    if selectedDayOffset == 0 {
+                        withAnimation {
+                            scrollProxy.scrollTo(max(0, currentHour - 1), anchor: .top)
+                        }
                     }
                 }
             }
@@ -438,6 +512,30 @@ struct DepartureMatrixView: View {
                     )
             )
             
+            // Schedule Validity Footer (for future days)
+            if selectedDayOffset > 0, let validity = scheduleValidity {
+                let validityText: String = {
+                    if let label = validity.seasonLabel, !label.isEmpty {
+                        return label
+                    } else if let start = validity.startDate, let end = validity.endDate {
+                        return "\(start) – \(end)"
+                    }
+                    return ""
+                }()
+                if !validityText.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        Text("Valid: \(validityText)")
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 4)
+                }
+            }
+            
             // Legend Footer
             LegendFooterView(routeId: routeId)
         }
@@ -449,6 +547,69 @@ struct DepartureMatrixView: View {
         }
         .onChange(of: availableDirections) { _, _ in
             autoSelectValidDirectionIfNeeded()
+        }
+    }
+}
+
+// MARK: - Day Scrubber View
+
+private struct DayScrubberView: View {
+    @Binding var selectedDayOffset: Int
+    let referenceDate: Date
+    
+    private let calendar = Calendar.current
+    
+    private func date(for offset: Int) -> Date {
+        calendar.date(byAdding: .day, value: offset, to: referenceDate) ?? referenceDate
+    }
+    
+    private func dayTitle(for offset: Int) -> String {
+        if offset == 0 { return "Today" }
+        if offset == -1 { return "Yesterday" }
+        if offset == 1 { return "Tomorrow" }
+        let d = date(for: offset)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE d"
+        return formatter.string(from: d)
+    }
+    
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(-7...7, id: \.self) { offset in
+                        let isSelected = selectedDayOffset == offset
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                selectedDayOffset = offset
+                            }
+                        } label: {
+                            Text(dayTitle(for: offset))
+                                .font(.system(size: 11, weight: isSelected ? .bold : .medium, design: .rounded))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(isSelected ? Color(hex: "#FFB300") : Color.primary.opacity(0.05))
+                                )
+                                .foregroundColor(isSelected ? .black : (offset == 0 ? Color(hex: "#FFB300") : .secondary))
+                                .shadow(color: isSelected ? Color(hex: "#FFB300").opacity(0.3) : Color.clear, radius: 3, y: 1)
+                        }
+                        .buttonStyle(.plain)
+                        .id(offset)
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 2)
+            }
+            .onAppear {
+                proxy.scrollTo(selectedDayOffset, anchor: .center)
+            }
+            .onChange(of: selectedDayOffset) { _, newOffset in
+                withAnimation {
+                    proxy.scrollTo(newOffset, anchor: .center)
+                }
+            }
         }
     }
 }
@@ -516,31 +677,93 @@ private struct DeparturePillView: View {
         TransitRouteData.lineInfo(for: pill.routeId)
     }
     
+    private var isCanceled: Bool {
+        pill.scheduleRelationship == .canceled
+    }
+    
+    private var isAdded: Bool {
+        pill.scheduleRelationship == .added
+    }
+    
+    private var isUnscheduled: Bool {
+        pill.scheduleRelationship == .unscheduled || pill.isUnscheduled
+    }
+    
+    private var isDuplicated: Bool {
+        pill.scheduleRelationship == .duplicated
+    }
+    
+    private var effectiveOpacity: Double {
+        if isCanceled {
+            return 0.4
+        }
+        return pill.isPast ? 0.35 : 1.0
+    }
+    
+    private var strokeColor: Color {
+        if isCanceled {
+            return Color(hex: "#FF453A").opacity(0.4)
+        }
+        if pill.isHistoricalEvent {
+            let delay = pill.historicalDelaySeconds ?? 0
+            if delay <= 120 {
+                return Color(hex: "#34C759").opacity(0.8)
+            } else if delay <= 300 {
+                return Color(hex: "#FFB300").opacity(0.8)
+            } else {
+                return Color(hex: "#FF453A").opacity(0.8)
+            }
+        }
+        if pill.isFirstDeparture || pill.isLastDeparture {
+            return Color(hex: "#FFB300").opacity(pill.isPast ? 0.35 : 1.0)
+        }
+        if pill.isLive || isAdded {
+            return Color(hex: "#FFB300").opacity(pill.isPast ? 0.3 : 0.8)
+        }
+        if isUnscheduled {
+            return Color(hex: "#FFB300").opacity(0.5)
+        }
+        return Color.primary.opacity(pill.isPast ? 0.04 : 0.08)
+    }
+    
     var body: some View {
         HStack(spacing: 3) {
             // Live Pulsing Indicator Dot
-            if pill.isLive {
+            if pill.isLive || isAdded || isUnscheduled {
                 Circle()
-                    .fill(Color(hex: "#FFB300"))
+                    .fill(isCanceled ? Color(hex: "#FF453A") : Color(hex: "#FFB300"))
                     .frame(width: 5, height: 5)
                     .opacity(isPulsing ? 1.0 : 0.25)
                     .shadow(color: Color(hex: "#FFB300").opacity(0.8), radius: 2)
             }
             
+            // Historical Status Dot
+            if pill.isHistoricalEvent {
+                let delay = pill.historicalDelaySeconds ?? 0
+                Circle()
+                    .fill(delay <= 120 ? Color(hex: "#34C759") : (delay <= 300 ? Color(hex: "#FFB300") : Color(hex: "#FF453A")))
+                    .frame(width: 5, height: 5)
+            }
+            
             // 2-Digit Monospace Minute
             Text(String(format: "%02d", pill.minute))
-                .font(.system(size: 12, weight: pill.isExpress ? .heavy : .semibold, design: .monospaced))
-                .foregroundColor(pill.isPast ? .secondary : (pill.isExpress ? Color(hex: routeInfo.textColorHex) : .primary))
+                .font(.system(size: 12, weight: isAdded ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
+                .italic(isUnscheduled)
+                .strikethrough(isCanceled, color: Color(hex: "#FF453A"))
+                .foregroundColor(
+                    isCanceled ? Color(hex: "#FF453A") :
+                    (pill.isPast ? .secondary : (pill.isExpress ? Color(hex: routeInfo.textColorHex) : .primary))
+                )
             
             // Express Tag
-            if pill.isExpress {
+            if pill.isExpress && !isCanceled {
                 Text("EXP")
                     .font(.system(size: 8, weight: .bold, design: .rounded))
                     .foregroundColor(Color(hex: routeInfo.textColorHex).opacity(pill.isPast ? 0.5 : 0.9))
             }
             
             // Live Countdown Overlay
-            if let delta = pill.liveDeltaMinutes {
+            if let delta = pill.liveDeltaMinutes, !isCanceled {
                 Text(delta == 0 ? "0m" : "\(delta)m")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(Color(hex: "#FFB300"))
@@ -550,21 +773,54 @@ private struct DeparturePillView: View {
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(pill.isExpress ? (pill.isPast ? routeInfo.color.opacity(0.4) : routeInfo.color) : Color.primary.opacity(pill.isPast ? 0.03 : 0.06))
+                .fill(
+                    isCanceled ? Color(hex: "#FF453A").opacity(0.08) :
+                    (pill.isExpress ? (pill.isPast ? routeInfo.color.opacity(0.4) : routeInfo.color) : Color.primary.opacity(pill.isPast ? 0.03 : 0.06))
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(
-                    pill.isFirstDeparture || pill.isLastDeparture
-                        ? Color(hex: "#FFB300").opacity(pill.isPast ? 0.35 : 1.0)
-                        : (pill.isLive ? Color(hex: "#FFB300").opacity(pill.isPast ? 0.3 : 0.6) : (pill.isUnscheduled ? Color(hex: "#FFB300").opacity(0.4) : Color.primary.opacity(pill.isPast ? 0.04 : 0.08))),
-                    lineWidth: (pill.isFirstDeparture || pill.isLastDeparture) ? 1.5 : 1
-                )
+                .stroke(strokeColor, lineWidth: (pill.isFirstDeparture || pill.isLastDeparture || pill.isHistoricalEvent) ? 1.5 : 1)
         )
-        .opacity(pill.isPast ? 0.35 : 1.0)
+        .opacity(effectiveOpacity)
         .overlay(alignment: .topTrailing) {
-            // Delay Badge
-            if let delay = pill.delaySeconds, delay >= 180 {
+            if isCanceled {
+                Text("CANCELED")
+                    .font(.system(size: 7, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(Color(hex: "#FF453A"))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                    .offset(x: 6, y: -6)
+            } else if isAdded {
+                Text("ADDED")
+                    .font(.system(size: 7, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(Color(hex: "#FFB300"))
+                    .foregroundColor(.black)
+                    .clipShape(Capsule())
+                    .offset(x: 4, y: -6)
+            } else if isUnscheduled {
+                Text("LIVE")
+                    .font(.system(size: 7, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(Color(hex: "#007AFF"))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                    .offset(x: 4, y: -6)
+            } else if isDuplicated {
+                Text("DUPLICATE")
+                    .font(.system(size: 7, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary)
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                    .offset(x: 6, y: -6)
+            } else if let delay = pill.delaySeconds, delay >= 180 {
                 Text("+\(delay / 60)m")
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
                     .padding(.horizontal, 3)
@@ -584,53 +840,67 @@ private struct LegendFooterView: View {
     let routeId: String
     
     var body: some View {
-        HStack(spacing: 12) {
-            // First / Last Marker
-            HStack(spacing: 4) {
-                RoundedRectangle(cornerRadius: 3)
-                    .stroke(Color(hex: "#FFB300"), lineWidth: 1.5)
-                    .frame(width: 12, height: 10)
-                Text("First / Last")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                // First / Last Marker
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(Color(hex: "#FFB300"), lineWidth: 1.5)
+                        .frame(width: 12, height: 10)
+                    Text("First/Last")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                
+                // Express Variant
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(TransitRouteData.lineInfo(for: routeId).color)
+                        .frame(width: 12, height: 10)
+                    Text("Express")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                
+                // Live GTFS-RT
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color(hex: "#FFB300"))
+                        .frame(width: 6, height: 6)
+                    Text("Live Δt")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                
+                // Delay Badge
+                HStack(spacing: 4) {
+                    Text("+4m")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .padding(.horizontal, 3)
+                        .background(Color(hex: "#FF453A"))
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                    Text("Delay ≥3m")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                
+                // Canceled
+                HStack(spacing: 4) {
+                    Text("CANCELED")
+                        .font(.system(size: 7, weight: .bold, design: .rounded))
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(Color(hex: "#FF453A"))
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                    Text("Canceled")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
             }
-            
-            // Express Variant
-            HStack(spacing: 4) {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(TransitRouteData.lineInfo(for: routeId).color)
-                    .frame(width: 12, height: 10)
-                Text("Express")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-            
-            // Live GTFS-RT
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(Color(hex: "#FFB300"))
-                    .frame(width: 6, height: 6)
-                Text("Live Δt")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-            
-            // Delay Badge
-            HStack(spacing: 4) {
-                Text("+4m")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .padding(.horizontal, 3)
-                    .background(Color(hex: "#FF453A"))
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-                Text("Delay ≥3m")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
+            .padding(.top, 2)
         }
-        .padding(.top, 2)
     }
 }
 
@@ -697,8 +967,8 @@ private struct FlowLayoutImplementation: Layout {
         SpatialDatabaseManager.DeparturePillRecord(id: "2", tripId: "T2", routeId: "L", destination: "8th Ave", minute: 12, isExpress: false, liveDeltaMinutes: 3, isLive: true),
         SpatialDatabaseManager.DeparturePillRecord(id: "3", tripId: "T3", routeId: "L", destination: "8th Ave", minute: 19, isExpress: true),
         SpatialDatabaseManager.DeparturePillRecord(id: "4", tripId: "T4", routeId: "L", destination: "8th Ave", minute: 26, isExpress: false, delaySeconds: 240),
-        SpatialDatabaseManager.DeparturePillRecord(id: "5", tripId: "T5", routeId: "L", destination: "8th Ave", minute: 34, isExpress: false),
-        SpatialDatabaseManager.DeparturePillRecord(id: "6", tripId: "T6", routeId: "L", destination: "8th Ave", minute: 42, isExpress: true),
+        SpatialDatabaseManager.DeparturePillRecord(id: "5", tripId: "T5", routeId: "L", destination: "8th Ave", minute: 34, isExpress: false, scheduleRelationship: .canceled),
+        SpatialDatabaseManager.DeparturePillRecord(id: "6", tripId: "T6", routeId: "L", destination: "8th Ave", minute: 42, isExpress: true, scheduleRelationship: .added),
         SpatialDatabaseManager.DeparturePillRecord(id: "7", tripId: "T7", routeId: "L", destination: "8th Ave", minute: 51, isExpress: false)
     ]
     

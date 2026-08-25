@@ -24,6 +24,9 @@ struct TransitRevealSheet: View {
     @State private var timetableSchedule: [SpatialDatabaseManager.HourScheduleRecord] = []
     @State private var availableDirections: Set<Int> = [0, 1]
     @State private var selectedDirection: Int = 0
+    @State private var selectedDayOffset: Int = 0
+    @State private var isHistoricalFallback: Bool = false
+    @State private var isObservedReplay: Bool = false
     @State private var selectedRecord: SpatialDatabaseManager.HourlyReliabilityRecord? = nil
     @State private var liveArrivals: [SpatialDatabaseManager.ArrivalInfo] = []
     @State private var serviceAlerts: [TransitAlert] = []
@@ -424,6 +427,10 @@ struct TransitRevealSheet: View {
                                 liveArrivals: liveArrivals,
                                 availableDirections: availableDirections,
                                 selectedDirection: $selectedDirection,
+                                selectedDayOffset: $selectedDayOffset,
+                                isHistoricalFallback: isHistoricalFallback,
+                                isObservedReplay: isObservedReplay,
+                                scheduleValidity: CameraBounds.activeConfig.transit?.scheduleValidity,
                                 referenceDate: referenceDate
                             )
                         }
@@ -455,15 +462,30 @@ struct TransitRevealSheet: View {
         }
         .onChange(of: selectedDirection) { _, newDir in
             Task {
-                if let details = stopDetails {
-                    let timetable = try? await SpatialDatabaseManager.shared.fetchTimetable(for: stopId, routeId: details.routeId, routeIds: details.routeIds, directionId: newDir)
-                    if let timetable = timetable {
-                        await MainActor.run {
-                            self.timetableSchedule = timetable
-                        }
-                    }
-                }
+                await reloadTimetable(direction: newDir, dayOffset: selectedDayOffset)
             }
+        }
+        .onChange(of: selectedDayOffset) { _, newOffset in
+            Task {
+                await reloadTimetable(direction: selectedDirection, dayOffset: newOffset)
+            }
+        }
+    }
+    
+    @MainActor
+    private func reloadTimetable(direction: Int, dayOffset: Int) async {
+        guard let details = stopDetails else { return }
+        if let result = try? await SpatialDatabaseManager.shared.fetchTimetableResult(
+            for: stopId,
+            routeId: details.routeId,
+            routeIds: details.routeIds,
+            directionId: direction,
+            dayOffset: dayOffset,
+            referenceDate: referenceDate ?? Date()
+        ) {
+            self.timetableSchedule = result.records
+            self.isHistoricalFallback = result.isHistoricalFallback
+            self.isObservedReplay = result.isObservedReplay
         }
     }
     
@@ -536,7 +558,7 @@ struct TransitRevealSheet: View {
             initialDir = selectedDirection
         }
         
-        let timetable = try? await SpatialDatabaseManager.shared.fetchTimetable(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [], directionId: initialDir)
+        let timetableResult = try? await SpatialDatabaseManager.shared.fetchTimetableResult(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [], directionId: initialDir, dayOffset: selectedDayOffset, referenceDate: referenceDate ?? Date())
         
         self.stopDetails = details
         self.availableDirections = availDirs
@@ -546,8 +568,10 @@ struct TransitRevealSheet: View {
         if let rel = rel {
             self.hourlyReliability = rel
         }
-        if let timetable = timetable {
-            self.timetableSchedule = timetable
+        if let result = timetableResult {
+            self.timetableSchedule = result.records
+            self.isHistoricalFallback = result.isHistoricalFallback
+            self.isObservedReplay = result.isObservedReplay
         }
         
         guard let details = details else { return }

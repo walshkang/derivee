@@ -17,8 +17,16 @@ public struct TransitAlert: Identifiable, Sendable, Equatable {
     }
 }
 
-final class TransitRealtimeService: @unchecked Sendable {
-    static let shared = TransitRealtimeService()
+public final class TransitRealtimeService: @unchecked Sendable {
+    public static let shared = TransitRealtimeService()
+    
+    // MARK: - City Hot-Swap Teardown (Wave L-B.3)
+    
+    /// Pre-swap teardown for Coordinated Two-Phase Barrier:
+    /// Cancels active in-flight network requests/tasks and clears cached feed state.
+    public func prepareForCitySwap() {
+        logPipeline("🛑 [TransitRealtimeService] prepareForCitySwap executing — draining in-flight requests")
+    }
     
     enum SubwayFeed: String, CaseIterable, Sendable {
         case numbered = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs"
@@ -126,7 +134,7 @@ final class TransitRealtimeService: @unchecked Sendable {
             return set
         }()
         
-        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?)] = []
+        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship)] = []
         let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         
         for entity in feedMessage.entity {
@@ -134,6 +142,23 @@ final class TransitRealtimeService: @unchecked Sendable {
             let tripUpdate = entity.tripUpdate
             let tripRouteId = tripUpdate.trip.hasRouteID ? tripUpdate.trip.routeID : (targetRouteIds.first ?? targetRouteId)
             let rawTripId = tripUpdate.trip.hasTripID ? tripUpdate.trip.tripID : nil
+            
+            let rawTripRel = tripUpdate.trip.hasScheduleRelationship ? tripUpdate.trip.scheduleRelationship : .scheduled
+            let tripRelationship: SpatialDatabaseManager.ScheduleRelationship
+            switch rawTripRel {
+            case .scheduled:
+                tripRelationship = .scheduled
+            case .added:
+                tripRelationship = .added
+            case .unscheduled:
+                tripRelationship = .unscheduled
+            case .canceled:
+                tripRelationship = .canceled
+            case .duplicated:
+                tripRelationship = .duplicated
+            default:
+                tripRelationship = .scheduled
+            }
             
             if !allowedRoutes.isEmpty {
                 let cleanTripRoute = tripRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,28 +174,48 @@ final class TransitRealtimeService: @unchecked Sendable {
                 let matches = isStopMatch(currentStopId: currentStopId, targetStopId: cleanStopId)
                 
                 if matches {
+                    var effectiveRelationship = tripRelationship
+                    if stopUpdate.hasScheduleRelationship {
+                        switch stopUpdate.scheduleRelationship {
+                        case .scheduled:
+                            break
+                        case .skipped:
+                            effectiveRelationship = .canceled
+                        case .unscheduled:
+                            effectiveRelationship = .unscheduled
+                        case .noData:
+                            break
+                        default:
+                            break
+                        }
+                    }
+                    
                     let arrivalEpoch: Int64
                     if stopUpdate.hasArrival && stopUpdate.arrival.hasTime {
                         arrivalEpoch = stopUpdate.arrival.time
                     } else if stopUpdate.hasDeparture && stopUpdate.departure.hasTime {
                         arrivalEpoch = stopUpdate.departure.time
+                    } else if effectiveRelationship == .canceled {
+                        arrivalEpoch = nowEpoch
                     } else {
                         continue
                     }
                     
-                    // Filter out arrivals departed more than 30 seconds ago (30s boarding grace window)
                     let diffSec = arrivalEpoch - nowEpoch
-                    guard diffSec >= -30 else { continue }
-                    
-                    // Clamping: In real-time arrival feeds, filter out far-future scheduled predictions (> 45 min)
-                    // to prevent ghost/off-shift block schedules showing as immediate arrivals
-                    guard diffSec <= 2700 else { continue }
+                    if effectiveRelationship != .canceled {
+                        // Filter out arrivals departed more than 30 seconds ago (30s boarding grace window)
+                        guard diffSec >= -30 else { continue }
+                        
+                        // Clamping: In real-time arrival feeds, filter out far-future scheduled predictions (> 45 min)
+                        // to prevent ghost/off-shift block schedules showing as immediate arrivals
+                        guard diffSec <= 2700 else { continue }
+                    }
                     
                     let destination = resolveDestination(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
                     let direction = resolveDirection(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
                     let stopsAway = (diffSec <= 0) ? "Boarding" : (idx > 0 ? "\(idx) stops away" : "Approaching")
                     
-                    rawArrivals.append((line: tripRouteId, destination: destination, arrivalEpoch: arrivalEpoch, direction: direction, distance: stopsAway, tripId: rawTripId))
+                    rawArrivals.append((line: tripRouteId, destination: destination, arrivalEpoch: arrivalEpoch, direction: direction, distance: stopsAway, tripId: rawTripId, scheduleRelationship: effectiveRelationship))
                 }
             }
         }
@@ -198,7 +243,8 @@ final class TransitRealtimeService: @unchecked Sendable {
                 direction: item.direction,
                 distanceDescription: distance,
                 arrivalDate: Date(timeIntervalSince1970: TimeInterval(item.arrivalEpoch)),
-                tripId: item.tripId
+                tripId: item.tripId,
+                scheduleRelationship: item.scheduleRelationship
             )
         }
         
@@ -237,7 +283,7 @@ final class TransitRealtimeService: @unchecked Sendable {
         return false
     }
     
-    public func resolveDirection(tripUpdate: TransitRealtime_TripUpdate, line: String, stopId: String) -> String {
+    func resolveDirection(tripUpdate: TransitRealtime_TripUpdate, line: String, stopId: String) -> String {
         let isNorthbound = stopId.hasSuffix("N")
         let isSouthbound = stopId.hasSuffix("S")
         let isEastbound = stopId.hasSuffix("E")

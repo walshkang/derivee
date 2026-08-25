@@ -86,6 +86,20 @@ final class TransitRevealSheetTests: XCTestCase {
                     direction_id INTEGER NOT NULL DEFAULT 0,
                     PRIMARY KEY (stop_id, trip_id, departure_time)
                 );
+                
+                CREATE TABLE scheduled_hourly_patterns (
+                    stop_id TEXT NOT NULL,
+                    route_id TEXT NOT NULL,
+                    direction_id INTEGER NOT NULL,
+                    hour_of_day INTEGER NOT NULL,
+                    service_mask INTEGER NOT NULL,
+                    baseline_days_of_week INTEGER NOT NULL,
+                    minute_offsets TEXT NOT NULL,
+                    headsign TEXT NOT NULL,
+                    PRIMARY KEY (stop_id, route_id, direction_id, hour_of_day, service_mask)
+                );
+                CREATE INDEX idx_patterns_lookup ON scheduled_hourly_patterns(stop_id, route_id, direction_id);
+                INSERT INTO scheduled_hourly_patterns VALUES ('stop_pattern_test', 'Red', 0, 8, 384, 127, '04,16,28,40,52', 'Alewife');
             """)
             
             // Seed all 168 cells (7 days x 24 hours) for stop_bedford
@@ -1029,4 +1043,284 @@ final class TransitRevealSheetTests: XCTestCase {
         )
         XCTAssertNotNil(sheet)
     }
+    
+    // MARK: - Wave L-C.4 Timetable Reconciler & ScheduleRelationship Tests
+    
+    func testBitwiseDayEvaluationFutureAndPast() async throws {
+        let fixedDate = Date(timeIntervalSince1970: 1736337600) // Anchor date
+        
+        // Query day offset 0 (Today: bit 7 active)
+        let todayResult = try await dbManager.fetchTimetableResult(
+            for: "stop_pattern_test",
+            routeId: "Red",
+            directionId: 0,
+            dayOffset: 0,
+            referenceDate: fixedDate
+        )
+        let h8Today = todayResult.records.first(where: { $0.hourOfDay == 8 })!
+        XCTAssertEqual(h8Today.departures.count, 5, "Today (offset 0) should be active and return 5 departures.")
+        XCTAssertEqual(h8Today.departures.map { $0.minute }, [4, 16, 28, 40, 52])
+        
+        // Query day offset 1 (Tomorrow: bit 8 active)
+        let tomorrowResult = try await dbManager.fetchTimetableResult(
+            for: "stop_pattern_test",
+            routeId: "Red",
+            directionId: 0,
+            dayOffset: 1,
+            referenceDate: fixedDate
+        )
+        let h8Tomorrow = tomorrowResult.records.first(where: { $0.hourOfDay == 8 })!
+        XCTAssertEqual(h8Tomorrow.departures.count, 5, "Tomorrow (offset 1) should be active and return 5 departures.")
+        XCTAssertFalse(tomorrowResult.isHistoricalFallback)
+    }
+    
+    func testCircularDistanceMatchingModeTolerances() throws {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2025; comps.month = 1; comps.day = 8
+        comps.hour = 12; comps.minute = 0; comps.second = 0
+        let date1200 = calendar.date(from: comps)!
+        
+        let sampleHours = (0..<24).map { h in
+            if h == 12 {
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 12, departures: [
+                    SpatialDatabaseManager.DeparturePillRecord(id: "D12_00", tripId: "T1", routeId: "L", destination: "8th Ave", minute: 0)
+                ])
+            }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+        
+        // 1. Subway live arrival 9 minutes late (12:09) -> within 10m rail tolerance
+        let subwayArr = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8th Ave",
+            minutes: 9,
+            arrivalDate: date1200.addingTimeInterval(540)
+        )
+        let subwayView = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_subway",
+            liveArrivals: [subwayArr],
+            referenceDate: date1200
+        )
+        let subwayReconciled = subwayView.reconciledRecords(at: date1200)
+        let subPill = subwayReconciled.first(where: { $0.hourOfDay == 12 })!.departures.first!
+        XCTAssertTrue(subPill.isLive, "Subway 9m diff must match within 10m tolerance.")
+        
+        // 2. Bus stop live arrival 14 minutes late (12:14) -> within 15m bus tolerance
+        let busSampleHours = (0..<24).map { h in
+            if h == 12 {
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 12, departures: [
+                    SpatialDatabaseManager.DeparturePillRecord(id: "B12_00", tripId: "TB1", routeId: "B32", destination: "Williamsburg", minute: 0)
+                ])
+            }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+        let busArr = SpatialDatabaseManager.ArrivalInfo(
+            line: "B32",
+            destination: "Williamsburg",
+            minutes: 14,
+            arrivalDate: date1200.addingTimeInterval(840)
+        )
+        let busView = DepartureMatrixView(
+            records: busSampleHours,
+            routeId: "B32",
+            stopId: "BUS_308666",
+            liveArrivals: [busArr],
+            referenceDate: date1200
+        )
+        let busReconciled = busView.reconciledRecords(at: date1200)
+        let busPill = busReconciled.first(where: { $0.hourOfDay == 12 })!.departures.first!
+        XCTAssertTrue(busPill.isLive, "Bus 14m diff must match within 15m bus tolerance.")
+    }
+    
+    func testGTFSRealtimeScheduleRelationshipParsing() throws {
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = 1736337600
+        feedMessage.header = header
+        
+        // 1. SCHEDULED
+        var ent1 = TransitRealtime_FeedEntity()
+        ent1.id = "E1"
+        var tu1 = TransitRealtime_TripUpdate()
+        var t1 = TransitRealtime_TripDescriptor()
+        t1.routeID = "L"; t1.tripID = "T_SCHED"; t1.scheduleRelationship = .scheduled
+        tu1.trip = t1
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "stop_bedford"
+        var arr1 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr1.time = 1736337600 + 120
+        stu1.arrival = arr1
+        tu1.stopTimeUpdate = [stu1]
+        ent1.tripUpdate = tu1
+        
+        // 2. ADDED
+        var ent2 = TransitRealtime_FeedEntity()
+        ent2.id = "E2"
+        var tu2 = TransitRealtime_TripUpdate()
+        var t2 = TransitRealtime_TripDescriptor()
+        t2.routeID = "L"; t2.tripID = "T_ADDED"; t2.scheduleRelationship = .added
+        tu2.trip = t2
+        var stu2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2.stopID = "stop_bedford"
+        var arr2 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr2.time = 1736337600 + 300
+        stu2.arrival = arr2
+        tu2.stopTimeUpdate = [stu2]
+        ent2.tripUpdate = tu2
+        
+        // 3. UNSCHEDULED
+        var ent3 = TransitRealtime_FeedEntity()
+        ent3.id = "E3"
+        var tu3 = TransitRealtime_TripUpdate()
+        var t3 = TransitRealtime_TripDescriptor()
+        t3.routeID = "L"; t3.tripID = "T_UNSCHED"; t3.scheduleRelationship = .unscheduled
+        tu3.trip = t3
+        var stu3 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu3.stopID = "stop_bedford"
+        var arr3 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr3.time = 1736337600 + 450
+        stu3.arrival = arr3
+        tu3.stopTimeUpdate = [stu3]
+        ent3.tripUpdate = tu3
+        
+        // 4. CANCELED
+        var ent4 = TransitRealtime_FeedEntity()
+        ent4.id = "E4"
+        var tu4 = TransitRealtime_TripUpdate()
+        var t4 = TransitRealtime_TripDescriptor()
+        t4.routeID = "L"; t4.tripID = "T_CANCEL"; t4.scheduleRelationship = .canceled
+        tu4.trip = t4
+        var stu4 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu4.stopID = "stop_bedford"
+        tu4.stopTimeUpdate = [stu4]
+        ent4.tripUpdate = tu4
+        
+        // 5. SKIPPED STOP
+        var ent5 = TransitRealtime_FeedEntity()
+        ent5.id = "E5"
+        var tu5 = TransitRealtime_TripUpdate()
+        var t5 = TransitRealtime_TripDescriptor()
+        t5.routeID = "L"; t5.tripID = "T_SKIPPED"; t5.scheduleRelationship = .scheduled
+        tu5.trip = t5
+        var stu5 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu5.stopID = "stop_bedford"
+        stu5.scheduleRelationship = .skipped
+        tu5.stopTimeUpdate = [stu5]
+        ent5.tripUpdate = tu5
+        
+        feedMessage.entity = [ent1, ent2, ent3, ent4, ent5]
+        let data = try feedMessage.serializedData()
+        
+        let arrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "stop_bedford",
+            targetRouteId: "L",
+            referenceDate: Date(timeIntervalSince1970: 1736337600)
+        )
+        
+        XCTAssertEqual(arrivals.count, 5)
+        let sched = arrivals.first(where: { $0.tripId == "T_SCHED" })!
+        XCTAssertEqual(sched.scheduleRelationship, .scheduled)
+        
+        let added = arrivals.first(where: { $0.tripId == "T_ADDED" })!
+        XCTAssertEqual(added.scheduleRelationship, .added)
+        
+        let unsched = arrivals.first(where: { $0.tripId == "T_UNSCHED" })!
+        XCTAssertEqual(unsched.scheduleRelationship, .unscheduled)
+        
+        let canceled = arrivals.first(where: { $0.tripId == "T_CANCEL" })!
+        XCTAssertEqual(canceled.scheduleRelationship, .canceled)
+        
+        let skipped = arrivals.first(where: { $0.tripId == "T_SKIPPED" })!
+        XCTAssertEqual(skipped.scheduleRelationship, .canceled)
+    }
+    
+    func testScheduleRelationshipInSituRendering() throws {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2025; comps.month = 1; comps.day = 8
+        comps.hour = 12; comps.minute = 0; comps.second = 0
+        let date1200 = calendar.date(from: comps)!
+        
+        let sampleHours = (0..<24).map { h in
+            if h == 12 {
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 12, departures: [
+                    SpatialDatabaseManager.DeparturePillRecord(id: "D12_10", tripId: "T_CANCELED_1", routeId: "L", destination: "8th Ave", minute: 10),
+                    SpatialDatabaseManager.DeparturePillRecord(id: "D12_30", tripId: "T_NORMAL_1", routeId: "L", destination: "8th Ave", minute: 30)
+                ])
+            }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+        
+        let liveArrivals = [
+            SpatialDatabaseManager.ArrivalInfo(
+                line: "L",
+                destination: "8th Ave",
+                minutes: 10,
+                arrivalDate: date1200.addingTimeInterval(600),
+                tripId: "T_CANCELED_1",
+                scheduleRelationship: .canceled
+            ),
+            SpatialDatabaseManager.ArrivalInfo(
+                line: "L",
+                destination: "8th Ave",
+                minutes: 45,
+                arrivalDate: date1200.addingTimeInterval(2700),
+                tripId: "T_ADDED_1",
+                scheduleRelationship: .added
+            )
+        ]
+        
+        let view = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_bedford",
+            liveArrivals: liveArrivals,
+            referenceDate: date1200
+        )
+        
+        let reconciled = view.reconciledRecords(at: date1200)
+        let h12 = reconciled.first(where: { $0.hourOfDay == 12 })!
+        
+        // Canceled pill should stay in-situ in hour 12
+        let canceledPill = h12.departures.first(where: { $0.id == "D12_10" })!
+        XCTAssertEqual(canceledPill.scheduleRelationship, .canceled)
+        XCTAssertFalse(canceledPill.isPast)
+        
+        // Added pill should be dynamically injected into hour 12
+        let addedPill = h12.departures.first(where: { $0.scheduleRelationship == .added })!
+        XCTAssertEqual(addedPill.scheduleRelationship, .added)
+        XCTAssertTrue(addedPill.isLive)
+    }
+    
+    func testPastDayObservedRealityReplayAndFallbackBanner() async throws {
+        let fixedDate = Date(timeIntervalSince1970: 1736337600)
+        
+        // Query past day (-1) for stop_bedford which has stop_events seeded
+        let observedResult = try await dbManager.fetchTimetableResult(
+            for: "stop_bedford",
+            routeId: "L",
+            directionId: 0,
+            dayOffset: -1,
+            referenceDate: fixedDate.addingTimeInterval(86400) // Next day querying yesterday
+        )
+        XCTAssertTrue(observedResult.isObservedReplay, "When stop_events exist for past day, isObservedReplay must be true.")
+        XCTAssertFalse(observedResult.isHistoricalFallback)
+        
+        // Query past day (-2) for unknown stop with 0 stop_events
+        let fallbackResult = try await dbManager.fetchTimetableResult(
+            for: "stop_no_events",
+            routeId: "L",
+            directionId: 0,
+            dayOffset: -2,
+            referenceDate: fixedDate
+        )
+        XCTAssertFalse(fallbackResult.isObservedReplay)
+        XCTAssertTrue(fallbackResult.isHistoricalFallback, "When no stop_events exist for past day, isHistoricalFallback must be true.")
+    }
 }
+
