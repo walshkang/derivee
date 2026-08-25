@@ -185,4 +185,320 @@ final class TransitRealtimeTests: XCTestCase {
         let q59 = TransitRealtimeService.resolveBusDestination(routeId: "Q59", directionId: 0)
         XCTAssertEqual(q59.destination, "Rego Park - 63 Dr / Queens Blvd")
     }
+
+    // MARK: - Wave M.1: VehicleStopStatus & Terminus Dwell Tests
+
+    func testVehiclePositionTerminusDwellStoppedAt() throws {
+        let nowEpoch: Int64 = 1700000000
+        let refDate = Date(timeIntervalSince1970: TimeInterval(nowEpoch))
+        
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(nowEpoch)
+        feedMessage.header = header
+        
+        // Entity 1: TripUpdate with origin at L01 and downstream stops L02, L03
+        var ent1 = TransitRealtime_FeedEntity()
+        ent1.id = "TU_L_001"
+        var tu = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "TRIP_L_DWELL_001"
+        trip.routeID = "L"
+        tu.trip = trip
+        
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "L01N"
+        stu1.stopSequence = 1
+        var arr1 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr1.time = nowEpoch + 180 // 3m
+        stu1.arrival = arr1
+        stu1.departure = arr1
+        
+        var stu2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2.stopID = "L02N"
+        stu2.stopSequence = 2
+        var arr2 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr2.time = nowEpoch + 360 // 6m
+        stu2.arrival = arr2
+        stu2.departure = arr2
+        
+        var stu3 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu3.stopID = "L03N"
+        stu3.stopSequence = 3
+        var arr3 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr3.time = nowEpoch + 540 // 9m
+        stu3.arrival = arr3
+        stu3.departure = arr3
+        
+        tu.stopTimeUpdate = [stu1, stu2, stu3]
+        ent1.tripUpdate = tu
+        
+        // Entity 2: VehiclePosition dwelling at origin terminal (STOPPED_AT, seq 1)
+        var ent2 = TransitRealtime_FeedEntity()
+        ent2.id = "VP_L_001"
+        var vp = TransitRealtime_VehiclePosition()
+        vp.trip = trip
+        vp.currentStatus = .stoppedAt
+        vp.currentStopSequence = 1
+        vp.stopID = "L01N"
+        ent2.vehicle = vp
+        
+        feedMessage.entity = [ent1, ent2]
+        let data = try feedMessage.serializedData()
+        
+        // 1. Querying origin terminal (L01)
+        let originArrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "L01",
+            targetRouteId: "L",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(originArrivals.count, 1)
+        XCTAssertEqual(originArrivals[0].minutes, 3)
+        XCTAssertEqual(originArrivals[0].distanceDescription, "At Terminus")
+        
+        // 2. Querying downstream station 2 stops away (L03) while vehicle is still dwelling at origin
+        let downstreamArrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "L03",
+            targetRouteId: "L",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(downstreamArrivals.count, 1)
+        XCTAssertEqual(downstreamArrivals[0].minutes, 9)
+        XCTAssertEqual(downstreamArrivals[0].distanceDescription, "At Terminus", "Downstream stops must render 'At Terminus' while vehicle is dwelling at origin terminal.")
+    }
+
+    func testVehiclePositionTransitionToInTransitTo() throws {
+        let nowEpoch: Int64 = 1700000000
+        let refDate = Date(timeIntervalSince1970: TimeInterval(nowEpoch))
+        
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(nowEpoch)
+        feedMessage.header = header
+        
+        var ent1 = TransitRealtime_FeedEntity()
+        ent1.id = "TU_L_002"
+        var tu = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "TRIP_L_MOVING_002"
+        trip.routeID = "L"
+        tu.trip = trip
+        
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "L01N"
+        stu1.stopSequence = 1
+        var arr1 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr1.time = nowEpoch + 60
+        stu1.departure = arr1
+        
+        var stu2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2.stopID = "L02N"
+        stu2.stopSequence = 2
+        var arr2 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr2.time = nowEpoch + 240
+        stu2.arrival = arr2
+        
+        var stu3 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu3.stopID = "L03N"
+        stu3.stopSequence = 3
+        var arr3 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr3.time = nowEpoch + 420
+        stu3.arrival = arr3
+        
+        tu.stopTimeUpdate = [stu1, stu2, stu3]
+        ent1.tripUpdate = tu
+        
+        // Vehicle has transitioned to IN_TRANSIT_TO from terminal
+        var ent2 = TransitRealtime_FeedEntity()
+        ent2.id = "VP_L_002"
+        var vp = TransitRealtime_VehiclePosition()
+        vp.trip = trip
+        vp.currentStatus = .inTransitTo
+        vp.currentStopSequence = 1
+        vp.stopID = "L01N"
+        ent2.vehicle = vp
+        
+        feedMessage.entity = [ent1, ent2]
+        let data = try feedMessage.serializedData()
+        
+        // Downstream stops must now show active stops countdown
+        let arrAtL02 = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "L02",
+            targetRouteId: "L",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(arrAtL02[0].distanceDescription, "1 stop away")
+        
+        let arrAtL03 = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "L03",
+            targetRouteId: "L",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(arrAtL03[0].distanceDescription, "2 stops away")
+    }
+
+    func testVehiclePositionAdvancingSequence() throws {
+        let nowEpoch: Int64 = 1700000000
+        let refDate = Date(timeIntervalSince1970: TimeInterval(nowEpoch))
+        
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(nowEpoch)
+        feedMessage.header = header
+        
+        var ent1 = TransitRealtime_FeedEntity()
+        ent1.id = "TU_L_003"
+        var tu = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "TRIP_L_ADVANCING_003"
+        trip.routeID = "L"
+        tu.trip = trip
+        
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "L01N"; stu1.stopSequence = 1
+        var stu2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2.stopID = "L02N"; stu2.stopSequence = 2
+        var arr2 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr2.time = nowEpoch + 120
+        stu2.arrival = arr2
+        var stu3 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu3.stopID = "L03N"; stu3.stopSequence = 3
+        var arr3 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr3.time = nowEpoch + 300
+        stu3.arrival = arr3
+        
+        tu.stopTimeUpdate = [stu1, stu2, stu3]
+        ent1.tripUpdate = tu
+        
+        // Vehicle has reached sequence 2 (STOPPED_AT L02N)
+        var ent2 = TransitRealtime_FeedEntity()
+        ent2.id = "VP_L_003"
+        var vp = TransitRealtime_VehiclePosition()
+        vp.trip = trip
+        vp.currentStatus = .stoppedAt
+        vp.currentStopSequence = 2
+        vp.stopID = "L02N"
+        ent2.vehicle = vp
+        
+        feedMessage.entity = [ent1, ent2]
+        let data = try feedMessage.serializedData()
+        
+        let arrAtL03 = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "L03",
+            targetRouteId: "L",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(arrAtL03[0].distanceDescription, "1 stop away", "Vehicle at sequence 2 should be 1 stop away from sequence 3.")
+    }
+
+    func testScheduledFutureDepartureWithoutTelemetry() throws {
+        let nowEpoch: Int64 = 1700000000
+        let refDate = Date(timeIntervalSince1970: TimeInterval(nowEpoch))
+        
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(nowEpoch)
+        feedMessage.header = header
+        
+        var ent = TransitRealtime_FeedEntity()
+        ent.id = "TU_L_SCHED"
+        var tu = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "TRIP_L_SCHED_FUTURE"
+        trip.routeID = "L"
+        tu.trip = trip
+        
+        // Origin departure is 15 minutes in the future
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "L01N"
+        stu1.stopSequence = 1
+        var dep1 = TransitRealtime_TripUpdate.StopTimeEvent()
+        dep1.time = nowEpoch + 900 // 15m
+        stu1.departure = dep1
+        
+        var stu2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2.stopID = "L03N"
+        stu2.stopSequence = 3
+        var arr2 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr2.time = nowEpoch + 1200 // 20m
+        stu2.arrival = arr2
+        
+        tu.stopTimeUpdate = [stu1, stu2]
+        ent.tripUpdate = tu
+        feedMessage.entity = [ent]
+        let data = try feedMessage.serializedData()
+        
+        // Origin query
+        let originArr = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "L01",
+            targetRouteId: "L",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(originArr[0].distanceDescription, "Scheduled")
+        
+        // Downstream query
+        let downstreamArr = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "L03",
+            targetRouteId: "L",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(downstreamArr[0].distanceDescription, "Scheduled", "Future departure without active vehicle telemetry should render 'Scheduled'.")
+    }
+
+    func testOriginStopIncomingAtAndBoarding() throws {
+        let nowEpoch: Int64 = 1700000000
+        let refDate = Date(timeIntervalSince1970: TimeInterval(nowEpoch))
+        
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(nowEpoch)
+        feedMessage.header = header
+        
+        var ent1 = TransitRealtime_FeedEntity()
+        ent1.id = "TU_L_004"
+        var tu = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "TRIP_L_INCOMING"
+        trip.routeID = "L"
+        tu.trip = trip
+        
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "L01N"
+        var arr1 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr1.time = nowEpoch + 45 // 45s away
+        stu1.arrival = arr1
+        tu.stopTimeUpdate = [stu1]
+        ent1.tripUpdate = tu
+        
+        var ent2 = TransitRealtime_FeedEntity()
+        ent2.id = "VP_L_004"
+        var vp = TransitRealtime_VehiclePosition()
+        vp.trip = trip
+        vp.currentStatus = .incomingAt
+        vp.stopID = "L01N"
+        ent2.vehicle = vp
+        
+        feedMessage.entity = [ent1, ent2]
+        let data = try feedMessage.serializedData()
+        
+        let arrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "L01",
+            targetRouteId: "L",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(arrivals[0].distanceDescription, "Approaching")
+    }
 }

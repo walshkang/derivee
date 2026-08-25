@@ -137,11 +137,41 @@ public final class TransitRealtimeService: @unchecked Sendable {
         var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship)] = []
         let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         
+        // 1. Index VehiclePositions from the feed by tripId and vehicleId
+        var vehiclePositionsByTripId: [String: TransitRealtime_VehiclePosition] = [:]
+        var vehiclePositionsByVehicleId: [String: TransitRealtime_VehiclePosition] = [:]
+        for entity in feedMessage.entity {
+            if entity.hasVehicle {
+                let vp = entity.vehicle
+                if vp.hasTrip && vp.trip.hasTripID && !vp.trip.tripID.isEmpty {
+                    vehiclePositionsByTripId[vp.trip.tripID] = vp
+                }
+                if vp.hasVehicle && vp.vehicle.hasID && !vp.vehicle.id.isEmpty {
+                    vehiclePositionsByVehicleId[vp.vehicle.id] = vp
+                }
+            }
+        }
+        
         for entity in feedMessage.entity {
             guard entity.hasTripUpdate else { continue }
             let tripUpdate = entity.tripUpdate
             let tripRouteId = tripUpdate.trip.hasRouteID ? tripUpdate.trip.routeID : (targetRouteIds.first ?? targetRouteId)
             let rawTripId = tripUpdate.trip.hasTripID ? tripUpdate.trip.tripID : nil
+            
+            // Match vehicle position for this trip
+            let matchedVehicle: TransitRealtime_VehiclePosition? = {
+                if let rawTripId, let vp = vehiclePositionsByTripId[rawTripId] {
+                    return vp
+                }
+                if tripUpdate.hasVehicle && tripUpdate.vehicle.hasID && !tripUpdate.vehicle.id.isEmpty,
+                   let vp = vehiclePositionsByVehicleId[tripUpdate.vehicle.id] {
+                    return vp
+                }
+                if entity.hasVehicle {
+                    return entity.vehicle
+                }
+                return nil
+            }()
             
             let rawTripRel = tripUpdate.trip.hasScheduleRelationship ? tripUpdate.trip.scheduleRelationship : .scheduled
             let tripRelationship: SpatialDatabaseManager.ScheduleRelationship
@@ -168,6 +198,52 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 guard isAllowed else { continue }
             }
             
+            // Determine initial stop sequence and stop ID from tripUpdate
+            let firstStopUpdate = tripUpdate.stopTimeUpdate.first
+            let firstStopSequence = (firstStopUpdate?.hasStopSequence == true) ? firstStopUpdate!.stopSequence : 1
+            let firstStopId = firstStopUpdate?.stopID ?? ""
+            let firstStopDepartureEpoch: Int64 = {
+                if let f = firstStopUpdate {
+                    if f.hasDeparture && f.departure.hasTime { return f.departure.time }
+                    if f.hasArrival && f.arrival.hasTime { return f.arrival.time }
+                }
+                return 0
+            }()
+            
+            // Check vehicle status and origin dwell
+            let isDwellingAtOrigin: Bool = {
+                if let vp = matchedVehicle {
+                    let isStoppedOrIncoming: Bool = {
+                        if vp.hasCurrentStatus {
+                            return vp.currentStatus == .stoppedAt || vp.currentStatus == .incomingAt
+                        }
+                        return true
+                    }()
+                    guard isStoppedOrIncoming else { return false }
+                    
+                    if vp.hasCurrentStopSequence {
+                        return vp.currentStopSequence <= firstStopSequence || vp.currentStopSequence <= 1
+                    }
+                    if vp.hasStopID && !vp.stopID.isEmpty {
+                        return self.isStopMatch(currentStopId: vp.stopID, targetStopId: firstStopId)
+                    }
+                    return true
+                }
+                // If no vehicle position telemetry, check if origin departure time is still in the future
+                if firstStopDepartureEpoch > nowEpoch {
+                    return true
+                }
+                return false
+            }()
+            
+            let isVehicleInTransit: Bool = {
+                if let vp = matchedVehicle {
+                    if vp.hasCurrentStatus && vp.currentStatus == .inTransitTo { return true }
+                    if vp.hasCurrentStopSequence && vp.currentStopSequence > firstStopSequence && vp.currentStopSequence > 1 { return true }
+                }
+                return false
+            }()
+            
             // Match stop updates
             for (idx, stopUpdate) in tripUpdate.stopTimeUpdate.enumerated() {
                 let currentStopId = stopUpdate.stopID.uppercased()
@@ -177,16 +253,12 @@ public final class TransitRealtimeService: @unchecked Sendable {
                     var effectiveRelationship = tripRelationship
                     if stopUpdate.hasScheduleRelationship {
                         switch stopUpdate.scheduleRelationship {
-                        case .scheduled:
+                        case .scheduled, .noData:
                             break
                         case .skipped:
                             effectiveRelationship = .canceled
                         case .unscheduled:
                             effectiveRelationship = .unscheduled
-                        case .noData:
-                            break
-                        default:
-                            break
                         }
                     }
                     
@@ -213,9 +285,52 @@ public final class TransitRealtimeService: @unchecked Sendable {
                     
                     let destination = resolveDestination(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
                     let direction = resolveDirection(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
-                    let stopsAway = (diffSec <= 0) ? "Boarding" : (idx > 0 ? "\(idx) stops away" : "Approaching")
                     
-                    rawArrivals.append((line: tripRouteId, destination: destination, arrivalEpoch: arrivalEpoch, direction: direction, distance: stopsAway, tripId: rawTripId, scheduleRelationship: effectiveRelationship))
+                    // Compute distance / stop status description
+                    let distance: String
+                    if diffSec <= 0 {
+                        distance = "Boarding"
+                    } else if idx == 0 {
+                        // Target stop is the initial / current stop
+                        if let vp = matchedVehicle {
+                            if vp.hasCurrentStatus && vp.currentStatus == .stoppedAt {
+                                distance = "At Terminus"
+                            } else if vp.hasCurrentStatus && vp.currentStatus == .incomingAt {
+                                distance = "Approaching"
+                            } else if vp.hasCurrentStatus && vp.currentStatus == .inTransitTo {
+                                distance = "Approaching"
+                            } else {
+                                distance = (diffSec <= 60) ? "Approaching" : "Scheduled"
+                            }
+                        } else {
+                            distance = (diffSec <= 60) ? "Approaching" : "Scheduled"
+                        }
+                    } else {
+                        // Target stop is downstream (idx > 0)
+                        if isDwellingAtOrigin && !isVehicleInTransit {
+                            if matchedVehicle != nil {
+                                distance = "At Terminus"
+                            } else {
+                                distance = "Scheduled"
+                            }
+                        } else {
+                            // Vehicle has departed origin or is in transit
+                            let effectiveStopsAway: Int
+                            if let vp = matchedVehicle, vp.hasCurrentStopSequence, stopUpdate.hasStopSequence, stopUpdate.stopSequence > vp.currentStopSequence {
+                                effectiveStopsAway = max(1, Int(stopUpdate.stopSequence) - Int(vp.currentStopSequence))
+                            } else {
+                                effectiveStopsAway = idx
+                            }
+                            
+                            if effectiveStopsAway == 1 {
+                                distance = "1 stop away"
+                            } else {
+                                distance = "\(effectiveStopsAway) stops away"
+                            }
+                        }
+                    }
+                    
+                    rawArrivals.append((line: tripRouteId, destination: destination, arrivalEpoch: arrivalEpoch, direction: direction, distance: distance, tripId: rawTripId, scheduleRelationship: effectiveRelationship))
                 }
             }
         }
