@@ -13,9 +13,12 @@ final class HydrationManager {
         progress = 0.1
         
         do {
-            // 1. Transit DB is now bundled locally and copied by SpatialDatabaseManager on init.
-            // We just need to simulate the UI delay and mark hydration as complete.
-            try await Task.sleep(nanoseconds: 1_000_000_000)
+            // 1. Ensure bundled city pack (NYC) is unpacked and ready in CityPacks/nyc/
+            _ = try CityPackManager.shared.ensureBundledPackExtracted()
+            
+            // Simulate smooth progress transition
+            try await Task.sleep(nanoseconds: 500_000_000)
+            progress = 0.6
             
             // 2. Update Meta Table
             try await SpatialDatabaseManager.shared.setHydrationComplete()
