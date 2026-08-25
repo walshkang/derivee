@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "slug": "bos",
+  "displayName": "Boston",
+  "region": "Massachusetts, USA",
+  "bounds": {
+    "minLatitude": 42.20,
+    "maxLatitude": 42.50,
+    "minLongitude": -71.25,
+    "maxLongitude": -70.90
+  },
+  "center": {
+    "latitude": 42.3601,
+    "longitude": -71.0589,
+    "defaultZoom": 13.0
+  },
+  "transit": {
+    "agencyName": "Massachusetts Bay Transportation Authority",
+    "attributions": [
+      "MBTA Subway, Bus & Commuter Rail",
+      "MassDOT Ferry Operations"
+    ],
+    "realtimeEndpoints": [
+      {
+        "feedId": "mbta_subway",
+        "url": "https://cdn.mbta.com/realtime/TripUpdates.pb",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "mbta_green",
+        "url": "https://cdn.mbta.com/realtime/TripUpdates.pb",
+        "pollIntervalSeconds": 15
+      },
+      {
+        "feedId": "mbta_bus",
+        "url": "https://cdn.mbta.com/realtime/TripUpdates.pb",
+        "pollIntervalSeconds": 30
+      },
+      {
+        "feedId": "mbta_ferry",
+        "url": "https://cdn.mbta.com/realtime/TripUpdates.pb",
+        "pollIntervalSeconds": 30
+      }
+    ],
+    "feedRouteMapping": {
+      "Red": "mbta_subway",
+      "Orange": "mbta_subway",
+      "Blue": "mbta_subway",
+      "Mattapan": "mbta_subway",
+      "Green-B": "mbta_green",
+      "Green-C": "mbta_green",
+      "Green-D": "mbta_green",
+      "Green-E": "mbta_green",
+      "SL1": "mbta_bus",
+      "SL2": "mbta_bus",
+      "SL3": "mbta_bus",
+      "SL4": "mbta_bus",
+      "SL5": "mbta_bus",
+      "SLW": "mbta_bus",
+      "Boat-F4": "mbta_ferry",
+      "Boat-F1": "mbta_ferry",
+      "Boat-F2H": "mbta_ferry",
+      "F4": "mbta_ferry",
+      "F1": "mbta_ferry",
+      "F2H": "mbta_ferry"
+    },
+    "scheduleValidity": {
+      "startDate": "2026-06-01",
+      "endDate": "2026-09-01",
+      "seasonLabel": "Summer 2026 Timetable"
+    }
+  }
+}

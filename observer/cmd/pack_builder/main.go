@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"flag"
 	"io"
 	"log"
@@ -13,8 +14,10 @@ import (
 	"time"
 
 	"observer/internal/builder"
+	"observer/internal/fetcher"
 	"observer/internal/gtfs"
 	"observer/internal/pack"
+	"observer/internal/storage"
 )
 
 func main() {
@@ -26,6 +29,10 @@ func main() {
 	manifestPath := flag.String("manifest", "", "Optional path to cities.json to update with new pack entry")
 	anchorDateStr := flag.String("anchor", "", "Optional anchor date YYYY-MM-DD (defaults to today UTC)")
 	keepDBPath := flag.String("keep-db", "", "Optional path to save intermediate uncompressed transit.sqlite")
+	deltaCheck := flag.Bool("delta-check", false, "Enable 3-tier delta checking to skip compilation if feeds are unchanged")
+	deltaStatePath := flag.String("delta-state", ".feed_state.json", "Path to delta checker state file")
+	uploadR2 := flag.Bool("upload-r2", false, "Upload built pack and manifest to Cloudflare R2")
+	forceBuild := flag.Bool("force", false, "Force compilation even if delta check indicates no change")
 	flag.Parse()
 
 	if *configPath == "" || *gtfsSources == "" || *outputPath == "" {
@@ -51,9 +58,21 @@ func main() {
 	}
 	log.Printf("Loaded config for metro: %s (%s)", cfg.DisplayName, cfg.Slug)
 
-	// 3. Ingest GTFS Sources
+	// 3. Ingest GTFS Sources (with optional 3-tier delta checking)
+	var deltaChecker *fetcher.DeltaChecker
+	if *deltaCheck {
+		dc, err := fetcher.NewDeltaChecker(*deltaStatePath, nil)
+		if err != nil {
+			log.Printf("Warning: failed to initialize DeltaChecker: %v", err)
+		} else {
+			deltaChecker = dc
+		}
+	}
+
 	mergedDataset := gtfs.NewDataset(anchorDate)
 	sources := strings.Split(*gtfsSources, ",")
+	anyFeedModified := false
+	ctx := context.Background()
 
 	for _, src := range sources {
 		src = strings.TrimSpace(src)
@@ -62,34 +81,64 @@ func main() {
 		}
 
 		var zipBytes []byte
-		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
-			log.Printf("Downloading GTFS feed from %s...", src)
-			resp, err := http.Get(src)
+		var modified bool = true
+
+		if deltaChecker != nil {
+			data, mod, err := deltaChecker.CheckAndFetch(ctx, src)
 			if err != nil {
-				log.Fatalf("Failed to download GTFS from %s: %v", src, err)
+				log.Fatalf("Delta check failed for %s: %v", src, err)
 			}
-			data, err := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if err != nil {
-				log.Fatalf("Failed to read response body from %s: %v", src, err)
-			}
+			modified = mod
 			zipBytes = data
 		} else {
-			log.Printf("Reading local GTFS feed from %s...", src)
-			data, err := os.ReadFile(src)
-			if err != nil {
-				log.Fatalf("Failed to read local GTFS file %s: %v", src, err)
+			if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+				log.Printf("Downloading GTFS feed from %s...", src)
+				resp, err := http.Get(src)
+				if err != nil {
+					log.Fatalf("Failed to download GTFS from %s: %v", src, err)
+				}
+				data, err := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if err != nil {
+					log.Fatalf("Failed to read response body from %s: %v", src, err)
+				}
+				zipBytes = data
+			} else {
+				log.Printf("Reading local GTFS feed from %s...", src)
+				data, err := os.ReadFile(src)
+				if err != nil {
+					log.Fatalf("Failed to read local GTFS file %s: %v", src, err)
+				}
+				zipBytes = data
 			}
-			zipBytes = data
 		}
 
-		ds, err := gtfs.ParseGTFSArchive(bytes.NewReader(zipBytes), int64(len(zipBytes)), anchorDate)
-		if err != nil {
-			log.Fatalf("Failed to parse GTFS feed %s: %v", src, err)
+		if modified {
+			anyFeedModified = true
 		}
 
-		// Merge datasets
-		mergeDatasets(mergedDataset, ds)
+		if len(zipBytes) == 0 {
+			// In case 304 was returned and deltaChecker returned nil bytes, read local copy if available
+			if feedState, exists := deltaChecker.GetFeedState(src); exists && feedState.ContentHash != "" {
+				log.Printf("Feed %s unchanged (hash: %s).", src, feedState.ContentHash[:12])
+			}
+		} else {
+			ds, err := gtfs.ParseGTFSArchive(bytes.NewReader(zipBytes), int64(len(zipBytes)), anchorDate)
+			if err != nil {
+				log.Fatalf("Failed to parse GTFS feed %s: %v", src, err)
+			}
+
+			// Merge datasets
+			mergeDatasets(mergedDataset, ds)
+		}
+	}
+
+	// Check if pack can be skipped
+	if *deltaCheck && !anyFeedModified && !*forceBuild {
+		if _, err := os.Stat(*outputPath); err == nil {
+			log.Printf("All feeds unchanged and pack already exists at %s. Skipping build.", *outputPath)
+			return
+		}
 	}
 
 	log.Printf("Merged GTFS totals: %d agencies, %d routes, %d stops, %d trips, %d stop_time series, %d calendars, %d calendar_date overrides, %d frequency rules",
@@ -220,6 +269,24 @@ func main() {
 	// 12. Update manifest if requested
 	if *manifestPath != "" {
 		updateManifest(*manifestPath, manifestEntry)
+	}
+
+	// 13. Upload to Cloudflare R2 if requested
+	if *uploadR2 {
+		log.Printf("Uploading %s to Cloudflare R2...", *outputPath)
+		packKey := filepath.Base(*outputPath)
+		if err := storage.UploadFileToR2(*outputPath, packKey, "application/zstd"); err != nil {
+			log.Fatalf("Failed to upload pack to R2: %v", err)
+		}
+		log.Printf("✅ Uploaded %s to R2", packKey)
+
+		if *manifestPath != "" {
+			log.Printf("Uploading updated manifest %s to Cloudflare R2...", *manifestPath)
+			if err := storage.UploadFileToR2(*manifestPath, "cities.json", "application/json"); err != nil {
+				log.Fatalf("Failed to upload manifest to R2: %v", err)
+			}
+			log.Printf("✅ Uploaded cities.json to R2")
+		}
 	}
 }
 

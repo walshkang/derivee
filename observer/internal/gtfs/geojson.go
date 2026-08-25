@@ -52,8 +52,8 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 			continue
 		}
 		modalClass := ResolveModalClass(route.RouteType)
-		if modalClass == ModalClassBus {
-			continue // Bus capillary routes excluded from transit-lines.geojson
+		if modalClass == ModalClassBus && !isBRTRoute(route) {
+			continue // Standard capillary bus routes excluded; BRT corridors preserved
 		}
 		if _, hasShape := ds.Shapes[trip.ShapeID]; !hasShape {
 			continue
@@ -119,17 +119,10 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 		route := ds.Routes[routeID]
 		modalClass := ResolveModalClass(route.RouteType)
 
-		color := route.RouteColor
-		if color == "" {
-			color = "#FFB300"
-		}
-		if !strings.HasPrefix(color, "#") {
-			color = "#" + color
-		}
-
+		color := ResolveRouteColor(route)
 		casingColor := "#FFFFFF"
 		if modalClass == ModalClassLRT {
-			casingColor = "#FFFFFF" // or #222433
+			casingColor = "#FFFFFF"
 		}
 
 		routeName := route.RouteLongName
@@ -238,3 +231,110 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 
 	return fc, rawBytes, nil
 }
+
+// isBRTRoute identifies Bus Rapid Transit trunk corridors that should be included in transit-lines.geojson
+func isBRTRoute(route Route) bool {
+	rID := strings.ToUpper(strings.TrimSpace(route.RouteID))
+	sName := strings.ToUpper(strings.TrimSpace(route.RouteShortName))
+	lName := strings.ToUpper(strings.TrimSpace(route.RouteLongName))
+
+	// Extended GTFS BRT
+	if route.RouteType == 702 {
+		return true
+	}
+	// Boston MBTA Silver Line
+	if strings.HasPrefix(rID, "SL") || strings.HasPrefix(sName, "SL") || strings.Contains(lName, "SILVER LINE") {
+		return true
+	}
+	// NYC Select Bus Service
+	if strings.Contains(rID, "SBS") || strings.Contains(sName, "SBS") || strings.Contains(lName, "+ SELECT BUS") {
+		return true
+	}
+	return false
+}
+
+// ResolveRouteColor returns the formatted hex color for a Route, falling back to brand modal defaults
+func ResolveRouteColor(route Route) string {
+	color := strings.TrimSpace(route.RouteColor)
+	if color != "" {
+		if !strings.HasPrefix(color, "#") {
+			color = "#" + color
+		}
+		return color
+	}
+
+	cleanID := strings.ToUpper(strings.TrimSpace(route.RouteID))
+	cleanShort := strings.ToUpper(strings.TrimSpace(route.RouteShortName))
+
+	// Boston MBTA Trunk Colors
+	switch cleanID {
+	case "RED":
+		return "#DA291C"
+	case "ORANGE":
+		return "#ED8B00"
+	case "BLUE":
+		return "#003DA5"
+	case "GREEN-B", "GREEN-C", "GREEN-D", "GREEN-E", "GREEN_B", "GREEN_C", "GREEN_D", "GREEN_E":
+		return "#00843D"
+	case "MATTAPAN":
+		return "#DA291C"
+	case "SL1", "SL2", "SL3", "SL4", "SL5", "SLW":
+		return "#7C878E"
+	case "BOAT-F4", "BOAT-F1", "BOAT-F2H", "F4", "F1", "F2H":
+		return "#00A3E0"
+	}
+
+	switch cleanShort {
+	case "RED":
+		return "#DA291C"
+	case "ORANGE":
+		return "#ED8B00"
+	case "BLUE":
+		return "#003DA5"
+	case "GREEN-B", "GREEN-C", "GREEN-D", "GREEN-E", "B", "C", "D", "E":
+		if strings.Contains(cleanID, "GREEN") {
+			return "#00843D"
+		}
+	case "SL1", "SL2", "SL3", "SL4", "SL5", "SLW":
+		return "#7C878E"
+	case "F4", "F1", "F2H":
+		return "#00A3E0"
+	}
+
+	// NYC Subway Line Colors
+	switch cleanShort {
+	case "1", "2", "3":
+		return "#EE352E"
+	case "4", "5", "6", "6X":
+		return "#00933C"
+	case "7", "7X":
+		return "#B933AD"
+	case "A", "C", "E":
+		return "#0039A6"
+	case "B", "D", "F", "FX", "M":
+		return "#FF6319"
+	case "G":
+		return "#6CBE45"
+	case "J", "Z":
+		return "#996633"
+	case "L":
+		return "#A7A9AC"
+	case "N", "Q", "R", "W":
+		return "#FCCC0A"
+	case "SIR":
+		return "#0039A6"
+	}
+
+	modalClass := ResolveModalClass(route.RouteType)
+	switch modalClass {
+	case ModalClassFerry:
+		return "#00A3E0"
+	case ModalClassLRT:
+		return "#00843D"
+	case ModalClassBus:
+		return "#7C878E"
+	default:
+		return "#FFB300" // Electric Amber
+	}
+}
+
