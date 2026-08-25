@@ -9,17 +9,19 @@ struct NearbyBusesCapsule: View {
     let onSelectStop: (SpatialDatabaseManager.NearbyBusStop) -> Void
     let onRefresh: () -> Void
     
-    @State private var isExpanded: Bool = false
+    @Binding var isExpanded: Bool
     @Environment(\.colorScheme) private var colorScheme
     
     init(
         busStops: [SpatialDatabaseManager.NearbyBusStop],
+        isExpanded: Binding<Bool> = .constant(false),
         isLoading: Bool = false,
         hasLocation: Bool = true,
         onSelectStop: @escaping (SpatialDatabaseManager.NearbyBusStop) -> Void,
         onRefresh: @escaping () -> Void
     ) {
         self.busStops = busStops
+        self._isExpanded = isExpanded
         self.isLoading = isLoading
         self.hasLocation = hasLocation
         self.onSelectStop = onSelectStop

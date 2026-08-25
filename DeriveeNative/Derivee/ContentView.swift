@@ -29,6 +29,7 @@ struct ContentView: View {
     @AppStorage(AppStorageKeys.showNearbyBusesLens) private var showNearbyBusesLens: Bool = MapCustomizationDefaults.defaultShowNearbyBusesLens
     
     @State private var nearbyBusStops: [SpatialDatabaseManager.NearbyBusStop] = []
+    @State private var isNearbyBusesExpanded: Bool = false
     @State private var isScanningBuses: Bool = false
     @State private var isReadyForToasts: Bool = false
     
@@ -76,7 +77,21 @@ struct ContentView: View {
                             showBoundaryBorders: showBoundaryBorders,
                             showSubwayThoroughfares: showSubwayThoroughfares,
                             subwayStationMarkerStyle: stationMarkerStyle,
-                            nearbyBusStops: nearbyBusStops)
+                            nearbyBusStops: nearbyBusStops,
+                            onAmbientMapTap: {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isNearbyBusesExpanded = false
+                                    spatialStore.newlyDiscoveredPOIName = nil
+                                    cityDetectionService.autoSwitchToast = nil
+                                }
+                            },
+                            onMapGesture: {
+                                if isNearbyBusesExpanded {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                        isNearbyBusesExpanded = false
+                                    }
+                                }
+                            })
                         .ignoresSafeArea()
                     
                     GeometryReader { geo in
@@ -107,9 +122,11 @@ struct ContentView: View {
                             if showNearbyBusesLens {
                                 NearbyBusesCapsule(
                                     busStops: nearbyBusStops,
+                                    isExpanded: $isNearbyBusesExpanded,
                                     isLoading: isScanningBuses,
                                     hasLocation: currentUserLocation != nil || trackingEngine.lastKnownLocation != nil,
                                     onSelectStop: { stop in
+                                        isNearbyBusesExpanded = false
                                         selectedTransitStop = stop.id
                                         showTransitSheet = true
                                     },

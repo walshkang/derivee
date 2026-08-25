@@ -23,6 +23,8 @@ struct MapView: UIViewRepresentable {
     var showSubwayThoroughfares: Bool = MapCustomizationDefaults.defaultShowSubwayThoroughfares
     var subwayStationMarkerStyle: SubwayStationMarkerStyle = MapCustomizationDefaults.defaultSubwayStationMarkerStyle
     var nearbyBusStops: [SpatialDatabaseManager.NearbyBusStop] = []
+    var onAmbientMapTap: (() -> Void)? = nil
+    var onMapGesture: (() -> Void)? = nil
     
     // Bundled Composite Style URL with runtime key injection
     let styleURL = BasemapStyleLoader.styleURL
@@ -378,6 +380,19 @@ struct MapView: UIViewRepresentable {
                 reason: reason,
                 isRollingBack: isRollingBack
             )
+        }
+        
+        func mapView(_ mapView: MLNMapView, regionWillChangeWith reason: MLNCameraChangeReason, animated: Bool) {
+            let isUserGesture = reason.contains(.gesturePan) ||
+                                reason.contains(.gesturePinch) ||
+                                reason.contains(.gestureRotate) ||
+                                reason.contains(.gestureZoomIn) ||
+                                reason.contains(.gestureZoomOut)
+            if isUserGesture {
+                DispatchQueue.main.async {
+                    self.parent.onMapGesture?()
+                }
+            }
         }
         
         func mapView(_ mapView: MLNMapView, regionDidChangeWith reason: MLNCameraChangeReason, animated: Bool) {
@@ -891,6 +906,10 @@ struct MapView: UIViewRepresentable {
                 DispatchQueue.main.async {
                     self.parent.selectedTransitStop = stopId
                     self.parent.showTransitSheet = true
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.parent.onAmbientMapTap?()
                 }
             }
         }
