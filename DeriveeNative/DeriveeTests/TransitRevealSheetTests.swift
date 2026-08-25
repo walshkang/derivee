@@ -1322,5 +1322,35 @@ final class TransitRevealSheetTests: XCTestCase {
         XCTAssertFalse(fallbackResult.isObservedReplay)
         XCTAssertTrue(fallbackResult.isHistoricalFallback, "When no stop_events exist for past day, isHistoricalFallback must be true.")
     }
+    
+    func testTransitMatrixInspectorAndTripLedgerViewInstantiation() throws {
+        let record = SpatialDatabaseManager.HourlyReliabilityRecord(
+            routeId: "L",
+            stopId: "stop_bedford",
+            directionId: 0,
+            hourOfDay: 8,
+            dayOfWeek: 3,
+            medianDelaySec: 84,
+            p90DelaySec: 288,
+            medianHeadwaySec: 270,
+            headwayStdDevSec: 68,
+            ewtSeconds: 72.0,
+            onTimePct: 84.2,
+            sampleCount: 48
+        )
+        
+        let inspectorView = TransitMatrixInspectorView(record: record)
+        let inspectorVc = UIHostingController(rootView: inspectorView)
+        XCTAssertNotNil(inspectorVc.view)
+        
+        let ledgerView = TripLedgerView(
+            stopId: "stop_bedford",
+            routeId: "L",
+            hourOfDay: 8,
+            dayOfWeek: 3
+        )
+        let ledgerVc = UIHostingController(rootView: ledgerView)
+        XCTAssertNotNil(ledgerVc.view)
+    }
 }
 

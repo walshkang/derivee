@@ -79,6 +79,7 @@ public struct AllMetrosSummaryView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .scrollBounceBehavior(.basedOnSize)
     }
 }
 

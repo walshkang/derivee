@@ -289,6 +289,8 @@ struct ContentView: View {
                         },
                         targetCoordinate: $targetCoordinate
                     )
+                    .presentationDragIndicator(.visible)
+                    .presentationContentInteraction(.scrolls)
                 }
                 .onOpenURL { url in
                     guard url.scheme == "derivee" && url.host == "progress" else { return }

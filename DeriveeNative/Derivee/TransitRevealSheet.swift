@@ -439,6 +439,7 @@ struct TransitRevealSheet: View {
                     .padding(.top, 8)
                     .padding(.bottom, 24)
                 }
+                .scrollBounceBehavior(.basedOnSize)
             } else {
                 TransitSheetSkeletonView()
             }
@@ -451,6 +452,7 @@ struct TransitRevealSheet: View {
             TransitMatrixInspectorView(record: rec)
                 .presentationDetents([.fraction(0.5), .large])
                 .presentationDragIndicator(.visible)
+                .presentationContentInteraction(.scrolls)
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {

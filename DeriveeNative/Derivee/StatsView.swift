@@ -159,6 +159,8 @@ struct StatsView: View {
                         dismiss()
                     })
                 }
+                .presentationDragIndicator(.visible)
+                .presentationContentInteraction(.scrolls)
             }
             .task {
                 if let activeSlug = cityDetectionService?.activeCitySlug {
@@ -287,6 +289,7 @@ struct StatsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .scrollBounceBehavior(.basedOnSize)
         }
     }
     
@@ -483,6 +486,7 @@ struct StatsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .scrollBounceBehavior(.basedOnSize)
         } else {
             loadingView
         }

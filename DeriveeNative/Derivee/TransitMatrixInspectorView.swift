@@ -176,6 +176,7 @@ struct TransitMatrixInspectorView: View {
                 }
                 .padding(20)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Hour Reliability Inspector")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -195,6 +196,7 @@ struct TransitMatrixInspectorView: View {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .presentationContentInteraction(.scrolls)
             }
         }
     }

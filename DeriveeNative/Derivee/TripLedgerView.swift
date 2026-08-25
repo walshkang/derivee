@@ -142,6 +142,7 @@ struct TripLedgerView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .scrollBounceBehavior(.basedOnSize)
                 }
             }
             .navigationTitle("Arrival Trip Ledger")

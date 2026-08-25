@@ -410,6 +410,7 @@ struct DepartureMatrixView: View {
                         }
                         .padding(.vertical, 2)
                     }
+                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
                 }
                 
                 // Status Header or Fallback Banner
@@ -492,6 +493,7 @@ struct DepartureMatrixView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                .scrollBounceBehavior(.basedOnSize)
                 .frame(maxHeight: 380)
                 .onAppear {
                     // Scroll to current hour if today
@@ -602,6 +604,7 @@ private struct DayScrubberView: View {
                 .padding(.horizontal, 2)
                 .padding(.vertical, 2)
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             .onAppear {
                 proxy.scrollTo(selectedDayOffset, anchor: .center)
             }

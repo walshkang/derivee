@@ -121,6 +121,7 @@ public struct CitiesStorageManagerView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .scrollBounceBehavior(.basedOnSize)
         .navigationTitle("Cities & Storage")
         .navigationBarTitleDisplayMode(.inline)
         .task {
