@@ -4,7 +4,11 @@ import SwiftUI
 struct DeriveeApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if NSClassFromString("XCTestCase") != nil {
+                EmptyView()
+            } else {
+                ContentView()
+            }
         }
     }
 }

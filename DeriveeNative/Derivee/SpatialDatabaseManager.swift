@@ -1166,21 +1166,67 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    public static let fallbackBusCandidates: [(id: String, name: String, lat: Double, lon: Double, routes: [String], direction: String)] = [
+        // 14th St / Union Square
+        ("BUS_001", "1 Av & E 14 St", 40.7320, -73.9830, ["M15-SBS", "M15"], "Southbound"),
+        ("BUS_002", "E 14 St & 2 Av", 40.7335, -73.9860, ["M14A-SBS", "M14D-SBS"], "Eastbound"),
+        ("BUS_003", "1 Av & E 18 St", 40.7345, -73.9810, ["M15", "M101"], "Northbound"),
+        ("BUS_004", "Bedford Av & N 7 St", 40.7160, -73.9590, ["B62"], "Northbound"),
+        ("BUS_005", "Grand St & Bedford Av", 40.7130, -73.9600, ["B32", "B62"], "Southbound"),
+        ("BUS_006", "Union Sq West & 14 St", 40.7350, -73.9910, ["M1", "M2", "M3"], "Southbound"),
+        ("BUS_007", "5 Av & W 14 St", 40.7360, -73.9930, ["M1", "M2", "M3"], "Northbound"),
+        ("BUS_008", "Union Sq East & E 15 St", 40.7355, -73.9895, ["M14A-SBS", "M14D-SBS"], "Eastbound"),
+
+        // Columbus Circle / Central Park South / 59th St (for demo walks)
+        ("BUS_CC_01", "Columbus Circle & 8 Av", 40.7684, -73.9826, ["M10", "M20", "M104"], "Northbound"),
+        ("BUS_CC_02", "8 Av & W 58 St", 40.7675, -73.9832, ["M20", "M104"], "Southbound"),
+        ("BUS_CC_03", "Broadway & W 61 St", 40.7702, -73.9822, ["M104", "M20", "M5"], "Northbound"),
+        ("BUS_CC_04", "Central Park South & Columbus Circle", 40.7668, -73.9798, ["M5", "M7", "M10"], "Eastbound"),
+        ("BUS_CC_05", "W 57 St & 8 Av", 40.7663, -73.9839, ["M57", "M31"], "Westbound"),
+        ("BUS_CC_06", "W 57 St & 7 Av", 40.7650, -73.9795, ["M57", "M31", "M5"], "Eastbound"),
+        ("BUS_CC_07", "Broadway & W 63 St / Lincoln Center", 40.7720, -73.9818, ["M104", "M20", "M66"], "Northbound"),
+
+        // Financial District (FiDi) & Battery Park & WTC
+        ("BUS_FIDI_01", "Broadway & Wall St", 40.7075, -74.0112, ["M55", "SIM1", "SIM2"], "Southbound"),
+        ("BUS_FIDI_02", "Broadway & Fulton St", 40.7112, -74.0085, ["M55", "SIM1", "SIM4"], "Northbound"),
+        ("BUS_FIDI_03", "Water St & Wall St", 40.7058, -74.0076, ["M15-SBS", "M15"], "Southbound"),
+        ("BUS_FIDI_04", "Battery Pl & Washington St", 40.7052, -74.0163, ["M20", "M55"], "Southbound"),
+        ("BUS_FIDI_05", "Vesey St & Church St / WTC", 40.7125, -74.0098, ["M20", "M55", "M9"], "Northbound"),
+        ("BUS_FIDI_06", "State St & Whitehall St / South Ferry", 40.7020, -74.0132, ["M15-SBS", "M20", "M55"], "Southbound"),
+        ("BUS_FIDI_07", "Broadway & Rector St", 40.7082, -74.0110, ["M55", "SIM1"], "Northbound"),
+        ("BUS_FIDI_08", "Water St & Maiden Ln", 40.7065, -74.0065, ["M15-SBS", "M15"], "Northbound"),
+
+        // Midtown / Times Square / Grand Central / Penn Station
+        ("BUS_MID_01", "7 Av & W 42 St / Times Sq", 40.7562, -73.9868, ["M7", "M20", "M104"], "Southbound"),
+        ("BUS_MID_02", "8 Av & W 42 St / Port Authority", 40.7576, -73.9898, ["M20", "M104", "M34A-SBS"], "Northbound"),
+        ("BUS_MID_03", "E 42 St & Lexington Av / Grand Central", 40.7516, -73.9754, ["M42", "M101", "M102"], "Eastbound"),
+        ("BUS_MID_04", "E 42 St & Madison Av", 40.7525, -73.9785, ["M42", "M1", "M2", "M3"], "Westbound"),
+        ("BUS_MID_05", "W 34 St & 7 Av / Penn Station", 40.7505, -73.9902, ["M34-SBS", "M34A-SBS", "M7"], "Westbound"),
+        ("BUS_MID_06", "W 34 St & 8 Av", 40.7520, -73.9930, ["M34-SBS", "M20"], "Westbound"),
+        ("BUS_MID_07", "5 Av & W 46 St / Rockefeller Ctr", 40.7558, -73.9795, ["M1", "M2", "M3", "M4"], "Southbound"),
+        ("BUS_MID_08", "Madison Av & E 48 St", 40.7567, -73.9758, ["M1", "M2", "M3", "M4"], "Northbound"),
+
+        // Upper West Side & Upper East Side & Harlem
+        ("BUS_UWS_01", "Broadway & W 72 St", 40.7785, -73.9820, ["M104", "M72"], "Northbound"),
+        ("BUS_UWS_02", "Amsterdam Av & W 79 St", 40.7836, -73.9785, ["M79-SBS", "M7", "M11"], "Northbound"),
+        ("BUS_UWS_03", "Broadway & W 86 St", 40.7885, -73.9760, ["M104", "M86-SBS"], "Northbound"),
+        ("BUS_UES_01", "Lexington Av & E 72 St", 40.7705, -73.9620, ["M101", "M102", "M103", "M72"], "Southbound"),
+        ("BUS_UES_02", "3 Av & E 79 St", 40.7745, -73.9575, ["M101", "M102", "M79-SBS"], "Northbound"),
+        ("BUS_UES_03", "2 Av & E 86 St", 40.7780, -73.9520, ["M15-SBS", "M15", "M86-SBS"], "Southbound"),
+        ("BUS_HLM_01", "125 St & Lenox Av / Apollo", 40.8080, -73.9480, ["M60-SBS", "M125", "Bx15"], "Westbound"),
+
+        // Brooklyn Hubs
+        ("BUS_BK_01", "Cadman Plaza W & Montague St", 40.6945, -73.9915, ["B25", "B26", "B38", "B41"], "Southbound"),
+        ("BUS_BK_02", "Fulton St & Jay St / Downtown BK", 40.6920, -73.9875, ["B25", "B26", "B38"], "Eastbound"),
+        ("BUS_BK_03", "Atlantic Av & 4 Av / Barclays Ctr", 40.6845, -73.9780, ["B41", "B45", "B67"], "Eastbound"),
+        ("BUS_BK_04", "Water St & Main St / DUMBO", 40.7032, -73.9902, ["B25"], "Northbound")
+    ]
+    
     private func generateFallbackNearbyBusStops(for coordinate: CLLocationCoordinate2D, radiusMeters: Double) -> [NearbyBusStop] {
         let userLoc = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        let candidates: [(id: String, name: String, lat: Double, lon: Double, routes: [String], direction: String)] = [
-            ("BUS_001", "1 Av & E 14 St", 40.7320, -73.9830, ["M15-SBS", "M15"], "Southbound"),
-            ("BUS_002", "E 14 St & 2 Av", 40.7335, -73.9860, ["M14A-SBS", "M14D-SBS"], "Eastbound"),
-            ("BUS_003", "1 Av & E 18 St", 40.7345, -73.9810, ["M15", "M101"], "Northbound"),
-            ("BUS_004", "Bedford Av & N 7 St", 40.7160, -73.9590, ["B62"], "Northbound"),
-            ("BUS_005", "Grand St & Bedford Av", 40.7130, -73.9600, ["B32", "B62"], "Southbound"),
-            ("BUS_006", "Union Sq West & 14 St", 40.7350, -73.9910, ["M1", "M2", "M3"], "Southbound"),
-            ("BUS_007", "5 Av & W 14 St", 40.7360, -73.9930, ["M1", "M2", "M3"], "Northbound"),
-            ("BUS_008", "Union Sq East & E 15 St", 40.7355, -73.9895, ["M14A-SBS", "M14D-SBS"], "Eastbound")
-        ]
         
         var results: [NearbyBusStop] = []
-        for c in candidates {
+        for c in Self.fallbackBusCandidates {
             let stopLoc = CLLocation(latitude: c.lat, longitude: c.lon)
             let dist = userLoc.distance(from: stopLoc)
             if dist <= radiusMeters {
@@ -1200,7 +1246,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     
     public func isSubwayPlatformId(_ stopId: String) -> Bool {
         let clean = stopId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        if clean.hasPrefix("BUS_") { return false }
+        if clean.hasPrefix("BUS_") || clean.hasPrefix("MTA_") { return false }
         if clean.count == 6 && clean.allSatisfy({ $0.isNumber }) { return false }
         if clean.count == 5 && clean.allSatisfy({ $0.isNumber }) { return false }
         if clean.hasSuffix("N") || clean.hasSuffix("S") || clean.hasSuffix("E") || clean.hasSuffix("W") {
@@ -2137,53 +2183,20 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     ArrivalInfo(line: "M15", destination: "South Ferry", minutes: 7, direction: "Southbound", distanceDescription: "0.8 mi away")
                 ]
             )
-        case "BUS_004":
-            return StopDetails(
-                stopId: stopId,
-                name: "Bedford Av & N 7 St",
-                routeId: "B62",
-                routeIds: ["B62"],
-                routeType: 3,
-                arrivals: self.generateBusArrivals(for: "B62", stopName: "Bedford Av & N 7 St")
-            )
-        case "BUS_005":
-            return StopDetails(
-                stopId: stopId,
-                name: "Grand St & Bedford Av",
-                routeId: "B62",
-                routeIds: ["B32", "B62"],
-                routeType: 3,
-                arrivals: self.generateBusArrivals(for: "B62", stopName: "Grand St & Bedford Av")
-            )
-        case "BUS_006":
-            return StopDetails(
-                stopId: stopId,
-                name: "Union Sq West & 14 St",
-                routeId: "M1",
-                routeIds: ["M1", "M2", "M3"],
-                routeType: 3,
-                arrivals: self.generateBusArrivals(for: "M1", stopName: "Union Sq West & 14 St")
-            )
-        case "BUS_007":
-            return StopDetails(
-                stopId: stopId,
-                name: "5 Av & W 14 St",
-                routeId: "M1",
-                routeIds: ["M1", "M2", "M3"],
-                routeType: 3,
-                arrivals: self.generateBusArrivals(for: "M1", stopName: "5 Av & W 14 St")
-            )
-        case "BUS_008":
-            return StopDetails(
-                stopId: stopId,
-                name: "Union Sq East & E 15 St",
-                routeId: "M14A-SBS",
-                routeIds: ["M14A-SBS", "M14D-SBS"],
-                routeType: 3,
-                arrivals: self.generateBusArrivals(for: "M14A-SBS", stopName: "Union Sq East & E 15 St")
-            )
         default:
-            let isBus = stopId.hasPrefix("BUS_")
+            if let candidate = Self.fallbackBusCandidates.first(where: { $0.id == stopId }) {
+                let primaryRoute = candidate.routes.first ?? "M10"
+                return StopDetails(
+                    stopId: stopId,
+                    name: candidate.name,
+                    routeId: primaryRoute,
+                    routeIds: candidate.routes,
+                    routeType: 3,
+                    arrivals: self.generateBusArrivals(for: primaryRoute, stopName: candidate.name)
+                )
+            }
+            
+            let isBus = stopId.hasPrefix("BUS_") || stopId.hasPrefix("MTA_")
             let routeId = isBus ? "M15" : "L"
             let routeType = isBus ? 3 : 1
             let name = isBus ? "Bus Stop (\(stopId))" : "Transit Station (\(stopId))"

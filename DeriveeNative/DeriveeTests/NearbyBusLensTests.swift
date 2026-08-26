@@ -340,6 +340,48 @@ final class NearbyBusLensTests: XCTestCase {
         XCTAssertLessThan(updatedList[0].distanceMeters, updatedList[1].distanceMeters)
     }
     
+    func testNearbyBusStopQueryColumbusCircle() async throws {
+        let columbusCircle = CLLocationCoordinate2D(latitude: 40.7681, longitude: -73.9819)
+        let stops = try await SpatialDatabaseManager.shared.fetchNearbyBusStops(coordinate: columbusCircle, radiusMeters: 400.0)
+        
+        XCTAssertFalse(stops.isEmpty, "Should automatically find bus stops near Columbus Circle.")
+        for stop in stops {
+            XCTAssertLessThanOrEqual(stop.distanceMeters, 400.0)
+            XCTAssertFalse(stop.routes.isEmpty)
+        }
+        
+        // Assert that key Columbus Circle routes (M10, M20, M104, M57, or M31) are present
+        let allRoutes = Set(stops.flatMap { $0.routes })
+        let expectedRoutes: Set<String> = ["M10", "M20", "M104", "M57", "M31", "M12", "M5", "M7"]
+        XCTAssertFalse(allRoutes.intersection(expectedRoutes).isEmpty, "Discovered bus stops at Columbus Circle must serve active area routes.")
+    }
+    
+    func testNearbyBusStopQueryFiDi() async throws {
+        let fidiWallSt = CLLocationCoordinate2D(latitude: 40.7075, longitude: -74.0112)
+        let stops = try await SpatialDatabaseManager.shared.fetchNearbyBusStops(coordinate: fidiWallSt, radiusMeters: 400.0)
+        
+        XCTAssertFalse(stops.isEmpty, "Should automatically find bus stops in Financial District (FiDi).")
+        for stop in stops {
+            XCTAssertLessThanOrEqual(stop.distanceMeters, 400.0)
+            XCTAssertFalse(stop.routes.isEmpty)
+        }
+        
+        let allRoutes = Set(stops.flatMap { $0.routes })
+        let expectedRoutes: Set<String> = ["M55", "M15", "M15-SBS", "M20", "SIM1", "SIM2", "SIM4", "SIM5", "SIM15", "SIM35"]
+        XCTAssertFalse(allRoutes.intersection(expectedRoutes).isEmpty, "Discovered bus stops in FiDi must serve active area routes.")
+    }
+    
+    func testNearbyBusStopQueryTimesSquare() async throws {
+        let timesSq = CLLocationCoordinate2D(latitude: 40.7562, longitude: -73.9868)
+        let stops = try await SpatialDatabaseManager.shared.fetchNearbyBusStops(coordinate: timesSq, radiusMeters: 400.0)
+        
+        XCTAssertFalse(stops.isEmpty, "Should automatically find bus stops near Times Square.")
+        for stop in stops {
+            XCTAssertLessThanOrEqual(stop.distanceMeters, 400.0)
+            XCTAssertFalse(stop.routes.isEmpty)
+        }
+    }
+    
     func testSparseLocationReturnsEmptyWithoutDrift() async throws {
         // Location in the middle of Jamaica Bay far from any bus stops (> 2km)
         let remoteWater = CLLocationCoordinate2D(latitude: 40.6120, longitude: -73.8350)
