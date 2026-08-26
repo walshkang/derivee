@@ -252,33 +252,20 @@ struct DepartureMatrixView: View {
             }
         }
         
-        // Tier 3: Inject unmatched ad-hoc GTFS-RT arrivals into target hour row
-        for arr in filteredLiveArrivals {
-            guard !matchedArrivalIds.contains(arr.id) else { continue }
-            let arrHour = calendar.component(.hour, from: arr.arrivalDate)
-            let arrMin = calendar.component(.minute, from: arr.arrivalDate)
-            
-            let isUnscheduled = (arr.scheduleRelationship != .added)
-            let adHocPill = SpatialDatabaseManager.DeparturePillRecord(
-                id: "adhoc_\(arr.id.uuidString)",
-                tripId: arr.tripId ?? "adhoc_\(arr.line)_\(arrHour)_\(arrMin)",
-                routeId: arr.line,
-                destination: arr.destination,
-                minute: arrMin,
-                isExpress: false,
-                isFirstDeparture: false,
-                isLastDeparture: false,
-                liveDeltaMinutes: arr.minutes,
-                delaySeconds: nil,
-                isLive: true,
-                isPast: false,
-                isUnscheduled: isUnscheduled,
-                isBoarding: (arr.minutes == 0),
-                isImminentLive: imminentLiveIds.contains(arr.id),
-                scheduleRelationship: arr.scheduleRelationship
-            )
-            
-            resultMap[arrHour % 24]?.append(adHocPill)
+        // Find the single immediate upcoming departure across all 24 hours to tag with `isNextDeparture`
+        var foundNext = false
+        for hOffset in 0..<24 {
+            let h = (currentHour + hOffset) % 24
+            if let deps = resultMap[h] {
+                for idx in deps.indices {
+                    if !deps[idx].isPast && deps[idx].scheduleRelationship != .canceled {
+                        resultMap[h]?[idx].isNextDeparture = true
+                        foundNext = true
+                        break
+                    }
+                }
+            }
+            if foundNext { break }
         }
         
         // Return sorted 24-hour records
@@ -701,10 +688,6 @@ private struct DeparturePillView: View {
         pill.scheduleRelationship == .added
     }
     
-    private var isUnscheduled: Bool {
-        pill.scheduleRelationship == .unscheduled || pill.isUnscheduled
-    }
-    
     private var isDuplicated: Bool {
         pill.scheduleRelationship == .duplicated
     }
@@ -730,14 +713,14 @@ private struct DeparturePillView: View {
                 return Color(hex: "#FF453A").opacity(0.8)
             }
         }
+        if pill.isNextDeparture {
+            return Color(hex: "#FFB300")
+        }
         if pill.isFirstDeparture || pill.isLastDeparture {
             return Color(hex: "#FFB300").opacity(pill.isPast ? 0.35 : 1.0)
         }
         if pill.isLive || isAdded {
             return Color(hex: "#FFB300").opacity(pill.isPast ? 0.3 : 0.8)
-        }
-        if isUnscheduled {
-            return Color(hex: "#FFB300").opacity(0.5)
         }
         return Color.primary.opacity(pill.isPast ? 0.04 : 0.08)
     }
@@ -756,7 +739,7 @@ private struct DeparturePillView: View {
             }
             
             // Live Pulsing Indicator Dot
-            if pill.isLive || isAdded || isUnscheduled {
+            if pill.isLive || isAdded {
                 Circle()
                     .fill(isCanceled ? Color(hex: "#FF453A") : Color(hex: "#FFB300"))
                     .frame(width: 5, height: 5)
@@ -774,8 +757,7 @@ private struct DeparturePillView: View {
             
             // Monospace Full Time (HH:mm)
             Text(String(format: "%02d:%02d", hour, pill.minute))
-                .font(.system(size: 11, weight: isAdded ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
-                .italic(isUnscheduled)
+                .font(.system(size: 11, weight: (isAdded || pill.isNextDeparture) ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
                 .strikethrough(isCanceled, color: Color(hex: "#FF453A"))
                 .foregroundColor(
                     isCanceled ? Color(hex: "#FF453A") :
@@ -787,13 +769,6 @@ private struct DeparturePillView: View {
                 Text("EXP")
                     .font(.system(size: 8, weight: .bold, design: .rounded))
                     .foregroundColor(Color(hex: routeInfo.textColorHex).opacity(pill.isPast ? 0.5 : 0.9))
-            }
-            
-            // Live Countdown Overlay (shown for imminent arrivals)
-            if let delta = pill.liveDeltaMinutes, !isCanceled, pill.isImminentLive {
-                Text(delta == 0 ? "0m" : "\(delta)m")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(Color(hex: "#FFB300"))
             }
         }
         .padding(.horizontal, pill.isExpress ? 7 : 6)
@@ -807,7 +782,7 @@ private struct DeparturePillView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(strokeColor, lineWidth: (pill.isFirstDeparture || pill.isLastDeparture || pill.isHistoricalEvent) ? 1.5 : 1)
+                .stroke(strokeColor, lineWidth: (pill.isNextDeparture || pill.isFirstDeparture || pill.isLastDeparture || pill.isHistoricalEvent) ? 1.5 : 1)
         )
         .opacity(effectiveOpacity)
         .overlay(alignment: .topTrailing) {
@@ -820,8 +795,8 @@ private struct DeparturePillView: View {
                     .foregroundColor(.white)
                     .clipShape(Capsule())
                     .offset(x: 6, y: -6)
-            } else if isAdded {
-                Text("ADDED")
+            } else if pill.isNextDeparture {
+                Text("NEXT")
                     .font(.system(size: 7, weight: .bold, design: .rounded))
                     .padding(.horizontal, 3)
                     .padding(.vertical, 1)
@@ -829,13 +804,22 @@ private struct DeparturePillView: View {
                     .foregroundColor(.black)
                     .clipShape(Capsule())
                     .offset(x: 4, y: -6)
-            } else if isUnscheduled {
-                Text("EXTRA")
+            } else if let delay = pill.delaySeconds, delay >= 180 {
+                Text("+\(delay / 60)m")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(Color(hex: "#FF453A"))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                    .offset(x: 4, y: -6)
+            } else if isAdded {
+                Text("ADDED")
                     .font(.system(size: 7, weight: .bold, design: .rounded))
                     .padding(.horizontal, 3)
                     .padding(.vertical, 1)
-                    .background(Color(hex: "#475569"))
-                    .foregroundColor(.white)
+                    .background(Color(hex: "#FFB300"))
+                    .foregroundColor(.black)
                     .clipShape(Capsule())
                     .offset(x: 4, y: -6)
             } else if isDuplicated {
@@ -847,15 +831,6 @@ private struct DeparturePillView: View {
                     .foregroundColor(.white)
                     .clipShape(Capsule())
                     .offset(x: 6, y: -6)
-            } else if let delay = pill.delaySeconds, delay >= 180 {
-                Text("+\(delay / 60)m")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 1)
-                    .background(Color(hex: "#FF453A"))
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-                    .offset(x: 4, y: -6)
             }
         }
     }
@@ -894,21 +869,21 @@ private struct LegendFooterView: View {
                     Circle()
                         .fill(Color(hex: "#FFB300"))
                         .frame(width: 6, height: 6)
-                    Text("Live Δt")
+                    Text("Live •")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
                 }
                 
-                // Extra / Unscheduled
+                // Next Indicator
                 HStack(spacing: 4) {
-                    Text("EXTRA")
+                    Text("NEXT")
                         .font(.system(size: 7, weight: .bold, design: .rounded))
                         .padding(.horizontal, 3)
                         .padding(.vertical, 1)
-                        .background(Color(hex: "#475569"))
-                        .foregroundColor(.white)
+                        .background(Color(hex: "#FFB300"))
+                        .foregroundColor(.black)
                         .clipShape(Capsule())
-                    Text("Unscheduled")
+                    Text("Next Departure")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
                 }

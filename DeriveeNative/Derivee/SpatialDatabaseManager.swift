@@ -956,6 +956,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public var isUnscheduled: Bool
         public var isBoarding: Bool
         public var isImminentLive: Bool
+        public var isNextDeparture: Bool
         public var scheduleRelationship: ScheduleRelationship
         public var isHistoricalEvent: Bool
         public var historicalDelaySeconds: Int?
@@ -977,6 +978,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             isUnscheduled: Bool = false,
             isBoarding: Bool = false,
             isImminentLive: Bool = false,
+            isNextDeparture: Bool = false,
             scheduleRelationship: ScheduleRelationship = .scheduled,
             isHistoricalEvent: Bool = false,
             historicalDelaySeconds: Int? = nil
@@ -997,6 +999,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.isUnscheduled = isUnscheduled
             self.isBoarding = isBoarding
             self.isImminentLive = isImminentLive
+            self.isNextDeparture = isNextDeparture
             self.scheduleRelationship = scheduleRelationship
             self.isHistoricalEvent = isHistoricalEvent
             self.historicalDelaySeconds = historicalDelaySeconds

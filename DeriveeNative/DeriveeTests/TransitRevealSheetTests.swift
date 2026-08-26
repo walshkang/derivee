@@ -526,6 +526,108 @@ final class TransitRevealSheetTests: XCTestCase {
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620))))
     }
     
+    func testExportTimetableVerificationScreenshots() throws {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2025; comps.month = 1; comps.day = 8
+        comps.hour = 0; comps.minute = 39; comps.second = 0
+        let date0039 = calendar.date(from: comps)!
+        
+        let sampleDepartures00 = [
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_00", tripId: "T00_00", routeId: "6", destination: "Pelham Bay Park", minute: 0),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_04", tripId: "T00_04", routeId: "6", destination: "Pelham Bay Park", minute: 4),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_06", tripId: "T00_06", routeId: "6", destination: "Pelham Bay Park", minute: 6),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_08", tripId: "T00_08", routeId: "6", destination: "Pelham Bay Park", minute: 8),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_13", tripId: "T00_13", routeId: "6", destination: "Pelham Bay Park", minute: 13),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_15", tripId: "T00_15", routeId: "6", destination: "Pelham Bay Park", minute: 15),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_17", tripId: "T00_17", routeId: "6", destination: "Pelham Bay Park", minute: 17),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_22", tripId: "T00_22", routeId: "6", destination: "Pelham Bay Park", minute: 22),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_24", tripId: "T00_24", routeId: "6", destination: "Pelham Bay Park", minute: 24),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_26", tripId: "T00_26", routeId: "6", destination: "Pelham Bay Park", minute: 26),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_31", tripId: "T00_31", routeId: "6", destination: "Pelham Bay Park", minute: 31),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_33", tripId: "T00_33", routeId: "6", destination: "Pelham Bay Park", minute: 33),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_35", tripId: "T00_35", routeId: "6", destination: "Pelham Bay Park", minute: 35),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_40", tripId: "T00_40", routeId: "6", destination: "Pelham Bay Park", minute: 40),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_42", tripId: "T00_42", routeId: "6", destination: "Pelham Bay Park", minute: 42),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_44", tripId: "T00_44", routeId: "6", destination: "Pelham Bay Park", minute: 44),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_50", tripId: "T00_50", routeId: "6", destination: "Pelham Bay Park", minute: 50),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D00_56", tripId: "T00_56", routeId: "6", destination: "Pelham Bay Park", minute: 56)
+        ]
+        
+        let sampleDepartures01 = [
+            SpatialDatabaseManager.DeparturePillRecord(id: "D01_00", tripId: "T01_00", routeId: "6", destination: "Pelham Bay Park", minute: 0),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D01_08", tripId: "T01_08", routeId: "6", destination: "Pelham Bay Park", minute: 8),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D01_14", tripId: "T01_14", routeId: "6", destination: "Pelham Bay Park", minute: 14),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D01_20", tripId: "T01_20", routeId: "6", destination: "Pelham Bay Park", minute: 20),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D01_29", tripId: "T01_29", routeId: "6", destination: "Pelham Bay Park", minute: 29),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D01_35", tripId: "T01_35", routeId: "6", destination: "Pelham Bay Park", minute: 35),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D01_41", tripId: "T01_41", routeId: "6", destination: "Pelham Bay Park", minute: 41),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D01_50", tripId: "T01_50", routeId: "6", destination: "Pelham Bay Park", minute: 50)
+        ]
+        
+        let sampleHours = (0..<24).map { h in
+            if h == 0 {
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 0, departures: sampleDepartures00)
+            } else if h == 1 {
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 1, departures: sampleDepartures01)
+            } else {
+                let deps = [4, 12, 20, 28, 36, 44, 52].map { m in
+                    SpatialDatabaseManager.DeparturePillRecord(
+                        id: "D\(h)_\(m)",
+                        tripId: "T\(h)_\(m)",
+                        routeId: "6",
+                        destination: "Pelham Bay Park",
+                        minute: m
+                    )
+                }
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: deps)
+            }
+        }
+        
+        let liveArrivals = [
+            SpatialDatabaseManager.ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 1, direction: "Uptown & Bronx", arrivalDate: date0039.addingTimeInterval(60), tripId: "T00_40"),
+            SpatialDatabaseManager.ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 3, direction: "Uptown & Bronx", arrivalDate: date0039.addingTimeInterval(180), tripId: "T00_42"),
+            SpatialDatabaseManager.ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 5, direction: "Uptown & Bronx", arrivalDate: date0039.addingTimeInterval(300), tripId: "T00_44"),
+            SpatialDatabaseManager.ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 11, direction: "Uptown & Bronx", arrivalDate: date0039.addingTimeInterval(660), tripId: "T00_50"),
+            SpatialDatabaseManager.ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 17, direction: "Uptown & Bronx", arrivalDate: date0039.addingTimeInterval(1020), tripId: "T00_56"),
+            SpatialDatabaseManager.ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 21, direction: "Uptown & Bronx", arrivalDate: date0039.addingTimeInterval(1260), tripId: "T01_00")
+        ]
+        
+        let details = SpatialDatabaseManager.StopDetails(
+            stopId: "stop_brooklyn_bridge",
+            name: "Brooklyn Bridge-City Hall",
+            routeId: "6",
+            routeIds: ["6"],
+            routeType: 1,
+            arrivals: liveArrivals
+        )
+        
+        // Full Timetable Tab (Showing 00:00 to 03:00)
+        let matrixView = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "6",
+            stopId: "stop_brooklyn_bridge",
+            liveArrivals: liveArrivals,
+            referenceDate: date0039
+        )
+        .frame(width: 375, height: 600)
+        
+        let matrixVC = UIHostingController(rootView: matrixView)
+        assertSnapshot(of: matrixVC, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
+        
+        // Live Arrivals Tab
+        let sheetView = TransitRevealSheet(
+            stopId: "stop_brooklyn_bridge",
+            initialDetails: details,
+            initialLiveArrivals: liveArrivals,
+            referenceDate: date0039
+        )
+        .frame(width: 375, height: 650)
+        
+        let sheetVC = UIHostingController(rootView: sheetView)
+        assertSnapshot(of: sheetVC, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 650))))
+    }
+    
     func testFetchAvailableDirectionsInDatabase() async throws {
         // stop_terminal_dir1 was seeded with only direction_id = 1
         let dirs1 = try await dbManager.fetchAvailableDirections(for: "stop_terminal_dir1", routeId: "L")
@@ -923,11 +1025,11 @@ final class TransitRevealSheetTests: XCTestCase {
         let reconciled = view.reconciledRecords(at: date1000)
         let h10 = reconciled.first(where: { $0.hourOfDay == 10 })!
         
-        XCTAssertEqual(h10.departures.count, 2, "Unscheduled GTFS-RT arrival must be dynamically injected.")
+        // Full Timetable preserves published baseline schedule (no synthetic ad-hoc injections into grid)
+        XCTAssertEqual(h10.departures.count, 1, "Published baseline schedule must remain stable without phantom ad-hoc injections.")
         XCTAssertEqual(h10.departures[0].minute, 10)
-        XCTAssertEqual(h10.departures[1].minute, 45)
-        XCTAssertTrue(h10.departures[1].isUnscheduled)
-        XCTAssertTrue(h10.departures[1].isLive)
+        XCTAssertTrue(h10.departures[0].isLive, "Matched scheduled trip must be flagged as live.")
+        XCTAssertTrue(h10.departures[0].isNextDeparture, "Immediate upcoming departure must be tagged with isNextDeparture.")
     }
 
     func testBusFallbackAvailableDirectionsKentAndWythe() async throws {
