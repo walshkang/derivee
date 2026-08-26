@@ -40,7 +40,9 @@ if [ -n "${CONTAINER_DATA}" ] && [ -d "${CONTAINER_DATA}" ]; then
     DB_PATH="${CONTAINER_DATA}/Library/Application Support/derivee_spatial.sqlite"
     if [ -f "${DB_PATH}" ]; then
         echo "    🧹 Cleared previously explored hexes & POIs from SQLite"
-        sqlite3 "${DB_PATH}" "DELETE FROM explored_hexes; DELETE FROM discovered_pois; VACUUM;" 2>/dev/null || rm -f "${CONTAINER_DATA}/Library/Application Support/derivee_spatial.sqlite"*
+        sqlite3 "${DB_PATH}" "DELETE FROM discovered_pois; DELETE FROM meta WHERE key = 'hydration_complete';" 2>/dev/null || true
+        sqlite3 "${DB_PATH}" "SELECT 'DELETE FROM ' || name || ';' FROM sqlite_master WHERE type='table' AND (name LIKE 'explored_hexes_%' OR name = 'explored_hexes');" 2>/dev/null | sqlite3 "${DB_PATH}" 2>/dev/null || true
+        sqlite3 "${DB_PATH}" "VACUUM;" 2>/dev/null || true
     fi
 fi
 

@@ -148,6 +148,10 @@ struct DepartureMatrixView: View {
             ? liveArrivals
             : liveArrivals.filter { $0.line.uppercased() == selectedRouteFilter.uppercased() }
         
+        let sortedLiveArrivals = filteredLiveArrivals.sorted { $0.minutes < $1.minutes }
+        let top2LiveIds = Set(sortedLiveArrivals.prefix(2).map { $0.id })
+        let imminentLiveIds = Set(sortedLiveArrivals.filter { $0.minutes <= 20 }.map { $0.id }).union(top2LiveIds)
+        
         var matchedArrivalIds = Set<UUID>()
         var pillMatchMap: [String: SpatialDatabaseManager.ArrivalInfo] = [:]
         
@@ -227,6 +231,7 @@ struct DepartureMatrixView: View {
                         modPill.isLive = true
                         modPill.liveDeltaMinutes = matchedArrival.minutes
                         modPill.isBoarding = (matchedArrival.minutes == 0)
+                        modPill.isImminentLive = imminentLiveIds.contains(matchedArrival.id)
                         
                         let delayMin = signedMinuteDiff(from: tSched, to: tEst)
                         if delayMin >= 3 {
@@ -269,6 +274,7 @@ struct DepartureMatrixView: View {
                 isPast: false,
                 isUnscheduled: isUnscheduled,
                 isBoarding: (arr.minutes == 0),
+                isImminentLive: imminentLiveIds.contains(arr.id),
                 scheduleRelationship: arr.scheduleRelationship
             )
             
@@ -476,10 +482,12 @@ struct DepartureMatrixView: View {
             ScrollViewReader { scrollProxy in
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 10) {
+                        let showRouteBadge = (selectedRouteFilter == "ALL" && routeIds.count > 1)
                         ForEach(reconciled) { hourRec in
                             HourRowView(
                                 hourRecord: hourRec,
                                 routeId: routeId,
+                                showRouteBadge: showRouteBadge,
                                 isPulsing: isPulsing,
                                 currentHour: selectedDayOffset == 0 ? currentHour : -1
                             )
@@ -622,6 +630,7 @@ private struct DayScrubberView: View {
 private struct HourRowView: View {
     let hourRecord: SpatialDatabaseManager.HourScheduleRecord
     let routeId: String
+    let showRouteBadge: Bool
     let isPulsing: Bool
     let currentHour: Int
     
@@ -657,7 +666,9 @@ private struct HourRowView: View {
                     ForEach(hourRecord.departures) { pill in
                         DeparturePillView(
                             pill: pill,
+                            hour: hourRecord.hourOfDay,
                             routeId: routeId,
+                            showRouteBadge: showRouteBadge,
                             isPulsing: isPulsing
                         )
                     }
@@ -673,7 +684,9 @@ private struct HourRowView: View {
 
 private struct DeparturePillView: View {
     let pill: SpatialDatabaseManager.DeparturePillRecord
+    let hour: Int
     let routeId: String
+    let showRouteBadge: Bool
     let isPulsing: Bool
     
     private var routeInfo: TransitRouteData.LineInfo {
@@ -731,6 +744,17 @@ private struct DeparturePillView: View {
     
     var body: some View {
         HStack(spacing: 3) {
+            // Route identifier bullet when multiple routes present
+            if showRouteBadge {
+                Text(pill.routeId)
+                    .font(.system(size: 8, weight: .bold, design: .rounded))
+                    .foregroundColor(Color(hex: routeInfo.textColorHex))
+                    .padding(.horizontal, 3.5)
+                    .padding(.vertical, 1)
+                    .background(routeInfo.color)
+                    .clipShape(Capsule())
+            }
+            
             // Live Pulsing Indicator Dot
             if pill.isLive || isAdded || isUnscheduled {
                 Circle()
@@ -748,9 +772,9 @@ private struct DeparturePillView: View {
                     .frame(width: 5, height: 5)
             }
             
-            // 2-Digit Monospace Minute
-            Text(String(format: "%02d", pill.minute))
-                .font(.system(size: 12, weight: isAdded ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
+            // Monospace Full Time (HH:mm)
+            Text(String(format: "%02d:%02d", hour, pill.minute))
+                .font(.system(size: 11, weight: isAdded ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
                 .italic(isUnscheduled)
                 .strikethrough(isCanceled, color: Color(hex: "#FF453A"))
                 .foregroundColor(
@@ -765,10 +789,10 @@ private struct DeparturePillView: View {
                     .foregroundColor(Color(hex: routeInfo.textColorHex).opacity(pill.isPast ? 0.5 : 0.9))
             }
             
-            // Live Countdown Overlay
-            if let delta = pill.liveDeltaMinutes, !isCanceled {
+            // Live Countdown Overlay (shown for imminent arrivals)
+            if let delta = pill.liveDeltaMinutes, !isCanceled, pill.isImminentLive {
                 Text(delta == 0 ? "0m" : "\(delta)m")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundColor(Color(hex: "#FFB300"))
             }
         }
@@ -806,11 +830,11 @@ private struct DeparturePillView: View {
                     .clipShape(Capsule())
                     .offset(x: 4, y: -6)
             } else if isUnscheduled {
-                Text("LIVE")
+                Text("EXTRA")
                     .font(.system(size: 7, weight: .bold, design: .rounded))
                     .padding(.horizontal, 3)
                     .padding(.vertical, 1)
-                    .background(Color(hex: "#007AFF"))
+                    .background(Color(hex: "#475569"))
                     .foregroundColor(.white)
                     .clipShape(Capsule())
                     .offset(x: 4, y: -6)
@@ -871,6 +895,20 @@ private struct LegendFooterView: View {
                         .fill(Color(hex: "#FFB300"))
                         .frame(width: 6, height: 6)
                     Text("Live Δt")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                
+                // Extra / Unscheduled
+                HStack(spacing: 4) {
+                    Text("EXTRA")
+                        .font(.system(size: 7, weight: .bold, design: .rounded))
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(Color(hex: "#475569"))
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                    Text("Unscheduled")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
                 }

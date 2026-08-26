@@ -709,7 +709,9 @@ struct MapView: UIViewRepresentable {
                     print("✅ Deferred fog shape applied (\(interiorCount) holes)")
                 }
             } else if isMapStyleLoaded {
-                print("⚠️ Fog shape not yet ready, will apply on next update")
+                let freshFogFeature = FogPolygonMath.makeInitialFogShapeFeature(for: CameraBounds.activeConfig)
+                fogSource.shape = freshFogFeature
+                logPipeline("🌫️ [updateExploredHexes] Reset fog-source to full solid baseline fog shape for \(CameraBounds.activeConfig.slug)")
             }
         }
         
