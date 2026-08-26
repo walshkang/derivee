@@ -389,4 +389,28 @@ final class NearbyBusLensTests: XCTestCase {
         
         XCTAssertTrue(stops.isEmpty, "Sparse coordinates without bus stops must return empty list without fabricating drifting fake stops.")
     }
+    
+    func testGreenpointNassauAveBusStops() async throws {
+        let nassauCoord = CLLocationCoordinate2D(latitude: 40.724635, longitude: -73.951277)
+        let stops = try await SpatialDatabaseManager.shared.fetchNearbyBusStops(coordinate: nassauCoord, radiusMeters: 400.0)
+        
+        XCTAssertFalse(stops.isEmpty, "Should find real bus stops around Nassau Ave in Greenpoint without readonly errors.")
+        let allRoutes = Set(stops.flatMap { $0.routes })
+        let expectedGreenpointRoutes: Set<String> = ["B43", "B48", "B62"]
+        XCTAssertFalse(allRoutes.intersection(expectedGreenpointRoutes).isEmpty, "Discovered bus stops around Nassau Ave must serve B43, B48, or B62.")
+    }
+    
+    func testGTrainNassauAveStationResolution() async throws {
+        let details = try await SpatialDatabaseManager.shared.fetchStopDetails(for: "G28")
+        XCTAssertEqual(details.name, "Nassau Av", "Parent station G28 must resolve to Nassau Av")
+        XCTAssertEqual(details.routeId, "G", "Primary route for Nassau Av station must be G line")
+        XCTAssertEqual(details.routeIds, ["G"], "Route IDs for G28 should be G train")
+        XCTAssertEqual(details.modalClass, .subway, "Modal class must be subway")
+        
+        let lineInfo = TransitRouteData.lineInfo(for: details.routeId)
+        XCTAssertEqual(lineInfo.colorHex, "#6CBE45", "G train line color must be green (#6CBE45), not gray")
+        
+        let directions = try await SpatialDatabaseManager.shared.fetchAvailableDirections(for: "G28", routeId: "G", routeIds: ["G"])
+        XCTAssertTrue(directions.contains(0) && directions.contains(1), "G28 must have both directions (0 and 1) available in timetable patterns")
+    }
 }

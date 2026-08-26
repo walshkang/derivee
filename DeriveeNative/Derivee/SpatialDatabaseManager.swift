@@ -166,10 +166,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         let hasRoutes = stopsColumns.contains { ($0["name"] as? String) == "routes" }
                         let hasParentStation = stopsColumns.contains { ($0["name"] as? String) == "parent_station" }
                         let stopCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM stops") ?? 0
-                        return hasRoutes && hasParentStation && stopCount >= 1000
+                        return hasRoutes && hasParentStation && stopCount >= 10000
                     }
                     if !isValid {
-                        print("Local transit DB is missing routes/parent_station column or incomplete (<1k stops). Re-copying from bundle...")
+                        print("Local transit DB is missing routes/parent_station column or incomplete (<10k stops). Re-copying from bundle...")
                         shouldCopy = true
                     }
                 } catch {
@@ -295,9 +295,54 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             if FileManager.default.fileExists(atPath: targetURL.path) {
                 let escapedPath = targetURL.path.replacingOccurrences(of: "'", with: "''")
                 try db.execute(sql: "ATTACH DATABASE '\(escapedPath)' AS transit;")
-                try db.execute(sql: "PRAGMA transit.optimize;")
             }
         }
+    }
+    
+    /// Resolves platform stop IDs for a given parent or platform stop ID via stop_resolution or stops hierarchy.
+    public func resolvePlatformStopIds(for stopId: String, in db: Database) -> [String] {
+        var stopIds = [stopId]
+        
+        // 1. Try stop_resolution table
+        do {
+            let resColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stop_resolution)")
+            if !resColumns.isEmpty {
+                let children = try String.fetchAll(db, sql: "SELECT child_stop_id FROM transit.stop_resolution WHERE parent_stop_id = ?", arguments: [stopId])
+                for child in children {
+                    if !stopIds.contains(child) {
+                        stopIds.append(child)
+                    }
+                }
+            }
+        } catch {
+            // Ignored
+        }
+        
+        // 2. Try stops table parent_station join if stop_resolution had no extra rows
+        if stopIds.count == 1 {
+            do {
+                let childStops = try String.fetchAll(db, sql: "SELECT stop_id FROM transit.stops WHERE parent_station = ?", arguments: [stopId])
+                for child in childStops {
+                    if !stopIds.contains(child) {
+                        stopIds.append(child)
+                    }
+                }
+            } catch {
+                // Ignored
+            }
+        }
+        
+        // 3. Fallback platform directional suffixes if single ID
+        if stopIds.count == 1 {
+            for suffix in ["N", "S", "1", "2"] {
+                let suffixed = "\(stopId)\(suffix)"
+                if !stopIds.contains(suffixed) {
+                    stopIds.append(suffixed)
+                }
+            }
+        }
+        
+        return stopIds
     }
     
     /// Checks if the `transit` database schema is currently attached.
@@ -335,6 +380,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         // 2. Execute DETACH + ATTACH + PRAGMA transit.optimize; inside serialized writeWithoutTransaction barrier
         try await dbWriter.writeWithoutTransaction { db in
             try self.ensureTransitAttached(in: db)
+            _ = try? db.execute(sql: "PRAGMA transit.optimize;")
             logPipeline("✅ [SpatialDatabaseManager] Transit DB Hot-Swap complete & optimizer warmed")
         }
     }
@@ -1219,11 +1265,14 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         ("BUS_UES_03", "2 Av & E 86 St", 40.7780, -73.9520, ["M15-SBS", "M15", "M86-SBS"], "Southbound"),
         ("BUS_HLM_01", "125 St & Lenox Av / Apollo", 40.8080, -73.9480, ["M60-SBS", "M125", "Bx15"], "Westbound"),
 
-        // Brooklyn Hubs
+        // Brooklyn Hubs & Greenpoint / Williamsburg
         ("BUS_BK_01", "Cadman Plaza W & Montague St", 40.6945, -73.9915, ["B25", "B26", "B38", "B41"], "Southbound"),
         ("BUS_BK_02", "Fulton St & Jay St / Downtown BK", 40.6920, -73.9875, ["B25", "B26", "B38"], "Eastbound"),
         ("BUS_BK_03", "Atlantic Av & 4 Av / Barclays Ctr", 40.6845, -73.9780, ["B41", "B45", "B67"], "Eastbound"),
-        ("BUS_BK_04", "Water St & Main St / DUMBO", 40.7032, -73.9902, ["B25"], "Northbound")
+        ("BUS_BK_04", "Water St & Main St / DUMBO", 40.7032, -73.9902, ["B25"], "Northbound"),
+        ("BUS_GP_01", "Manhattan Av & Nassau Av", 40.7235, -73.9507, ["B43", "B62"], "Northbound"),
+        ("BUS_GP_02", "Lorimer St & Nassau Av", 40.7234, -73.9515, ["B48"], "Southbound"),
+        ("BUS_GP_03", "Nassau Av & Manhattan Av", 40.7237, -73.9509, ["B62"], "Southbound")
     ]
     
     private func generateFallbackNearbyBusStops(for coordinate: CLLocationCoordinate2D, radiusMeters: Double) -> [NearbyBusStop] {
@@ -1317,6 +1366,26 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                                         routesStr = pRoutes
                                     }
                                 }
+                            }
+                        }
+                    }
+                    
+                    // Tier 2.5: Parent Station Child Platform Route Resolution
+                    if (routesStr == nil || routesStr?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true) && locationType == 1 {
+                        let childRoutesSql = "SELECT DISTINCT routes FROM transit.stops WHERE parent_station = ? AND routes IS NOT NULL AND routes != ''"
+                        if let childRows = try? Row.fetchAll(db, sql: childRoutesSql, arguments: [stopId]), !childRows.isEmpty {
+                            var collected = [String]()
+                            for cRow in childRows {
+                                let r: String = cRow["routes"] ?? ""
+                                for item in r.components(separatedBy: ",") {
+                                    let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if !trimmed.isEmpty && !collected.contains(trimmed) {
+                                        collected.append(trimmed)
+                                    }
+                                }
+                            }
+                            if !collected.isEmpty {
+                                routesStr = collected.joined(separator: ",")
                             }
                         }
                     }
@@ -1475,8 +1544,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         return try await dbWriter.read { db in
             do {
                 try self.ensureTransitAttached(in: db)
-                let sql = "SELECT headway_min FROM transit.headway_history WHERE stop_id = ? ORDER BY day_offset ASC LIMIT 7"
-                let rows = try Double.fetchAll(db, sql: sql, arguments: [stopId])
+                let resolvedIds = self.resolvePlatformStopIds(for: stopId, in: db)
+                let idPlaceholders = Array(repeating: "?", count: resolvedIds.count).joined(separator: ", ")
+                let sql = "SELECT headway_min FROM transit.headway_history WHERE stop_id IN (\(idPlaceholders)) ORDER BY day_offset ASC LIMIT 7"
+                let rows = try Double.fetchAll(db, sql: sql, arguments: StatementArguments(resolvedIds.map { $0 as DatabaseValueConvertible }))
                 if !rows.isEmpty {
                     return rows
                 }
@@ -1499,14 +1570,16 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         return try await dbWriter.read { db in
             do {
                 try self.ensureTransitAttached(in: db)
+                let resolvedIds = self.resolvePlatformStopIds(for: stopId, in: db)
+                let idPlaceholders = Array(repeating: "?", count: resolvedIds.count).joined(separator: ", ")
                 var sql = """
                     SELECT route_id, stop_id, direction_id, hour_of_day, day_of_week, 
                            median_delay_sec, p90_delay_sec, median_headway_sec, headway_stddev_sec, 
                            ewt_seconds, on_time_pct, sample_count
                     FROM transit.stop_reliability_hourly
-                    WHERE stop_id = ?
+                    WHERE stop_id IN (\(idPlaceholders))
                 """
-                var args: [DatabaseValueConvertible] = [stopId]
+                var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
                 if let rId = routeId, !rId.isEmpty {
                     sql += " AND route_id = ?"
                     args.append(rId)
@@ -1553,14 +1626,16 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         return try await dbWriter.read { db in
             do {
                 try self.ensureTransitAttached(in: db)
+                let resolvedIds = self.resolvePlatformStopIds(for: stopId, in: db)
+                let idPlaceholders = Array(repeating: "?", count: resolvedIds.count).joined(separator: ", ")
                 let sql = """
                     SELECT event_id, trip_id, route_id, stop_id, scheduled_time, actual_time, delay_seconds, observed_at, direction_id
                     FROM transit.stop_events
-                    WHERE stop_id = ?
+                    WHERE stop_id IN (\(idPlaceholders))
                     ORDER BY observed_at DESC
                     LIMIT 50
                 """
-                let rows = try Row.fetchAll(db, sql: sql, arguments: [stopId])
+                let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(resolvedIds.map { $0 as DatabaseValueConvertible }))
                 if !rows.isEmpty {
                     return rows.map { row in
                         let schedEpoch: Int64? = row[4]
@@ -1614,6 +1689,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 let startOfDayEpoch = Int64(startOfDay.timeIntervalSince1970)
                 let endOfDayEpoch = startOfDayEpoch + 86400
                 
+                let resolvedIds = self.resolvePlatformStopIds(for: stopId, in: db)
+                let idPlaceholders = Array(repeating: "?", count: resolvedIds.count).joined(separator: ", ")
+                
                 // Past days ($dayOffset < 0): Try Observed Reality Replay from stop_events
                 if dayOffset < 0 {
                     let eventColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stop_events)")
@@ -1621,9 +1699,12 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         var eventSql = """
                             SELECT event_id, trip_id, route_id, stop_id, scheduled_time, actual_time, delay_seconds, observed_at, direction_id
                             FROM transit.stop_events
-                            WHERE stop_id = ? AND direction_id = ? AND observed_at >= ? AND observed_at < ?
+                            WHERE stop_id IN (\(idPlaceholders)) AND direction_id = ? AND observed_at >= ? AND observed_at < ?
                         """
-                        var eventArgs: [DatabaseValueConvertible] = [stopId, directionId, startOfDayEpoch, endOfDayEpoch]
+                        var eventArgs: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
+                        eventArgs.append(directionId)
+                        eventArgs.append(startOfDayEpoch)
+                        eventArgs.append(endOfDayEpoch)
                         if let rId = routeId, !rId.isEmpty {
                             eventSql += " AND route_id = ?"
                             eventArgs.append(rId)
@@ -1684,9 +1765,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     var sql = """
                         SELECT hour_of_day, minute_offsets, route_id, headsign, direction_id, service_mask, baseline_days_of_week
                         FROM transit.scheduled_hourly_patterns
-                        WHERE stop_id = ? AND direction_id = ?
+                        WHERE stop_id IN (\(idPlaceholders)) AND direction_id = ?
                     """
-                    var args: [DatabaseValueConvertible] = [stopId, directionId]
+                    var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
+                    args.append(directionId)
                     if let rId = routeId, !rId.isEmpty {
                         sql += " AND route_id = ?"
                         args.append(rId)
@@ -1865,12 +1947,14 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         return try await dbWriter.read { db in
             do {
                 try self.ensureTransitAttached(in: db)
+                let resolvedIds = self.resolvePlatformStopIds(for: stopId, in: db)
+                let idPlaceholders = Array(repeating: "?", count: resolvedIds.count).joined(separator: ", ")
                 
                 // 1. Check scheduled_hourly_patterns
                 let patternCols = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_hourly_patterns)")
                 if !patternCols.isEmpty {
-                    var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_hourly_patterns WHERE stop_id = ?"
-                    var args: [DatabaseValueConvertible] = [stopId]
+                    var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_hourly_patterns WHERE stop_id IN (\(idPlaceholders))"
+                    var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
                     if let rId = routeId, !rId.isEmpty {
                         sql += " AND route_id = ?"
                         args.append(rId)
@@ -1891,8 +1975,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 // 2. Check legacy scheduled_stops
                 let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_stops)")
                 if !columns.isEmpty {
-                    var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_stops WHERE stop_id = ?"
-                    var args: [DatabaseValueConvertible] = [stopId]
+                    var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_stops WHERE stop_id IN (\(idPlaceholders))"
+                    var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
                     if let rId = routeId, !rId.isEmpty {
                         sql += " AND route_id = ?"
                         args.append(rId)

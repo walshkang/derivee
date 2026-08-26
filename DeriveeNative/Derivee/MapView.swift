@@ -270,6 +270,7 @@ struct MapView: UIViewRepresentable {
             Task {
                 do {
                     let loadedPOIs = try await SpatialDatabaseManager.shared.dbWriter.read { db in
+                        try SpatialDatabaseManager.shared.ensureTransitAttached(in: db)
                         let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1")
                         return rows.map { row in
                             let lat: Double = row["stop_lat"]
