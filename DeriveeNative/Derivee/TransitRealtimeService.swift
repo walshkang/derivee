@@ -212,17 +212,20 @@ public final class TransitRealtimeService: @unchecked Sendable {
             
             // Check vehicle status and origin dwell
             let isDwellingAtOrigin: Bool = {
+                // Origin dwell applies ONLY when the first stop is sequence 1 (the start of the entire trip)
+                guard firstStopSequence <= 1 else { return false }
+                
                 if let vp = matchedVehicle {
-                    let isStoppedOrIncoming: Bool = {
+                    let isStopped: Bool = {
                         if vp.hasCurrentStatus {
-                            return vp.currentStatus == .stoppedAt || vp.currentStatus == .incomingAt
+                            return vp.currentStatus == .stoppedAt
                         }
                         return true
                     }()
-                    guard isStoppedOrIncoming else { return false }
+                    guard isStopped else { return false }
                     
                     if vp.hasCurrentStopSequence {
-                        return vp.currentStopSequence <= firstStopSequence || vp.currentStopSequence <= 1
+                        return vp.currentStopSequence <= 1
                     }
                     if vp.hasStopID && !vp.stopID.isEmpty {
                         return self.isStopMatch(currentStopId: vp.stopID, targetStopId: firstStopId)
@@ -291,28 +294,24 @@ public final class TransitRealtimeService: @unchecked Sendable {
                     if diffSec <= 0 {
                         distance = "Boarding"
                     } else if idx == 0 {
-                        // Target stop is the initial / current stop
-                        if let vp = matchedVehicle {
-                            if vp.hasCurrentStatus && vp.currentStatus == .stoppedAt {
-                                distance = "At Terminus"
-                            } else if vp.hasCurrentStatus && vp.currentStatus == .incomingAt {
+                        // Target stop is the initial / current stop in this update
+                        if isDwellingAtOrigin && !isVehicleInTransit {
+                            distance = (matchedVehicle != nil) ? "At Terminus" : "Scheduled"
+                        } else if let vp = matchedVehicle {
+                            if vp.hasCurrentStatus && (vp.currentStatus == .incomingAt || vp.currentStatus == .inTransitTo) {
                                 distance = "Approaching"
-                            } else if vp.hasCurrentStatus && vp.currentStatus == .inTransitTo {
+                            } else if diffSec <= 90 {
                                 distance = "Approaching"
                             } else {
-                                distance = (diffSec <= 60) ? "Approaching" : "Scheduled"
+                                distance = "1 stop away"
                             }
                         } else {
-                            distance = (diffSec <= 60) ? "Approaching" : "Scheduled"
+                            distance = (diffSec <= 90) ? "Approaching" : ((diffSec > 600) ? "Scheduled" : "1 stop away")
                         }
                     } else {
                         // Target stop is downstream (idx > 0)
                         if isDwellingAtOrigin && !isVehicleInTransit {
-                            if matchedVehicle != nil {
-                                distance = "At Terminus"
-                            } else {
-                                distance = "Scheduled"
-                            }
+                            distance = (matchedVehicle != nil) ? "At Terminus" : "Scheduled"
                         } else {
                             // Vehicle has departed origin or is in transit
                             let effectiveStopsAway: Int
@@ -323,7 +322,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
                             }
                             
                             if effectiveStopsAway == 1 {
-                                distance = "1 stop away"
+                                distance = (diffSec <= 90) ? "Approaching" : "1 stop away"
                             } else {
                                 distance = "\(effectiveStopsAway) stops away"
                             }

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -179,7 +179,7 @@
 		1B22D3DA37C0675E12FF0F69 /* CitySelectorPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CitySelectorPill.swift; sourceTree = "<group>"; };
 		21AD6FB3518E383909502845 /* TransitRevealSheetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRevealSheetTests.swift; sourceTree = "<group>"; };
 		22985E8C3BC5CF4435B93C29 /* NearbyBusLensTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyBusLensTests.swift; sourceTree = "<group>"; };
-		250C5799146FC7DD7F64B3D1 /* city-nyc.pack.zst */ = {isa = PBXFileReference; path = "city-nyc.pack.zst"; sourceTree = "<group>"; };
+		250C5799146FC7DD7F64B3D1 /* city-nyc.pack.zst */ = {isa = PBXFileReference; lastKnownFileType = file; path = "city-nyc.pack.zst"; sourceTree = "<group>"; };
 		263E5C695DD8B6540A1EEDB8 /* MultiCityGPXImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiCityGPXImportTests.swift; sourceTree = "<group>"; };
 		26A818AC294C5ADD0DAEF5D2 /* AllMetrosModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllMetrosModels.swift; sourceTree = "<group>"; };
 		29C14A94454A0845801D4442 /* TrackingLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingLiveActivity.swift; sourceTree = "<group>"; };
@@ -195,7 +195,7 @@
 		3D018BBDA1F928EA07A82D14 /* BasemapTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BasemapTheme.swift; sourceTree = "<group>"; };
 		3EDA374CB9DDF6AF944ECDE0 /* CityAutoSwitchToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityAutoSwitchToast.swift; sourceTree = "<group>"; };
 		3F0CB6CA4122C28DEC7B25F6 /* testApertureMilestoneFrameSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testApertureMilestoneFrameSnapshot.1.png; sourceTree = "<group>"; };
-		445AD172FC50D843E3DEA9E7 /* subway-lines.geojson */ = {isa = PBXFileReference; path = "subway-lines.geojson"; sourceTree = "<group>"; };
+		445AD172FC50D843E3DEA9E7 /* subway-lines.geojson */ = {isa = PBXFileReference; lastKnownFileType = text; path = "subway-lines.geojson"; sourceTree = "<group>"; };
 		47A3E08CE2FC2E71A4F9EEA6 /* H3SpatialMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H3SpatialMathTests.swift; sourceTree = "<group>"; };
 		47FDD1CBF726DA8A1160FD2A /* ColdStartLocationFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColdStartLocationFilterTests.swift; sourceTree = "<group>"; };
 		482E45C732819866B4B63747 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -206,7 +206,7 @@
 		52B7EC31E1CA9FF5D99063CD /* TransitRealtimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRealtimeService.swift; sourceTree = "<group>"; };
 		587DBC0D7259B1BDC19D0323 /* MapCustomization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapCustomization.swift; sourceTree = "<group>"; };
 		591F9E805016DF32C53AA95D /* testStatsViewJournalSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testStatsViewJournalSnapshot.1.png; sourceTree = "<group>"; };
-		5AFFB73189473060ADA73222 /* Derivee.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Derivee.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5AFFB73189473060ADA73222 /* Derivee.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Derivee.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5FA1E40A44F1C7D276AEF000 /* testTransitSparklineViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testTransitSparklineViewSnapshot.1.png; sourceTree = "<group>"; };
 		5FE99F0C57D46BACC5466A29 /* ReliabilityHeatmapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReliabilityHeatmapCanvas.swift; sourceTree = "<group>"; };
 		645F1EEDEA7E098541109468 /* CityPackManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPackManagerTests.swift; sourceTree = "<group>"; };
@@ -220,7 +220,7 @@
 		769592D64F1678EB59A70440 /* TransitRouteBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRouteBadge.swift; sourceTree = "<group>"; };
 		7BF5DEEF4436C92EA5AF42BF /* testDepartureMatrixViewMultiRouteSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testDepartureMatrixViewMultiRouteSnapshot.1.png; sourceTree = "<group>"; };
 		7D1316A233DA1D98239A28BC /* FogCacheHandshakeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FogCacheHandshakeTests.swift; sourceTree = "<group>"; };
-		7EC6A6941E06A9AA9C6D2A93 /* DeriveeWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = DeriveeWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		7EC6A6941E06A9AA9C6D2A93 /* DeriveeWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DeriveeWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7F9718A0C6F19BF050A52A38 /* TransitSparklineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitSparklineView.swift; sourceTree = "<group>"; };
 		80384B383FEE2FACF5DEF57F /* neighborhood.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = neighborhood.sqlite; sourceTree = "<group>"; };
 		84929F88DE3A4803334F70D9 /* TransitMatrixInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitMatrixInspectorView.swift; sourceTree = "<group>"; };
@@ -236,14 +236,14 @@
 		936463E8983EB06677DF22A4 /* GPXLocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXLocationProvider.swift; sourceTree = "<group>"; };
 		94F77B8E3EE24B3260000B62 /* TransitRouteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRouteData.swift; sourceTree = "<group>"; };
 		966E6957AA78D74369F921CC /* NeighborhoodTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeighborhoodTests.swift; sourceTree = "<group>"; };
-		97F9405AD2F0493CF5ECB925 /* neighborhood.sqlite-shm */ = {isa = PBXFileReference; path = "neighborhood.sqlite-shm"; sourceTree = "<group>"; };
+		97F9405AD2F0493CF5ECB925 /* neighborhood.sqlite-shm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "neighborhood.sqlite-shm"; sourceTree = "<group>"; };
 		9C4FBD3DE070AA06CD7B75E6 /* CitySelectorPillTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CitySelectorPillTests.swift; sourceTree = "<group>"; };
 		9F6A53E84867BAE6EE1B6ACC /* DepartureMatrixView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepartureMatrixView.swift; sourceTree = "<group>"; };
 		A17A20B7CEF52F8D8EE81D5B /* BusTerminalNameResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusTerminalNameResolutionTests.swift; sourceTree = "<group>"; };
 		A24558ABB620FC3D2824A803 /* MilestoneModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MilestoneModels.swift; sourceTree = "<group>"; };
 		A3A37CA71EE44E8BDD205124 /* PhilosophyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhilosophyView.swift; sourceTree = "<group>"; };
 		A8714A86D95B5C35D2A6F8AA /* PipelineLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineLogger.swift; sourceTree = "<group>"; };
-		AA1D089BD418F79AE29C57FC /* neighborhood.sqlite-wal */ = {isa = PBXFileReference; path = "neighborhood.sqlite-wal"; sourceTree = "<group>"; };
+		AA1D089BD418F79AE29C57FC /* neighborhood.sqlite-wal */ = {isa = PBXFileReference; lastKnownFileType = text; path = "neighborhood.sqlite-wal"; sourceTree = "<group>"; };
 		ACEA1BA69C2073E437F97CAA /* POIMaskingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POIMaskingTests.swift; sourceTree = "<group>"; };
 		AE52C1AEF96AD03646AAC256 /* OrientationClusterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationClusterTests.swift; sourceTree = "<group>"; };
 		AECB22D323FB4F1FADD6D8B8 /* CameraBounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraBounds.swift; sourceTree = "<group>"; };
@@ -259,7 +259,7 @@
 		BD68697FCA0DA2827F0AFADC /* TransitHydrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitHydrationTests.swift; sourceTree = "<group>"; };
 		C1269ACE7C6346A1302459B0 /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
 		C1CFB41819645FF7A1F85119 /* TransitHotSwapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitHotSwapTests.swift; sourceTree = "<group>"; };
-		C48AF06DA0327D2A4E8DC3D7 /* DeriveeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DeriveeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C48AF06DA0327D2A4E8DC3D7 /* DeriveeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeriveeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6083EE5B62BC24A46D675DC /* ApertureBrandingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApertureBrandingTests.swift; sourceTree = "<group>"; };
 		C99A430676D6B46B80F89732 /* GPXParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXParser.swift; sourceTree = "<group>"; };
 		CB9C4AFCEF940DE99ECCC619 /* testTransitRevealSheetDirectionalSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testTransitRevealSheetDirectionalSnapshot.1.png; sourceTree = "<group>"; };
@@ -635,7 +635,6 @@
 				A2D8039E8A383F4842E7143E /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */,
 				DF937CC7693D350B42F576DB /* XCRemoteSwiftPackageReference "SwiftZSTD" */,
 			);
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -823,6 +822,7 @@
 		340FE5E09E5C47E77E529F5F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				DEVELOPMENT_TEAM = KWWBXRPU7P;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DeriveeWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -841,6 +841,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = KWWBXRPU7P;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -859,6 +860,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = KWWBXRPU7P;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -933,6 +935,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = KWWBXRPU7P;
 				INFOPLIST_FILE = Derivee/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -948,6 +951,7 @@
 		F154111276CAF6A92375DC2E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				DEVELOPMENT_TEAM = KWWBXRPU7P;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DeriveeWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1029,6 +1033,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = KWWBXRPU7P;
 				INFOPLIST_FILE = Derivee/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

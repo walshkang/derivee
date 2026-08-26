@@ -15,6 +15,10 @@ final class HydrationManager {
         do {
             // 1. Ensure bundled city pack (NYC) is unpacked and ready in CityPacks/nyc/
             _ = try CityPackManager.shared.ensureBundledPackExtracted()
+            let nycTransitURL = CityPackManager.shared.transitDatabaseURL(for: "nyc")
+            if FileManager.default.fileExists(atPath: nycTransitURL.path) {
+                try await SpatialDatabaseManager.shared.hotSwapTransitDatabase(to: nycTransitURL)
+            }
             
             // Simulate smooth progress transition
             try await Task.sleep(nanoseconds: 500_000_000)

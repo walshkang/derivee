@@ -293,7 +293,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 try db.execute(sql: "DETACH DATABASE transit;")
             }
             if FileManager.default.fileExists(atPath: targetURL.path) {
-                try db.execute(sql: "ATTACH DATABASE ? AS transit;", arguments: [targetURL.path])
+                let escapedPath = targetURL.path.replacingOccurrences(of: "'", with: "''")
+                try db.execute(sql: "ATTACH DATABASE '\(escapedPath)' AS transit;")
                 try db.execute(sql: "PRAGMA transit.optimize;")
             }
         }
@@ -2199,7 +2200,47 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 )
             }
             
-            let isBus = stopId.hasPrefix("BUS_") || stopId.hasPrefix("MTA_")
+            let cleanId = stopId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            let isBus = cleanId.hasPrefix("BUS_") || cleanId.hasPrefix("MTA_")
+            
+            let knownSubwayNames: [String: (name: String, routes: [String])] = [
+                "L08": ("Bedford Av", ["L"]),
+                "L08N": ("Bedford Av", ["L"]),
+                "L08S": ("Bedford Av", ["L"]),
+                "STOP_BEDFORD": ("Bedford Av", ["L"]),
+                "L01": ("8 Av", ["L"]),
+                "L01N": ("8 Av", ["L"]),
+                "L01S": ("8 Av", ["L"]),
+                "STOP_8TH_AVE": ("8 Av", ["L"]),
+                "L02": ("6 Av", ["L"]),
+                "L03": ("14 St - Union Sq", ["L", "4", "5", "6", "N", "Q", "R", "W"]),
+                "L05": ("3 Av", ["L"]),
+                "L06": ("1 Av", ["L"]),
+                "L10": ("Lorimer St", ["L", "G"]),
+                "STOP_LORIMER": ("Lorimer St", ["L", "G"]),
+                "631": ("Brooklyn Bridge-City Hall", ["6", "4", "5", "J", "Z"]),
+                "631N": ("Brooklyn Bridge-City Hall", ["6", "4", "5", "J", "Z"]),
+                "631S": ("Brooklyn Bridge-City Hall", ["6", "4", "5", "J", "Z"]),
+                "STOP_BROOKLYN_BRIDGE": ("Brooklyn Bridge-City Hall", ["6", "4", "5", "J", "Z"]),
+                "R23": ("Canal St", ["N", "Q", "R", "W", "6", "J", "Z"]),
+                "STOP_CANAL": ("Canal St", ["N", "Q", "R", "W", "6", "J", "Z"]),
+                "G33": ("Bedford-Nostrand Avs", ["G"]),
+                "D03": ("Bedford Park Blvd", ["B", "D"]),
+                "405": ("Bedford Park Blvd-Lehman College", ["4"])
+            ]
+            
+            if let known = knownSubwayNames[cleanId] {
+                let primaryRoute = known.routes.first ?? "L"
+                return StopDetails(
+                    stopId: stopId,
+                    name: known.name,
+                    routeId: primaryRoute,
+                    routeIds: known.routes,
+                    routeType: 1,
+                    arrivals: self.generateArrivals(for: primaryRoute)
+                )
+            }
+            
             let routeId = isBus ? "M15" : "L"
             let routeType = isBus ? 3 : 1
             let name = isBus ? "Bus Stop (\(stopId))" : "Transit Station (\(stopId))"
