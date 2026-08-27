@@ -38,3 +38,8 @@
 ## 4. Backend & Ecosystem Directives
 - **Go Observer Daemon:** Do NOT containerize/Dockerize the Observer daemon. Deploy the raw compiled Go binary directly to the Oracle Cloud ARM instance via `systemd` to avoid virtualized filesystem overhead and maximize SQLite write speeds.
 - **Web MVP Brand Sync:** The web app must mirror the iOS aesthetic exactly. Hardcode daytime parchment / white colors (`#F9F9F6` / `#FFFFFF`) in MapLibre, use Electric Amber (`#FFB300`) for sparklines and accents, and pure black/white for text contrast.
+
+## 5. Diagnostic Capabilities
+- **Debugging Context:** When diagnosing bugs in this repo, `/diagnosing-bugs` loads Derivee-specific pipeline context from `.agents/skills/diagnosing-bugs/DERIVEE_CONTEXT.md` — the 6-stage reactive pipeline map, 5 invariant pre-flight checks, test harness cheat sheet, and known band-aid rejection patterns. This context enriches hypothesis generation (Phase 3) and fix validation (Phase 5).
+- **UX Audit:** For interaction design defects (inaccessible tap targets, missing feedback states, scroll position loss, choice overload), invoke `/ux-audit`. Derivee-specific UX constraints load from `.agents/skills/ux-audit/DERIVEE_INVARIANTS.md`.
+- **Recursive Improvement:** Both diagnostic references grow from real debugging sessions. After resolving a bug, the agent appends new invariants, failure modes, or band-aid patterns to the relevant context file.
