@@ -1560,7 +1560,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    public func fetchHourlyReliability(for stopId: String, routeId: String? = nil) async throws -> [HourlyReliabilityRecord] {
+    public func fetchHourlyReliability(for stopId: String, routeId: String? = nil, routeIds: [String] = []) async throws -> [HourlyReliabilityRecord] {
         let startTime = CFAbsoluteTimeGetCurrent()
         defer {
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
@@ -1580,7 +1580,11 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     WHERE stop_id IN (\(idPlaceholders))
                 """
                 var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
-                if let rId = routeId, !rId.isEmpty {
+                if !routeIds.isEmpty {
+                    let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
+                    sql += " AND route_id IN (\(placeholders))"
+                    args.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
+                } else if let rId = routeId, !rId.isEmpty {
                     sql += " AND route_id = ?"
                     args.append(rId)
                 }
@@ -1611,7 +1615,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 throw error
             }
             
-            let effectiveRoute = routeId ?? self.inferRouteId(from: stopId, name: stopId)
+            let effectiveRoute = routeIds.first ?? (routeId ?? self.inferRouteId(from: stopId, name: stopId))
             return self.generateFallbackReliabilityMatrix(for: stopId, routeId: effectiveRoute)
         }
     }
@@ -1632,10 +1636,15 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     SELECT event_id, trip_id, route_id, stop_id, scheduled_time, actual_time, delay_seconds, observed_at, direction_id
                     FROM transit.stop_events
                     WHERE stop_id IN (\(idPlaceholders))
-                    ORDER BY observed_at DESC
-                    LIMIT 50
+                      AND CAST(strftime('%w', datetime(observed_at, 'unixepoch')) AS INTEGER) = ?
+                      AND CAST(strftime('%H', datetime(observed_at, 'unixepoch')) AS INTEGER) = ?
+                    ORDER BY observed_at ASC
                 """
-                let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(resolvedIds.map { $0 as DatabaseValueConvertible }))
+                var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
+                args.append(dayOfWeek)
+                args.append(hourOfDay)
+                
+                let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
                 if !rows.isEmpty {
                     return rows.map { row in
                         let schedEpoch: Int64? = row[4]
@@ -1705,13 +1714,13 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         eventArgs.append(directionId)
                         eventArgs.append(startOfDayEpoch)
                         eventArgs.append(endOfDayEpoch)
-                        if let rId = routeId, !rId.isEmpty {
-                            eventSql += " AND route_id = ?"
-                            eventArgs.append(rId)
-                        } else if !routeIds.isEmpty {
+                        if !routeIds.isEmpty {
                             let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
                             eventSql += " AND route_id IN (\(placeholders))"
                             eventArgs.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
+                        } else if let rId = routeId, !rId.isEmpty {
+                            eventSql += " AND route_id = ?"
+                            eventArgs.append(rId)
                         }
                         eventSql += " ORDER BY observed_at ASC"
                         
@@ -1769,13 +1778,13 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     """
                     var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
                     args.append(directionId)
-                    if let rId = routeId, !rId.isEmpty {
-                        sql += " AND route_id = ?"
-                        args.append(rId)
-                    } else if !routeIds.isEmpty {
+                    if !routeIds.isEmpty {
                         let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
                         sql += " AND route_id IN (\(placeholders))"
                         args.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
+                    } else if let rId = routeId, !rId.isEmpty {
+                        sql += " AND route_id = ?"
+                        args.append(rId)
                     }
                     sql += " ORDER BY hour_of_day ASC"
                     
@@ -1851,16 +1860,17 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                                strftime('%M', departure_time) as dep_min,
                                trip_id, route_id, headsign, direction_id
                         FROM transit.scheduled_stops
-                        WHERE stop_id = ? AND direction_id = ?
+                        WHERE stop_id IN (\(idPlaceholders)) AND direction_id = ?
                     """
-                    var args: [DatabaseValueConvertible] = [stopId, directionId]
-                    if let rId = routeId, !rId.isEmpty {
-                        sql += " AND route_id = ?"
-                        args.append(rId)
-                    } else if !routeIds.isEmpty {
+                    var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
+                    args.append(directionId)
+                    if !routeIds.isEmpty {
                         let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
                         sql += " AND route_id IN (\(placeholders))"
                         args.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
+                    } else if let rId = routeId, !rId.isEmpty {
+                        sql += " AND route_id = ?"
+                        args.append(rId)
                     }
                     sql += " ORDER BY departure_time ASC"
                     
@@ -1916,12 +1926,13 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             }
             
             let fallbackRecords: [HourScheduleRecord]
-            if effectiveRoutes.count <= 1 {
-                fallbackRecords = self.generateFallbackTimetable(for: stopId, routeId: effectiveRoutes.first ?? "L", directionId: directionId)
-            } else {
+            if effectiveRoutes.count > 1 {
                 fallbackRecords = self.generateMultiRouteFallbackTimetable(for: stopId, routeIds: effectiveRoutes, directionId: directionId)
+            } else {
+                fallbackRecords = self.generateFallbackTimetable(for: stopId, routeId: effectiveRoutes.first ?? "L", directionId: directionId)
             }
-            return TimetableResult(records: fallbackRecords, isHistoricalFallback: dayOffset < 0, isObservedReplay: false)
+            let isHistFallback = (dayOffset < 0)
+            return TimetableResult(records: fallbackRecords, isHistoricalFallback: isHistFallback, isObservedReplay: false, totalDepartures: fallbackRecords.reduce(0) { $0 + $1.departures.count })
         }
     }
     
@@ -1955,13 +1966,13 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 if !patternCols.isEmpty {
                     var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_hourly_patterns WHERE stop_id IN (\(idPlaceholders))"
                     var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
-                    if let rId = routeId, !rId.isEmpty {
-                        sql += " AND route_id = ?"
-                        args.append(rId)
-                    } else if !routeIds.isEmpty {
+                    if !routeIds.isEmpty {
                         let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
                         sql += " AND route_id IN (\(placeholders))"
                         args.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
+                    } else if let rId = routeId, !rId.isEmpty {
+                        sql += " AND route_id = ?"
+                        args.append(rId)
                     }
                     let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
                     if !rows.isEmpty {
@@ -1977,13 +1988,13 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 if !columns.isEmpty {
                     var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_stops WHERE stop_id IN (\(idPlaceholders))"
                     var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
-                    if let rId = routeId, !rId.isEmpty {
-                        sql += " AND route_id = ?"
-                        args.append(rId)
-                    } else if !routeIds.isEmpty {
+                    if !routeIds.isEmpty {
                         let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
                         sql += " AND route_id IN (\(placeholders))"
                         args.append(contentsOf: routeIds.map { $0 as DatabaseValueConvertible })
+                    } else if let rId = routeId, !rId.isEmpty {
+                        sql += " AND route_id = ?"
+                        args.append(rId)
                     }
                     let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
                     if !rows.isEmpty {
@@ -2306,6 +2317,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 "631N": ("Brooklyn Bridge-City Hall", ["6", "4", "5", "J", "Z"]),
                 "631S": ("Brooklyn Bridge-City Hall", ["6", "4", "5", "J", "Z"]),
                 "STOP_BROOKLYN_BRIDGE": ("Brooklyn Bridge-City Hall", ["6", "4", "5", "J", "Z"]),
+                "635": ("14 St - Union Sq", ["6", "5", "4", "6X"]),
+                "635N": ("14 St - Union Sq", ["6", "5", "4", "6X"]),
+                "635S": ("14 St - Union Sq", ["6", "5", "4", "6X"]),
                 "R23": ("Canal St", ["N", "Q", "R", "W", "6", "J", "Z"]),
                 "STOP_CANAL": ("Canal St", ["N", "Q", "R", "W", "6", "J", "Z"]),
                 "G33": ("Bedford-Nostrand Avs", ["G"]),

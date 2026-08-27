@@ -547,9 +547,14 @@ struct TransitRevealSheet: View {
     @MainActor
     private func startPollingLifecycle() async {
         // 1. Initial base load from local SQLite
-        let details = try? await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
+        let details: SpatialDatabaseManager.StopDetails?
+        if let existing = self.stopDetails {
+            details = existing
+        } else {
+            details = try? await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
+        }
         let hw = try? await SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
-        let rel = try? await SpatialDatabaseManager.shared.fetchHourlyReliability(for: stopId, routeId: details?.routeId)
+        let rel = try? await SpatialDatabaseManager.shared.fetchHourlyReliability(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [])
         let availDirs = (try? await SpatialDatabaseManager.shared.fetchAvailableDirections(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [])) ?? [0, 1]
         
         let initialDir: Int

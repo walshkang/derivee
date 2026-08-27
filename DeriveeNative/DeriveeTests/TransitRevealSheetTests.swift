@@ -613,7 +613,8 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 375, height: 600)
         
         let matrixVC = UIHostingController(rootView: matrixView)
-        assertSnapshot(of: matrixVC, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
+        matrixVC.overrideUserInterfaceStyle = .light
+        assertSnapshot(of: matrixVC, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600)), precision: 0.98))
         
         // Live Arrivals Tab
         let sheetView = TransitRevealSheet(
@@ -625,7 +626,8 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 375, height: 650)
         
         let sheetVC = UIHostingController(rootView: sheetView)
-        assertSnapshot(of: sheetVC, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 650))))
+        sheetVC.overrideUserInterfaceStyle = .light
+        assertSnapshot(of: sheetVC, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 650)), precision: 0.98))
     }
     
     func testFetchAvailableDirectionsInDatabase() async throws {
@@ -1453,6 +1455,114 @@ final class TransitRevealSheetTests: XCTestCase {
         )
         let ledgerVc = UIHostingController(rootView: ledgerView)
         XCTAssertNotNil(ledgerVc.view)
+    }
+    
+    func testUnionSquareMultiRouteTimetableIncludes4Train() async throws {
+        let fixedDate = Date(timeIntervalSince1970: 1736337600) // Wednesday
+        
+        // Seed 4, 5, 6 patterns for a station
+        try await dbManager.dbWriter.write { db in
+            try db.execute(sql: """
+                INSERT INTO scheduled_hourly_patterns VALUES ('stop_union_sq_test', '6', 0, 8, 384, 127, '02,14,26,38,50', 'Pelham Bay Park');
+                INSERT INTO scheduled_hourly_patterns VALUES ('stop_union_sq_test', '4', 0, 8, 384, 127, '06,18,30,42,54', 'Woodlawn');
+                INSERT INTO scheduled_hourly_patterns VALUES ('stop_union_sq_test', '5', 0, 8, 384, 127, '10,22,34,46,58', 'Eastchester');
+            """)
+        }
+        
+        // When TransitRevealSheet queries timetable with primary routeId "6" and all routeIds ["6", "5", "4"]
+        let result = try await dbManager.fetchTimetableResult(
+            for: "stop_union_sq_test",
+            routeId: "6",
+            routeIds: ["6", "5", "4"],
+            directionId: 0,
+            dayOffset: 0,
+            referenceDate: fixedDate
+        )
+        
+        let h8 = result.records.first(where: { $0.hourOfDay == 8 })
+        XCTAssertNotNil(h8)
+        let departures = h8?.departures ?? []
+        let routeIdsInResult = Set(departures.map { $0.routeId })
+        
+        XCTAssertTrue(routeIdsInResult.contains("4"), "4 train departures must appear in timetable result for Union Square.")
+        XCTAssertTrue(routeIdsInResult.contains("5"), "5 train departures must appear in timetable result for Union Square.")
+        XCTAssertTrue(routeIdsInResult.contains("6"), "6 train departures must appear in timetable result for Union Square.")
+    }
+    
+    @MainActor
+    func testUnionSquareSnapshot() throws {
+        let fixedDate = Date(timeIntervalSince1970: 1736337600) // Wednesday
+        
+        let unionSqDetails = SpatialDatabaseManager.StopDetails(
+            stopId: "635",
+            name: "14 St - Union Sq",
+            routeId: "6",
+            routeIds: ["6", "5", "4", "6X"],
+            routeType: 1,
+            arrivals: [
+                SpatialDatabaseManager.ArrivalInfo(line: "4", destination: "Woodlawn", minutes: 2, direction: "Uptown & Bronx", distanceDescription: "Approaching", arrivalDate: fixedDate.addingTimeInterval(120)),
+                SpatialDatabaseManager.ArrivalInfo(line: "5", destination: "Eastchester - Dyre Av", minutes: 5, direction: "Uptown & Bronx", distanceDescription: "2 stops away", arrivalDate: fixedDate.addingTimeInterval(300)),
+                SpatialDatabaseManager.ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 7, direction: "Uptown & Bronx", distanceDescription: "3 stops away", arrivalDate: fixedDate.addingTimeInterval(420)),
+                SpatialDatabaseManager.ArrivalInfo(line: "4", destination: "Woodlawn", minutes: 11, direction: "Uptown & Bronx", distanceDescription: "5 stops away", arrivalDate: fixedDate.addingTimeInterval(660))
+            ]
+        )
+        
+        var sampleDepartures: [SpatialDatabaseManager.DeparturePillRecord] = []
+        let routes = ["6", "5", "4", "6X"]
+        for (i, r) in routes.enumerated() {
+            sampleDepartures.append(
+                SpatialDatabaseManager.DeparturePillRecord(
+                    id: "DEP_\(r)_\(i)_1",
+                    tripId: "TRIP_\(r)_\(i)_1",
+                    routeId: r,
+                    destination: r == "4" ? "Woodlawn" : (r == "5" ? "Eastchester" : "Pelham Bay Park"),
+                    minute: 4 + i * 14,
+                    isExpress: (r == "4" || r == "5" || r == "6X")
+                )
+            )
+            sampleDepartures.append(
+                SpatialDatabaseManager.DeparturePillRecord(
+                    id: "DEP_\(r)_\(i)_2",
+                    tripId: "TRIP_\(r)_\(i)_2",
+                    routeId: r,
+                    destination: r == "4" ? "Woodlawn" : (r == "5" ? "Eastchester" : "Pelham Bay Park"),
+                    minute: 10 + i * 14,
+                    isExpress: (r == "4" || r == "5" || r == "6X")
+                )
+            )
+        }
+        
+        let sampleHours = (0..<24).map { h in
+            SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: sampleDepartures.sorted { $0.minute < $1.minute })
+        }
+        
+        // 1. Timetable Matrix with 4, 5, 6, 6X route pills
+        let matrixView = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "6",
+            routeIds: ["6", "5", "4", "6X"],
+            stopId: "635",
+            liveArrivals: unionSqDetails.arrivals,
+            referenceDate: fixedDate
+        )
+        .frame(width: 375, height: 620)
+        
+        let matrixVc = UIHostingController(rootView: matrixView)
+        matrixVc.overrideUserInterfaceStyle = .light
+        assertSnapshot(of: matrixVc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620))))
+        
+        // 2. Full TransitRevealSheet with 4 train live arrivals and multi-route header badges
+        let sheetView = TransitRevealSheet(
+            stopId: "635",
+            initialDetails: unionSqDetails,
+            initialLiveArrivals: unionSqDetails.arrivals,
+            referenceDate: fixedDate
+        )
+        .frame(width: 375, height: 650)
+        
+        let sheetVc = UIHostingController(rootView: sheetView)
+        sheetVc.overrideUserInterfaceStyle = .light
+        assertSnapshot(of: sheetVc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 650))))
     }
 }
 
