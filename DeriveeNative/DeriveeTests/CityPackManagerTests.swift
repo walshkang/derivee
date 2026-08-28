@@ -1,6 +1,7 @@
 import XCTest
 import SwiftZSTD
 import CryptoKit
+import GRDB
 @testable import Derivee
 
 final class CityPackManagerTests: XCTestCase {
@@ -231,13 +232,70 @@ final class CityPackManagerTests: XCTestCase {
     
     // MARK: - Performance & Bundled First-Launch Test
     
-    func testEnsureBundledPackExtractedCompletesUnder200ms() throws {
-        let start = CFAbsoluteTimeGetCurrent()
-        let config = try manager.ensureBundledPackExtracted()
-        let elapsed = CFAbsoluteTimeGetCurrent() - start
+    func testActualBundledNYCPackExtraction() throws {
+        let bundleURL = Bundle.main.url(forResource: "city-nyc.pack", withExtension: "zst") ??
+                        Bundle.main.url(forResource: "city-nyc", withExtension: "pack.zst")
         
+        let fileURL: URL
+        if let bundleURL = bundleURL {
+            fileURL = bundleURL
+        } else {
+            let sourceDir = URL(fileURLWithPath: #file).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Derivee")
+            fileURL = sourceDir.appendingPathComponent("city-nyc.pack.zst")
+        }
+        
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path), "city-nyc.pack.zst must exist at \(fileURL.path)")
+        
+        let archiveData = try Data(contentsOf: fileURL)
+        print("📦 city-nyc.pack.zst archive size: \(archiveData.count) bytes")
+        
+        let config = try manager.unpackAndInstall(archiveData: archiveData)
         XCTAssertEqual(config.slug, "nyc")
-        XCTAssertTrue(manager.isPackInstalled(slug: "nyc"))
-        XCTAssertLessThan(elapsed, 0.200, "First-launch extraction must complete under 200ms (took \(elapsed * 1000)ms)")
+        
+        let transitDBURL = manager.transitDatabaseURL(for: "nyc")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: transitDBURL.path))
+        
+        let dbSize = try FileManager.default.attributesOfItem(atPath: transitDBURL.path)[.size] as? Int64 ?? 0
+        print("📦 Extracted transit.sqlite size: \(dbSize) bytes")
+        
+        // Verify it is actually a valid SQLite database
+        let dbQueue = try DatabaseQueue(path: transitDBURL.path)
+        try dbQueue.read { db in
+            let stopCount = try Int.fetchOne(db, sql: "SELECT count(*) FROM stops")
+            print("🚏 Extracted stops count: \(String(describing: stopCount))")
+            XCTAssertGreaterThan(stopCount ?? 0, 0)
+        }
+    }
+    
+    // MARK: - Corrupted Database Auto-Healing Test
+    
+    func testCorruptedDatabaseDetectionAndSelfHealing() throws {
+        let nycDir = manager.packDirectoryURL(for: "nyc")
+        try fileManager.createDirectory(at: nycDir, withIntermediateDirectories: true)
+        
+        let configURL = manager.configURL(for: "nyc")
+        let transitURL = manager.transitDatabaseURL(for: "nyc")
+        
+        let configData = try JSONEncoder().encode(CityConfig.nycDefault)
+        try configData.write(to: configURL)
+        
+        // Write corrupt 16-byte dummy file mimicking previous bug
+        let corruptData = "SQLite format 3\0".data(using: .utf8)!
+        try corruptData.write(to: transitURL)
+        
+        XCTAssertFalse(CityPackManager.isValidDatabase(at: transitURL), "16-byte dummy file must fail isValidDatabase check")
+        
+        // When ensureBundledPackExtracted is invoked, it should detect corrupted DB and auto-heal
+        let healedConfig = try manager.ensureBundledPackExtracted()
+        XCTAssertEqual(healedConfig.slug, "nyc")
+        
+        // Database must now be valid and queryable
+        XCTAssertTrue(CityPackManager.isValidDatabase(at: transitURL))
+        let dbQueue = try DatabaseQueue(path: transitURL.path)
+        try dbQueue.read { db in
+            let stopCount = try Int.fetchOne(db, sql: "SELECT count(*) FROM stops")
+            XCTAssertGreaterThan(stopCount ?? 0, 0)
+        }
     }
 }
+

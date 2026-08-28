@@ -440,53 +440,32 @@ public struct CitiesStorageManagerView: View {
     }
     
     private func startDownload(for entry: CityManifestEntry) {
-        downloadingSlugs[entry.slug] = .downloading(progress: 0.1, receivedBytes: 0, totalBytes: entry.compressedSizeBytes)
+        downloadingSlugs[entry.slug] = .downloading(progress: 0.05, receivedBytes: 0, totalBytes: entry.compressedSizeBytes)
         
         Task {
-            // Simulated / mock download loop if remote CDN not reachable
-            let total = entry.compressedSizeBytes > 0 ? entry.compressedSizeBytes : 9_400_000
-            for i in 1...10 {
-                let progress = Double(i) / 10.0
-                try? await Task.sleep(nanoseconds: 80_000_000)
+            do {
+                _ = try await packManager.downloadAndInstallPack(for: entry) { progress, received, total in
+                    Task { @MainActor in
+                        self.downloadingSlugs[entry.slug] = .downloading(
+                            progress: progress,
+                            receivedBytes: received,
+                            totalBytes: total
+                        )
+                    }
+                }
+                
                 await MainActor.run {
-                    self.downloadingSlugs[entry.slug] = .downloading(
-                        progress: progress,
-                        receivedBytes: Int64(Double(total) * progress),
-                        totalBytes: total
-                    )
+                    self.downloadingSlugs[entry.slug] = .completed
+                    let impact = UINotificationFeedbackGenerator()
+                    impact.notificationOccurred(.success)
+                    self.loadData()
                 }
-            }
-            
-            await MainActor.run {
-                self.downloadingSlugs[entry.slug] = .extracting
-            }
-            
-            try? await Task.sleep(nanoseconds: 150_000_000)
-            
-            // Create dummy pack directory for simulated installation if live pack not already present
-            let targetDir = packManager.packDirectoryURL(for: entry.slug)
-            if !packManager.fileManager.fileExists(atPath: targetDir.path) {
-                try? packManager.fileManager.createDirectory(at: targetDir, withIntermediateDirectories: true)
-                let sampleConfig = CityConfig(
-                    version: 1,
-                    slug: entry.slug,
-                    displayName: entry.displayName,
-                    region: entry.region,
-                    bounds: entry.bounds ?? CityConfig.nycDefault.bounds,
-                    center: entry.center ?? CityConfig.nycDefault.center
-                )
-                if let configData = try? JSONEncoder().encode(sampleConfig) {
-                    try? configData.write(to: packManager.configURL(for: entry.slug))
+            } catch {
+                print("⚠️ [CitiesStorageManagerView] Download/install failed for '\(entry.slug)': \(error)")
+                await MainActor.run {
+                    self.downloadingSlugs[entry.slug] = .idle
+                    self.loadData()
                 }
-                let dummyTransit = "SQLite format 3\0".data(using: .utf8)!
-                try? dummyTransit.write(to: packManager.transitDatabaseURL(for: entry.slug))
-            }
-            
-            await MainActor.run {
-                self.downloadingSlugs[entry.slug] = .completed
-                let impact = UINotificationFeedbackGenerator()
-                impact.notificationOccurred(.success)
-                self.loadData()
             }
         }
     }
@@ -494,6 +473,7 @@ public struct CitiesStorageManagerView: View {
     private func startUpdate(for entry: CityManifestEntry) {
         startDownload(for: entry)
     }
+
 }
 
 #Preview {

@@ -39,21 +39,25 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             let fileManager = FileManager.default
             let appSupportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let databaseURL = appSupportURL.appendingPathComponent("derivee_spatial.sqlite")
+            let fallbackTransitURL = appSupportURL.appendingPathComponent("derivee_transit.sqlite")
             let defaultPackTransitURL = CityPackManager.shared.transitDatabaseURL(for: "nyc")
+            
+            // Ensure bundled NYC pack is unpacked and verified before setting up transit database attachment
+            if customTransitURL == nil {
+                try? CityPackManager.shared.ensureBundledPackExtracted()
+            }
+            
             let transitDBURL: URL
             if let custom = customTransitURL {
                 transitDBURL = custom
-            } else if fileManager.fileExists(atPath: defaultPackTransitURL.path) {
+            } else if CityPackManager.isValidDatabase(at: defaultPackTransitURL) {
                 transitDBURL = defaultPackTransitURL
             } else {
-                transitDBURL = appSupportURL.appendingPathComponent("derivee_transit.sqlite")
+                Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["derivee_transit", "transit_delta"], targetURL: fallbackTransitURL, fileManager: fileManager)
+                transitDBURL = fallbackTransitURL
             }
             let neighborhoodDBURL = appSupportURL.appendingPathComponent("derivee_neighborhood.sqlite")
             _currentTransitDBURL = transitDBURL
-            
-            if customTransitURL == nil && !fileManager.fileExists(atPath: defaultPackTransitURL.path) {
-                Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["derivee_transit", "transit_delta"], targetURL: transitDBURL, fileManager: fileManager)
-            }
             
             Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["neighborhood"], targetURL: neighborhoodDBURL, fileManager: fileManager)
 
@@ -65,16 +69,25 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 try db.execute(sql: "PRAGMA synchronous = NORMAL;")
                 try db.execute(sql: "PRAGMA busy_timeout = 5000;")
                 
-                if fileManager.fileExists(atPath: transitDBURL.path) {
+                if CityPackManager.isValidDatabase(at: transitDBURL) {
                     do {
                         try db.execute(sql: "ATTACH DATABASE '\(transitDBURL.path)' AS transit")
-                        print("Successfully attached transit database")
+                        print("Successfully attached transit database at \(transitDBURL.path)")
                     } catch {
                         print("⚠️ Failed to attach transit DB: \(error)")
                     }
+                } else if CityPackManager.isValidDatabase(at: fallbackTransitURL) {
+
+                    do {
+                        try db.execute(sql: "ATTACH DATABASE '\(fallbackTransitURL.path)' AS transit")
+                        print("Successfully attached fallback transit DB at \(fallbackTransitURL.path)")
+                    } catch {
+                        print("⚠️ Failed to attach fallback transit DB: \(error)")
+                    }
                 } else {
-                    print("⚠️ No transit DB file to attach at \(transitDBURL)")
+                    print("⚠️ No valid transit DB file to attach at \(transitDBURL) or \(fallbackTransitURL)")
                 }
+
                 
                 if fileManager.fileExists(atPath: neighborhoodDBURL.path) {
                     do {
@@ -87,6 +100,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     print("⚠️ No neighborhood DB file to attach at \(neighborhoodDBURL)")
                 }
             }
+
             
             if inMemory {
                 let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("derivee_test_\(UUID().uuidString).sqlite")
@@ -283,7 +297,37 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     
     /// Ensures that the connection has the current target transit database attached.
     public func ensureTransitAttached(in db: Database) throws {
-        guard let targetURL = currentTransitDBURL else { return }
+        guard var targetURL = currentTransitDBURL else { return }
+        
+        // Validate target URL database integrity
+        if !CityPackManager.isValidDatabase(at: targetURL) {
+            // Attempt recovery if this is the NYC pack
+            if targetURL.path.contains("/CityPacks/nyc") {
+                try? CityPackManager.shared.ensureBundledPackExtracted()
+            }
+            
+            if !CityPackManager.isValidDatabase(at: targetURL) {
+                let fileManager = FileManager.default
+                if let appSupportURL = try? fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false) {
+                    let fallbackURL = appSupportURL.appendingPathComponent("derivee_transit.sqlite")
+                    if CityPackManager.isValidDatabase(at: fallbackURL) {
+                        targetURL = fallbackURL
+                        currentTransitDBURL = fallbackURL
+                    } else {
+                        Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["derivee_transit", "transit_delta"], targetURL: fallbackURL, fileManager: fileManager)
+                        if CityPackManager.isValidDatabase(at: fallbackURL) {
+                            targetURL = fallbackURL
+                            currentTransitDBURL = fallbackURL
+                        }
+                    }
+                }
+            }
+        }
+        
+        guard CityPackManager.isValidDatabase(at: targetURL) else {
+            return
+        }
+        
         let rows = try Row.fetchAll(db, sql: "PRAGMA database_list")
         let transitEntry = rows.first { ($0["name"] as? String) == "transit" }
         let attachedFile = transitEntry?["file"] as? String
@@ -292,12 +336,11 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             if transitEntry != nil {
                 try db.execute(sql: "DETACH DATABASE transit;")
             }
-            if FileManager.default.fileExists(atPath: targetURL.path) {
-                let escapedPath = targetURL.path.replacingOccurrences(of: "'", with: "''")
-                try db.execute(sql: "ATTACH DATABASE '\(escapedPath)' AS transit;")
-            }
+            let escapedPath = targetURL.path.replacingOccurrences(of: "'", with: "''")
+            try db.execute(sql: "ATTACH DATABASE '\(escapedPath)' AS transit;")
         }
     }
+
     
     /// Resolves platform stop IDs for a given parent or platform stop ID via stop_resolution or stops hierarchy.
     public func resolvePlatformStopIds(for stopId: String, in db: Database) -> [String] {

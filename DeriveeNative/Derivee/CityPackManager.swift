@@ -46,9 +46,57 @@ public final class CityPackManager: Sendable {
         packDirectoryURL(for: slug).appendingPathComponent("transit-lines.geojson")
     }
     
+    // MARK: - SQLite Database Validation Helper
+    
+    /// Validates that a file at the given URL exists, is >= 4096 bytes, and begins with the SQLite 3 magic header.
+    public static func isValidDatabase(at url: URL) -> Bool {
+        let fileManager = FileManager.default
+        let path = url.path
+        guard fileManager.fileExists(atPath: path) else { return false }
+        
+        guard let attrs = try? fileManager.attributesOfItem(atPath: path),
+              let size = attrs[.size] as? Int64, size >= 4096 else {
+            return false
+        }
+        
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        
+        guard let headerData = try? handle.read(upToCount: 16) else { return false }
+        let expectedHeader = "SQLite format 3\0".data(using: .utf8)!
+        return headerData == expectedHeader
+    }
+    
+    /// Locates the bundled city pack `.pack.zst` across all bundle naming variants.
+    public static func locateBundledPackURL(for slug: String = "nyc") -> URL? {
+        let bundle = Bundle.main
+        let fileManager = FileManager.default
+        
+        let candidateNames = ["city-\(slug).pack", "city-\(slug)"]
+        for name in candidateNames {
+            if let url = bundle.url(forResource: name, withExtension: "zst") {
+                return url
+            }
+            if let url = bundle.url(forResource: name, withExtension: "pack.zst") {
+                return url
+            }
+        }
+        if let url = bundle.url(forResource: "city-\(slug).pack.zst", withExtension: nil) {
+            return url
+        }
+        if let resourceURL = bundle.resourceURL {
+            let directURL = resourceURL.appendingPathComponent("city-\(slug).pack.zst")
+            if fileManager.fileExists(atPath: directURL.path) {
+                return directURL
+            }
+        }
+        return nil
+    }
+    
     // MARK: - First-Launch Bundled Pack Extraction
     
     /// Unpacks the bundled `city-nyc.pack.zst` (<200ms) or initializes the default NYC assets.
+    /// Auto-heals and re-extracts if a corrupted or invalid database file is detected on disk.
     @discardableResult
     public func ensureBundledPackExtracted() throws -> CityConfig {
         createRootDirectoryIfNeeded()
@@ -59,20 +107,24 @@ public final class CityPackManager: Sendable {
         
         // If already extracted and valid with full transit database, load and return
         if fileManager.fileExists(atPath: nycConfigURL.path) && fileManager.fileExists(atPath: nycTransitURL.path) {
-            do {
-                let config = try loadConfig(for: "nyc")
-                if let attrs = try? fileManager.attributesOfItem(atPath: nycTransitURL.path),
-                   let size = attrs[.size] as? Int64, size > 2_000_000 {
-                    return config
+            if Self.isValidDatabase(at: nycTransitURL) {
+                do {
+                    let config = try loadConfig(for: "nyc")
+                    if let attrs = try? fileManager.attributesOfItem(atPath: nycTransitURL.path),
+                       let size = attrs[.size] as? Int64, size > 2_000_000 {
+                        return config
+                    }
+                } catch {
+                    print("⚠️ Corrupted or outdated NYC pack detected, re-extracting: \(error)")
                 }
-            } catch {
-                print("⚠️ Corrupted or outdated NYC pack detected, re-extracting: \(error)")
+            } else {
+                print("⚠️ Invalid or corrupted NYC transit.sqlite detected (fails SQLite header/size checks), cleaning up for fresh extract")
+                try? fileManager.removeItem(at: nycTransitURL)
             }
         }
         
         // Check for bundled city-nyc.pack.zst in main bundle
-        if let bundlePackURL = Bundle.main.url(forResource: "city-nyc.pack", withExtension: "zst") ??
-                                Bundle.main.url(forResource: "city-nyc", withExtension: "pack.zst") {
+        if let bundlePackURL = Self.locateBundledPackURL(for: "nyc") {
             let archiveData = try Data(contentsOf: bundlePackURL)
             return try unpackAndInstall(archiveData: archiveData, expectedSHA256: nil)
         }
@@ -112,6 +164,7 @@ public final class CityPackManager: Sendable {
         print("📦 [CityPackManager] Initialized default NYC pack in \(nycDir.path)")
         return defaultConfig
     }
+
     
     // MARK: - Unpack & Install Pipeline
     
@@ -336,6 +389,12 @@ public final class CityPackManager: Sendable {
         progressHandler: (@Sendable (Double, Int64, Int64) -> Void)? = nil,
         session: URLSession = .shared
     ) async throws -> CityConfig {
+        if entry.isBundled || entry.slug == "nyc", let bundledURL = Self.locateBundledPackURL(for: entry.slug) {
+            let archiveData = try Data(contentsOf: bundledURL)
+            progressHandler?(1.0, Int64(archiveData.count), Int64(archiveData.count))
+            return try unpackAndInstall(archiveData: archiveData, expectedSHA256: nil)
+        }
+        
         let packURL = URL(string: "https://cdn.derivee.app/packs/city-\(entry.slug).pack.zst")!
         
         var request = URLRequest(url: packURL)
@@ -347,12 +406,18 @@ public final class CityPackManager: Sendable {
                 throw CityPackError.downloadFailed(reason: "HTTP \(http.statusCode)")
             }
             progressHandler?(1.0, Int64(data.count), Int64(data.count))
-            return try unpackAndInstall(archiveData: data)
+            return try unpackAndInstall(archiveData: data, expectedSHA256: nil)
         } catch {
-            // If download fails or in offline/test mode, check for bundled/mock fallback
+            if let bundledURL = Self.locateBundledPackURL(for: entry.slug) {
+                let archiveData = try Data(contentsOf: bundledURL)
+                progressHandler?(1.0, Int64(archiveData.count), Int64(archiveData.count))
+                return try unpackAndInstall(archiveData: archiveData, expectedSHA256: nil)
+            }
             throw CityPackError.downloadFailed(reason: error.localizedDescription)
         }
     }
+
+
     
     // MARK: - Manifest Fetcher & Offline Caching
     
