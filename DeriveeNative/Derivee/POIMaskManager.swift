@@ -86,7 +86,10 @@ enum POIMaskManager {
         
         guard let userLoc = userLocation else {
             // If user location is not yet known:
-            // If explored, show as archive (phase 3)
+            // If explored or in allStations mode, show as archive (phase 3)
+            if markerStyle == .allStations {
+                return 3
+            }
             return isExplored ? 3 : nil
         }
         
@@ -95,6 +98,8 @@ enum POIMaskManager {
         if distance <= activeVicinityRadius {
             return 2
         } else if isExplored {
+            return 3
+        } else if markerStyle == .allStations {
             return 3
         } else if markerStyle == .exploredOnly && distance <= lureMaxRadius {
             return 1

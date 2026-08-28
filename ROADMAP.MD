@@ -195,6 +195,56 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **M.3** | **WM3-AMBIENT-MAP-DISMISSAL** | **Ambient Map Dismissal Contract ("Map is the UI" for Overlays):** In `MapView.Coordinator.handleMapTap`, handle ambient taps outside transit POI features (`closest == nil`) by collapsing active floating lenses (`NearbyBusesCapsule`) and dismissing transient toast banners. Auto-collapse quick lens capsules on map gesture pan/drag (`mapViewRegionWillChange`). | **S** | ✅ Done |
 | **M.4** | **WM4-ORIENTATION-CLUSTER** | **Bottom-Right Navigation Orientation Cluster:** Relocate native MapLibre compass needle to `.bottomRight` directly stacked above the 50×50 `RecenterFAB` (`x: 20pt`, `y: 102pt + safeAreaInsets.bottom`). Preserves 120Hz native bearing animation, auto-fade when North-Up, and tap-to-reorient with brand-aligned `ApertureCompassNeedle`. | **XS** | ✅ Done |
 
+### 🚀 On-Device Multimodal Routing & Reliability Engine (Wave N)
+
+> [!NOTE]
+> **Gated on:** Wave M (field hardening) complete. Wave N introduces an **on-device C++ RAPTOR routing engine** with Swift interop, ULTRA precomputed transfer shortcuts, real-time GBFS micro-mobility integration, and a 120Hz immediate-mode Canvas for reliability visualization.
+>
+> **Parallel Execution:** Wave N is architected across **4 parallel tracks** (A, B, C, D) that can be developed concurrently:
+> - **Track A (Observer / Go / CLI):** OSM PBF extraction, ULTRA shortcut precomputation, RAPTOR timetable binary compilation.
+> - **Track B (C++ Engine / Swift):** Swift-C++ interop scaffold, RAPTOR core algorithm, rRAPTOR range search, Pareto cost evaluation.
+> - **Track C (Dynamic Data / GRDB):** GBFS station sync service, reliability math (EWT/OTP), `stop_reliability_hourly` aggregation.
+> - **Track D (SwiftUI / Canvas):** Route comparison cards, profile selector, P10/P50/P90 120Hz Canvas, GTFS-RT circular time math.
+>
+> **Prerequisite Research Spikes (All ✅ Resolved):**
+> 1. C++ RAPTOR Timetable Compaction — 20.64 MB for NYC-scale (9.36 MB headroom under 30 MB ceiling). Byte layout locked.
+> 2. OSM Pedestrian Graph + ULTRA — < 25 MB per city. CSR shortcuts (~8 MB) eliminate live Dijkstra. Go extraction ~4.5s.
+> 3. GBFS Polling — ~75 KB gzip payload. SQLite ingestion via GRDB. Spatial bounding box query < 0.8ms.
+> 4. Reliability Distribution Math — Pre-squared sum SQLite aggregation. 4,320-element flat `[Float]` buffer for 120Hz Canvas.
+>
+> **Combined On-Device Memory Budget:** RAPTOR timetable (20.64 MB) + ULTRA CSR (4 MB) + GBFS worker (1.5 MB) = **~26 MB** (4 MB headroom under 30 MB Jetsam ceiling).
+
+#### Track A: Observer & Data Compilation (Go / CLI / Offline)
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **N-A.1** | **WNA1-OSM-GRAPH** | **Two-Pass OSM PBF Pedestrian Graph Extractor (Go):** Implement `github.com/qedus/osmpbf` two-pass parser in the Observer. Pass 1 filters Ways for walkable infrastructure (`highway=footway\|pedestrian\|path\|steps\|living_street\|residential`, `railway=subway_entrance`, `amenity=elevator`), recording referenced NodeIDs. Pass 2 ingests referenced Nodes, strips metadata, quantizes coordinates to 32-bit fixed-point (×1e7). `EdgeFlags uint8` bitmask (Walkable, WheelchairAccessible, IsSteps, IsElevator). Emit `walk_graph.bin`. | **M** | Planned |
+| **N-A.2** | **WNA2-RAPTOR-BINARY** | **RAPTOR Timetable Binary Compiler (Go):** Serialize existing Observer GTFS data into flat contiguous byte buffer `timetable.bin` matching C++ struct layout: `StopTime` (12B), `Trip` (8B), `Route` (12B), `Stop` (20B), `Transfer` (8B), plus `RouteStops`/`StopRoutes` indirection arrays. Define binary header format (magic bytes, version, endianness, entity counts, offset table). Target ≤ 20.64 MB for NYC-scale. | **M** | Planned |
+| **N-A.3** | **WNA3-ULTRA-PRECOMPUTE** | **ULTRA Transfer Shortcut Precomputation & CSR Serialization:** Run bounded Dijkstra ($\tau_{\max} \le 15\text{m}$) from each transit stop across the pedestrian graph to produce Pareto-optimal stop-level shortcut tuples $(u, v, \tau_\theta)$. Serialize as Compressed Sparse Row (CSR) binary `ultra_transfers.csr`: `stop_offsets` array (`uint32_t[|S|+1]`) + packed `ULTRACompressedTransfer` structs (7B: `target_stop_id` u32, `duration_seconds` u16, `flags` u8). ~8 MB on disk per city. | **L** | Planned |
+| **N-A.4** | **WNA4-GBFS-CONFIG** | **GBFS Endpoint Configuration in City Packs:** Add `gbfs` section to `city_config.json` schema with `stationStatusUrl`, `pollIntervalSeconds` (30), `stalenessThresholdSeconds` (600). Update NYC pack with Citi Bike endpoints, Boston pack with Bluebikes endpoints. Update `cities.json` manifest. | **S** | Planned |
+| **N-A.5** | **WNA5-PACK-FORMAT** | **City Pack v2 Format Extension:** Update city pack directory structure to include `timetable.bin`, `ultra_transfers.csr`, `walk_graph.bin` alongside existing `transit.sqlite` and `transit-lines.geojson`. Bump `city_config.json` version to `2`. Regenerate and upload NYC + Boston packs to R2. | **M** | Planned |
+
+#### Track B: C++ RAPTOR Engine & Swift Interop (C++ / Swift)
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **N-B.1** | **WNB1-CXX-SCAFFOLD** | **Swift-C++ Interop Framework Scaffold:** Add `DeriveeCore` framework target to `project.yml` with C++20 (`CLANG_CXX_LANGUAGE_STANDARD: c++20`, `libc++`), `-cxx-interoperability-mode=default` on both framework and app targets. Create `DeriveeCore/include/` (public headers) and `DeriveeCore/src/` (implementation). Verify zero-bridge C++ type access from Swift. Add `DeriveeCoreTests` test target. | **M** | Planned |
+| **N-B.2** | **WNB2-RAPTOR-CORE** | **Single-Query RAPTOR Algorithm (C++):** Implement round-based RAPTOR with `MAX_ROUNDS = 8`, packed struct timetable loading from mmap'd `timetable.bin`, ULTRA CSR transfer relaxation via `ULTRADataStore::RelaxTransfers`, footpath transfer relaxation, and early round termination. Wheelchair profile support via `flags & WHEELCHAIR_ACCESSIBLE` filtering. | **L** | Planned |
+| **N-B.3** | **WNB3-RRAPTOR** | **Range-RAPTOR Backward Sweep & Pareto Evaluation (C++):** Extend single-query RAPTOR to continuous departure window sweep. Backward scan from $T_{\max} = T_0 + 60\text{m}$ to $T_0$ in 60-second steps. Target arrival bounds $\tau^*_{\text{target}}[k]$ prune forward scans (~75% route scan reduction). Multi-criteria Pareto cost vector $\vec{C} = (\tau_{\text{arrival}}, N_{\text{transfers}}, t_{\text{effort}}, P_{\text{layover}})$ with quadratic layover penalty ($S_{\text{ideal}} = 180\text{s}$, $\alpha = 10^{-3}$). `ParetoSet` dominance-based insertion. | **L** | Planned |
+| **N-B.4** | **WNB4-ROUTING-BRIDGE** | **`RoutingEngineBridge` Swift Actor & Async Dispatch:** Swift actor wrapping native `Timetable` instance with `Task.detached(priority: .userInitiated)` async execution. `JourneyItinerary: Sendable, Identifiable` result type. `@Observable` view model (not `@ObservableObject`) for SwiftUI integration. Bounded one-to-many A* for initial/final transfers at query time. | **M** | Planned |
+
+#### Track C: Dynamic Data Layer (Swift / GRDB)
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **N-C.1** | **WNC1-GBFS-SYNC** | **`GBFSSyncService` & GBFS SQLite Cache:** Implement `GBFSSyncService` with `Task`-based 30s async polling (not `Timer.scheduledTimer`). `GBFSStationStatus: Codable, FetchableRecord, PersistableRecord` in separate `gbfs_cache.sqlite` (`DatabaseQueue`, `.userInitiated` QoS, `NSTemporaryDirectory()`). Indexes: `idx_gbfs_availability` (num_bikes_available, is_renting), `idx_gbfs_spatial` (lat, lon). All reads via `async`/`await`. Staleness gate: 600s. Lifecycle: start on sheet open, cancel on dismiss. | **M** | Planned |
+| **N-C.2** | **WNC2-RELIABILITY-ENGINE** | **`TransitDatabaseEngine` & EWT/OTP Aggregation:** Implement `TransitReliabilityMetrics: Sendable, FetchableRecord` with computed properties for $SWT$, $AWT$, $EWT$, and $OTP$. Pre-squared sum aggregation over `stop_reliability_hourly` via `DatabasePool.read` (async). 168-hour (7×24) rolling window queries. | **M** | Planned |
+| **N-C.3** | **WNC3-CIRCULAR-TIME** | **`GTFSMidnightResolver` & Euclidean Modulo Circular Distance:** Implement `euclideanModulo(a, n) = (a % n + n) % n` for non-negative modular arithmetic. `calculateSignedCircularDelay` mapping GTFS-RT timestamps to signed $[-720, +720]$ minute offsets on the 1,440-minute clock face. `GTFSRealtimeStreamProcessor` actor for processing `StopTimeUpdate` payloads with midnight-safe delay computation. | **S** | Planned |
+
+#### Track D: UI & Visualization (SwiftUI / Canvas / Metal)
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **N-D.1** | **WND1-DEPARTURE-CANVAS** | **120Hz Immediate-Mode `DepartureMatrixCanvas`:** Replace retained-mode `LazyVGrid` with Metal-backed `Canvas(rendersAsynchronously: true)` + `.drawingGroup()`. Flat contiguous `[Float]` buffer (4,320 elements: $24\text{h} \times 60\text{m} \times 3$ percentiles). Index stride: $\text{Offset}(h, m, p) = (h \times 60 + m) \times 3 + p$. Direct RGBA interpolation avoiding SwiftUI modifier chains. Target: 0.8ms–1.9ms per frame (< 8.33ms 120Hz budget). | **M** | Planned |
+| **N-D.2** | **WND2-ROUTE-CARDS** | **Route Comparison Cards & Profile Selector:** `JourneyItinerary` result cards showing arrival time, transfer count, walk effort, and layover reliability. Profile selector modal (Fastest, Fewest Transfers, Least Walking, Wheelchair-Accessible) collapsing the 4D Pareto vector into ranked display. | **M** | Planned |
+| **N-D.3** | **WND3-CONFIDENCE-BANDS** | **P10/P50/P90 Confidence Interval Visualization:** Render percentile wait-time bands from `[Float]` buffer using `Canvas` or `Path`-based area fills. Statistical variance disutility coloring: narrow bands (reliable, green tint) vs wide bands (unreliable, amber/red tint). Tap-to-inspect detail overlay. | **S** | Planned |
+
 ### Post-Ship (Completed Post-Launch Waves)
 
 | Wave | Task ID | Title | Size | Status |

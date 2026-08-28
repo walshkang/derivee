@@ -61,6 +61,12 @@ struct MapView: UIViewRepresentable {
     func updateUIView(_ uiView: MLNMapView, context: Context) {
         context.coordinator.parent = self
         
+        if let currentCoord = currentUserLocation {
+            context.coordinator.lastLocation = CLLocation(latitude: currentCoord.latitude, longitude: currentCoord.longitude)
+        } else if let trackingLoc = trackingEngine.lastKnownLocation {
+            context.coordinator.lastLocation = trackingLoc
+        }
+        
         // Wave L-D.3: Check if active city has changed and coordinate atomic viewport handshake
         if context.coordinator.lastAppliedCitySlug != spatialStore.activeCitySlug {
             context.coordinator.performCitySwitchHandshake(
@@ -112,6 +118,7 @@ struct MapView: UIViewRepresentable {
         Coordinator(self)
     }
     
+    @MainActor
     class Coordinator: NSObject, MLNMapViewDelegate {
         var parent: MapView
         weak var mapView: MLNMapView?
@@ -324,6 +331,7 @@ struct MapView: UIViewRepresentable {
             updateBoundaryBorders(parent.showBoundaryBorders, in: style)
             updateSubwayThoroughfares(show: parent.showSubwayThoroughfares, theme: initialTheme, in: style)
             updateSubwayStationBullets(style: parent.subwayStationMarkerStyle, theme: initialTheme, in: style)
+            updateNearbyBusStops(parent.nearbyBusStops, in: style)
             updatePOIs(in: style)
             updateExploredHexes(in: mapView, with: parent.spatialStore.currentFogShape)
             startLureTimer()
@@ -580,7 +588,7 @@ struct MapView: UIViewRepresentable {
             POIMaskManager.configureBaseVectorLayers(in: style)
         }
         
-        static func subwayLineColorExpression() -> NSExpression {
+        nonisolated static func subwayLineColorExpression() -> NSExpression {
             return NSExpression(forKeyPath: "color")
         }
         
@@ -850,9 +858,13 @@ struct MapView: UIViewRepresentable {
             }
         }
         
+        @MainActor
         func updatePOIs(in style: MLNStyle) {
             guard let source = style.source(withIdentifier: poiSourceId) as? MLNShapeSource else { return }
-            guard let userLoc = lastLocation else { return }
+            
+            let effectiveLocation = lastLocation ??
+                (parent.currentUserLocation.map { CLLocation(latitude: $0.latitude, longitude: $0.longitude) }) ??
+                parent.trackingEngine.lastKnownLocation
             
             var features: [MLNPointFeature] = []
             let exploredHexes = parent.spatialStore.exploredHexes
@@ -862,7 +874,7 @@ struct MapView: UIViewRepresentable {
             for poi in pois {
                 guard let phase = POIMaskManager.resolvePhase(
                     poi: poi,
-                    userLocation: userLoc,
+                    userLocation: effectiveLocation,
                     exploredHexes: exploredHexes,
                     discoveredPOIs: discoveredPOIs,
                     markerStyle: markerStyle

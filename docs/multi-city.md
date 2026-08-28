@@ -79,8 +79,11 @@ All city assets are bundled into a single atomic, compressed archive to prevent 
 ```
 city-bos.pack/
 ├── city_config.json          # Bounding box, camera defaults, multi-modal feeds, attributions, metadata
-├── transit.sqlite            # GRDB SQLite database (stops, routes, scheduled_hourly_patterns)
-└── transit-lines.geojson     # Line geometries (Subway, PATH, LRT, BRT, Maritime Ferry) with hex colors & properties
+├── transit.sqlite            # GRDB SQLite database (stops, routes, scheduled_hourly_patterns, stop_reliability_hourly)
+├── transit-lines.geojson     # Line geometries (Subway, PATH, LRT, BRT, Maritime Ferry) with hex colors & properties
+├── timetable.bin             # (Wave N) Flat contiguous C++ RAPTOR timetable buffer (mmap'd, ≤20.64 MB)
+├── ultra_transfers.csr       # (Wave N) ULTRA precomputed transfer shortcuts in CSR format (~8 MB)
+└── walk_graph.bin            # (Wave N) Quantized OSM pedestrian graph (32-bit fixed-point coords, EdgeFlags)
 ```
 
 ### 3.2 `city_config.json` Schema
@@ -197,6 +200,28 @@ city-bos.pack/
     }
   },
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}
+```
+
+#### Wave N Additions to `city_config.json`
+
+Version 2 city packs add routing and GBFS configuration:
+
+```json
+{
+  "version": 2,
+  "routing": {
+    "timetableBinFile": "timetable.bin",
+    "ultraCsrFile": "ultra_transfers.csr",
+    "walkGraphFile": "walk_graph.bin",
+    "maxWalkMinutes": 15,
+    "maxRounds": 8
+  },
+  "gbfs": {
+    "stationStatusUrl": "https://gbfs.citibikenyc.com/gbfs/en/station_status.json",
+    "pollIntervalSeconds": 30,
+    "stalenessThresholdSeconds": 600
+  }
 }
 ```
 

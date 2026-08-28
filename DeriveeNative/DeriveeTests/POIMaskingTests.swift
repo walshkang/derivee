@@ -141,4 +141,53 @@ final class POIMaskingTests: XCTestCase {
         XCTAssertEqual(POIMaskManager.activeVicinityRadius, 200.0)
         XCTAssertEqual(POIMaskManager.lureMaxRadius, 1000.0)
     }
+    
+    func testNilUserLocationResolvesExploredStations() {
+        let hex = "8b2a100d6c91fff"
+        let poi = GhostPOI(id: "stop_explored", name: "Explored Stop", coordinate: CLLocationCoordinate2D(latitude: 40.7180, longitude: -74.0060), type: 1, h3Index: hex)
+        
+        let phase = POIMaskManager.resolvePhase(
+            poi: poi,
+            userLocation: nil,
+            exploredHexes: [hex],
+            discoveredPOIs: []
+        )
+        XCTAssertEqual(phase, 3, "When user location is nil, explored station must resolve to Phase 3 (Archive)")
+        
+        let unexploredPoi = GhostPOI(id: "stop_unexplored", name: "Unexplored Stop", coordinate: CLLocationCoordinate2D(latitude: 40.7180, longitude: -74.0060), type: 1, h3Index: "8b2a100d6c99fff")
+        let unexploredPhase = POIMaskManager.resolvePhase(
+            poi: unexploredPoi,
+            userLocation: nil,
+            exploredHexes: [],
+            discoveredPOIs: []
+        )
+        XCTAssertNil(unexploredPhase, "When user location is nil, unexplored station in exploredOnly mode must return nil")
+    }
+    
+    func testNilUserLocationInAllStationsModeResolvesStations() {
+        let unexploredPoi = GhostPOI(id: "stop_unexplored", name: "Unexplored Stop", coordinate: CLLocationCoordinate2D(latitude: 40.7180, longitude: -74.0060), type: 1, h3Index: "8b2a100d6c99fff")
+        let phase = POIMaskManager.resolvePhase(
+            poi: unexploredPoi,
+            userLocation: nil,
+            exploredHexes: [],
+            discoveredPOIs: [],
+            markerStyle: .allStations
+        )
+        XCTAssertEqual(phase, 3, "When user location is nil, allStations mode must resolve to Phase 3 (Archive)")
+    }
+    
+    func testAllStationsMarkerStyleShowsUnexploredFarStations() {
+        let userLocation = CLLocation(latitude: 40.7128, longitude: -74.0060)
+        let distantCoord = CLLocationCoordinate2D(latitude: 40.7500, longitude: -74.0060)
+        let poi = GhostPOI(id: "stop_far_unexp", name: "Far Unexplored", coordinate: distantCoord, type: 1, h3Index: "8b2a100d6c93fff")
+        
+        let phase = POIMaskManager.resolvePhase(
+            poi: poi,
+            userLocation: userLocation,
+            exploredHexes: [],
+            discoveredPOIs: [],
+            markerStyle: .allStations
+        )
+        XCTAssertEqual(phase, 3, "In .allStations mode, unexplored station > 200m must resolve to Phase 3 (Archive)")
+    }
 }

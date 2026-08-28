@@ -356,3 +356,111 @@ See [docs/multi-city.md §5.4](file:///Volumes/T7ssd/derivee/docs/multi-city.md)
 - **Sheet Scroll Interaction Priority:**
   - All bottom sheets and inspector sub-sheets (`TransitRevealSheet`, `TransitMatrixInspectorView`, `TripLedgerView`) apply `.presentationContentInteraction(.scrolls)` and `.scrollBounceBehavior(.basedOnSize)` to ensure vertical dragging on scrollable metrics or timetables does not trigger interactive sheet dismissal.
 
+---
+
+## 9. On-Device Multimodal Routing Engine (Wave N)
+
+Wave N introduces a native C++ RAPTOR routing engine with Swift interop, ULTRA precomputed transfer shortcuts, real-time GBFS micro-mobility integration, and 120Hz immediate-mode Canvas visualization.
+
+### 9.1 C++ RAPTOR Engine & Swift Interop
+
+The routing engine is implemented in **C++20** within a separate `DeriveeCore` framework target, accessed from Swift via `-cxx-interoperability-mode=default` (zero Objective-C boxing, no JSON serialization).
+
+#### Timetable Memory Layout
+All timetable data uses **Array of Structures (AoS)** with `#pragma pack(push, 1)` and 32-bit/16-bit integer offsets (no 64-bit pointers). Structural relationships are declared via offset indices into flat contiguous vectors:
+
+| Struct | Fields | Size | NYC Scale | Memory |
+|:---|:---|:---:|:---:|:---:|
+| `StopTime` | `stop_id` u32, `arrival_sec` u32, `departure_sec` u32 | 12B | 1,500,000 | 17.17 MB |
+| `Trip` | `stop_times_offset` u32, `stop_count` u16, `service_id` u16 | 8B | 50,000 | 0.38 MB |
+| `Route` | `trips_offset` u32, `route_stops_offset` u32, `trip_count` u16, `stop_count` u16 | 12B | 2,500 | 0.03 MB |
+| `Stop` | `routes_offset` u32, `transfers_offset` u32, `route_count` u16, `transfer_count` u16, `lat_e6` i32, `lon_e6` i32 | 20B | 15,000 | 0.29 MB |
+| `Transfer` | `target_stop_id` u32, `duration_sec` u16, `distance_m` u16 | 8B | 45,000 | 0.34 MB |
+| **Dynamic Round Memory** | ParetoLabel arrays | — | 8 rounds × 15K stops | 1.92 MB |
+| **Total Static + Dynamic** | | | | **20.64 MB** |
+
+Five `StopTime` instances (60 bytes) fit in < 2 ARM64 L1 cache lines (128 bytes), maximizing hardware prefetching during sequential route scans.
+
+#### Range-RAPTOR (rRAPTOR) Algorithm
+- **Sweep:** Backward from $T_{\max} = T_0 + 60\text{m}$ to $T_0$ in 60-second steps.
+- **Rounds:** `MAX_ROUNDS = 8` (up to 7 transfers per journey).
+- **Pruning:** Target arrival bounds $\tau^*_{\text{target}}[k]$ prune ~75% of route scans.
+- **Early Termination:** Round terminates if zero stop labels updated.
+
+#### Multi-Criteria Pareto Cost Vector
+$$\vec{C} = \left( \tau_{\text{arrival}},\; N_{\text{transfers}},\; t_{\text{effort}},\; P_{\text{layover}} \right)$$
+
+| Component | Unit | Direction | Purpose |
+|:---|:---|:---:|:---|
+| $\tau_{\text{arrival}}$ | Seconds past midnight | Minimize | Travel time |
+| $N_{\text{transfers}}$ | Integer count | Minimize | Journey simplicity |
+| $t_{\text{effort}}$ | Walking seconds | Minimize | Physical effort |
+| $P_{\text{layover}}$ | Continuous penalty | Minimize | Connection reliability |
+
+**Layover Penalty:** $P_{\text{layover}}(S) = \alpha \cdot (S_{\text{ideal}} - S)^2$ when $S < S_{\text{ideal}}$ (else 0), with $S_{\text{ideal}} = 180\text{s}$, $\alpha = 10^{-3}$.
+
+#### Swift-C++ Bridge Architecture
+- **Framework Target:** `DeriveeCore` with `include/` (public headers) + `src/` (implementation).
+- **Actor Pattern:** `RoutingEngineBridge` Swift actor wrapping native `Timetable` instance.
+- **Async Execution:** `Task.detached(priority: .userInitiated)` — identical to existing fog recomputation pipeline.
+- **Result Type:** `JourneyItinerary: Sendable, Identifiable` value type.
+- **View Model:** `@Observable` (not `@ObservableObject`) for consistency with existing codebase patterns.
+
+### 9.2 ULTRA Precomputed Transfer Shortcuts
+
+Standard multi-modal routing interleaves timetable scans with live Dijkstra/A* graph expansions — prohibitively slow on mobile. **ULTRA (UnLimited TRAnsfers)** eliminates runtime graph searches by precomputing Pareto-optimal stop-level shortcuts offline.
+
+- **Scope:** Intermediate transfers only (stop-to-stop). Initial/final transfers computed at query time via bounded A*.
+- **Precomputation:** Bounded Dijkstra ($\tau_{\max} \le 15\text{m}$) from each transit stop across the pedestrian graph.
+- **Storage:** Compressed Sparse Row (CSR) — `stop_offsets` (`uint32_t[|S|+1]`) + `flat_transfers` (packed `ULTRACompressedTransfer`: `target_stop_id` u32, `duration_seconds` u16, `flags` u8 = 7 bytes each).
+- **Relaxation:** For stop $u$, scan `flat_transfers[stop_offsets[u] .. stop_offsets[u+1])` — pure linear cache-line sweep.
+- **Wheelchair Profile:** `flags & WHEELCHAIR_ACCESSIBLE` per-transfer filtering at scan time.
+- **Memory:** ~4 MB RAM (CSR arrays loaded), ~8 MB on disk per city.
+
+### 9.3 OSM Pedestrian Walk Graph
+
+Raw OpenStreetMap `.pbf` extracts are processed by the Observer daemon (Go) via a two-pass parser (`github.com/qedus/osmpbf`):
+
+- **Pass 1 (Ways):** Filter for `highway=footway|pedestrian|path|steps|living_street|residential`, `railway=subway_entrance`, `amenity=elevator`. Record referenced NodeIDs.
+- **Pass 2 (Nodes):** Ingest only referenced nodes, strip all metadata (~40 bytes saved/node). Quantize coordinates: 64-bit float → 32-bit fixed-point (×1e7).
+- **Edge Flags:** `EdgeFlags uint8` bitmask: `FlagWalkable` (bit 0), `FlagWheelchairAccessible` (bit 1), `FlagIsSteps` (bit 2), `FlagIsElevator` (bit 3).
+- **Output:** `walk_graph.bin` (< 25 MB per city).
+
+### 9.4 GBFS Dynamic Micro-Mobility Layer
+
+Real-time bike-share availability is managed by a separate ephemeral SQLite database, not the static `transit.sqlite`.
+
+- **Database:** `gbfs_cache.sqlite` in `NSTemporaryDirectory()` via `DatabaseQueue` (not `DatabasePool` — single-writer ephemeral cache).
+- **Schema:** `gbfs_station_status` table with `station_id TEXT PK`, availability columns, spatial coordinates. Indexes: `idx_gbfs_availability`, `idx_gbfs_spatial`.
+- **Sync:** `GBFSSyncService` with `Task`-based 30s async polling. Staleness gate: 600s.
+- **Spatial Gating:** `lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND num_bikes_available > 0 AND is_renting = 1` — < 0.8ms.
+- **All reads MUST use `async`/`await`** per the project's async read mandate (§2.4).
+
+### 9.5 Reliability Distribution & Confidence Intervals
+
+#### EWT & OTP Math
+For high-frequency transit ($\le 12$ min headways), **Excess Wait Time** replaces schedule-based OTP:
+- $SWT = \frac{\sum H_s^2}{2 \sum H_s}$, $AWT = \frac{\sum H_a^2}{2 \sum H_a}$, $EWT = AWT - SWT$
+- Pre-squared sum aggregation in `stop_reliability_hourly` enables $O(1)$ SQL `GROUP BY` synthesis.
+
+#### 120Hz Immediate-Mode Canvas
+- **Memory Layout:** Single flat `[Float]` array of 4,320 elements ($24\text{h} \times 60\text{m} \times 3$ percentiles).
+- **Index Stride:** $\text{Offset}(h, m, p) = (h \times 60 + m) \times 3 + p$
+- **Rendering:** `Canvas(rendersAsynchronously: true)` + `.drawingGroup()` for Metal rasterization. 0.8ms–1.9ms per frame.
+- **Color:** Direct RGBA interpolation, no SwiftUI `.modifier()` chains.
+
+#### GTFS-RT Circular Time Math
+- **Euclidean Modulo:** `(a % n + n) % n` correcting Swift's truncating `%` operator.
+- **Signed Delay:** Maps to $[-720, +720]$ minutes on a 1,440-minute clock face, fixing midnight boundary errors.
+
+### 9.6 Combined On-Device Memory Budget
+
+| Subsystem | RAM | Disk |
+|:---|:---:|:---:|
+| C++ RAPTOR timetable | ~20.64 MB | `timetable.bin` |
+| ULTRA CSR arrays | ~4 MB | `ultra_transfers.csr` (~8 MB) |
+| GBFS sync worker | ~1.5 MB | `gbfs_cache.sqlite` (~150 KB WAL) |
+| Walk graph (query-time A*) | TBD | `walk_graph.bin` (< 25 MB) |
+| **Combined routing engine** | **~26 MB** | |
+
+Headroom under the 30 MB Jetsam ceiling: **~4 MB**. The walk graph runtime footprint is an open design item that may require partial loading or spatial tiling to stay within budget.

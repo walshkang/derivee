@@ -750,3 +750,49 @@ During ferry transits across open water bodies (Boston Harbor, East River, Charl
 * The puck follows its standard Electric Amber styling with heading cone.
 * Fog clearance resumes only when the GPS coordinate enters a terrestrial hex at the destination pier or landing.
 * This ensures crisp natural coastlines are preserved and prevents jagged ocean hex holes.
+
+---
+
+## 12. Multimodal Routing & Reliability UI (Wave N)
+
+> **Guardrail G10 Check:** All Wave N UI additions are extensions of **Screen 2 (`TransitRevealSheet`)** — no new top-level screens. The 4-screen architecture is preserved.
+
+### 12.1 120Hz Departure Matrix Canvas (`DepartureMatrixCanvas`)
+
+The existing `ReliabilityHeatmapCanvas` (§10.1) renders a 24×7 grid. Wave N adds a higher-resolution **24×60 departure matrix** rendering P10/P50/P90 percentile wait times.
+
+- **Memory:** Single flat `[Float]` array of exactly 4,320 elements ($24\text{h} \times 60\text{m} \times 3$ percentiles).
+- **Index Stride:** $\text{Offset}(h, m, p) = (h \times 60 + m) \times 3 + p$ where $p \in \{0, 1, 2\}$ maps to P10, P50, P90.
+- **Rendering:** `Canvas(rendersAsynchronously: true)` with `.drawingGroup()` for Metal rasterization. Procedural drawing loop — zero retained view tree nodes.
+- **Color Logic:** Direct RGBA interpolation. Variance disutility: $(P_{90} - P_{10})$ normalized against `maxWaitThreshold` controls red channel intensity. Median wait controls opacity.
+- **Selection:** Tap highlights cell with 1.5pt white stroke border. `selectedCellIndex` drives detail overlay.
+- **Performance:** 0.8ms–1.9ms per frame (vs. 18–42ms for declarative `LazyVGrid`), sustaining 120Hz ProMotion.
+
+### 12.2 Route Comparison Cards
+
+When a user taps a destination (or searches for a stop), Screen 2 displays ranked `JourneyItinerary` result cards:
+
+- **Card Layout:** Frosted glass (`.ultraThinMaterial`) cards showing: arrival time, transfer count badges, walking duration, and layover reliability indicator.
+- **Pareto Ranking:** Cards are ordered by the active routing profile's primary criterion. Non-dominated alternatives are shown with subtle visual differentiation.
+- **Result Type:** `JourneyItinerary: Sendable, Identifiable` — arrival time (seconds past midnight), transfer count, walking effort (seconds), layover penalty (continuous).
+
+### 12.3 Profile Selector Modal
+
+A compact modal (`.sheet`) offering 4 routing profiles that collapse the 4D Pareto cost vector $\vec{C}$ into ranked display:
+
+| Profile | Primary Sort | Secondary Sort | Icon |
+|:---|:---|:---|:---:|
+| **Fastest** | $\tau_{\text{arrival}}$ | $N_{\text{transfers}}$ | ⚡ |
+| **Fewest Transfers** | $N_{\text{transfers}}$ | $\tau_{\text{arrival}}$ | 🔄 |
+| **Least Walking** | $t_{\text{effort}}$ | $\tau_{\text{arrival}}$ | 🦶 |
+| **Wheelchair Accessible** | $\tau_{\text{arrival}}$ (filtered) | $t_{\text{effort}}$ | ♿ |
+
+The Wheelchair profile additionally filters ULTRA shortcuts via `flags & WHEELCHAIR_ACCESSIBLE` and excludes walk graph edges with `FlagIsSteps` without accompanying elevator/ramp.
+
+### 12.4 P10/P50/P90 Confidence Band Visualization
+
+Below route comparison cards, a `Canvas`-based area fill renders the uncertainty envelope:
+
+- **Narrow bands** (P90 ≈ P10): Green-tinted fill — reliable, low variance.
+- **Wide bands** (P90 >> P10): Amber/red-tinted fill — unreliable, high headway variance.
+- Tap-to-inspect opens the existing `TransitMatrixInspectorView` (§10.1) for the selected time slot.

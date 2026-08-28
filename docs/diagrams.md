@@ -762,3 +762,164 @@ classDiagram
     DepartureMatrixView ..> SpatialDatabaseManager : queries scheduled timetable
     DepartureMatrixView --> TransitScheduleState : renders per-trip state
 ```
+
+---
+
+## 8. Routing Engine Pipeline (Wave N)
+
+### 8.1 Routing Query Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant User as User (Screen 2)
+    participant VM as RouteViewModel<br/>(@Observable)
+    participant Bridge as RoutingEngineBridge<br/>(Swift Actor)
+    participant RAPTOR as C++ rRAPTOR<br/>(Task.detached .userInitiated)
+    participant ULTRA as ULTRADataStore<br/>(CSR Arrays)
+    participant GBFS as GBFSSyncService<br/>(DatabaseQueue)
+    participant UI as DepartureMatrixCanvas<br/>(120Hz Canvas)
+
+    User->>VM: searchRoutes(from, to)
+    VM->>VM: isSearching = true
+
+    VM->>Bridge: computeJourneys(source, target, depTime, window)
+    Bridge->>RAPTOR: Task.detached(.userInitiated)
+
+    loop Backward Sweep (T_max → T_0, 60s steps)
+        loop Round k = 1..8
+            RAPTOR->>RAPTOR: Traverse routes, update τ[k][stop]
+            RAPTOR->>ULTRA: RelaxTransfers(marked_stops)
+            ULTRA-->>RAPTOR: CSR flat scan [stop_offsets[u]..stop_offsets[u+1])
+            RAPTOR->>RAPTOR: Footpath transfer relaxation
+            RAPTOR->>RAPTOR: Early termination if no updates
+        end
+        RAPTOR->>RAPTOR: Update target_bounds[k]
+    end
+
+    RAPTOR->>Bridge: ParetoSet<JourneyItinerary>
+
+    Bridge->>GBFS: fetchAvailableStations(bbox) async
+    GBFS-->>Bridge: [GBFSStationStatus] (< 0.8ms)
+    Bridge->>Bridge: Filter micro-mobility transfers
+
+    Bridge-->>VM: [JourneyItinerary] @MainActor
+    VM->>VM: journeys = results, isSearching = false
+    VM->>UI: matrixBuffer [Float] 4320 elements
+    UI->>UI: Canvas draw loop (0.8–1.9ms/frame)
+```
+
+### 8.2 Routing Engine Class Diagram
+
+```mermaid
+classDiagram
+    direction TB
+
+    class RoutingEngineBridge {
+        <<Swift Actor>>
+        -nativeTimetable: Timetable
+        -ultraStore: ULTRADataStore
+        -isInitialized: Bool
+        +initializeEngine(assetPath) throws
+        +computeJourneys(source, target, dep, window) async → [JourneyItinerary]
+    }
+
+    class Timetable {
+        <<C++ Struct>>
+        +stop_times: vector~StopTime~
+        +trips: vector~Trip~
+        +routes: vector~Route~
+        +stops: vector~Stop~
+        +transfers: vector~Transfer~
+        +route_stops: vector~uint32_t~
+        +stop_routes: vector~uint32_t~
+    }
+
+    class ULTRADataStore {
+        <<C++ Class>>
+        +stop_offsets: vector~uint32_t~
+        +flat_transfers: vector~ULTRACompressedTransfer~
+        +BuildFromShortcuts(total_stops, raw_shortcuts)
+        +RelaxTransfers(state, wheelchair_only)
+    }
+
+    class ParetoSet {
+        <<C++ Class>>
+        -labels_: vector~ParetoLabel~
+        +merge(candidate) → bool
+        +get_labels() → vector~ParetoLabel~
+    }
+
+    class JourneyItinerary {
+        <<Swift Struct / Sendable>>
+        +id: UUID
+        +arrivalTimeSec: UInt32
+        +transferCount: Int
+        +totalWalkingEffortSec: UInt32
+        +layoverPenalty: Double
+    }
+
+    class GBFSSyncService {
+        <<Swift Class>>
+        -statusURL: URL
+        -dbQueue: DatabaseQueue
+        +startSyncing()
+        +stopSyncing()
+        +fetchAvailableTransferStations(bbox) async → [GBFSStationStatus]
+    }
+
+    class GTFSMidnightResolver {
+        <<Swift Struct / Sendable>>
+        +euclideanModulo(dividend, divisor) → Int
+        +calculateSignedCircularDelay(live, sched) → Int
+    }
+
+    class DepartureMatrixCanvas {
+        <<SwiftUI View / Immediate-Mode>>
+        +matrixBuffer: [Float] 4320
+        +maxWaitThreshold: Float
+        +selectedCellIndex: Int?
+    }
+
+    RoutingEngineBridge --> Timetable : owns (mmap'd)
+    RoutingEngineBridge --> ULTRADataStore : owns (CSR loaded)
+    RoutingEngineBridge --> ParetoSet : produces per query
+    RoutingEngineBridge ..> JourneyItinerary : returns
+    RoutingEngineBridge ..> GBFSSyncService : queries dynamic availability
+    DepartureMatrixCanvas ..> JourneyItinerary : visualizes
+```
+
+### 8.3 Extended Database Topology (Wave N Additions)
+
+```mermaid
+erDiagram
+    MAIN_DB ||--|{ explored_hexes_slug : "per-city hex tables"
+    MAIN_DB ||--o| settings : "app preferences"
+
+    TRANSIT_SQLITE ||--|{ stops : "physical platforms"
+    TRANSIT_SQLITE ||--|{ routes : "transit lines"
+    TRANSIT_SQLITE ||--|{ scheduled_hourly_patterns : "compact timetable"
+    TRANSIT_SQLITE ||--|{ stop_resolution : "parent-child hierarchy"
+    TRANSIT_SQLITE ||--|{ stop_reliability_hourly : "EWT/OTP aggregates (Wave N)"
+
+    GBFS_CACHE_SQLITE ||--|{ gbfs_station_status : "ephemeral bike-share availability"
+
+    TIMETABLE_BIN ||--|{ StopTime : "1.5M packed structs"
+    TIMETABLE_BIN ||--|{ Trip : "50K packed structs"
+    TIMETABLE_BIN ||--|{ Route : "2.5K packed structs"
+    TIMETABLE_BIN ||--|{ Stop : "15K packed structs"
+
+    ULTRA_CSR ||--|{ stop_offsets : "uint32_t[S+1]"
+    ULTRA_CSR ||--|{ flat_transfers : "ULTRACompressedTransfer[]"
+
+    WALK_GRAPH_BIN ||--|{ MinimalNode : "quantized lat/lon"
+    WALK_GRAPH_BIN ||--|{ MinimalWay : "edge topology + flags"
+```
+
+| Data Store | Type | Location | Mutability | Observed |
+|:---|:---|:---|:---:|:---:|
+| `main.sqlite` | GRDB DatabasePool | `~/Documents/` | Mutable | Yes (ValueObservation) |
+| `transit.sqlite` | ATTACH DATABASE | City Pack | Read-only | No |
+| `gbfs_cache.sqlite` | GRDB DatabaseQueue | `NSTemporaryDirectory()` | Mutable (30s sync) | No |
+| `timetable.bin` | mmap'd C++ buffer | City Pack | Read-only | No |
+| `ultra_transfers.csr` | mmap'd CSR arrays | City Pack | Read-only | No |
+| `walk_graph.bin` | mmap'd graph | City Pack | Read-only | No |

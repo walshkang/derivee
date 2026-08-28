@@ -57,12 +57,16 @@ public final class CityPackManager: Sendable {
         let nycConfigURL = configURL(for: "nyc")
         let nycTransitURL = transitDatabaseURL(for: "nyc")
         
-        // If already extracted and valid, load and return
+        // If already extracted and valid with full transit database, load and return
         if fileManager.fileExists(atPath: nycConfigURL.path) && fileManager.fileExists(atPath: nycTransitURL.path) {
             do {
-                return try loadConfig(for: "nyc")
+                let config = try loadConfig(for: "nyc")
+                if let attrs = try? fileManager.attributesOfItem(atPath: nycTransitURL.path),
+                   let size = attrs[.size] as? Int64, size > 2_000_000 {
+                    return config
+                }
             } catch {
-                print("⚠️ Corrupted NYC pack detected, re-extracting: \(error)")
+                print("⚠️ Corrupted or outdated NYC pack detected, re-extracting: \(error)")
             }
         }
         
