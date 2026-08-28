@@ -41,12 +41,16 @@ final class BasemapThemeTests: XCTestCase {
         
         // Day Palette Assertions
         XCTAssertEqual(day.backgroundColor, UIColor(hex: "#F9F9F6"), "Day background should be parchment white #F9F9F6")
+        XCTAssertEqual(day.waterColor, UIColor(hex: "#C8D7DE"), "Day water should be slate cyan #C8D7DE")
+        XCTAssertEqual(day.ferryColor, UIColor(hex: "#00A3E0"), "Day ferry color should be Maritime Cyan #00A3E0")
         XCTAssertEqual(day.fogColor, UIColor(hex: "#1C1C1E"), "Day fog should be graphite #1C1C1E")
         XCTAssertEqual(day.labelTextColor, UIColor(hex: "#1C1C1E"), "Day label should be dark")
         XCTAssertEqual(day.building3DColor, UIColor(hex: "#DCDCD6"), "Day 3D buildings should match building color")
         
         // Transit Palette Assertions (High-Contrast Light Navigation)
         XCTAssertEqual(transit.backgroundColor, UIColor(hex: "#FFFFFF"), "Transit background should be pure porcelain white #FFFFFF")
+        XCTAssertEqual(transit.waterColor, UIColor(hex: "#DDE7ED"), "Transit water should be light slate #DDE7ED")
+        XCTAssertEqual(transit.ferryColor, UIColor(hex: "#00A3E0"), "Transit ferry color should be Maritime Cyan #00A3E0")
         XCTAssertEqual(transit.fogColor, UIColor(hex: "#1C1C1E"), "Transit fog should be graphite #1C1C1E")
         XCTAssertEqual(transit.railColor, UIColor(hex: "#FFB300"), "Transit rail color should be Electric Amber #FFB300")
         XCTAssertEqual(transit.railLineWidth, 3.0, "Transit rail line width should be 3.0pt for prominent visibility")
@@ -103,10 +107,20 @@ final class BasemapThemeTests: XCTestCase {
         // Background
         XCTAssertTrue(styleLayerIds.contains("Background"), "composite_style.json must contain 'Background' layer")
         
-        // Water
+        // Water Fill & Water Lines
         for id in BasemapThemeManager.waterFillLayerIds {
             XCTAssertTrue(styleLayerIds.contains(id), "composite_style.json must contain water fill layer '\(id)'")
         }
+        for id in BasemapThemeManager.waterLineLayerIds {
+            XCTAssertTrue(styleLayerIds.contains(id), "composite_style.json must contain water line layer '\(id)'")
+        }
+        
+        // Ferry Lines (must be separate from waterLineLayerIds to avoid water-blending)
+        XCTAssertFalse(BasemapThemeManager.waterLineLayerIds.contains("Ferry line"), "waterLineLayerIds must NOT contain 'Ferry line' (causes invisible lines over water)")
+        for id in BasemapThemeManager.ferryLineLayerIds {
+            XCTAssertTrue(styleLayerIds.contains(id), "composite_style.json must contain ferry line layer '\(id)'")
+        }
+        XCTAssertTrue(styleLayerIds.contains("Ferry"), "composite_style.json must contain 'Ferry' label layer")
         
         // Rails
         for id in ["Major rail", "Minor rail", "Railway tunnel"] {

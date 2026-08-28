@@ -20,6 +20,7 @@ public enum BasemapTheme: String, CaseIterable, Identifiable, Codable {
 public struct BasemapPalette: Equatable {
     public let backgroundColor: UIColor
     public let waterColor: UIColor
+    public let ferryColor: UIColor
     public let parkColor: UIColor
     public let landuseColor: UIColor
     public let buildingColor: UIColor
@@ -37,6 +38,7 @@ public struct BasemapPalette: Equatable {
     public static let day = BasemapPalette(
         backgroundColor: UIColor(hex: "#F9F9F6"),
         waterColor: UIColor(hex: "#C8D7DE"),
+        ferryColor: UIColor(hex: "#00A3E0"),
         parkColor: UIColor(hex: "#E3ECD9"),
         landuseColor: UIColor(hex: "#EDEDE9"),
         buildingColor: UIColor(hex: "#DCDCD6"),
@@ -55,6 +57,7 @@ public struct BasemapPalette: Equatable {
     public static let transit = BasemapPalette(
         backgroundColor: UIColor(hex: "#FFFFFF"),
         waterColor: UIColor(hex: "#DDE7ED"),
+        ferryColor: UIColor(hex: "#00A3E0"),
         parkColor: UIColor(hex: "#EDF3E8"),
         landuseColor: UIColor(hex: "#F5F6F8"),
         buildingColor: UIColor(hex: "#F1F3F5"),
@@ -83,7 +86,8 @@ public enum BasemapThemeManager {
     
     // Layer Group IDs matching composite_style.json
     static let waterFillLayerIds = ["Water", "Water intermittent"]
-    static let waterLineLayerIds = ["River", "River tunnel", "Ferry line"]
+    static let waterLineLayerIds = ["River", "River tunnel"]
+    static let ferryLineLayerIds = ["Ferry line"]
     static let natureLayerIds = ["Park", "Meadow", "Scrub", "Crop", "Forest", "Sand", "Wood", "Grass", "Glacier"]
     static let landuseLayerIds = ["Residential", "Industrial", "Cemetery", "Hospital", "Stadium", "School", "Airport zone"]
     static let buildingLayerIds = ["Building"]
@@ -135,6 +139,14 @@ public enum BasemapThemeManager {
             if let lineLayer = style.layer(withIdentifier: layerId) as? MLNLineStyleLayer {
                 lineLayer.lineColorTransition = transition
                 lineLayer.lineColor = NSExpression(forConstantValue: palette.waterColor)
+            }
+        }
+        
+        // 2b. Ferry Lines (Dashed maritime transit paths over water)
+        for layerId in ferryLineLayerIds {
+            if let lineLayer = style.layer(withIdentifier: layerId) as? MLNLineStyleLayer {
+                lineLayer.lineColorTransition = transition
+                lineLayer.lineColor = NSExpression(forConstantValue: palette.ferryColor)
             }
         }
         
