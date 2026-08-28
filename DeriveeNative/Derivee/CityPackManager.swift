@@ -244,6 +244,14 @@ public final class CityPackManager: Sendable {
         }
         
         print("✅ [CityPackManager] Successfully installed city pack '\(config.slug)' at \(targetDir.path)")
+        
+        // If this pack replaces the currently attached transit database, trigger hot-swap to safely rebind connection handles
+        let targetTransitURL = targetDir.appendingPathComponent("transit.sqlite")
+        if SpatialDatabaseManager.shared.currentTransitDBURL?.path == targetTransitURL.path {
+            Task {
+                try? await SpatialDatabaseManager.shared.hotSwapTransitDatabase(to: targetTransitURL)
+            }
+        }
         return config
     }
     

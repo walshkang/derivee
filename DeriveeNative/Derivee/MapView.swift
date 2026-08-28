@@ -572,6 +572,8 @@ struct MapView: UIViewRepresentable {
             activeLayer.predicate = NSPredicate(format: "phase == 2")
             activeLayer.iconImageName = NSExpression(forKeyPath: "icon_name")
             activeLayer.iconScale = NSExpression(forConstantValue: 1.0)
+            activeLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            activeLayer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
             style.insertLayer(activeLayer, above: lureLayer)
             
             let archiveLayer = MLNCircleStyleLayer(identifier: archiveLayerId, source: source)
@@ -861,6 +863,10 @@ struct MapView: UIViewRepresentable {
         @MainActor
         func updatePOIs(in style: MLNStyle) {
             guard let source = style.source(withIdentifier: poiSourceId) as? MLNShapeSource else { return }
+            
+            if pois.isEmpty {
+                loadPOIs(for: parent.spatialStore.activeCitySlug)
+            }
             
             let effectiveLocation = lastLocation ??
                 (parent.currentUserLocation.map { CLLocation(latitude: $0.latitude, longitude: $0.longitude) }) ??

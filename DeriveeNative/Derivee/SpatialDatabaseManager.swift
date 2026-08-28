@@ -296,7 +296,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     // MARK: - Transit Database Hot-Swap (Wave L-B.3)
     
     /// Ensures that the connection has the current target transit database attached.
-    public func ensureTransitAttached(in db: Database) throws {
+    /// Performs an active health check on the attached transit schema and auto-heals stale or invalidated
+    /// SQLite file descriptors (e.g. following city pack decompression / file replacement) to prevent disk I/O errors.
+    public func ensureTransitAttached(in db: Database, force: Bool = false) throws {
         guard var targetURL = currentTransitDBURL else { return }
         
         // Validate target URL database integrity
@@ -332,9 +334,22 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         let transitEntry = rows.first { ($0["name"] as? String) == "transit" }
         let attachedFile = transitEntry?["file"] as? String
         
-        if attachedFile != targetURL.path {
+        var needsReattach = force || (attachedFile != targetURL.path)
+        
+        // Proactive Health Probe: If transit is ostensibly attached to targetURL, verify the file handle is valid.
+        // If the underlying file was unlinked/replaced on disk, querying PRAGMA transit.table_info(stops) throws disk I/O error (10).
+        if !needsReattach && transitEntry != nil {
+            do {
+                _ = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stops);")
+            } catch {
+                print("⚠️ [SpatialDatabaseManager] Transit schema probe failed (\(error)). Re-attaching database handle to \(targetURL.path)")
+                needsReattach = true
+            }
+        }
+        
+        if needsReattach {
             if transitEntry != nil {
-                try db.execute(sql: "DETACH DATABASE transit;")
+                try? db.execute(sql: "DETACH DATABASE transit;")
             }
             let escapedPath = targetURL.path.replacingOccurrences(of: "'", with: "''")
             try db.execute(sql: "ATTACH DATABASE '\(escapedPath)' AS transit;")
@@ -422,7 +437,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         
         // 2. Execute DETACH + ATTACH + PRAGMA transit.optimize; inside serialized writeWithoutTransaction barrier
         try await dbWriter.writeWithoutTransaction { db in
-            try self.ensureTransitAttached(in: db)
+            try self.ensureTransitAttached(in: db, force: true)
             _ = try? db.execute(sql: "PRAGMA transit.optimize;")
             logPipeline("✅ [SpatialDatabaseManager] Transit DB Hot-Swap complete & optimizer warmed")
         }
