@@ -401,6 +401,7 @@ final class NearbyBusLensTests: XCTestCase {
     }
     
     func testGTrainNassauAveStationResolution() async throws {
+        _ = try? CityPackManager.shared.ensureBundledPackExtracted()
         let details = try await SpatialDatabaseManager.shared.fetchStopDetails(for: "G28")
         XCTAssertEqual(details.name, "Nassau Av", "Parent station G28 must resolve to Nassau Av")
         XCTAssertEqual(details.routeId, "G", "Primary route for Nassau Av station must be G line")

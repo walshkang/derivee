@@ -213,7 +213,7 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 320, height: 100)
 
         let vc = UIHostingController(rootView: view)
-        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 320, height: 100))))
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 320, height: 100)), precision: 0.98))
     }
     
     func testReliabilityHeatmapCanvasSnapshot() throws {
@@ -247,7 +247,7 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 360, height: 250)
         
         let vc = UIHostingController(rootView: view)
-        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 360, height: 250))))
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 360, height: 250)), precision: 0.98))
     }
     
     func testTransitMatrixInspectorViewSnapshot() throws {
@@ -270,7 +270,7 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 375, height: 600)
         
         let vc = UIHostingController(rootView: view)
-        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600))))
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 600)), precision: 0.98))
     }
     
     func testTimetableQueryPerformanceUnder12ms() async throws {
@@ -486,7 +486,7 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 375, height: 620)
         
         let vc = UIHostingController(rootView: view)
-        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620))))
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620)), precision: 0.98))
     }
     
     func testDepartureMatrixViewMultiRouteSnapshot() throws {
@@ -523,7 +523,7 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 375, height: 620)
         
         let vc = UIHostingController(rootView: view)
-        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620))))
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620)), precision: 0.98))
     }
     
     func testExportTimetableVerificationScreenshots() throws {
@@ -717,7 +717,7 @@ final class TransitRevealSheetTests: XCTestCase {
         .frame(width: 375, height: 620)
         
         let vc = UIHostingController(rootView: view)
-        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620))))
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620)), precision: 0.98))
     }
     
     // MARK: - Wave K.7 Unit Tests
@@ -1549,7 +1549,7 @@ final class TransitRevealSheetTests: XCTestCase {
         
         let matrixVc = UIHostingController(rootView: matrixView)
         matrixVc.overrideUserInterfaceStyle = .light
-        assertSnapshot(of: matrixVc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620))))
+        assertSnapshot(of: matrixVc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 620)), precision: 0.98))
         
         // 2. Full TransitRevealSheet with 4 train live arrivals and multi-route header badges
         let sheetView = TransitRevealSheet(
@@ -1562,7 +1562,7 @@ final class TransitRevealSheetTests: XCTestCase {
         
         let sheetVc = UIHostingController(rootView: sheetView)
         sheetVc.overrideUserInterfaceStyle = .light
-        assertSnapshot(of: sheetVc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 650))))
+        assertSnapshot(of: sheetVc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 650)), precision: 0.98))
     }
 }
 

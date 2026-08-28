@@ -9,6 +9,8 @@ targets:
     deploymentTarget: "17.0"
     settings:
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      DEVELOPMENT_TEAM: K9HJ6RGKU6
+      CODE_SIGN_STYLE: Automatic
     sources:
       - path: Derivee
       - path: ../observer/transit_delta.sqlite
@@ -45,6 +47,8 @@ targets:
     deploymentTarget: "17.0"
     settings:
       GENERATE_INFOPLIST_FILE: YES
+      DEVELOPMENT_TEAM: K9HJ6RGKU6
+      CODE_SIGN_STYLE: Automatic
     sources:
       - path: DeriveeTests
     dependencies:
@@ -60,6 +64,8 @@ targets:
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.derivee.Derivee.DeriveeWidget
       GENERATE_INFOPLIST_FILE: NO
+      DEVELOPMENT_TEAM: K9HJ6RGKU6
+      CODE_SIGN_STYLE: Automatic
     info:
       path: DeriveeWidget/Info.plist
       properties:
