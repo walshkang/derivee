@@ -169,16 +169,18 @@ The map uses a 3-tier state to separate where the user **is**, where they **have
 
 > **Strict Rule:** If a map element (pin, label, text, POI) is outside the 200m Active Vicinity Bubble, it **must** be hidden. No exceptions.
 
-### 2.1 Zoom Level Framework
+### 2.1 Zoom Level Framework & Smart Zoom Cartography
 
-Standard cartographic data (streets, parks, travel direction) is handled entirely by MapTiler. Custom data overlays are **strictly limited** to Transit nodes (Subway Entrances and Bus Stops).
+Standard cartographic data (streets, parks, travel direction) is handled entirely by MapTiler. Custom transit overlays follow a **Smart Zoom hierarchical disclosure** model that balances macro clarity beneath the fog with granular route disambiguation at street level.
 
-| Zoom Level | Map Focus | Visible Custom Elements |
+| Zoom Level | Map Focus | Visible Custom Elements & Smart Zoom Behavior |
 |:---|:---|:---|
-| **0–11** | City / Region | Fog layer dominates. Base map geography visible. No custom pins or text. |
-| **12–14** | Neighborhood | Unlocked hex outlines appear. Major arterial roads and neighborhood names render via MapTiler. |
-| **15–16** | Street Level | MapTiler street names and travel directions fade in. Subway Ghost POI nodes become visible within Active and Explored zones. |
-| **17+** | Granular Detail | Bus stop Ghost POI nodes fade in. Building footprints and exact street geometries fully visible in exposed areas. |
+| **0–12.5** | City / Regional Trunk | Fog layer dominates. Major transit thoroughfares render as consolidated physical rail alignments beneath the fog (e.g. solid Lexington Green `#00933C`, Broadway Yellow `#FCCC0A`, 7th Ave Red `#EE352E`). Station bullets hidden to eliminate visual noise. |
+| **13.0–14.4** | Neighborhood | Unlocked hex outlines appear. Major street names render via MapTiler. Transit stations render as subtle 4.5pt ambient discs (`subway-station-bullets-layer`) indicating station presence. |
+| **14.5–16.5** | Street / Smart Zoom Resolution | **Smart Zoom Station Badges:** Station nodes dynamically resolve into discrete route bullet clusters: <br>• *Express Station (e.g., 86th St):* `[ 4 ] [ 5 ] [ 6 ]`<br>• *Local-Only Station (e.g., 77th St):* `[ 6 ]` (dimmed 4/5 indicates express bypass).<br>Bus stop Ghost POI nodes fade in. Subway line geometries remain locked to true 2D geographic track centerlines (preventing multi-ribbon curve clipping across sidewalks/buildings). |
+| **17+** | Granular Detail | Bus stop lines and stop labels fade in. Building footprints, pedestrian paths, and exact platform footprints fully visible in exposed areas. |
+
+> **Selected Route Trace:** When any route or train is inspected in Screen 2 (`TransitRevealSheet`), only that specific route's physical polyline illuminates with full color saturation and 6px casing across the map through the fog, dissolving on dismiss.
 
 ### 2.2 The 6-Layer Rendering Stack
 
@@ -309,16 +311,23 @@ The app has exactly **four** screens. If a screen is not enumerated below, the a
 
 **UI Elements:**
 * A native iOS-style bottom sheet (via SwiftUI `.sheet`) slides up over the map.
-* **Station/Stop Name:** Large, bold SF Pro heading.
-* **Real-Time Arrivals (Ground Truth Fidelity):** GTFS-RT countdown list with verified transit state:
-  * **In Transit:** Dynamic count (e.g., `"L train → Manhattan — 3 min"`, `"3 stops away"`).
-  * **Dwelling at Terminus:** Vehicles at their initial scheduled stop/origin display `"At Terminus"` / `"Scheduled"` rather than active momentum until physically transitioning to `IN_TRANSIT_TO`.
-  * **Platform Boarding:** Trains dwelling at platform ($0 \le \Delta t \le 30\text{s}$) display an amber `"Boarding"` pulse badge before departure.
+* **Station/Stop Name:** Large, bold SF Pro heading with mode/line badging.
+* **Modal-Adaptive Content Engine:**
+  * **Headway-Managed Modes (Subway, High-Frequency LRT):**
+    * **Live Dispatch Stream:** Unified chronological stream of active trains in motion and planned terminus dispatches over the next ~45–60 minutes:
+      * *Trains in Motion:* `[ 6 ] Express → Pelham Bay — 4 min • 3 stops away` (with glowing amber live dot).
+      * *Queued at Terminus:* `[ 6 ] Express → Pelham Bay — 18 min • Departs Brooklyn Bridge 1:23 PM` (with terminal dispatch badge).
+      * *Platform Boarding:* Dwelling vehicles ($0 \le \Delta t \le 30\text{s}$) show an amber `"Boarding"` pulse badge.
+    * **Multi-Route Filtering:** Pinned horizontal route strip (`[All] [N] [Q] [R] [W]`).
+    * **Tap-to-Inspect:** Tapping *any* train arrival row opens the deep **Train Inspector** (§10.5).
+    * **Offline / Underground Degraded State:** When underground without cell telemetry, displays local scheduled headway (`Every 4–6 min • Scheduled`) and last-updated timestamp (`"Updated 2 min ago • Telemetry paused underground"`), preserving offline route line trace.
+  * **Timetabled Modes (Commuter Rail, Regional Rail, HSR — LIRR, Metro-North, NJ Transit, Amtrak):**
+    * Retains the `[ Live Arrivals | Full Timetable ]` segmented control with full 24-hour departure grid and 24×7 OTP heatmap.
 * **Historical Reliability Sparkline / 24×7 Heatmap:** Compact reliability overview and inspector sub-sheet.
 * **Scroll & Gesture Interaction:** All sheets and inspector modals use `.presentationContentInteraction(.scrolls)` and `.scrollBounceBehavior(.basedOnSize)` so vertical scrolls within timetables and metrics are never swallowed by the sheet's interactive drag-to-dismiss gesture.
 
-**Map Interaction (Ephemeral Route Line):**
-When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top** of the MapLibre layer stack, tracing the entire transit route across the map — cutting visually through the fog. This line:
+**Map Interaction (Ephemeral Route Line & Train Tracking):**
+When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top** of the MapLibre layer stack, tracing the entire transit route across the map — cutting visually through the fog. Tapping an individual train in the stream highlights that vehicle's live position on the polyline. This line:
 * Uses a vibrant, semi-transparent stroke matching the transit line's official color (e.g., MTA L train gray).
 * Animates in with a 200ms fade.
 * Fades out with a 200ms opacity transition when the sheet is dismissed, rather than unmounting instantly, to dissolve gracefully matching the SwiftUI spring physics.
@@ -330,8 +339,10 @@ When this sheet opens, a temporary GeoJSON `LineLayer` is injected at the **top*
 
 **Definition of Done:**
 - [ ] Sheet triggers instantly upon tapping a Subway or Bus Ghost POI node (only when within 200m proximity).
-- [ ] Real-time GTFS-RT countdowns populate accurately for the selected stop with ground-truth terminus dwell states.
-- [ ] Historical sparkline renders from local SQLite data in < 12ms.
+- [ ] Subways render the Live Dispatch Stream with in-motion and queued terminal runs (0–45 min).
+- [ ] Tapping a subway train row transitions to the Train Inspector sheet with synchronized map focus.
+- [ ] Commuter rail stations render the 24-hour timetable departure matrix.
+- [ ] Underground/offline state gracefully shows scheduled frequency with last-updated freshness badge.
 - [ ] Ephemeral route `LineLayer` injects on open and unmounts on dismiss with no stale artifacts.
 - [ ] Sheet is dismissible via swipe-down and map tap.
 - [ ] Uses native SwiftUI `.sheet(presentationDetents: ...)` with `.presentationContentInteraction(.scrolls)`.
@@ -675,6 +686,30 @@ Following Google Maps and Apple Maps open transit compliance standards, Dérivé
 
 ---
 
+### 10.5 The Deep Train Inspector (Subway Run Tracking)
+
+Tapping any train arrival row in the subway Live Dispatch Stream (e.g., `[ 6 ] Express → Pelham Bay — 8 min away`) transitions the sheet into the dedicated **Train Inspector**:
+
+* **Map Synchronization:**
+  * The background map camera smoothly pans and zooms to frame the segment between the train’s estimated real-time track position (a glowing pulsing vehicle marker on the subway line) and the user’s station.
+* **Track Thermometer (Vertical Progression Strip):**
+  * A continuous vertical route line showing:
+    * **Origin Terminus:** e.g., `Brooklyn Bridge - City Hall (Departed 1:23 PM)`.
+    * **Past Stops:** Dimmed line nodes showing completed station calls with actual departure timestamps.
+    * **Current Position:** Glowing vehicle node showing current station or inter-station segment (e.g., `Between 28th St & 33rd St`).
+    * **User Station:** Highlighted station node in Electric Amber (`#FFB300`) with dynamic arrival countdown (`ETA: 1:31 PM • 8m`).
+    * **Remaining Route:** Downstream stops to destination (`Pelham Bay Park`).
+* **Real-Time Crowding & Capacity Gauge:**
+  * **Live GTFS-RT Sensor Telemetry:** On modern rolling stock (L, 7, and R211 A/C lines), displays car-by-car or train-level occupancy decoded from GTFS-RT `occupancy_status` (`MANY_SEATS_AVAILABLE`, `FEW_SEATS_AVAILABLE`, `STANDING_ROOM_ONLY`, `FULL`).
+  * **Historical Statistical Fallback:** For legacy uninstrumented rolling stock (e.g., older 1, 2, 6 cars), displays an offline statistical crowd rating (*"Typical Load: High (Standing Room)"*) computed from time-of-day, day-of-week, and directional ridership curves.
+* **Run Reliability & Slot Punctuality Card:**
+  * Evaluates the 15-minute origin dispatch slot (e.g., *1:15 PM – 1:30 PM weekday departures*) across the last 30 days of Observer data:
+    * **Slot Regularity:** `%` of trips that maintained scheduled headway without bunching/gapping (e.g., `91% Regular`).
+    * **Typical Transit Duration:** P10 to P90 transit duration from origin to user's station (e.g., `22–25 min`).
+* **Active Disruption Callouts:** If the train's route encounters planned track work (e.g., express bypass or weekend reroute), a high-visibility warning pill (e.g., `[ ⚠️ Skips 68th–116th St ]`) renders with full alert details.
+
+---
+
 ## 11. Multi-City Screens & User Flows (Wave L)
 
 > [!NOTE]
@@ -768,31 +803,41 @@ The existing `ReliabilityHeatmapCanvas` (§10.1) renders a 24×7 grid. Wave N ad
 - **Selection:** Tap highlights cell with 1.5pt white stroke border. `selectedCellIndex` drives detail overlay.
 - **Performance:** 0.8ms–1.9ms per frame (vs. 18–42ms for declarative `LazyVGrid`), sustaining 120Hz ProMotion.
 
-### 12.2 Route Comparison Cards
+### 12.2 Predictive Journey Planning & Ranked Route Cards
 
-When a user taps a destination (or searches for a stop), Screen 2 displays ranked `JourneyItinerary` result cards:
+When a user taps a destination or plans a journey, Screen 2 supports two query modes:
+1. **Leave Now (Real-Time Live):** Computed against active GTFS-RT train positions, live queued terminus runs, and real-time GBFS bike-share dock status.
+2. **Future Date/Time (Predictive Mode, e.g. "Tuesday at 3:00 PM"):** Computed using the Go Observer's Day-of-Week $\times$ Hour historical headway variance models, planned calendar disruptions (`service_disruptions`), and origin dispatch slot distributions.
 
-- **Card Layout:** Frosted glass (`.ultraThinMaterial`) cards showing: arrival time, transfer count badges, walking duration, and layover reliability indicator.
-- **Pareto Ranking:** Cards are ordered by the active routing profile's primary criterion. Non-dominated alternatives are shown with subtle visual differentiation.
-- **Result Type:** `JourneyItinerary: Sendable, Identifiable` — arrival time (seconds past midnight), transfer count, walking effort (seconds), layover penalty (continuous).
+#### Ranked Itinerary Cards with Confidence Bands:
+The result stream presents clear, ranked itinerary cards categorized by Pareto profile:
+
+* **`[ 🛡️ Most Reliable ]`**: Prioritizes routes with tight headway adherence and low transfer stress (e.g. CBTC-equipped lines like L or 7). Displays explicit confidence intervals: *"Arrive at 3:34 PM • 93% confident (3:33–3:36 PM)"*.
+* **`[ ⚡ Fastest ]`**: Absolute minimum expected transit time, accompanied by an honest variance indicator: *"Arrive at 3:30 PM • 72% confident (3:28–3:39 PM)"*.
+* **`[ 🔄 Fewest Transfers ]`**: Prioritizes direct single-seat or minimal-connection rides.
+* **`[ ♿ Step-Free / Least Walk ]`**: Filters step-free paths, avoiding long footpaths and complex stairs.
+* **`[ 🚲 + 🚇 Fast Multi-Modal (Citi Bike) ]`**: When enabled in Settings (`[ 🚲 Citi Bike Member ]`), surfaces capillary bike rides to express subway trunks (e.g. *"Citi Bike to Union Sq (4m) → 4/5 Express (12m) → Walk (3m) — Arrive 3:24 PM"*). Gated by live GBFS dock validation ($\ge 2$ bikes at origin dock, $\ge 2$ open docks at destination).
+* **Inline Disruption Callouts:** Any route leg impacted by scheduled track maintenance or active service alerts highlights an inline amber warning pill (e.g. `[ ⚠️ L Train Weekend Track Work ]`).
 
 ### 12.3 Profile Selector Modal
 
-A compact modal (`.sheet`) offering 4 routing profiles that collapse the 4D Pareto cost vector $\vec{C}$ into ranked display:
+A compact modal (`.sheet`) offering routing profiles that collapse the multi-dimensional Pareto cost vector $\vec{C}$ into ranked display:
 
 | Profile | Primary Sort | Secondary Sort | Icon |
 |:---|:---|:---|:---:|
-| **Fastest** | $\tau_{\text{arrival}}$ | $N_{\text{transfers}}$ | ⚡ |
-| **Fewest Transfers** | $N_{\text{transfers}}$ | $\tau_{\text{arrival}}$ | 🔄 |
-| **Least Walking** | $t_{\text{effort}}$ | $\tau_{\text{arrival}}$ | 🦶 |
+| **Most Reliable** | $\text{Variance Disutility } (P_{90} - P_{10})$ | $\tau_{\text{arrival}}$ | 🛡️ |
+| **Fastest** | Expected Arrival $\tau_{\text{arrival}}$ | Transfers $N_{\text{transfers}}$ | ⚡ |
+| **Fewest Transfers** | Transfers $N_{\text{transfers}}$ | $\tau_{\text{arrival}}$ | 🔄 |
+| **Least Walking** | Footpath Effort $t_{\text{effort}}$ | $\tau_{\text{arrival}}$ | 🦶 |
+| **Multi-Modal Bike + Rail** | Multi-Modal Duration | Transfers $N_{\text{transfers}}$ | 🚲 |
 | **Wheelchair Accessible** | $\tau_{\text{arrival}}$ (filtered) | $t_{\text{effort}}$ | ♿ |
 
-The Wheelchair profile additionally filters ULTRA shortcuts via `flags & WHEELCHAIR_ACCESSIBLE` and excludes walk graph edges with `FlagIsSteps` without accompanying elevator/ramp.
+The Wheelchair profile filters ULTRA shortcuts via `flags & WHEELCHAIR_ACCESSIBLE` and excludes walk graph edges with `FlagIsSteps` without accompanying elevator/ramp.
 
 ### 12.4 P10/P50/P90 Confidence Band Visualization
 
-Below route comparison cards, a `Canvas`-based area fill renders the uncertainty envelope:
+Below route comparison cards, an immediate-mode `Canvas`-based area fill renders the uncertainty envelope:
 
-- **Narrow bands** (P90 ≈ P10): Green-tinted fill — reliable, low variance.
-- **Wide bands** (P90 >> P10): Amber/red-tinted fill — unreliable, high headway variance.
-- Tap-to-inspect opens the existing `TransitMatrixInspectorView` (§10.1) for the selected time slot.
+- **Narrow bands** (P90 ≈ P10): Green-tinted fill — high predictability, low variance.
+- **Wide bands** (P90 >> P10): Amber/red-tinted fill — high risk of headway bunching or unannounced delays.
+- Tap-to-inspect opens the `TransitMatrixInspectorView` (§10.1) for the selected time slot.

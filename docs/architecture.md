@@ -362,9 +362,18 @@ See [docs/multi-city.md §5.4](file:///Volumes/T7ssd/derivee/docs/multi-city.md)
 
 Wave N introduces a native C++ RAPTOR routing engine with Swift interop, ULTRA precomputed transfer shortcuts, real-time GBFS micro-mobility integration, and 120Hz immediate-mode Canvas visualization.
 
-### 9.1 C++ RAPTOR Engine & Swift Interop
+### 9.1 C++ Hybrid RAPTOR Engine & Swift Interop
 
 The routing engine is implemented in **C++20** within a separate `DeriveeCore` framework target, accessed from Swift via `-cxx-interoperability-mode=default` (zero Objective-C boxing, no JSON serialization).
+
+#### Modal-Adaptive Hybrid Routing Paradigm:
+1. **Near-Term Horizon (0–45 min):** Routes across **actual physical vehicle positions and confirmed terminus dispatches** from the live GTFS-RT feed. Transfers are computed against real trains physically moving on the tracks or queued at origin platforms.
+2. **Long-Term Horizon (> 45 min for Subways):** Routes via **Probabilistic Frequency-Based Expected Journey Costs** ($E[\text{wait}] = \frac{h}{2} + \frac{\sigma^2}{2h}$ based on scheduled headways and historical variance) rather than assuming a rider will hit a fragile static departure minute.
+3. **Commuter & Heavy Rail (LIRR / Metro-North / Amtrak):** Evaluated strictly on static timetables + real-time delay offsets.
+4. **Dynamic In-Memory Disruption Bitmask:** Before round relaxation, RAPTOR checks query time $T_{\text{query}}$ against `service_disruptions`:
+   - `is_stop_active[stop_id] = false` (prunes closed stations in $\mathcal{O}(1)$).
+   - `is_route_segment_active[route_id][stop_idx] = false` (prunes bypassed/rerouted track segments).
+   - Delays apply a stochastic penalty (+5–15m) to expected wait time without copying the timetable buffer.
 
 #### Timetable Memory Layout
 All timetable data uses **Array of Structures (AoS)** with `#pragma pack(push, 1)` and 32-bit/16-bit integer offsets (no 64-bit pointers). Structural relationships are declared via offset indices into flat contiguous vectors:
@@ -388,16 +397,15 @@ Five `StopTime` instances (60 bytes) fit in < 2 ARM64 L1 cache lines (128 bytes)
 - **Early Termination:** Round terminates if zero stop labels updated.
 
 #### Multi-Criteria Pareto Cost Vector
-$$\vec{C} = \left( \tau_{\text{arrival}},\; N_{\text{transfers}},\; t_{\text{effort}},\; P_{\text{layover}} \right)$$
+$$\vec{C} = \left( \tau_{\text{arrival}},\; N_{\text{transfers}},\; t_{\text{effort}},\; P_{\text{layover}},\; \text{Var}_{\text{disutility}} \right)$$
 
 | Component | Unit | Direction | Purpose |
 |:---|:---|:---:|:---|
 | $\tau_{\text{arrival}}$ | Seconds past midnight | Minimize | Travel time |
 | $N_{\text{transfers}}$ | Integer count | Minimize | Journey simplicity |
-| $t_{\text{effort}}$ | Walking seconds | Minimize | Physical effort |
-| $P_{\text{layover}}$ | Continuous penalty | Minimize | Connection reliability |
-
-**Layover Penalty:** $P_{\text{layover}}(S) = \alpha \cdot (S_{\text{ideal}} - S)^2$ when $S < S_{\text{ideal}}$ (else 0), with $S_{\text{ideal}} = 180\text{s}$, $\alpha = 10^{-3}$.
+| $t_{\text{effort}}$ | Walking / biking seconds | Minimize | Physical effort |
+| $P_{\text{layover}}$ | Continuous penalty | Minimize | Connection reliability ($S_{\text{ideal}} = 180\text{s}$, $\alpha = 10^{-3}$) |
+| $\text{Var}_{\text{disutility}}$ | $(P_{90} - P_{10})$ seconds | Minimize | Punctuality confidence |
 
 #### Swift-C++ Bridge Architecture
 - **Framework Target:** `DeriveeCore` with `include/` (public headers) + `src/` (implementation).
@@ -426,32 +434,55 @@ Raw OpenStreetMap `.pbf` extracts are processed by the Observer daemon (Go) via 
 - **Edge Flags:** `EdgeFlags uint8` bitmask: `FlagWalkable` (bit 0), `FlagWheelchairAccessible` (bit 1), `FlagIsSteps` (bit 2), `FlagIsElevator` (bit 3).
 - **Output:** `walk_graph.bin` (< 25 MB per city).
 
-### 9.4 GBFS Dynamic Micro-Mobility Layer
+### 9.4 GBFS Dynamic Micro-Mobility Layer & Multi-Modal Routing
 
-Real-time bike-share availability is managed by a separate ephemeral SQLite database, not the static `transit.sqlite`.
+Real-time bike-share availability (Citi Bike / Bluebikes) is managed by a separate ephemeral SQLite database:
 
 - **Database:** `gbfs_cache.sqlite` in `NSTemporaryDirectory()` via `DatabaseQueue` (not `DatabasePool` — single-writer ephemeral cache).
 - **Schema:** `gbfs_station_status` table with `station_id TEXT PK`, availability columns, spatial coordinates. Indexes: `idx_gbfs_availability`, `idx_gbfs_spatial`.
 - **Sync:** `GBFSSyncService` with `Task`-based 30s async polling. Staleness gate: 600s.
-- **Spatial Gating:** `lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND num_bikes_available > 0 AND is_renting = 1` — < 0.8ms.
+- **Intermodal Routing:** Allows bicycle transfer legs from user origin to high-frequency transit trunk hubs (e.g. Citi Bike to Union Square 4/5 Express).
+- **Live Dock Validation:** Gated by `num_bikes_available >= 2` at origin dock and `num_docks_available >= 2` at destination dock before recommending bike legs.
 - **All reads MUST use `async`/`await`** per the project's async read mandate (§2.4).
 
-### 9.5 Reliability Distribution & Confidence Intervals
+### 9.5 Observer Disruptions & Origin Dispatch Slot Profiling
 
-#### EWT & OTP Math
-For high-frequency transit ($\le 12$ min headways), **Excess Wait Time** replaces schedule-based OTP:
-- $SWT = \frac{\sum H_s^2}{2 \sum H_s}$, $AWT = \frac{\sum H_a^2}{2 \sum H_a}$, $EWT = AWT - SWT$
-- Pre-squared sum aggregation in `stop_reliability_hourly` enables $O(1)$ SQL `GROUP BY` synthesis.
+#### A. Dual-Tier Disruption Ingestion
+1. **Planned Service Disruptions (Observer):**
+   - The Go Observer ingests GTFS `calendar_dates.txt` and planned construction feeds, pre-compiling future outages into `service_disruptions` inside the distributed `transit.sqlite`:
+   ```sql
+   CREATE TABLE service_disruptions (
+       route_id TEXT NOT NULL,
+       stop_id TEXT,
+       direction_id INTEGER,
+       start_epoch INTEGER NOT NULL,
+       end_epoch INTEGER NOT NULL,
+       disruption_type TEXT NOT NULL, -- 'SUSPENDED', 'REROUTED', 'BYPASS_LOCAL', 'DELAYS'
+       summary_text TEXT
+   );
+   CREATE INDEX idx_disruptions_time ON service_disruptions(start_epoch, end_epoch);
+   ```
+2. **Real-Time Emergency Alerts (Client):**
+   - `TransitRealtimeService` decodes live GTFS-RT Service Alerts protobuf messages, layering spontaneous reroutes over the base graph.
 
-#### 120Hz Immediate-Mode Canvas
-- **Memory Layout:** Single flat `[Float]` array of 4,320 elements ($24\text{h} \times 60\text{m} \times 3$ percentiles).
-- **Index Stride:** $\text{Offset}(h, m, p) = (h \times 60 + m) \times 3 + p$
-- **Rendering:** `Canvas(rendersAsynchronously: true)` + `.drawingGroup()` for Metal rasterization. 0.8ms–1.9ms per frame.
-- **Color:** Direct RGBA interpolation, no SwiftUI `.modifier()` chains.
-
-#### GTFS-RT Circular Time Math
-- **Euclidean Modulo:** `(a % n + n) % n` correcting Swift's truncating `%` operator.
-- **Signed Delay:** Maps to $[-720, +720]$ minutes on a 1,440-minute clock face, fixing midnight boundary errors.
+#### B. 15-Minute Origin Dispatch Slot Profiling (`trip_slot_profiles`)
+To evaluate specific train runs (e.g. *"the 1:23 PM #6 train from Pelham"*), the Observer groups 30-day stop arrivals by origin dispatch intervals:
+```sql
+CREATE TABLE trip_slot_profiles (
+    route_id TEXT NOT NULL,
+    direction_id INTEGER NOT NULL,
+    origin_slot_index INTEGER NOT NULL, -- 0..95 (15-min intervals from midnight)
+    stop_id TEXT NOT NULL,
+    day_type INTEGER NOT NULL,          -- 0 = Weekday, 1 = Saturday, 2 = Sunday
+    median_duration_sec INTEGER NOT NULL,
+    p90_duration_sec INTEGER NOT NULL,
+    regularity_pct REAL NOT NULL,
+    sample_count INTEGER NOT NULL,
+    PRIMARY KEY (route_id, direction_id, origin_slot_index, stop_id, day_type)
+) WITHOUT ROWID;
+```
+- **GTFS Immunity:** Bypasses fragile `trip_id` hash changes during monthly schedule updates.
+- **On-Device Point Reads:** Sub-millisecond $\mathcal{O}(1)$ queries feeding the Train Inspector and P10/P50/P90 confidence intervals.
 
 ### 9.6 Combined On-Device Memory Budget
 
@@ -463,4 +494,4 @@ For high-frequency transit ($\le 12$ min headways), **Excess Wait Time** replace
 | Walk graph (query-time A*) | TBD | `walk_graph.bin` (< 25 MB) |
 | **Combined routing engine** | **~26 MB** | |
 
-Headroom under the 30 MB Jetsam ceiling: **~4 MB**. The walk graph runtime footprint is an open design item that may require partial loading or spatial tiling to stay within budget.
+Headroom under the 30 MB Jetsam ceiling: **~4 MB**.
