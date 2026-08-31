@@ -151,14 +151,61 @@ final class CitiesStorageManagerTests: XCTestCase {
         }
     }
     
+    // MARK: - City Detection Service State Synchronization
+    
+    @MainActor
+    func testCityDetectionServiceStateSyncOnDownloadAndDeletion() {
+        let testDefaults = UserDefaults(suiteName: "com.derivee.test.storagemanager")!
+        testDefaults.removePersistentDomain(forName: "com.derivee.test.storagemanager")
+        defer { testDefaults.removePersistentDomain(forName: "com.derivee.test.storagemanager") }
+        
+        let detectionService = CityDetectionService(userDefaults: testDefaults)
+        XCTAssertFalse(detectionService.isCityInstalled("bos"))
+        
+        // Mark installed on download completion
+        detectionService.markCityInstalled("bos")
+        XCTAssertTrue(detectionService.isCityInstalled("bos"))
+        
+        // Mark uninstalled on deletion
+        detectionService.markCityUninstalled("bos")
+        XCTAssertFalse(detectionService.isCityInstalled("bos"))
+    }
+    
+    @MainActor
+    func testSwitchActiveMetro() {
+        let testDefaults = UserDefaults(suiteName: "com.derivee.test.storageswitch")!
+        testDefaults.removePersistentDomain(forName: "com.derivee.test.storageswitch")
+        defer { testDefaults.removePersistentDomain(forName: "com.derivee.test.storageswitch") }
+        
+        let detectionService = CityDetectionService(userDefaults: testDefaults)
+        XCTAssertEqual(detectionService.activeCitySlug, "nyc")
+        
+        var callbackFired = false
+        detectionService.onActiveCityChanged = { slug in
+            if slug == "bos" { callbackFired = true }
+        }
+        
+        let bostonEntry = CityManifest.defaultManifest.findCity(bySlug: "bos")!
+        detectionService.performAutoSwitch(to: bostonEntry)
+        
+        XCTAssertEqual(detectionService.activeCitySlug, "bos")
+        XCTAssertTrue(callbackFired)
+        XCTAssertEqual(detectionService.autoSwitchToast?.cityName, "Boston")
+    }
+    
     // MARK: - Visual Snapshot Test
     
     @MainActor
     func testCitiesStorageManagerViewSnapshot() {
+        let testDefaults = UserDefaults(suiteName: "com.derivee.test.storagesnapshot")!
+        testDefaults.removePersistentDomain(forName: "com.derivee.test.storagesnapshot")
+        let detectionService = CityDetectionService(userDefaults: testDefaults)
+        
         let view = NavigationStack {
             CitiesStorageManagerView(
                 packManager: manager,
-                spatialDatabaseManager: dbManager
+                spatialDatabaseManager: dbManager,
+                cityDetectionService: detectionService
             )
         }
         .frame(width: 393, height: 852)

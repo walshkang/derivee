@@ -89,14 +89,39 @@ final class CitySelectorPillTests: XCTestCase {
         XCTAssertTrue(manageCitiesInvoked, "onManageCities callback should be executed when triggered")
     }
     
+    func testCitySelectorPillUninstalledPacksAction() {
+        var uninstalledCitySelected: CityManifestEntry? = nil
+        let manifest = CityManifest.defaultManifest.cities
+        let installed = [manifest[0]] // NYC
+        let uninstalled = [manifest[1], manifest[2]] // Boston, Chicago
+        
+        let pill = CitySelectorPill(
+            browsingMode: .city(slug: "nyc"),
+            installedPacks: installed,
+            uninstalledPacks: uninstalled,
+            onSelectMode: { _ in },
+            onSelectUninstalledCity: { entry in
+                uninstalledCitySelected = entry
+            }
+        )
+        
+        XCTAssertEqual(pill.uninstalledPacks.count, 2)
+        XCTAssertNotNil(pill.onSelectUninstalledCity)
+        pill.onSelectUninstalledCity?(uninstalled[0])
+        XCTAssertEqual(uninstalledCitySelected?.slug, "bos")
+    }
+    
     @MainActor
     func testCitySelectorPillSnapshots() {
         let manifest = CityManifest.defaultManifest.cities
         let manhattanCoord = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
+        let installed = [manifest[0]]
+        let uninstalled = [manifest[1], manifest[2]]
         
         let activePill = CitySelectorPill(
             browsingMode: .city(slug: "nyc"),
-            installedPacks: manifest,
+            installedPacks: installed,
+            uninstalledPacks: uninstalled,
             userLocation: manhattanCoord,
             onSelectMode: { _ in }
         )

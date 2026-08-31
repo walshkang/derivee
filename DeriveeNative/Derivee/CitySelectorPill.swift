@@ -4,8 +4,10 @@ import CoreLocation
 public struct CitySelectorPill: View {
     public let browsingMode: StatsBrowsingMode
     public let installedPacks: [CityManifestEntry]
+    public let uninstalledPacks: [CityManifestEntry]
     public let userLocation: CLLocationCoordinate2D?
     public let onSelectMode: (StatsBrowsingMode) -> Void
+    public let onSelectUninstalledCity: ((CityManifestEntry) -> Void)?
     public let onOpenSettings: (() -> Void)?
     public let onManageCities: (() -> Void)?
     
@@ -14,22 +16,26 @@ public struct CitySelectorPill: View {
     public init(
         browsingMode: StatsBrowsingMode,
         installedPacks: [CityManifestEntry],
+        uninstalledPacks: [CityManifestEntry] = [],
         userLocation: CLLocationCoordinate2D? = nil,
         onSelectMode: @escaping (StatsBrowsingMode) -> Void,
+        onSelectUninstalledCity: ((CityManifestEntry) -> Void)? = nil,
         onOpenSettings: (() -> Void)? = nil,
         onManageCities: (() -> Void)? = nil
     ) {
         self.browsingMode = browsingMode
         self.installedPacks = installedPacks
+        self.uninstalledPacks = uninstalledPacks
         self.userLocation = userLocation
         self.onSelectMode = onSelectMode
+        self.onSelectUninstalledCity = onSelectUninstalledCity
         self.onOpenSettings = onOpenSettings
         self.onManageCities = onManageCities
     }
     
     private var selectedCityEntry: CityManifestEntry? {
         guard let slug = browsingMode.slug else { return nil }
-        return installedPacks.first { $0.slug == slug }
+        return installedPacks.first { $0.slug == slug } ?? uninstalledPacks.first { $0.slug == slug }
     }
     
     private var isPhysicallyPresentInSelectedCity: Bool {
@@ -63,7 +69,27 @@ public struct CitySelectorPill: View {
                 }
             }
             
-            // 2. Global Lifetime Overview Section
+            // 2. Available to Download Section
+            if !uninstalledPacks.isEmpty {
+                Section("Available to Download") {
+                    ForEach(uninstalledPacks) { city in
+                        Button(action: {
+                            if let onSelectUninstalledCity = onSelectUninstalledCity {
+                                onSelectUninstalledCity(city)
+                            } else {
+                                onSelectMode(.city(slug: city.slug))
+                            }
+                        }) {
+                            HStack {
+                                Label(city.displayName, systemImage: "arrow.down.circle")
+                                Text("(\(city.formattedDownloadSize))")
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 3. Global Lifetime Overview Section
             Section("Global") {
                 Button(action: {
                     onSelectMode(.allMetros)
@@ -77,7 +103,7 @@ public struct CitySelectorPill: View {
                 }
             }
             
-            // 3. Manage Cities Quick Action
+            // 4. Manage Cities Quick Action
             if let manageAction = onManageCities ?? onOpenSettings {
                 Section {
                     Button(action: manageAction) {

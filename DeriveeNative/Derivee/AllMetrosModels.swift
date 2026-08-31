@@ -34,6 +34,7 @@ public struct CityOverviewProgress: Identifiable, Sendable, Equatable {
     public let isInstalled: Bool
     public let centerCoordinate: CLLocationCoordinate2D
     public let bounds: CityBounds?
+    public let compressedSizeBytes: Int64
     
     public var percentage: Double {
         guard totalHexes > 0 else { return 0 }
@@ -52,6 +53,10 @@ public struct CityOverviewProgress: Identifiable, Sendable, Equatable {
         }
     }
     
+    public var formattedDownloadSize: String {
+        CityManifest.formatBytes(compressedSizeBytes)
+    }
+    
     public init(
         slug: String,
         displayName: String,
@@ -60,7 +65,8 @@ public struct CityOverviewProgress: Identifiable, Sendable, Equatable {
         totalHexes: Int,
         isInstalled: Bool,
         centerCoordinate: CLLocationCoordinate2D,
-        bounds: CityBounds? = nil
+        bounds: CityBounds? = nil,
+        compressedSizeBytes: Int64 = 0
     ) {
         self.slug = slug
         self.displayName = displayName
@@ -70,6 +76,7 @@ public struct CityOverviewProgress: Identifiable, Sendable, Equatable {
         self.isInstalled = isInstalled
         self.centerCoordinate = centerCoordinate
         self.bounds = bounds
+        self.compressedSizeBytes = compressedSizeBytes
     }
     
     public static func == (lhs: CityOverviewProgress, rhs: CityOverviewProgress) -> Bool {
@@ -81,7 +88,8 @@ public struct CityOverviewProgress: Identifiable, Sendable, Equatable {
                lhs.isInstalled == rhs.isInstalled &&
                lhs.centerCoordinate.latitude == rhs.centerCoordinate.latitude &&
                lhs.centerCoordinate.longitude == rhs.centerCoordinate.longitude &&
-               lhs.bounds == rhs.bounds
+               lhs.bounds == rhs.bounds &&
+               lhs.compressedSizeBytes == rhs.compressedSizeBytes
     }
 }
 

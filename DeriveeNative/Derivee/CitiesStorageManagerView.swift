@@ -7,6 +7,7 @@ public struct CitiesStorageManagerView: View {
     // Injectable dependencies
     public var packManager: CityPackManager
     var spatialDatabaseManager: SpatialDatabaseManager
+    public var cityDetectionService: CityDetectionService? = nil
     
     @State private var installedPacks: [InstalledCityPack] = []
     @State private var remoteManifest: CityManifest = CityManifest.defaultManifest
@@ -24,14 +25,23 @@ public struct CitiesStorageManagerView: View {
     // Download states: slug -> state
     @State private var downloadingSlugs: [String: CityDownloadState] = [:]
     
-    public init(packManager: CityPackManager = .shared) {
-        self.packManager = packManager
-        self.spatialDatabaseManager = SpatialDatabaseManager.shared
-    }
-    
-    init(packManager: CityPackManager, spatialDatabaseManager: SpatialDatabaseManager) {
+    public init(
+        packManager: CityPackManager = .shared,
+        spatialDatabaseManager: SpatialDatabaseManager = .shared,
+        cityDetectionService: CityDetectionService? = nil
+    ) {
         self.packManager = packManager
         self.spatialDatabaseManager = spatialDatabaseManager
+        self.cityDetectionService = cityDetectionService
+    }
+    
+    init(
+        packManager: CityPackManager,
+        spatialDatabaseManager: SpatialDatabaseManager
+    ) {
+        self.packManager = packManager
+        self.spatialDatabaseManager = spatialDatabaseManager
+        self.cityDetectionService = nil
     }
     
     private var totalStorageBytes: Int64 {
@@ -163,6 +173,8 @@ public struct CitiesStorageManagerView: View {
         let isExpanded = expandedSlugs.contains(pack.slug)
         let hasUpdate = packManager.isUpdateAvailable(for: pack.slug, manifest: remoteManifest)
         let manifestEntry = remoteManifest.findCity(bySlug: pack.slug)
+        let activeSlug = cityDetectionService?.activeCitySlug ?? "nyc"
+        let isActiveMetro = (pack.slug == activeSlug)
         
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
@@ -171,6 +183,20 @@ public struct CitiesStorageManagerView: View {
                         Text(pack.config.displayName)
                             .font(.headline)
                             .foregroundColor(.primary)
+                        
+                        if isActiveMetro {
+                            HStack(spacing: 3) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 9))
+                                Text("Active")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(hex: "#FFB300").opacity(0.18))
+                            .clipShape(Capsule())
+                            .foregroundColor(Color(hex: "#D97706"))
+                        }
                         
                         if pack.isBundled {
                             HStack(spacing: 3) {
@@ -250,8 +276,27 @@ public struct CitiesStorageManagerView: View {
                 .padding(.top, 2)
             }
             
-            // Action Buttons: Update / Delete / Reset
+            // Action Buttons: Switch Active Metro / Update / Delete / Reset
             HStack(spacing: 12) {
+                if !isActiveMetro {
+                    Button {
+                        switchToActiveMetro(pack)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.swap")
+                            Text("Switch Active Metro")
+                        }
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.secondary.opacity(0.12))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                
                 if hasUpdate, let entry = manifestEntry {
                     Button {
                         startUpdate(for: entry)
@@ -414,9 +459,36 @@ public struct CitiesStorageManagerView: View {
         }
     }
     
+    private func switchToActiveMetro(_ pack: InstalledCityPack) {
+        let manifestEntry = remoteManifest.findCity(bySlug: pack.slug) ?? CityManifestEntry(
+            slug: pack.slug,
+            displayName: pack.config.displayName,
+            region: pack.config.region,
+            compressedSizeBytes: 0,
+            uncompressedSizeBytes: pack.totalDiskSizeBytes,
+            isBundled: pack.isBundled,
+            version: "\(pack.config.version).0.0",
+            bounds: pack.config.bounds,
+            center: pack.config.center
+        )
+        
+        let impact = UIImpactFeedbackGenerator(style: .medium)
+        impact.impactOccurred()
+        
+        if let service = cityDetectionService {
+            service.performAutoSwitch(to: manifestEntry)
+        } else {
+            Task {
+                try? await spatialDatabaseManager.hotSwapTransitDatabase(to: pack.transitDatabaseURL)
+            }
+        }
+        loadData()
+    }
+    
     private func deleteCityPack(_ pack: InstalledCityPack) {
         do {
             try packManager.deletePack(slug: pack.slug)
+            cityDetectionService?.markCityUninstalled(pack.slug)
             let impact = UINotificationFeedbackGenerator()
             impact.notificationOccurred(.success)
             loadData()
@@ -458,6 +530,7 @@ public struct CitiesStorageManagerView: View {
                     self.downloadingSlugs[entry.slug] = .completed
                     let impact = UINotificationFeedbackGenerator()
                     impact.notificationOccurred(.success)
+                    self.cityDetectionService?.markCityInstalled(entry.slug)
                     self.loadData()
                 }
             } catch {

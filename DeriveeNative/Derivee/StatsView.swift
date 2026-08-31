@@ -35,12 +35,20 @@ struct StatsView: View {
     @State private var showFileImporter = false
     @State private var isLoading = true
     
-    private var availableManifestCities: [CityManifestEntry] {
+    private var installedManifestCities: [CityManifestEntry] {
         if let manifest = cityDetectionService?.manifest {
             let installed = cityDetectionService?.installedCitySlugs ?? ["nyc"]
             return manifest.cities.filter { installed.contains($0.slug) || $0.isBundled }
         }
-        return CityManifest.defaultManifest.cities
+        return CityManifest.defaultManifest.cities.filter { $0.isBundled }
+    }
+    
+    private var uninstalledManifestCities: [CityManifestEntry] {
+        if let manifest = cityDetectionService?.manifest {
+            let installed = cityDetectionService?.installedCitySlugs ?? ["nyc"]
+            return manifest.cities.filter { !installed.contains($0.slug) && !$0.isBundled }
+        }
+        return CityManifest.defaultManifest.cities.filter { !$0.isBundled }
     }
     
     var body: some View {
@@ -51,10 +59,17 @@ struct StatsView: View {
                     Spacer()
                     CitySelectorPill(
                         browsingMode: browsingMode,
-                        installedPacks: availableManifestCities,
+                        installedPacks: installedManifestCities,
+                        uninstalledPacks: uninstalledManifestCities,
                         userLocation: trackingEngine.lastKnownLocation?.coordinate,
                         onSelectMode: { newMode in
                             browsingMode = newMode
+                            Task {
+                                await loadAllData()
+                            }
+                        },
+                        onSelectUninstalledCity: { city in
+                            browsingMode = .city(slug: city.slug)
                             Task {
                                 await loadAllData()
                             }
@@ -82,6 +97,12 @@ struct StatsView: View {
                             },
                             onViewOnMap: { slug, coord in
                                 handleViewOnMap(slug: slug, coordinate: coord)
+                            },
+                            cityDetectionService: cityDetectionService,
+                            onCityInstalled: { _ in
+                                Task {
+                                    await loadAllData()
+                                }
                             }
                         )
                     } else {
@@ -164,7 +185,7 @@ struct StatsView: View {
                 .presentationContentInteraction(.scrolls)
             }
             .navigationDestination(isPresented: $showCitiesStorage) {
-                CitiesStorageManagerView()
+                CitiesStorageManagerView(cityDetectionService: cityDetectionService)
             }
             .onChange(of: showCitiesStorage) { _, isShowing in
                 if !isShowing {

@@ -605,7 +605,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     totalHexes: totalHexes,
                     isInstalled: isInstalled,
                     centerCoordinate: centerCoord,
-                    bounds: entry.bounds
+                    bounds: entry.bounds,
+                    compressedSizeBytes: entry.compressedSizeBytes
                 )
                 cityOverviews.append(overview)
             }
