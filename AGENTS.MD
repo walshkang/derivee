@@ -46,6 +46,10 @@
   - **`DeriveeCoreTests` (No App Host):** Tests core logic (GRDB SQLite transactions, Uber H3 spatial math, multipath GPS noise rejection, multi-threading deadlocks). Runs in milliseconds, completely headlessly without a simulator. Cooperative Task yield testing should be restricted purely to these core database logic tests.
   - **`DeriveeSnapshotTests` (Requires App Host):** Tests SwiftUI layouts (`StatsView`, `TransitRevealSheet`, color accuracy) using `swift-snapshot-testing`. Boots an iPhone simulator in the background on GitHub Actions to prevent visual UI regressions from agent vibe-coding.
 - **Data vs Snapshot Assertions:** Use `swift-snapshot-testing` exclusively for SwiftUI visual layers. Keep pure native data assertions (e.g. `interiorPolygons?.count`) for the MapLibre Fog Polygon Math—do not use snapshot/dump diffing for MapLibre structural objects or OpenGL renders.
+- **Tiered Task Validation Policy (Anti-Bloat & Velocity):**
+  - **Tier 1 (Core Logic, C++, Go, GRDB, GIS):** Headless unit tests (`DeriveeCoreTests` / `go test`), memory budgets, and binary assertions. **Zero screenshot/snapshot requirement.**
+  - **Tier 2 (SwiftUI Screens, Sheets, Cards):** Programmatic `swift-snapshot-testing` image regressions in `DeriveeTests/__Snapshots__/` and/or embedded screenshots in `walkthrough.md`.
+  - **Tier 3 (MapLibre & Metal Shaders):** Numerical geometry assertions (`interiorPolygons`, vertex winding) and RMSD parity telemetry kernels — avoid flaky simulator GL/Metal snapshot diffing.
 - **CI/CD Enforcement (Phase 4):** Both test targets run in CI using **GitHub Actions**. Do NOT use Xcode Cloud due to its rigid `.xcodeproj` expectations which conflict with our dynamic `xcodegen` setup. CI acts as a post-push safety net on `main` to catch regressions immediately.
 - **Simulator Environment:** The local development environment has advanced to iOS 26.5. When running tests via `xcodebuild`, you MUST explicitly specify a valid simulator destination (e.g., `-destination 'platform=iOS Simulator,name=iPhone 17e,OS=latest'`). Do not use legacy devices like the iPhone 15 Pro.
 

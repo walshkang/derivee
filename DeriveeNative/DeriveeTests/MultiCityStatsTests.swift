@@ -88,14 +88,21 @@ final class MultiCityStatsTests: XCTestCase {
     
     func testCityScopedJournalAndNeighborhoodProgression() async throws {
         try await dbManager.insertHexesBatch(h3Indices: ["8b2a1072cb00fff"], citySlug: "nyc")
+        try await dbManager.insertHexesBatch(h3Indices: ["8b2a100d2840fff"], citySlug: "bos")
         
         let nycJournal = try await dbManager.fetchExplorationJournalData(citySlug: "nyc")
         XCTAssertEqual(nycJournal.totalClearedHexes, 1)
         
         let bosJournal = try await dbManager.fetchExplorationJournalData(citySlug: "bos")
-        XCTAssertEqual(bosJournal.totalClearedHexes, 0)
+        XCTAssertEqual(bosJournal.totalClearedHexes, 1)
+        XCTAssertTrue(bosJournal.boroughProgress.isEmpty, "Non-NYC metros must have empty borough progress until M.5.5")
+        XCTAssertTrue(bosJournal.landmarks.isEmpty, "Non-NYC metros must have empty landmarks list until curated catalogs are added")
+        XCTAssertEqual(bosJournal.totalCityHexes, 115000, "Boston total hex estimate must be 115,000")
         
         let nycProgression = try await dbManager.fetchNeighborhoodProgression(citySlug: "nyc")
         XCTAssertNotNil(nycProgression)
+        
+        let bosProgression = try await dbManager.fetchNeighborhoodProgression(citySlug: "bos")
+        XCTAssertTrue(bosProgression.isEmpty, "Boston must return empty neighborhood list without leaking NYC neighborhoods")
     }
 }

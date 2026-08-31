@@ -504,22 +504,80 @@ struct StatsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
+    private var currentCityDisplayName: String {
+        guard let slug = browsingMode.slug else { return "This City" }
+        let manifest = cityDetectionService?.manifest ?? .defaultManifest
+        return manifest.findCity(bySlug: slug)?.displayName ?? slug.uppercased()
+    }
+    
+    private var currentCityCenterCoordinate: CLLocationCoordinate2D {
+        guard let slug = browsingMode.slug else { return CityConfig.nycDefault.center.coordinate }
+        let manifest = cityDetectionService?.manifest ?? .defaultManifest
+        return manifest.findCity(bySlug: slug)?.center?.coordinate ?? CityConfig.nycDefault.center.coordinate
+    }
+    
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "map.fill")
-                .resizable()
-                .frame(width: 60, height: 60)
-                .foregroundColor(.gray.opacity(0.5))
-            
-            Text("No Exploration Data")
-                .font(.title3)
-                .foregroundColor(.secondary)
-            
-            Text("Walk around to discover neighborhoods and clear the fog.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+        let slug = browsingMode.slug ?? "nyc"
+        let isNYC = (slug == "nyc")
+        
+        return VStack(spacing: 18) {
+            if isNYC {
+                Image(systemName: "map.fill")
+                    .resizable()
+                    .frame(width: 54, height: 54)
+                    .foregroundColor(.secondary.opacity(0.6))
+                
+                Text("No Exploration Data")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Text("Walk around to discover neighborhoods and clear the fog.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: "#FFB300").opacity(0.15))
+                        .frame(width: 72, height: 72)
+                    
+                    Image(systemName: "map.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 44, height: 44)
+                        .foregroundColor(Color(hex: "#FFB300"))
+                }
+                
+                Text("Neighborhood Data Coming Soon")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Text("Neighborhood boundaries for \(currentCityDisplayName) are in compilation. All exploration hexes and drift distance are actively recorded in your global footprint.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                
+                Button(action: {
+                    handleViewOnMap(slug: slug, coordinate: currentCityCenterCoordinate)
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "map")
+                        Text("View \(currentCityDisplayName) on Map")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Color(hex: "#FFB300"))
+                    .foregroundColor(.black)
+                    .cornerRadius(10)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
+            }
         }
         .frame(maxHeight: .infinity)
     }
@@ -527,15 +585,24 @@ struct StatsView: View {
     // MARK: - Actions & Handlers
     
     private func handleViewOnMap(slug: String, coordinate: CLLocationCoordinate2D) {
-        targetCoordinate = coordinate
+        let manifest = cityDetectionService?.manifest ?? .defaultManifest
+        let targetEntry = manifest.findCity(bySlug: slug)
+        let validCoord: CLLocationCoordinate2D
+        if let bounds = targetEntry?.bounds, bounds.contains(coordinate: coordinate) {
+            validCoord = coordinate
+        } else {
+            validCoord = targetEntry?.center?.coordinate ?? coordinate
+        }
+        
+        targetCoordinate = validCoord
         if let cityService = cityDetectionService, cityService.activeCitySlug != slug {
-            if let entry = cityService.manifest.findCity(bySlug: slug) {
+            if let entry = targetEntry {
                 cityService.performAutoSwitch(to: entry)
             } else {
                 cityService.activeCitySlug = slug
             }
         }
-        onSwitchCity?(slug, coordinate)
+        onSwitchCity?(slug, validCoord)
         dismiss()
     }
     

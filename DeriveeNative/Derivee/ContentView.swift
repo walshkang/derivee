@@ -279,13 +279,25 @@ struct ContentView: View {
                         spatialStore: spatialStore,
                         cityDetectionService: cityDetectionService,
                         onSwitchCity: { slug, coord in
+                            let targetConfig = (try? CityPackManager.shared.loadConfig(for: slug)) ??
+                                               CityManifest.defaultManifest.findCity(bySlug: slug).map { entry in
+                                                   CityConfig(slug: entry.slug, displayName: entry.displayName, region: entry.region, bounds: entry.bounds ?? CityConfig.nycDefault.bounds, center: entry.center ?? CityConfig.nycDefault.center)
+                                               } ?? CityConfig.nycDefault
+                            
                             if spatialStore.activeCitySlug != slug {
                                 executeCityHotSwap(to: slug)
                             }
-                            if let coord = coord {
-                                targetCoordinate = coord
-                                isMapCentered = false
+                            
+                            // Disambiguate coordinate: if within bounds, target it; otherwise default to destination city center
+                            let resolvedCoord: CLLocationCoordinate2D
+                            if let c = coord, c.latitude != 0, c.longitude != 0, targetConfig.bounds.contains(coordinate: c) {
+                                resolvedCoord = c
+                            } else {
+                                resolvedCoord = targetConfig.center.coordinate
                             }
+                            
+                            targetCoordinate = resolvedCoord
+                            isMapCentered = false
                         },
                         targetCoordinate: $targetCoordinate
                     )
@@ -369,6 +381,15 @@ struct ContentView: View {
     private func executeCityHotSwap(to slug: String) {
         logPipeline("🏙️ [ContentView] executeCityHotSwap triggered for slug: \(slug)")
         
+        let newConfig = (try? CityPackManager.shared.loadConfig(for: slug)) ??
+                        CityManifest.defaultManifest.findCity(bySlug: slug).map { entry in
+                            CityConfig(slug: entry.slug, displayName: entry.displayName, region: entry.region, bounds: entry.bounds ?? CityConfig.nycDefault.bounds, center: entry.center ?? CityConfig.nycDefault.center)
+                        } ?? CityConfig.nycDefault
+        
+        // Synchronously update SpatialStore and CameraBounds on @MainActor immediately
+        // so that camera viewport bounds, fog envelope, and UI states align with the target city before async DB tasks
+        spatialStore.setActiveCity(newConfig)
+        
         // Phase 1: Pre-Swap UI Query Teardown
         TransitRealtimeService.shared.prepareForCitySwap()
         showTransitSheet = false
@@ -388,9 +409,7 @@ struct ContentView: View {
             }
             
             // Phase 3: Post-Swap State Sync & Re-enablement
-            let newConfig = (try? CityPackManager.shared.loadConfig(for: slug)) ?? CityConfig.nycDefault
             await MainActor.run {
-                spatialStore.setActiveCity(newConfig)
                 if showNearbyBusesLens {
                     scanNearbyBuses(force: true)
                 }

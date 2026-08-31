@@ -69,25 +69,35 @@ public final class CityPackManager: Sendable {
     
     /// Locates the bundled city pack `.pack.zst` across all bundle naming variants.
     public static func locateBundledPackURL(for slug: String = "nyc") -> URL? {
-        let bundle = Bundle.main
-        let fileManager = FileManager.default
+        var bundles = [Bundle.main, Bundle(for: CityPackManager.self)] + Bundle.allBundles
+        var seenBundlePaths = Set<String>()
+        let uniqueBundles = bundles.filter { bundle in
+            let path = bundle.bundlePath
+            if seenBundlePaths.contains(path) { return false }
+            seenBundlePaths.insert(path)
+            return true
+        }
         
+        let fileManager = FileManager.default
         let candidateNames = ["city-\(slug).pack", "city-\(slug)"]
-        for name in candidateNames {
-            if let url = bundle.url(forResource: name, withExtension: "zst") {
+        
+        for bundle in uniqueBundles {
+            for name in candidateNames {
+                if let url = bundle.url(forResource: name, withExtension: "zst") {
+                    return url
+                }
+                if let url = bundle.url(forResource: name, withExtension: "pack.zst") {
+                    return url
+                }
+            }
+            if let url = bundle.url(forResource: "city-\(slug).pack.zst", withExtension: nil) {
                 return url
             }
-            if let url = bundle.url(forResource: name, withExtension: "pack.zst") {
-                return url
-            }
-        }
-        if let url = bundle.url(forResource: "city-\(slug).pack.zst", withExtension: nil) {
-            return url
-        }
-        if let resourceURL = bundle.resourceURL {
-            let directURL = resourceURL.appendingPathComponent("city-\(slug).pack.zst")
-            if fileManager.fileExists(atPath: directURL.path) {
-                return directURL
+            if let resourceURL = bundle.resourceURL {
+                let directURL = resourceURL.appendingPathComponent("city-\(slug).pack.zst")
+                if fileManager.fileExists(atPath: directURL.path) {
+                    return directURL
+                }
             }
         }
         return nil
