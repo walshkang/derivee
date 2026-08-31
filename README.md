@@ -67,6 +67,30 @@ Built as a **pure native iOS application** under the **Sleepy Hermes** paradigm 
 
 ---
 
+## 📚 Architecture & Technical Research Library
+
+The project maintains comprehensive engineering specifications in [`docs/`](docs/) and [`docs/research/`](docs/research/):
+
+* **Visual Architecture & Pipeline Diagrams:** [`docs/diagrams.md`](docs/diagrams.md) — 6-stage reactive GPS-to-fog pipeline, database topology, MapLibre layer stack.
+* **UI & Interaction Specifications:** [`docs/design.md`](docs/design.md) — Screen flow, typography, materials, and color tokens.
+* **System Architecture:** [`docs/architecture.md`](docs/architecture.md) — Class ownership, concurrency patterns, and storage models.
+* **On-Device Routing & Metal Graphics Research Specifications ([`docs/research/`](docs/research/)):**
+  1. [`01_binary_serialization_contracts.md`](docs/research/01_binary_serialization_contracts.md) — 128B header, 16 KiB Apple Silicon page alignment, zero-copy `mmap`.
+  2. [`02_ultra_precomputation_architecture.md`](docs/research/02_ultra_precomputation_architecture.md) — ULTRA CSR transfer shortcuts & Pareto optimality.
+  3. [`03_walk_graph_runtime_memory.md`](docs/research/03_walk_graph_runtime_memory.md) — Quantized walk graph & bounded one-to-many Dijkstra under 25 MB budget.
+  4. [`04_reliability_population_pipeline.md`](docs/research/04_reliability_population_pipeline.md) — 15-min origin slot profiling & pre-squared variance aggregation.
+  5. [`05_maplibre_metal_view_synchronization.md`](docs/research/05_maplibre_metal_view_synchronization.md) — Web Mercator $\rightarrow$ Metal NDC projection, Relative-to-Center (RTC) precision, zero-lag VSync.
+  6. [`06_sparse_gpu_spatial_memory_h3_buffering.md`](docs/research/06_sparse_gpu_spatial_memory_h3_buffering.md) — Open-addressing GPU hash table in `MTLBuffer`, $<10\text{ MB}$ VRAM limit, bitwise parent LOD.
+  7. [`07_metal_layer_injection_compositing_maplibre.md`](docs/research/07_metal_layer_injection_compositing_maplibre.md) — `MLNCustomStyleLayer` zero-lag in-pipeline injection & z-index label occlusion preservation.
+  8. [`08_empirical_performance_benchmarking_metalfogengine.md`](docs/research/08_empirical_performance_benchmarking_metalfogengine.md) — 120 FPS CADisplayLink telemetry, RMSD visual parity kernel, and 100k hex tour regression suite.
+  9. [`09_metal_shading_pipeline_sdf_edge_glow.md`](docs/research/09_metal_shading_pipeline_sdf_edge_glow.md) — 4-vertex full-screen quad fragment pipeline, screen-space derivative anti-aliasing (`dfdx`/`dfdy`), and single-pass Electric Amber (`#FFB300`) analytical glow.
+  10. [`10_hybrid_raptor_algorithm_cpp20_interop.md`](docs/research/10_hybrid_raptor_algorithm_cpp20_interop.md) — On-device packed timetable layout (17.58 MB NYC MTA model), 4D Pareto multi-criteria optimization, and zero-bridge Swift C++20 interop under 30 MB Jetsam budget.
+  11. [`11_gbfs_micromobility_dock_gating.md`](docs/research/11_gbfs_micromobility_dock_gating.md) — Ephemeral `gbfs_cache.sqlite` (`DatabaseQueue`), dock gating ($G(e) = g_{\text{pick}} \cdot g_{\text{drop}}$), sub-millisecond flat-Earth bounding box queries, and zero `0xdead10cc` background lock risk.
+  12. [`12_immediate_mode_canvas_reliability_heatmap.md`](docs/research/12_immediate_mode_canvas_reliability_heatmap.md) — 120 FPS `Canvas(rendersAsynchronously: true)` + `.drawingGroup()`, 4,320 `[Float]` array buffer, and von Mises circular convolution in $< 0.07\text{ ms}$ via Accelerate `vDSP`.
+  13. [`13_automated_gis_city_pack_compiler.md`](docs/research/13_automated_gis_city_pack_compiler.md) — Pedestrian bridge boolean GIS subtraction ($\text{Walkable} = (\text{Neighborhood} \setminus \text{Water}) \cup \text{Bridges}$), 16 KiB page-aligned `.pack.zst`, and atomic POSIX `rename()` zero-downtime swaps.
+
+---
+
 ## 📍 Current Status
 
 The project has fully completed the **Pure Native iOS Migration**, **Design Alignment** (Waves E–H.1, W15), **Fog Reliability Hardening** (Waves I.1–I.10c), and **Exploration, Performance & Map Customization** (Wave J — 16 sub-waves). Current focus is on **Post-Wave J Field Fixes & UX Polish** (Wave K).

@@ -195,6 +195,20 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **M.3** | **WM3-AMBIENT-MAP-DISMISSAL** | **Ambient Map Dismissal Contract ("Map is the UI" for Overlays):** In `MapView.Coordinator.handleMapTap`, handle ambient taps outside transit POI features (`closest == nil`) by collapsing active floating lenses (`NearbyBusesCapsule`) and dismissing transient toast banners. Auto-collapse quick lens capsules on map gesture pan/drag (`mapViewRegionWillChange`). | **S** | ✅ Done |
 | **M.4** | **WM4-ORIENTATION-CLUSTER** | **Bottom-Right Navigation Orientation Cluster:** Relocate native MapLibre compass needle to `.bottomRight` directly stacked above the 50×50 `RecenterFAB` (`x: 20pt`, `y: 102pt + safeAreaInsets.bottom`). Preserves 120Hz native bearing animation, auto-fade when North-Up, and tap-to-reorient with brand-aligned `ApertureCompassNeedle`. | **XS** | ✅ Done |
 
+### 🏙️ Multi-City Pack Hardening & Global Fog Architecture (Wave M.5)
+
+> [!NOTE]
+> **Field Audit & Experience Polish.** Resolves fog bounding box rectangular cutoffs with a global world mask, eliminates single-city neighborhood data leakage during remote city switching, deep-links city management navigation, and streamlines 1-tap city pack downloads with reactive state synchronization.
+>
+> **Modular Agent Scope:** Each sub-wave is self-contained with dedicated test coverage to allow isolated agent auditing.
+
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **M.5.1** | **WM5.1-GLOBAL-FOG** | **Global World Fog Mask Architecture (World Polygon & Seamless Apertures):** Replace localized 30km×30km per-city bounding box with a global world outer polygon `[(-85.0511, -179.999), (85.0511, -179.999), (85.0511, 179.999), (-85.0511, 179.999), (-85.0511, -179.999)]` in CW winding order. Explored hexes anywhere on earth dissolve into interior aperture cutouts with golden illuminated borders. Eliminates artificial rectangular fog edges and border lines across city margins. | **S** | Planned |
+| **M.5.2** | **WM5.2-CITY-SWITCH-NAV** | **Multi-City Navigation & Neighborhood Database Disambiguation:** Gate `SpatialDatabaseManager.fetchNeighborhoodProgression` so NYC-specific `neighborhood.sqlite` data is not returned for non-NYC metros. Show clean empty state for cities without compiled neighborhood boundaries. Ensure switching active city (or tapping "View on Map") targets `config.center.coordinate` (e.g. Boston Common `42.3601, -71.0589`) instead of clamped out-of-bounds coordinates. | **S** | Planned |
+| **M.5.3** | **WM5.3-MANAGE-CITIES-DEEPLINK** | **"Manage Cities" Deep-Link & Direct Storage Navigation:** Update "Manage Cities..." in `CitySelectorPill` to navigate directly to `CitiesStorageManagerView` (or deep-link via `ScrollViewReader` with `#citiesStorage` anchor in `SettingsView`) instead of landing on top of general Settings. | **XS** | Planned |
+| **M.5.4** | **WM5.4-CITY-CATALOG-DISCOVERY** | **City Pack Cloud Catalog Discovery, 1-Tap Download & State Sync:** Add 1-tap download buttons with live progress on uninstalled cards in `AllMetrosSummaryView` and "Available to Download" menu items in `CitySelectorPill`. Call `CityDetectionService.markCityInstalled` upon download completion in `CitiesStorageManagerView` for instant state synchronization across all selectors. Add "Switch Active Metro" button in `CitiesStorageManagerView`. | **S** | Planned |
+
 ### 🚀 On-Device Multimodal Routing & Reliability Engine (Wave N)
 
 > [!NOTE]
