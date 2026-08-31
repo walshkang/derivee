@@ -33,9 +33,33 @@ public struct FogGeometry: Sendable {
 /// Spatial math utilities for dissolving H3 hex collections and generating optimized MapLibre fog shapes.
 public enum FogPolygonMath {
     
-    /// Generates the standard 50km NYC metropolitan bounding box coordinates with optional sub-pixel jitter.
+    // MARK: - Global World Fog Mask Bounds (Wave M.5.1)
+    
+    /// Web Mercator upper projection latitude limit (EPSG:3857).
+    public static let worldMaxLatitude: Double = 85.0511
+    /// Web Mercator lower projection latitude limit (EPSG:3857).
+    public static let worldMinLatitude: Double = -85.0511
+    /// Web Mercator western longitude boundary with 0.001 deg buffer to avoid antimeridian wrapping singularities.
+    public static let worldMinLongitude: Double = -179.999
+    /// Web Mercator eastern longitude boundary with 0.001 deg buffer to avoid antimeridian wrapping singularities.
+    public static let worldMaxLongitude: Double = 179.999
+    
+    /// Generates the Global World Fog Mask outer polygon coordinates with optional sub-pixel jitter.
+    /// Preserves strict Clockwise (CW) winding order required by MapLibre Native:
+    /// Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left -> Top-Left (closed).
+    public static func makeWorldBounds(jitter: Double = 0.0) -> [CLLocationCoordinate2D] {
+        [
+            CLLocationCoordinate2D(latitude: worldMaxLatitude + jitter, longitude: worldMinLongitude - jitter), // Top Left
+            CLLocationCoordinate2D(latitude: worldMaxLatitude, longitude: worldMaxLongitude),                  // Top Right
+            CLLocationCoordinate2D(latitude: worldMinLatitude, longitude: worldMaxLongitude),                  // Bottom Right
+            CLLocationCoordinate2D(latitude: worldMinLatitude, longitude: worldMinLongitude),                  // Bottom Left
+            CLLocationCoordinate2D(latitude: worldMaxLatitude + jitter, longitude: worldMinLongitude - jitter)   // Top Left (closed)
+        ]
+    }
+    
+    /// Generates the standard global world fog mask bounding box coordinates with optional sub-pixel jitter.
     public static func makeDefaultBounds(jitter: Double = 0.0) -> [CLLocationCoordinate2D] {
-        makeBounds(for: CityConfig.nycDefault.bounds, jitter: jitter)
+        makeWorldBounds(jitter: jitter)
     }
     
     /// Generates bounding box coordinates for a specific CityBounds with optional sub-pixel jitter.
@@ -80,25 +104,27 @@ public enum FogPolygonMath {
     }
     
     /// Dissolves a set of H3 hexadecimal strings into a `FogGeometry` containing the world mask with cutouts and unvisited fog islands.
-    public static func dissolveHexesToFogGeometry(hexes: Set<String>, bounds: [CLLocationCoordinate2D]) -> FogGeometry {
+    public static func dissolveHexesToFogGeometry(hexes: Set<String>, bounds: [CLLocationCoordinate2D]? = nil) -> FogGeometry {
+        let targetBounds = bounds ?? makeWorldBounds()
         guard !hexes.isEmpty else {
-            let emptyWorld = MLNPolygonFeature(coordinates: bounds, count: UInt(bounds.count))
+            let emptyWorld = MLNPolygonFeature(coordinates: targetBounds, count: UInt(targetBounds.count))
             return FogGeometry(worldMaskPolygon: emptyWorld, islandPolygons: [])
         }
         
         let cells: [UInt64] = hexes.compactMap { UInt64($0, radix: 16) }
         guard !cells.isEmpty else {
-            let emptyWorld = MLNPolygonFeature(coordinates: bounds, count: UInt(bounds.count))
+            let emptyWorld = MLNPolygonFeature(coordinates: targetBounds, count: UInt(targetBounds.count))
             return FogGeometry(worldMaskPolygon: emptyWorld, islandPolygons: [])
         }
         
-        return dissolveCellsToFogGeometry(cells: cells, bounds: bounds)
+        return dissolveCellsToFogGeometry(cells: cells, bounds: targetBounds)
     }
     
     /// Dissolves an array of `UInt64` H3 cell indices into a `FogGeometry` containing the world mask with cutouts and unvisited fog islands.
-    public static func dissolveCellsToFogGeometry(cells: [UInt64], bounds: [CLLocationCoordinate2D]) -> FogGeometry {
+    public static func dissolveCellsToFogGeometry(cells: [UInt64], bounds: [CLLocationCoordinate2D]? = nil) -> FogGeometry {
+        let targetBounds = bounds ?? makeWorldBounds()
         guard !cells.isEmpty else {
-            let emptyWorld = MLNPolygonFeature(coordinates: bounds, count: UInt(bounds.count))
+            let emptyWorld = MLNPolygonFeature(coordinates: targetBounds, count: UInt(targetBounds.count))
             return FogGeometry(worldMaskPolygon: emptyWorld, islandPolygons: [])
         }
         
@@ -109,7 +135,7 @@ public enum FogPolygonMath {
         
         guard err == 0 else {
             print("⚠️ [FogPolygonMath] cellsToLinkedMultiPolygon failed with error code: \(err)")
-            let emptyWorld = MLNPolygonFeature(coordinates: bounds, count: UInt(bounds.count))
+            let emptyWorld = MLNPolygonFeature(coordinates: targetBounds, count: UInt(targetBounds.count))
             return FogGeometry(worldMaskPolygon: emptyWorld, islandPolygons: [])
         }
         
@@ -169,8 +195,8 @@ public enum FogPolygonMath {
         }
         
         let worldMask = (MLNPolygonFeature.self as MLNPolygon.Type).init(
-            coordinates: bounds,
-            count: UInt(bounds.count),
+            coordinates: targetBounds,
+            count: UInt(targetBounds.count),
             interiorPolygons: holePolygons.isEmpty ? nil : holePolygons
         ) as! MLNPolygonFeature
         
@@ -179,21 +205,21 @@ public enum FogPolygonMath {
     
     /// Dissolves a set of H3 hexadecimal strings into a list of closed `MLNPolygon` interior cutout rings.
     public static func dissolveHexesToInteriorPolygons(hexes: Set<String>) -> [MLNPolygon] {
-        let dummyBounds = makeDefaultBounds()
+        let dummyBounds = makeWorldBounds()
         let geom = dissolveHexesToFogGeometry(hexes: hexes, bounds: dummyBounds)
         return geom.worldMaskPolygon.interiorPolygons ?? []
     }
     
     /// Dissolves an array of `UInt64` H3 cell indices into a list of closed `MLNPolygon` interior cutout rings.
     public static func dissolveCellsToInteriorPolygons(cells: [UInt64]) -> [MLNPolygon] {
-        let dummyBounds = makeDefaultBounds()
+        let dummyBounds = makeWorldBounds()
         let geom = dissolveCellsToFogGeometry(cells: cells, bounds: dummyBounds)
         return geom.worldMaskPolygon.interiorPolygons ?? []
     }
     
-    /// Generates a complete fog `MLNPolygon` spanning the NYC metropolitan bounding box with dissolved interior holes.
+    /// Generates a complete fog `MLNPolygon` spanning the global world bounds with dissolved interior holes.
     public static func generateFogPolygon(hexes: Set<String>, jitter: Double = 0.0) -> MLNPolygon {
-        let bounds = makeDefaultBounds(jitter: jitter)
+        let bounds = makeWorldBounds(jitter: jitter)
         let geom = dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
         return geom.worldMaskPolygon
     }
@@ -205,9 +231,9 @@ public enum FogPolygonMath {
         return geom.worldMaskPolygon
     }
     
-    /// Generates a complete composite fog `MLNShape` (including interior unvisited islands) spanning the NYC bounding box.
+    /// Generates a complete composite fog `MLNShape` (including interior unvisited islands) spanning the global world bounds.
     public static func generateFogShape(hexes: Set<String>, jitter: Double = 0.0) -> MLNShape {
-        let bounds = makeDefaultBounds(jitter: jitter)
+        let bounds = makeWorldBounds(jitter: jitter)
         let geom = dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
         return geom.compositeShape
     }
@@ -219,19 +245,31 @@ public enum FogPolygonMath {
         return geom.compositeShape
     }
     
+    /// Generates an initial baseline global world fog shape feature with zero explored holes.
+    /// Allocates fresh coordinate arrays and a new `MLNShapeCollectionFeature` to reset GPU mesh cache.
+    public static func makeInitialFogShapeFeature(jitter: Double = 0.0) -> MLNShapeCollectionFeature {
+        let bounds = makeWorldBounds(jitter: jitter)
+        let worldMask = MLNPolygonFeature(coordinates: bounds, count: UInt(bounds.count))
+        return MLNShapeCollectionFeature(shapes: [worldMask])
+    }
+    
     /// Generates an initial baseline fog shape feature for a specific city config with zero explored holes.
     /// Allocates fresh coordinate arrays and a new `MLNShapeCollectionFeature` to reset GPU mesh cache.
     public static func makeInitialFogShapeFeature(for config: CityConfig, jitter: Double = 0.0) -> MLNShapeCollectionFeature {
-        let bounds = makeBounds(for: config.bounds, jitter: jitter)
-        let worldMask = MLNPolygonFeature(coordinates: bounds, count: UInt(bounds.count))
-        return MLNShapeCollectionFeature(shapes: [worldMask])
+        makeInitialFogShapeFeature(jitter: jitter)
+    }
+    
+    /// Generates a complete composite fog `MLNShapeCollectionFeature` spanning the global world bounds.
+    /// Ensures newly allocated `MLNShapeCollectionFeature` with fresh coordinate arrays for MapLibre cache invalidation.
+    public static func generateFogShapeFeature(hexes: Set<String>, jitter: Double = 0.0) -> MLNShapeCollectionFeature {
+        let bounds = makeWorldBounds(jitter: jitter)
+        let geom = dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
+        return geom.compositeShapeFeature
     }
     
     /// Generates a complete composite fog `MLNShapeCollectionFeature` spanning the specified city's bounding box.
     /// Ensures newly allocated `MLNShapeCollectionFeature` with fresh coordinate arrays for MapLibre cache invalidation.
     public static func generateFogShapeFeature(hexes: Set<String>, config: CityConfig, jitter: Double = 0.0) -> MLNShapeCollectionFeature {
-        let bounds = makeBounds(for: config.bounds, jitter: jitter)
-        let geom = dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
-        return geom.compositeShapeFeature
+        generateFogShapeFeature(hexes: hexes, jitter: jitter)
     }
 }

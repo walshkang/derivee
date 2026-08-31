@@ -225,7 +225,7 @@ The MapLibre layer stack **must** follow this exact Z-index order. All layers ar
 ```
 
 > [!NOTE]
-> **Fog Bounding Polygon:** The current implementation uses a city-scoped bounding polygon loaded from the active `CityConfig.bounds`. Wave M.5.1 (`WM5.1-GLOBAL-FOG`) will replace this with a global world outer polygon covering `[-85.0511, 85.0511]` latitude, eliminating artificial rectangular fog edges at city boundaries.
+> **Fog Bounding Polygon (Wave M.5.1):** The fog mask uses a Global World outer polygon spanning Web Mercator limits `[-85.0511, 85.0511]` latitude and `[-179.999, 179.999]` longitude in Clockwise (CW) winding order. Explored H3 hexes anywhere on earth dissolve into interior cutout apertures, completely eliminating artificial rectangular fog edges and border lines across city margins.
 
 > [!IMPORTANT]
 > **Cold-Start Fog Contract:** On app launch after a force-quit, the Cloud Layer (Layer 2) must render with all previously explored hex holes visible **immediately** when the map finishes loading. The `SpatialStore` fog polygon computation must complete before or synchronize with MapLibre's `didFinishLoading` callback. A solid, hole-less fog flash on cold start is a rendering bug. See [architecture.md §5.2](file:///Volumes/T7ssd/derivee/docs/architecture.md) for the synchronization mechanism.

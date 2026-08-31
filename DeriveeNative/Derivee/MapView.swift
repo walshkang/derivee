@@ -201,13 +201,13 @@ struct MapView: UIViewRepresentable {
             self.lastAppliedCitySlug = config.slug
             
             // 2. Generate a fresh baseline MLNShapeCollectionFeature with new coordinate arrays
-            // (Guarantees MapLibre C++ GPU tessellation cache invalidation for the new city's bounding envelope)
-            let freshFogFeature = FogPolygonMath.makeInitialFogShapeFeature(for: config)
+            // (Guarantees MapLibre C++ GPU tessellation cache invalidation for the global world bounding envelope)
+            let freshFogFeature = FogPolygonMath.makeInitialFogShapeFeature()
             
             if let style = mapView.style {
                 if let fogSource = style.source(withIdentifier: "fog-source") as? MLNShapeSource {
                     fogSource.shape = freshFogFeature
-                    logPipeline("🌫️ [WLD3 Viewport Handshake] Assigned fresh MLNShapeCollectionFeature to fog-source for \(config.slug)")
+                    logPipeline("🌫️ [WLD3 Viewport Handshake] Assigned fresh global MLNShapeCollectionFeature to fog-source")
                 }
                 
                 // 3. Update transit lines GeoJSON for the destination city
@@ -503,8 +503,8 @@ struct MapView: UIViewRepresentable {
             
             // VERIFIED: MapLibre Native (iOS) initial fog shape requires CW winding order for exterior bounds.
             // Matches SpatialStore bounds order (Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left -> Top-Left).
-            // Tested & hardened in Wave I.2 (WI2-WINDING).
-            let bounds = FogPolygonMath.makeBounds(for: CameraBounds.activeConfig.bounds, jitter: 0.000001)
+            // Tested & hardened in Wave I.2 (WI2-WINDING) & Wave M.5.1 (WM5.1-GLOBAL-FOG).
+            let bounds = FogPolygonMath.makeWorldBounds(jitter: 0.000001)
             let initialFogShape = MLNPolygon(coordinates: bounds, count: UInt(bounds.count))
             
             let fogSource = MLNShapeSource(identifier: "fog-source", shape: initialFogShape, options: nil)
@@ -720,9 +720,9 @@ struct MapView: UIViewRepresentable {
                     print("✅ Deferred fog shape applied (\(interiorCount) holes)")
                 }
             } else if isMapStyleLoaded {
-                let freshFogFeature = FogPolygonMath.makeInitialFogShapeFeature(for: CameraBounds.activeConfig)
+                let freshFogFeature = FogPolygonMath.makeInitialFogShapeFeature()
                 fogSource.shape = freshFogFeature
-                logPipeline("🌫️ [updateExploredHexes] Reset fog-source to full solid baseline fog shape for \(CameraBounds.activeConfig.slug)")
+                logPipeline("🌫️ [updateExploredHexes] Reset fog-source to full solid baseline world fog shape")
             }
         }
         

@@ -36,33 +36,32 @@ final class FogCacheHandshakeTests: XCTestCase {
         XCTAssertEqual(feature1.shapes.count, 1)
         XCTAssertEqual(featureBos.shapes.count, 1)
         
-        guard let polyNyc = feature1.shapes.first as? MLNPolygon,
+        guard let poly1 = feature1.shapes.first as? MLNPolygon,
               let polyBos = featureBos.shapes.first as? MLNPolygon else {
             XCTFail("Root shape in MLNShapeCollectionFeature must be MLNPolygon")
             return
         }
         
-        XCTAssertEqual(polyNyc.pointCount, 5)
+        XCTAssertEqual(poly1.pointCount, 5)
         XCTAssertEqual(polyBos.pointCount, 5)
         
-        // Verify NYC coordinates vs Boston coordinates
-        var nycCoords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: 5)
-        polyNyc.getCoordinates(&nycCoords, range: NSRange(location: 0, length: 5))
+        // Verify Global World Fog Mask coordinates
+        var coords1 = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: 5)
+        poly1.getCoordinates(&coords1, range: NSRange(location: 0, length: 5))
         
-        var bosCoords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: 5)
-        polyBos.getCoordinates(&bosCoords, range: NSRange(location: 0, length: 5))
+        var coordsBos = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: 5)
+        polyBos.getCoordinates(&coordsBos, range: NSRange(location: 0, length: 5))
         
-        // NYC bounds ~40.0 - 41.5 lat, -74.5 - -73.0 lon
-        XCTAssertEqual(nycCoords[1].latitude, nycConfig.bounds.maxLatitude, accuracy: 1e-5)
-        XCTAssertEqual(nycCoords[1].longitude, nycConfig.bounds.maxLongitude, accuracy: 1e-5)
+        // Global world bounds: 85.0511 max lat, -85.0511 min lat, -179.999 min lon, 179.999 max lon
+        XCTAssertEqual(coords1[0].latitude, 85.0511, accuracy: 1e-4)
+        XCTAssertEqual(coords1[0].longitude, -179.999, accuracy: 1e-4)
+        XCTAssertEqual(coords1[1].latitude, 85.0511, accuracy: 1e-4)
+        XCTAssertEqual(coords1[1].longitude, 179.999, accuracy: 1e-4)
         
-        // Boston bounds ~42.20 - 42.50 lat, -71.25 - -70.90 lon
-        XCTAssertEqual(bosCoords[1].latitude, bosConfig.bounds.maxLatitude, accuracy: 1e-5)
-        XCTAssertEqual(bosCoords[1].longitude, bosConfig.bounds.maxLongitude, accuracy: 1e-5)
-        
-        // Bounding boxes must not overlap or share coordinates
-        XCTAssertNotEqual(nycCoords[0].latitude, bosCoords[0].latitude)
-        XCTAssertNotEqual(nycCoords[0].longitude, bosCoords[0].longitude)
+        XCTAssertEqual(coordsBos[0].latitude, 85.0511, accuracy: 1e-4)
+        XCTAssertEqual(coordsBos[0].longitude, -179.999, accuracy: 1e-4)
+        XCTAssertEqual(coordsBos[1].latitude, 85.0511, accuracy: 1e-4)
+        XCTAssertEqual(coordsBos[1].longitude, 179.999, accuracy: 1e-4)
     }
     
     // MARK: - 2. Winding Order & Closed Loop Geometry

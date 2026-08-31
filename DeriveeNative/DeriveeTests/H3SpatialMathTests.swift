@@ -43,6 +43,27 @@ final class H3SpatialMathTests: XCTestCase {
         XCTAssertLessThan(distance, 25.0, "Reconstituted cell center should be within 25m of origin coordinate.")
     }
     
+    func testGlobalWorldBoundingPolygonClockwiseWindingOrder() {
+        let bounds = FogPolygonMath.makeWorldBounds()
+        
+        XCTAssertEqual(bounds.count, 5, "Global world fog mask outer polygon must contain exactly 5 points (closed loop)")
+        XCTAssertEqual(bounds.first?.latitude, bounds.last?.latitude, "Global world fog loop must be closed in latitude")
+        XCTAssertEqual(bounds.first?.longitude, bounds.last?.longitude, "Global world fog loop must be closed in longitude")
+        
+        // Check exact Web Mercator limits
+        XCTAssertEqual(bounds[0].latitude, 85.0511, accuracy: 1e-4)
+        XCTAssertEqual(bounds[0].longitude, -179.999, accuracy: 1e-4)
+        XCTAssertEqual(bounds[1].latitude, 85.0511, accuracy: 1e-4)
+        XCTAssertEqual(bounds[1].longitude, 179.999, accuracy: 1e-4)
+        XCTAssertEqual(bounds[2].latitude, -85.0511, accuracy: 1e-4)
+        XCTAssertEqual(bounds[2].longitude, 179.999, accuracy: 1e-4)
+        XCTAssertEqual(bounds[3].latitude, -85.0511, accuracy: 1e-4)
+        XCTAssertEqual(bounds[3].longitude, -179.999, accuracy: 1e-4)
+        
+        let area = FogPolygonMath.shoelaceSignedArea(bounds)
+        XCTAssertGreaterThan(area, 0, "Global world fog polygon must have Clockwise (CW) winding order (positive shoelace sum).")
+    }
+
     func testExteriorBoundingBoxClockwiseWindingOrder() {
         let bounds = [
             CLLocationCoordinate2D(latitude: 41.5, longitude: -74.5), // Top Left

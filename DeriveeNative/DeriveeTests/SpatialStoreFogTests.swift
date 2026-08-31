@@ -196,14 +196,24 @@ final class SpatialStoreFogTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(coords.count, 4, "Exterior ring bounding box must have at least 4 coordinates")
         
         for coord in coords {
-            // Latitude range: 40.0 to 41.5 (+ small jitter tolerance 0.0001)
-            XCTAssertGreaterThanOrEqual(coord.latitude, 39.999, "Latitude \(coord.latitude) below expected 40.0 bound")
-            XCTAssertLessThanOrEqual(coord.latitude, 41.501, "Latitude \(coord.latitude) above expected 41.5 bound")
+            // Global World Fog Mask latitude range: -85.0511 to 85.0511 (+ small jitter tolerance 0.0001)
+            XCTAssertGreaterThanOrEqual(coord.latitude, -85.0512, "Latitude \(coord.latitude) below expected -85.0511 world bound")
+            XCTAssertLessThanOrEqual(coord.latitude, 85.0512, "Latitude \(coord.latitude) above expected 85.0511 world bound")
             
-            // Longitude range: -74.5 to -73.0 (+ small jitter tolerance 0.0001)
-            XCTAssertGreaterThanOrEqual(coord.longitude, -74.501, "Longitude \(coord.longitude) below expected -74.5 bound")
-            XCTAssertLessThanOrEqual(coord.longitude, -72.999, "Longitude \(coord.longitude) above expected -73.0 bound")
+            // Global World Fog Mask longitude range: -179.999 to 179.999 (+ small jitter tolerance 0.0001)
+            XCTAssertGreaterThanOrEqual(coord.longitude, -180.0, "Longitude \(coord.longitude) below expected -179.999 world bound")
+            XCTAssertLessThanOrEqual(coord.longitude, 180.0, "Longitude \(coord.longitude) above expected 179.999 world bound")
         }
+        
+        // Assert top-left, top-right, bottom-right, bottom-left world corners are present
+        XCTAssertEqual(coords[0].latitude, 85.0511, accuracy: 1e-4)
+        XCTAssertEqual(coords[0].longitude, -179.999, accuracy: 1e-4)
+        XCTAssertEqual(coords[1].latitude, 85.0511, accuracy: 1e-4)
+        XCTAssertEqual(coords[1].longitude, 179.999, accuracy: 1e-4)
+        XCTAssertEqual(coords[2].latitude, -85.0511, accuracy: 1e-4)
+        XCTAssertEqual(coords[2].longitude, 179.999, accuracy: 1e-4)
+        XCTAssertEqual(coords[3].latitude, -85.0511, accuracy: 1e-4)
+        XCTAssertEqual(coords[3].longitude, -179.999, accuracy: 1e-4)
     }
     
     @MainActor

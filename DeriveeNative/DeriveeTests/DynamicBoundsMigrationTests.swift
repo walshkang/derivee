@@ -221,7 +221,7 @@ final class DynamicBoundsMigrationTests: XCTestCase {
         XCTAssertTrue(isForcedInserted, "When enforceLandOnly is false, hex is inserted")
     }
     
-    // MARK: - 5. Multi-City Fog Bounding Polygon CW Math
+    // MARK: - 5. Multi-City Fog Bounding Polygon & Global World Mask CW Math
     
     func testMultiCityFogBoundingPolygonCWMath() {
         let configs: [CityConfig] = [.nycDefault, .bostonDefault, .chicagoDefault]
@@ -243,5 +243,18 @@ final class DynamicBoundsMigrationTests: XCTestCase {
             let fogShape = FogPolygonMath.generateFogShape(hexes: ["8b2a1072b4cdfff"], config: config)
             XCTAssertNotNil(fogShape)
         }
+        
+        // Test Global World Fog Mask (Wave M.5.1)
+        let worldBounds = FogPolygonMath.makeWorldBounds()
+        XCTAssertEqual(worldBounds.count, 5)
+        XCTAssertEqual(worldBounds.first?.latitude, worldBounds.last?.latitude)
+        XCTAssertEqual(worldBounds.first?.longitude, worldBounds.last?.longitude)
+        let worldArea = FogPolygonMath.shoelaceSignedArea(worldBounds)
+        XCTAssertGreaterThan(worldArea, 0, "Global world fog bounds must have Clockwise (CW) winding order")
+        
+        let globalFogPoly = FogPolygonMath.generateFogPolygon(hexes: ["8b2a1072b4cdfff"])
+        XCTAssertEqual(globalFogPoly.pointCount, 5)
+        let globalFogShape = FogPolygonMath.generateFogShape(hexes: ["8b2a1072b4cdfff"])
+        XCTAssertNotNil(globalFogShape)
     }
 }

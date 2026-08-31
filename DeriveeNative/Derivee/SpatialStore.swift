@@ -130,12 +130,12 @@ final class SpatialStore: @unchecked Sendable {
         polygonTask = Task.detached(priority: taskPriority) {
             logPipeline("📍 [S5 - recomputeFogShape ENTER] at \(Date()), priority=\(taskPriority), hexCount=\(hexes.count), isCancelled=\(Task.isCancelled)")
             // VERIFIED: MapLibre Native (iOS) requires Clockwise (CW) winding order for exterior bounds.
-            // Tested & hardened in Wave I.2 (WI2-WINDING).
+            // Tested & hardened in Wave I.2 (WI2-WINDING) & Wave M.5.1 (WM5.1-GLOBAL-FOG).
             // JITTER APPLIED: MapLibre ignores updates to polygons if the exterior bounding box 
             // hasn't changed. We jitter the top-left corner slightly to force a cache invalidation 
             // and redraw the new holes.
             let jitter = Double.random(in: 0...0.00001)
-            let bounds = FogPolygonMath.makeBounds(for: currentBounds, jitter: jitter)
+            let bounds = FogPolygonMath.makeWorldBounds(jitter: jitter)
             
             let fogGeometry = FogPolygonMath.dissolveHexesToFogGeometry(hexes: hexes, bounds: bounds)
             
