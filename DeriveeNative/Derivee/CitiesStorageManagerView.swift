@@ -267,6 +267,9 @@ public struct CitiesStorageManagerView: View {
                     Divider()
                     
                     breakdownRow(title: "transit.sqlite (GTFS Timetable DB)", size: pack.breakdown.formattedTransitDB)
+                    if pack.breakdown.neighborhoodDatabaseBytes > 0 {
+                        breakdownRow(title: "neighborhood.sqlite (GIS Walkable Boundaries)", size: pack.breakdown.formattedNeighborhoodDB)
+                    }
                     breakdownRow(title: "transit-lines.geojson (Route Lines)", size: pack.breakdown.formattedTransitLines)
                     breakdownRow(title: "city_config.json (Metro Bounds)", size: pack.breakdown.formattedConfig)
                     if pack.breakdown.otherBytes > 0 {

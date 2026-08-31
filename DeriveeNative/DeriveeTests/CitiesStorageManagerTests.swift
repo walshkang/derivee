@@ -201,6 +201,8 @@ final class CitiesStorageManagerTests: XCTestCase {
         testDefaults.removePersistentDomain(forName: "com.derivee.test.storagesnapshot")
         let detectionService = CityDetectionService(userDefaults: testDefaults)
         
+        try? manager.ensureBundledPackExtracted()
+        
         let view = NavigationStack {
             CitiesStorageManagerView(
                 packManager: manager,

@@ -1,0 +1,182 @@
+{
+  "city": "bos",
+  "total_neighborhoods": 25,
+  "total_hexes": 56006,
+  "neighborhoods": [
+    {
+      "id": "BOS_1",
+      "name": "Roslindale",
+      "total_hexes": 2949,
+      "centroid_lat": 42.28257415685446,
+      "centroid_lng": -71.12663819411091
+    },
+    {
+      "id": "BOS_2",
+      "name": "Jamaica Plain",
+      "total_hexes": 4478,
+      "centroid_lat": 42.30758457542424,
+      "centroid_lng": -71.11492684469208
+    },
+    {
+      "id": "BOS_3",
+      "name": "Mission Hill",
+      "total_hexes": 664,
+      "centroid_lat": 42.33201958210492,
+      "centroid_lng": -71.10253365381196
+    },
+    {
+      "id": "BOS_4",
+      "name": "Longwood",
+      "total_hexes": 357,
+      "centroid_lat": 42.33870943757803,
+      "centroid_lng": -71.10511015833805
+    },
+    {
+      "id": "BOS_5",
+      "name": "Bay Village",
+      "total_hexes": 74,
+      "centroid_lat": 42.34889988912833,
+      "centroid_lng": -71.06809704869289
+    },
+    {
+      "id": "BOS_6",
+      "name": "Leather District",
+      "total_hexes": 68,
+      "centroid_lat": 42.34988486279679,
+      "centroid_lng": -71.05766434500883
+    },
+    {
+      "id": "BOS_7",
+      "name": "Chinatown",
+      "total_hexes": 178,
+      "centroid_lat": 42.34833875759327,
+      "centroid_lng": -71.0620905354207
+    },
+    {
+      "id": "BOS_8",
+      "name": "North End",
+      "total_hexes": 294,
+      "centroid_lat": 42.365962896704254,
+      "centroid_lng": -71.05425045222131
+    },
+    {
+      "id": "BOS_9",
+      "name": "Roxbury",
+      "total_hexes": 3860,
+      "centroid_lat": 42.318612734332035,
+      "centroid_lng": -71.08659407754048
+    },
+    {
+      "id": "BOS_10",
+      "name": "South End",
+      "total_hexes": 913,
+      "centroid_lat": 42.341637374992466,
+      "centroid_lng": -71.07099284184224
+    },
+    {
+      "id": "BOS_11",
+      "name": "Back Bay",
+      "total_hexes": 788,
+      "centroid_lat": 42.350141327730874,
+      "centroid_lng": -71.0805958377108
+    },
+    {
+      "id": "BOS_12",
+      "name": "East Boston",
+      "total_hexes": 5874,
+      "centroid_lat": 42.37262578847294,
+      "centroid_lng": -71.01498126752752
+    },
+    {
+      "id": "BOS_13",
+      "name": "Charlestown",
+      "total_hexes": 1664,
+      "centroid_lat": 42.378986087438534,
+      "centroid_lng": -71.06366234875942
+    },
+    {
+      "id": "BOS_14",
+      "name": "West End",
+      "total_hexes": 434,
+      "centroid_lat": 42.36514306748309,
+      "centroid_lng": -71.06599989872473
+    },
+    {
+      "id": "BOS_15",
+      "name": "Beacon Hill",
+      "total_hexes": 407,
+      "centroid_lat": 42.35703555473951,
+      "centroid_lng": -71.06862608760015
+    },
+    {
+      "id": "BOS_16",
+      "name": "Downtown",
+      "total_hexes": 835,
+      "centroid_lat": 42.35507481423895,
+      "centroid_lng": -71.0577256370307
+    },
+    {
+      "id": "BOS_17",
+      "name": "Fenway",
+      "total_hexes": 1071,
+      "centroid_lat": 42.3450817881329,
+      "centroid_lng": -71.09635375615795
+    },
+    {
+      "id": "BOS_18",
+      "name": "Brighton",
+      "total_hexes": 3349,
+      "centroid_lat": 42.34839150383496,
+      "centroid_lng": -71.15491712769051
+    },
+    {
+      "id": "BOS_19",
+      "name": "West Roxbury",
+      "total_hexes": 6417,
+      "centroid_lat": 42.28070071515113,
+      "centroid_lng": -71.1600223088671
+    },
+    {
+      "id": "BOS_20",
+      "name": "Hyde Park",
+      "total_hexes": 5317,
+      "centroid_lat": 42.25516293461914,
+      "centroid_lng": -71.12618542448709
+    },
+    {
+      "id": "BOS_21",
+      "name": "Mattapan",
+      "total_hexes": 2468,
+      "centroid_lat": 42.27706592603552,
+      "centroid_lng": -71.09144568974564
+    },
+    {
+      "id": "BOS_22",
+      "name": "Dorchester",
+      "total_hexes": 8521,
+      "centroid_lat": 42.2985238151647,
+      "centroid_lng": -71.0634341095684
+    },
+    {
+      "id": "BOS_23",
+      "name": "South Boston Waterfront",
+      "total_hexes": 1197,
+      "centroid_lat": 42.346594043460854,
+      "centroid_lng": -71.04246255963037
+    },
+    {
+      "id": "BOS_24",
+      "name": "South Boston",
+      "total_hexes": 2674,
+      "centroid_lat": 42.3350789411992,
+      "centroid_lng": -71.04489736431027
+    },
+    {
+      "id": "BOS_25",
+      "name": "Allston",
+      "total_hexes": 1868,
+      "centroid_lat": 42.35834978257677,
+      "centroid_lng": -71.12819386063111
+    }
+  ]
+}

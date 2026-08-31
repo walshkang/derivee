@@ -370,6 +370,7 @@ public struct CityManifest: Codable, Sendable, Equatable {
 
 public struct CityPackDiskBreakdown: Sendable, Equatable, Hashable {
     public let transitDatabaseBytes: Int64
+    public let neighborhoodDatabaseBytes: Int64
     public let transitLinesGeoJSONBytes: Int64
     public let configBytes: Int64
     public let otherBytes: Int64
@@ -377,20 +378,23 @@ public struct CityPackDiskBreakdown: Sendable, Equatable, Hashable {
     
     public init(
         transitDatabaseBytes: Int64,
+        neighborhoodDatabaseBytes: Int64 = 0,
         transitLinesGeoJSONBytes: Int64,
         configBytes: Int64,
         otherBytes: Int64 = 0,
         totalBytes: Int64? = nil
     ) {
         self.transitDatabaseBytes = transitDatabaseBytes
+        self.neighborhoodDatabaseBytes = neighborhoodDatabaseBytes
         self.transitLinesGeoJSONBytes = transitLinesGeoJSONBytes
         self.configBytes = configBytes
         self.otherBytes = otherBytes
-        self.totalBytes = totalBytes ?? (transitDatabaseBytes + transitLinesGeoJSONBytes + configBytes + otherBytes)
+        self.totalBytes = totalBytes ?? (transitDatabaseBytes + neighborhoodDatabaseBytes + transitLinesGeoJSONBytes + configBytes + otherBytes)
     }
     
     public var formattedTotal: String { CityManifest.formatBytes(totalBytes) }
     public var formattedTransitDB: String { CityManifest.formatBytes(transitDatabaseBytes) }
+    public var formattedNeighborhoodDB: String { CityManifest.formatBytes(neighborhoodDatabaseBytes) }
     public var formattedTransitLines: String { CityManifest.formatBytes(transitLinesGeoJSONBytes) }
     public var formattedConfig: String { CityManifest.formatBytes(configBytes) }
     public var formattedOther: String { CityManifest.formatBytes(otherBytes) }
@@ -429,6 +433,7 @@ public struct InstalledCityPack: Sendable, Equatable, Identifiable {
     public let config: CityConfig
     public let packDirectoryURL: URL
     public let transitDatabaseURL: URL
+    public let neighborhoodDatabaseURL: URL?
     public let transitLinesGeoJSONURL: URL?
     public let totalDiskSizeBytes: Int64
     public let isBundled: Bool
@@ -439,6 +444,7 @@ public struct InstalledCityPack: Sendable, Equatable, Identifiable {
         config: CityConfig,
         packDirectoryURL: URL,
         transitDatabaseURL: URL,
+        neighborhoodDatabaseURL: URL? = nil,
         transitLinesGeoJSONURL: URL?,
         totalDiskSizeBytes: Int64,
         isBundled: Bool,
@@ -448,11 +454,13 @@ public struct InstalledCityPack: Sendable, Equatable, Identifiable {
         self.config = config
         self.packDirectoryURL = packDirectoryURL
         self.transitDatabaseURL = transitDatabaseURL
+        self.neighborhoodDatabaseURL = neighborhoodDatabaseURL
         self.transitLinesGeoJSONURL = transitLinesGeoJSONURL
         self.totalDiskSizeBytes = totalDiskSizeBytes
         self.isBundled = isBundled
         self.breakdown = breakdown ?? CityPackDiskBreakdown(
             transitDatabaseBytes: 0,
+            neighborhoodDatabaseBytes: 0,
             transitLinesGeoJSONBytes: 0,
             configBytes: 0,
             otherBytes: 0,

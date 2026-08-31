@@ -92,17 +92,54 @@ final class MultiCityStatsTests: XCTestCase {
         
         let nycJournal = try await dbManager.fetchExplorationJournalData(citySlug: "nyc")
         XCTAssertEqual(nycJournal.totalClearedHexes, 1)
+        XCTAssertFalse(nycJournal.boroughProgress.isEmpty, "NYC must return 5 borough progression entries")
+        
+        let chiJournal = try await dbManager.fetchExplorationJournalData(citySlug: "chi")
+        XCTAssertEqual(chiJournal.totalClearedHexes, 0)
+        XCTAssertTrue(chiJournal.landmarks.isEmpty, "Non-NYC metros must have empty landmarks list until curated catalogs are added")
+        
+        let nycProgression = try await dbManager.fetchNeighborhoodProgression(citySlug: "nyc")
+        XCTAssertFalse(nycProgression.isEmpty)
+        
+        // Test Boston journal and neighborhood mounting
+        let bosNbhdURL = tempDirectoryURL.appendingPathComponent("mock_bos_stats_neighborhood.sqlite")
+        let dbQueue = try DatabaseQueue(path: bosNbhdURL.path)
+        try await dbQueue.write { db in
+            try db.execute(sql: """
+            CREATE TABLE neighborhood_stats (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                total_hexes INTEGER NOT NULL,
+                centroid_lat REAL NOT NULL,
+                centroid_lng REAL NOT NULL
+            ) WITHOUT ROWID;
+            
+            CREATE TABLE neighborhood_hexes (
+                h3_index TEXT PRIMARY KEY,
+                neighborhood_id TEXT NOT NULL
+            ) WITHOUT ROWID;
+            
+            INSERT INTO neighborhood_stats VALUES
+            ('BOS_BB', 'Back Bay', 2500, 42.3503, -71.0810),
+            ('BOS_BH', 'Beacon Hill', 1200, 42.3588, -71.0707);
+            
+            INSERT INTO neighborhood_hexes VALUES
+            ('8b2a100d2840fff', 'BOS_BB');
+            """)
+        }
+        
+        try await dbManager.hotSwapCityDatabase(transitURL: mockTransitURL, neighborhoodURL: bosNbhdURL)
         
         let bosJournal = try await dbManager.fetchExplorationJournalData(citySlug: "bos")
         XCTAssertEqual(bosJournal.totalClearedHexes, 1)
-        XCTAssertTrue(bosJournal.boroughProgress.isEmpty, "Non-NYC metros must have empty borough progress until M.5.5")
-        XCTAssertTrue(bosJournal.landmarks.isEmpty, "Non-NYC metros must have empty landmarks list until curated catalogs are added")
-        XCTAssertEqual(bosJournal.totalCityHexes, 115000, "Boston total hex estimate must be 115,000")
-        
-        let nycProgression = try await dbManager.fetchNeighborhoodProgression(citySlug: "nyc")
-        XCTAssertNotNil(nycProgression)
+        XCTAssertEqual(bosJournal.boroughProgress.count, 2, "Boston journal should return mounted district progress")
+        XCTAssertEqual(bosJournal.totalCityHexes, 3700, "Boston total city hexes should be dynamically aggregated from stats (2500 + 1200)")
         
         let bosProgression = try await dbManager.fetchNeighborhoodProgression(citySlug: "bos")
-        XCTAssertTrue(bosProgression.isEmpty, "Boston must return empty neighborhood list without leaking NYC neighborhoods")
+        XCTAssertEqual(bosProgression.count, 2)
+        let backBay = bosProgression.first(where: { $0.id == "BOS_BB" })
+        XCTAssertNotNil(backBay)
+        XCTAssertEqual(backBay?.clearedHexes, 1)
+        XCTAssertEqual(backBay?.totalHexes, 2500)
     }
 }

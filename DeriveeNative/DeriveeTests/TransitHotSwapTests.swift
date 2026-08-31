@@ -89,6 +89,56 @@ final class TransitHotSwapTests: XCTestCase {
         XCTAssertNotEqual(oldNycStop.name, "Times Sq-42 St")
     }
     
+    func testDualTransitAndNeighborhoodHotSwap() async throws {
+        let nycNbhdURL = tempDirectoryURL.appendingPathComponent("nyc_neighborhood.sqlite")
+        let bosNbhdURL = tempDirectoryURL.appendingPathComponent("bos_neighborhood.sqlite")
+        
+        let nycNbhdQueue = try DatabaseQueue(path: nycNbhdURL.path)
+        try await nycNbhdQueue.write { db in
+            try db.execute(sql: """
+            CREATE TABLE neighborhood_stats (id TEXT PRIMARY KEY, name TEXT NOT NULL, total_hexes INTEGER, centroid_lat REAL, centroid_lng REAL) WITHOUT ROWID;
+            CREATE TABLE neighborhood_hexes (h3_index TEXT PRIMARY KEY, neighborhood_id TEXT NOT NULL) WITHOUT ROWID;
+            INSERT INTO neighborhood_stats VALUES ('NYC01', 'Greenwich Village', 1000, 40.7336, -74.0027);
+            INSERT INTO neighborhood_hexes VALUES ('8b2a100d3ad4fff', 'NYC01');
+            """)
+        }
+        
+        let bosNbhdQueue = try DatabaseQueue(path: bosNbhdURL.path)
+        try await bosNbhdQueue.write { db in
+            try db.execute(sql: """
+            CREATE TABLE neighborhood_stats (id TEXT PRIMARY KEY, name TEXT NOT NULL, total_hexes INTEGER, centroid_lat REAL, centroid_lng REAL) WITHOUT ROWID;
+            CREATE TABLE neighborhood_hexes (h3_index TEXT PRIMARY KEY, neighborhood_id TEXT NOT NULL) WITHOUT ROWID;
+            INSERT INTO neighborhood_stats VALUES ('BOS01', 'Back Bay', 1500, 42.3503, -71.0810);
+            INSERT INTO neighborhood_hexes VALUES ('8b2a100d2840fff', 'BOS01');
+            """)
+        }
+        
+        let dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true, customTransitURL: nycTransitURL, customNeighborhoodURL: nycNbhdURL)
+        
+        let initialTransitAttached = try await dbManager.isTransitAttached()
+        let initialNbhdAttached = try await dbManager.isNeighborhoodAttached()
+        let initialNbhdPath = try await dbManager.attachedNeighborhoodPath()
+        XCTAssertTrue(initialTransitAttached)
+        XCTAssertTrue(initialNbhdAttached)
+        XCTAssertEqual(initialNbhdPath, nycNbhdURL.path)
+        
+        // Swap both to Boston
+        try await dbManager.hotSwapCityDatabase(transitURL: bosTransitURL, neighborhoodURL: bosNbhdURL)
+        
+        let postSwapTransitAttached = try await dbManager.isTransitAttached()
+        let postSwapNbhdAttached = try await dbManager.isNeighborhoodAttached()
+        let postSwapTransitPath = try await dbManager.attachedTransitPath()
+        let postSwapNbhdPath = try await dbManager.attachedNeighborhoodPath()
+        XCTAssertTrue(postSwapTransitAttached)
+        XCTAssertTrue(postSwapNbhdAttached)
+        XCTAssertEqual(postSwapTransitPath, bosTransitURL.path)
+        XCTAssertEqual(postSwapNbhdPath, bosNbhdURL.path)
+        
+        let bosProgression = try await dbManager.fetchNeighborhoodProgression(citySlug: "bos")
+        XCTAssertEqual(bosProgression.count, 1)
+        XCTAssertEqual(bosProgression.first?.name, "Back Bay")
+    }
+    
     func testHotSwapConcurrentWithBackgroundReads() async throws {
         let dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true, customTransitURL: nycTransitURL)
         

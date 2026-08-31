@@ -178,8 +178,6 @@ final class DynamicBoundsMigrationTests: XCTestCase {
     // MARK: - 4. Strict Land-Only Water Fog Policy & Quiet Water Gliding
     
     func testStrictLandOnlyWaterFogPolicyAndQuietWaterGliding() async throws {
-        let dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true)
-        
         // Attach a mock neighborhood database to test land vs water separation
         let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("derivee_land_test_\(UUID().uuidString).sqlite")
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -196,11 +194,7 @@ final class DynamicBoundsMigrationTests: XCTestCase {
             """)
         }
         
-        // Attach to dbManager pool (detach default neighborhood first if attached)
-        try await dbManager.dbWriter.writeWithoutTransaction { db in
-            try? db.execute(sql: "DETACH DATABASE neighborhood")
-            try db.execute(sql: "ATTACH DATABASE '\(tempURL.path)' AS neighborhood")
-        }
+        let dbManager = SpatialDatabaseManager.makeForTesting(inMemory: true, customNeighborhoodURL: tempURL)
         
         // 1. Test Land Hex: Should be accepted and inserted
         let isLandInserted = try await dbManager.insertDiscoveredHex(h3Index: "land_hex_1", citySlug: "nyc", enforceLandOnly: true)

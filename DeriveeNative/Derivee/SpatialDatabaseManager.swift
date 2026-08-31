@@ -14,6 +14,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     
     private let transitLock = NSLock()
     private var _currentTransitDBURL: URL?
+    private var _currentNeighborhoodDBURL: URL?
     
     public var currentTransitDBURL: URL? {
         get {
@@ -28,19 +29,38 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    public var currentNeighborhoodDBURL: URL? {
+        get {
+            transitLock.lock()
+            defer { transitLock.unlock() }
+            return _currentNeighborhoodDBURL
+        }
+        set {
+            transitLock.lock()
+            defer { transitLock.unlock() }
+            _currentNeighborhoodDBURL = newValue
+        }
+    }
+    
 #if DEBUG
-    public static func makeForTesting(inMemory: Bool = true, customTransitURL: URL? = nil) -> SpatialDatabaseManager {
-        SpatialDatabaseManager(inMemory: inMemory, customTransitURL: customTransitURL)
+    public static func makeForTesting(
+        inMemory: Bool = true,
+        customTransitURL: URL? = nil,
+        customNeighborhoodURL: URL? = nil
+    ) -> SpatialDatabaseManager {
+        SpatialDatabaseManager(inMemory: inMemory, customTransitURL: customTransitURL, customNeighborhoodURL: customNeighborhoodURL)
     }
 #endif
 
-    private init(inMemory: Bool = false, customTransitURL: URL? = nil) {
+    private init(inMemory: Bool = false, customTransitURL: URL? = nil, customNeighborhoodURL: URL? = nil) {
         do {
             let fileManager = FileManager.default
             let appSupportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let databaseURL = appSupportURL.appendingPathComponent("derivee_spatial.sqlite")
             let fallbackTransitURL = appSupportURL.appendingPathComponent("derivee_transit.sqlite")
             let defaultPackTransitURL = CityPackManager.shared.transitDatabaseURL(for: "nyc")
+            let defaultPackNbhdURL = CityPackManager.shared.neighborhoodDatabaseURL(for: "nyc")
+            let fallbackNeighborhoodURL = appSupportURL.appendingPathComponent("derivee_neighborhood.sqlite")
             
             // Ensure bundled NYC pack is unpacked and verified before setting up transit database attachment
             if customTransitURL == nil {
@@ -56,11 +76,19 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["derivee_transit", "transit_delta"], targetURL: fallbackTransitURL, fileManager: fileManager)
                 transitDBURL = fallbackTransitURL
             }
-            let neighborhoodDBURL = appSupportURL.appendingPathComponent("derivee_neighborhood.sqlite")
-            _currentTransitDBURL = transitDBURL
             
-            Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["neighborhood"], targetURL: neighborhoodDBURL, fileManager: fileManager)
-
+            let neighborhoodDBURL: URL
+            if let customNbhd = customNeighborhoodURL {
+                neighborhoodDBURL = customNbhd
+            } else if CityPackManager.isValidDatabase(at: defaultPackNbhdURL) {
+                neighborhoodDBURL = defaultPackNbhdURL
+            } else {
+                Self.copyBundleDatabaseIfNeeded(bundleResourceNames: ["neighborhood"], targetURL: fallbackNeighborhoodURL, fileManager: fileManager)
+                neighborhoodDBURL = fallbackNeighborhoodURL
+            }
+            
+            _currentTransitDBURL = transitDBURL
+            _currentNeighborhoodDBURL = neighborhoodDBURL
             
             var configuration = Configuration()
             configuration.qos = .userInitiated
@@ -77,7 +105,6 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         print("⚠️ Failed to attach transit DB: \(error)")
                     }
                 } else if CityPackManager.isValidDatabase(at: fallbackTransitURL) {
-
                     do {
                         try db.execute(sql: "ATTACH DATABASE '\(fallbackTransitURL.path)' AS transit")
                         print("Successfully attached fallback transit DB at \(fallbackTransitURL.path)")
@@ -87,12 +114,11 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 } else {
                     print("⚠️ No valid transit DB file to attach at \(transitDBURL) or \(fallbackTransitURL)")
                 }
-
                 
-                if fileManager.fileExists(atPath: neighborhoodDBURL.path) {
+                if CityPackManager.isValidDatabase(at: neighborhoodDBURL) || fileManager.fileExists(atPath: neighborhoodDBURL.path) {
                     do {
                         try db.execute(sql: "ATTACH DATABASE '\(neighborhoodDBURL.path)' AS neighborhood")
-                        print("Successfully attached neighborhood database")
+                        print("Successfully attached neighborhood database at \(neighborhoodDBURL.path)")
                     } catch {
                         print("⚠️ Failed to attach neighborhood DB: \(error)")
                     }
@@ -100,7 +126,6 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     print("⚠️ No neighborhood DB file to attach at \(neighborhoodDBURL)")
                 }
             }
-
             
             if inMemory {
                 let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("derivee_test_\(UUID().uuidString).sqlite")
@@ -285,6 +310,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     /// Returns true if the hex is walkable land, or if no neighborhood mask is attached.
     public func isLandHex(h3Index: String, in db: Database) throws -> Bool {
         do {
+            try self.ensureNeighborhoodAttached(in: db)
             let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM neighborhood.neighborhood_hexes WHERE h3_index = ? LIMIT 1", arguments: [h3Index]) ?? 0
             return count > 0
         } catch {
@@ -293,7 +319,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    // MARK: - Transit Database Hot-Swap (Wave L-B.3)
+    // MARK: - Transit & Neighborhood Database Hot-Swap (Wave L-B.3 & M.5.5)
     
     /// Ensures that the connection has the current target transit database attached.
     /// Performs an active health check on the attached transit schema and auto-heals stale or invalidated
@@ -337,7 +363,6 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         var needsReattach = force || (attachedFile != targetURL.path)
         
         // Proactive Health Probe: If transit is ostensibly attached to targetURL, verify the file handle is valid.
-        // If the underlying file was unlinked/replaced on disk, querying PRAGMA transit.table_info(stops) throws disk I/O error (10).
         if !needsReattach && transitEntry != nil {
             do {
                 _ = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stops);")
@@ -354,6 +379,46 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             let escapedPath = targetURL.path.replacingOccurrences(of: "'", with: "''")
             try db.execute(sql: "ATTACH DATABASE '\(escapedPath)' AS transit;")
         }
+    }
+    
+    /// Ensures that the connection has the current target neighborhood database attached.
+    /// Performs an active health check on the attached neighborhood schema and auto-heals stale or invalidated handles.
+    public func ensureNeighborhoodAttached(in db: Database, force: Bool = false) throws {
+        let rows = try Row.fetchAll(db, sql: "PRAGMA database_list")
+        let neighborhoodEntry = rows.first { ($0["name"] as? String) == "neighborhood" }
+        let attachedFile = neighborhoodEntry?["file"] as? String
+        
+        guard let targetURL = currentNeighborhoodDBURL, FileManager.default.fileExists(atPath: targetURL.path) else {
+            if neighborhoodEntry != nil {
+                try? db.execute(sql: "DETACH DATABASE neighborhood;")
+            }
+            return
+        }
+        
+        var needsReattach = force || (attachedFile != targetURL.path)
+        
+        if !needsReattach && neighborhoodEntry != nil {
+            do {
+                _ = try Row.fetchAll(db, sql: "PRAGMA neighborhood.table_info(neighborhood_stats);")
+            } catch {
+                print("⚠️ [SpatialDatabaseManager] Neighborhood schema probe failed (\(error)). Re-attaching handle to \(targetURL.path)")
+                needsReattach = true
+            }
+        }
+        
+        if needsReattach {
+            if neighborhoodEntry != nil {
+                try? db.execute(sql: "DETACH DATABASE neighborhood;")
+            }
+            let escapedPath = targetURL.path.replacingOccurrences(of: "'", with: "''")
+            try db.execute(sql: "ATTACH DATABASE '\(escapedPath)' AS neighborhood;")
+        }
+    }
+    
+    /// Ensures both transit and neighborhood databases are attached.
+    public func ensureDatabasesAttached(in db: Database, force: Bool = false) throws {
+        try ensureTransitAttached(in: db, force: force)
+        try ensureNeighborhoodAttached(in: db, force: force)
     }
 
     
@@ -421,12 +486,31 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    /// Safely hot-swaps the attached `transit.sqlite` database using the Coordinated Two-Phase Barrier protocol.
+    /// Checks if the `neighborhood` database schema is currently attached.
+    public func isNeighborhoodAttached() async throws -> Bool {
+        try await dbWriter.read { db in
+            try self.ensureNeighborhoodAttached(in: db)
+            let attached = try Row.fetchAll(db, sql: "PRAGMA database_list")
+            return attached.contains { ($0["name"] as? String) == "neighborhood" }
+        }
+    }
+    
+    /// Returns the file path of the currently attached `neighborhood` database, if any.
+    public func attachedNeighborhoodPath() async throws -> String? {
+        try await dbWriter.read { db in
+            try self.ensureNeighborhoodAttached(in: db)
+            let attached = try Row.fetchAll(db, sql: "PRAGMA database_list")
+            return attached.first { ($0["name"] as? String) == "neighborhood" }?["file"] as? String
+        }
+    }
+    
+    /// Safely hot-swaps the attached `transit.sqlite` and `neighborhood.sqlite` databases using the Coordinated Two-Phase Barrier protocol.
     /// Drains memory/prepared statements across reader connections and executes DETACH/ATTACH/OPTIMIZE
     /// inside a serialized `writeWithoutTransaction` block to avoid SQLITE_LOCKED and 0xdead10cc.
-    public func hotSwapTransitDatabase(to targetTransitDBURL: URL) async throws {
-        logPipeline("🔄 [SpatialDatabaseManager] Starting Transit DB Hot-Swap to: \(targetTransitDBURL.path)")
-        currentTransitDBURL = targetTransitDBURL
+    public func hotSwapCityDatabase(transitURL: URL, neighborhoodURL: URL? = nil) async throws {
+        logPipeline("🔄 [SpatialDatabaseManager] Starting City DB Hot-Swap (Transit: \(transitURL.path), Neighborhood: \(neighborhoodURL?.path ?? "none"))")
+        currentTransitDBURL = transitURL
+        currentNeighborhoodDBURL = neighborhoodURL
         
         // 1. Drain internal caches and prepared statements across all reader connections in the GRDB pool
         if let pool = dbWriter as? DatabasePool {
@@ -435,12 +519,19 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             queue.releaseMemory()
         }
         
-        // 2. Execute DETACH + ATTACH + PRAGMA transit.optimize; inside serialized writeWithoutTransaction barrier
+        // 2. Execute DETACH + ATTACH + PRAGMA optimize inside serialized writeWithoutTransaction barrier
         try await dbWriter.writeWithoutTransaction { db in
             try self.ensureTransitAttached(in: db, force: true)
+            try self.ensureNeighborhoodAttached(in: db, force: true)
             _ = try? db.execute(sql: "PRAGMA transit.optimize;")
-            logPipeline("✅ [SpatialDatabaseManager] Transit DB Hot-Swap complete & optimizer warmed")
+            _ = try? db.execute(sql: "PRAGMA neighborhood.optimize;")
+            logPipeline("✅ [SpatialDatabaseManager] City DB Hot-Swap complete & optimizers warmed")
         }
+    }
+    
+    /// Convenience wrapper for transit-only hot swap.
+    public func hotSwapTransitDatabase(to targetTransitDBURL: URL) async throws {
+        try await hotSwapCityDatabase(transitURL: targetTransitDBURL, neighborhoodURL: currentNeighborhoodDBURL)
     }
     
     // Asynchronous write
@@ -653,22 +744,28 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     func fetchNeighborhoodProgression(citySlug: String = "nyc") async throws -> [NeighborhoodProgress] {
-        guard citySlug == "nyc" else {
-            // Wave M.5.5 will compile and dynamically attach per-city neighborhood datasets (e.g. Boston, Chicago)
-            return []
-        }
         let table = Self.tableName(for: citySlug)
         return try await dbWriter.read { db in
-            let statsRows = try Row.fetchAll(db, sql: "SELECT id, name, total_hexes, centroid_lat, centroid_lng FROM neighborhood.neighborhood_stats")
+            try self.ensureNeighborhoodAttached(in: db)
+            
+            let statsRows: [Row]
+            do {
+                statsRows = try Row.fetchAll(db, sql: "SELECT id, name, total_hexes, centroid_lat, centroid_lng FROM neighborhood.neighborhood_stats")
+            } catch {
+                return []
+            }
+            
+            guard !statsRows.isEmpty else { return [] }
+            
             let hasTable = try db.tableExists(table)
             let clearedRows: [Row]
             if hasTable {
-                clearedRows = try Row.fetchAll(db, sql: """
+                clearedRows = (try? Row.fetchAll(db, sql: """
                 SELECT nh.neighborhood_id, COUNT(eh.h3_index) as cleared_hexes
                 FROM \(table) eh
                 CROSS JOIN neighborhood.neighborhood_hexes nh ON eh.h3_index = nh.h3_index
                 GROUP BY nh.neighborhood_id
-                """)
+                """)) ?? []
             } else {
                 clearedRows = []
             }
@@ -708,13 +805,14 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     
     func fetchNeighborhoodName(for h3Index: String) async throws -> String? {
         return try await dbWriter.read { db in
+            try self.ensureNeighborhoodAttached(in: db)
             let sql = """
             SELECT ns.name
             FROM neighborhood.neighborhood_hexes nh
             JOIN neighborhood.neighborhood_stats ns ON nh.neighborhood_id = ns.id
             WHERE nh.h3_index = ?
             """
-            return try String.fetchOne(db, sql: sql, arguments: [h3Index])
+            return try? String.fetchOne(db, sql: sql, arguments: [h3Index])
         }
     }
     
@@ -730,11 +828,12 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         
         let cityTotalHexEstimates: [String: Int] = [
             "nyc": 362118,
-            "bos": 115000,
+            "bos": 56006,
             "chi": 220000
         ]
         
         return try await dbWriter.read { db in
+            try self.ensureNeighborhoodAttached(in: db)
             let hasTable = try db.tableExists(table)
             // 1. Fetch all explored hexes and discovered POIs
             let exploredHexes: Set<String>
@@ -750,17 +849,18 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             var totalExploredNbhdsCount = 0
             var totalNbhdsCount = 0
             
-            if isNYC {
-                // 2. Fetch neighborhood stats and cleared counts via fast indexed join for NYC
-                let statsRows = try Row.fetchAll(db, sql: "SELECT id, name, total_hexes FROM neighborhood.neighborhood_stats")
+            // 2. Fetch neighborhood stats and cleared counts via fast indexed join
+            let statsRows: [Row] = (try? Row.fetchAll(db, sql: "SELECT id, name, total_hexes FROM neighborhood.neighborhood_stats")) ?? []
+            
+            if !statsRows.isEmpty {
                 let clearedRows: [Row]
                 if hasTable {
-                    clearedRows = try Row.fetchAll(db, sql: """
+                    clearedRows = (try? Row.fetchAll(db, sql: """
                     SELECT nh.neighborhood_id, COUNT(eh.h3_index) as cleared_hexes
                     FROM \(table) eh
                     CROSS JOIN neighborhood.neighborhood_hexes nh ON eh.h3_index = nh.h3_index
                     GROUP BY nh.neighborhood_id
-                    """)
+                    """)) ?? []
                 } else {
                     clearedRows = []
                 }
@@ -772,52 +872,91 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     clearedMap[nid] = count
                 }
                 
-                var boroughClearedMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
-                var boroughTotalMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
-                var boroughNbhdCountMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
-                var boroughExploredNbhdCountMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
-                var aggregatedCityHexes = 0
-                
-                for row in statsRows {
-                    let id: String = row["id"]
-                    let total: Int = row["total_hexes"]
-                    let bCode = String(id.prefix(2)).uppercased()
-                    let cleared = clearedMap[id] ?? 0
+                if isNYC {
+                    var boroughClearedMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
+                    var boroughTotalMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
+                    var boroughNbhdCountMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
+                    var boroughExploredNbhdCountMap: [String: Int] = ["MN": 0, "BK": 0, "QN": 0, "BX": 0, "SI": 0]
+                    var aggregatedCityHexes = 0
                     
-                    boroughTotalMap[bCode, default: 0] += total
-                    boroughClearedMap[bCode, default: 0] += cleared
-                    boroughNbhdCountMap[bCode, default: 0] += 1
-                    totalNbhdsCount += 1
-                    
-                    if cleared > 0 {
-                        boroughExploredNbhdCountMap[bCode, default: 0] += 1
-                        totalExploredNbhdsCount += 1
+                    for row in statsRows {
+                        let id: String = row["id"]
+                        let total: Int = row["total_hexes"]
+                        let bCode = String(id.prefix(2)).uppercased()
+                        let cleared = clearedMap[id] ?? 0
+                        
+                        boroughTotalMap[bCode, default: 0] += total
+                        boroughClearedMap[bCode, default: 0] += cleared
+                        boroughNbhdCountMap[bCode, default: 0] += 1
+                        totalNbhdsCount += 1
+                        
+                        if cleared > 0 {
+                            boroughExploredNbhdCountMap[bCode, default: 0] += 1
+                            totalExploredNbhdsCount += 1
+                        }
+                        
+                        aggregatedCityHexes += total
                     }
                     
-                    aggregatedCityHexes += total
-                }
-                
-                if aggregatedCityHexes > 0 {
-                    totalCityHexes = aggregatedCityHexes
-                }
-                
-                let boroughNames: [(code: String, name: String)] = [
-                    ("MN", "Manhattan"),
-                    ("BK", "Brooklyn"),
-                    ("QN", "Queens"),
-                    ("BX", "Bronx"),
-                    ("SI", "Staten Island")
-                ]
-                
-                boroughProgressList = boroughNames.map { item in
-                    BoroughProgress(
-                        id: item.code,
-                        name: item.name,
-                        clearedHexes: boroughClearedMap[item.code] ?? 0,
-                        totalHexes: max(1, boroughTotalMap[item.code] ?? 1),
-                        neighborhoodCount: boroughNbhdCountMap[item.code] ?? 0,
-                        exploredNeighborhoodCount: boroughExploredNbhdCountMap[item.code] ?? 0
-                    )
+                    if aggregatedCityHexes > 0 {
+                        totalCityHexes = aggregatedCityHexes
+                    }
+                    
+                    let boroughNames: [(code: String, name: String)] = [
+                        ("MN", "Manhattan"),
+                        ("BK", "Brooklyn"),
+                        ("QN", "Queens"),
+                        ("BX", "Bronx"),
+                        ("SI", "Staten Island")
+                    ]
+                    
+                    boroughProgressList = boroughNames.map { item in
+                        BoroughProgress(
+                            id: item.code,
+                            name: item.name,
+                            clearedHexes: boroughClearedMap[item.code] ?? 0,
+                            totalHexes: max(1, boroughTotalMap[item.code] ?? 1),
+                            neighborhoodCount: boroughNbhdCountMap[item.code] ?? 0,
+                            exploredNeighborhoodCount: boroughExploredNbhdCountMap[item.code] ?? 0
+                        )
+                    }
+                } else {
+                    // Non-NYC metros (e.g. Boston): Group neighborhoods and aggregate total hexes
+                    var aggregatedCityHexes = 0
+                    totalNbhdsCount = statsRows.count
+                    for row in statsRows {
+                        let id: String = row["id"]
+                        let total: Int = row["total_hexes"]
+                        let cleared = clearedMap[id] ?? 0
+                        aggregatedCityHexes += total
+                        if cleared > 0 {
+                            totalExploredNbhdsCount += 1
+                        }
+                    }
+                    
+                    if aggregatedCityHexes > 0 {
+                        totalCityHexes = aggregatedCityHexes
+                    }
+                    
+                    boroughProgressList = statsRows.map { row in
+                        let id: String = row["id"]
+                        let name: String = row["name"]
+                        let total: Int = row["total_hexes"]
+                        let cleared = clearedMap[id] ?? 0
+                        return BoroughProgress(
+                            id: id,
+                            name: name,
+                            clearedHexes: cleared,
+                            totalHexes: max(1, total),
+                            neighborhoodCount: 1,
+                            exploredNeighborhoodCount: cleared > 0 ? 1 : 0
+                        )
+                    }.sorted {
+                        let p1 = Double($0.clearedHexes) / Double($0.totalHexes)
+                        let p2 = Double($1.clearedHexes) / Double($1.totalHexes)
+                        if p1 != p2 { return p1 > p2 }
+                        return $0.name < $1.name
+                    }
                 }
             }
             

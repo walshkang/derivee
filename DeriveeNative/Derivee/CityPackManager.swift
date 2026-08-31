@@ -42,6 +42,10 @@ public final class CityPackManager: Sendable {
         packDirectoryURL(for: slug).appendingPathComponent("transit.sqlite")
     }
     
+    public func neighborhoodDatabaseURL(for slug: String) -> URL {
+        packDirectoryURL(for: slug).appendingPathComponent("neighborhood.sqlite")
+    }
+    
     public func transitLinesGeoJSONURL(for slug: String) -> URL {
         packDirectoryURL(for: slug).appendingPathComponent("transit-lines.geojson")
     }
@@ -164,7 +168,15 @@ public final class CityPackManager: Sendable {
             try fileManager.copyItem(at: geojsonBundleURL, to: linesGeoJSONURL)
         }
         
-        // 3. Write default CityConfig
+        // 3. Copy neighborhood database if available
+        let nycNeighborhoodURL = neighborhoodDatabaseURL(for: "nyc")
+        if !fileManager.fileExists(atPath: nycNeighborhoodURL.path) {
+            if let nbhdBundleURL = Bundle.main.url(forResource: "neighborhood", withExtension: "sqlite") {
+                try? fileManager.copyItem(at: nbhdBundleURL, to: nycNeighborhoodURL)
+            }
+        }
+        
+        // 4. Write default CityConfig
         let defaultConfig = CityConfig.nycDefault
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -257,9 +269,11 @@ public final class CityPackManager: Sendable {
         
         // If this pack replaces the currently attached transit database, trigger hot-swap to safely rebind connection handles
         let targetTransitURL = targetDir.appendingPathComponent("transit.sqlite")
+        let targetNbhdURL = targetDir.appendingPathComponent("neighborhood.sqlite")
+        let validTargetNbhdURL = fileManager.fileExists(atPath: targetNbhdURL.path) ? targetNbhdURL : nil
         if SpatialDatabaseManager.shared.currentTransitDBURL?.path == targetTransitURL.path {
             Task {
-                try? await SpatialDatabaseManager.shared.hotSwapTransitDatabase(to: targetTransitURL)
+                try? await SpatialDatabaseManager.shared.hotSwapCityDatabase(transitURL: targetTransitURL, neighborhoodURL: validTargetNbhdURL)
             }
         }
         return config
@@ -296,6 +310,8 @@ public final class CityPackManager: Sendable {
             guard let config = try? loadConfig(for: slug) else { return nil }
             let dirURL = packDirectoryURL(for: slug)
             let transitURL = transitDatabaseURL(for: slug)
+            let nbhdURL = neighborhoodDatabaseURL(for: slug)
+            let validNbhdURL = fileManager.fileExists(atPath: nbhdURL.path) ? nbhdURL : nil
             let linesURL = transitLinesGeoJSONURL(for: slug)
             let breakdown = calculateDiskBreakdown(slug: slug)
             let isBundled = (slug == "nyc")
@@ -305,6 +321,7 @@ public final class CityPackManager: Sendable {
                 config: config,
                 packDirectoryURL: dirURL,
                 transitDatabaseURL: transitURL,
+                neighborhoodDatabaseURL: validNbhdURL,
                 transitLinesGeoJSONURL: fileManager.fileExists(atPath: linesURL.path) ? linesURL : nil,
                 totalDiskSizeBytes: breakdown.totalBytes,
                 isBundled: isBundled,
@@ -331,19 +348,22 @@ public final class CityPackManager: Sendable {
     
     public func calculateDiskBreakdown(slug: String) -> CityPackDiskBreakdown {
         let transitURL = transitDatabaseURL(for: slug)
+        let nbhdURL = neighborhoodDatabaseURL(for: slug)
         let linesURL = transitLinesGeoJSONURL(for: slug)
         let configPath = configURL(for: slug)
         
         let transitSize = (try? fileManager.attributesOfItem(atPath: transitURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        let nbhdSize = (try? fileManager.attributesOfItem(atPath: nbhdURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         let linesSize = (try? fileManager.attributesOfItem(atPath: linesURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         let configSize = (try? fileManager.attributesOfItem(atPath: configPath.path)[.size] as? NSNumber)?.int64Value ?? 0
         
         let totalSize = calculatePackDiskSize(slug: slug)
-        let knownSize = transitSize + linesSize + configSize
+        let knownSize = transitSize + nbhdSize + linesSize + configSize
         let otherSize = max(0, totalSize - knownSize)
         
         return CityPackDiskBreakdown(
             transitDatabaseBytes: transitSize,
+            neighborhoodDatabaseBytes: nbhdSize,
             transitLinesGeoJSONBytes: linesSize,
             configBytes: configSize,
             otherBytes: otherSize,
@@ -370,7 +390,7 @@ public final class CityPackManager: Sendable {
         return attributions
     }
     
-    // MARK: - Hot-Swap Integration (Wave L-B.3)
+    // MARK: - Hot-Swap Integration (Wave L-B.3 & M.5.5)
     
     /// Coordinates hot-swapping the active city pack database in SpatialDatabaseManager.
     @discardableResult
@@ -380,7 +400,9 @@ public final class CityPackManager: Sendable {
         guard fileManager.fileExists(atPath: transitURL.path) else {
             throw CityPackError.missingRequiredFile(name: "transit.sqlite")
         }
-        try await databaseManager.hotSwapTransitDatabase(to: transitURL)
+        let nbhdURL = neighborhoodDatabaseURL(for: slug)
+        let validNbhdURL = fileManager.fileExists(atPath: nbhdURL.path) ? nbhdURL : nil
+        try await databaseManager.hotSwapCityDatabase(transitURL: transitURL, neighborhoodURL: validNbhdURL)
         return config
     }
     

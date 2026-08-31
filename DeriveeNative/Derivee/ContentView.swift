@@ -400,11 +400,14 @@ struct ContentView: View {
         Task {
             // Phase 2: GRDB Serialized Write Barrier & Hot-Swap
             let packTransitURL = CityPackManager.shared.transitDatabaseURL(for: slug)
+            let packNbhdURL = CityPackManager.shared.neighborhoodDatabaseURL(for: slug)
+            let validNbhdURL = FileManager.default.fileExists(atPath: packNbhdURL.path) ? packNbhdURL : nil
+            
             if FileManager.default.fileExists(atPath: packTransitURL.path) {
                 do {
-                    try await SpatialDatabaseManager.shared.hotSwapTransitDatabase(to: packTransitURL)
+                    try await SpatialDatabaseManager.shared.hotSwapCityDatabase(transitURL: packTransitURL, neighborhoodURL: validNbhdURL)
                 } catch {
-                    logPipeline("⚠️ [ContentView] hotSwapTransitDatabase failed: \(error)")
+                    logPipeline("⚠️ [ContentView] hotSwapCityDatabase failed: \(error)")
                 }
             }
             

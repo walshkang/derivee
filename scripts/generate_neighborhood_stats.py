@@ -56,7 +56,12 @@ CITY_DATA_SOURCES = {
     "bos": {
         "name": "Boston",
         "bbox": (42.22, -71.20, 42.45, -70.92),
-        "bridge_file": "bos_pedestrian_bridges.geojson"
+        "neighborhood_url": "https://bostonopendata-boston.opendata.arcgis.com/datasets/boston::boston-neighborhoods.geojson",
+        "neighborhood_file": "bos_neighborhoods.geojson",
+        "water_file": "bos_water.geojson",
+        "bridge_file": "bos_pedestrian_bridges.geojson",
+        "id_prop": "id",
+        "name_prop": "Name"
     }
 }
 

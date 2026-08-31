@@ -354,3 +354,50 @@ def test_database_schema_and_optimization(db_connection):
     # Verify sqlite_stat1
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_stat1';")
     assert cursor.fetchone() is not None, "sqlite_stat1 table must exist for query optimizer statistics!"
+
+
+def test_boston_pipeline_compilation_and_database_generation(tmp_path):
+    """
+    Validates end-to-end processing of Boston neighborhood data using
+    the boolean CSG formula, H3 polyfilling, and SQLite emission.
+    """
+    from generate_neighborhood_stats import process_city_neighborhoods
+    
+    cache_dir = os.path.join(os.path.dirname(__file__), "cache")
+    output_db = str(tmp_path / "bos_neighborhood.sqlite")
+    output_json = str(tmp_path / "bos_neighborhood.json")
+
+    stats, hexes = process_city_neighborhoods(
+        city_slug="bos",
+        cache_dir=cache_dir,
+        output_db=output_db,
+        output_json=output_json,
+        offline=True
+    )
+
+    assert len(stats) >= 20, f"Boston must have at least 20 neighborhoods, got {len(stats)}"
+    assert len(hexes) > 20000, f"Boston hexes must be substantial (>20,000), got {len(hexes)}"
+
+    names = [s["name"] for s in stats]
+    assert "Back Bay" in names or any("Back Bay" in n for n in names)
+    assert "Beacon Hill" in names or any("Beacon Hill" in n for n in names)
+    assert "South End" in names or any("South End" in n for n in names)
+
+    # Verify SQLite schema of emitted Boston database
+    conn = sqlite3.connect(output_db)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, sql FROM sqlite_master WHERE type='table';")
+    tables = {row[0]: row[1] for row in cursor.fetchall()}
+    assert "neighborhood_stats" in tables
+    assert "neighborhood_hexes" in tables
+    assert "WITHOUT ROWID" in tables["neighborhood_stats"].upper()
+    assert "WITHOUT ROWID" in tables["neighborhood_hexes"].upper()
+
+    cursor.execute("SELECT COUNT(*) FROM neighborhood_stats;")
+    assert cursor.fetchone()[0] == len(stats)
+
+    cursor.execute("SELECT COUNT(*) FROM neighborhood_hexes;")
+    assert cursor.fetchone()[0] == len(hexes)
+
+    conn.close()
+
