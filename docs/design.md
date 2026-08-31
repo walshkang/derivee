@@ -164,10 +164,12 @@ The map uses a 3-tier state to separate where the user **is**, where they **have
 | Tier | Name | Visual Treatment |
 |:---|:---|:---|
 | **Hidden** | Unexplored | Matte graphite clouds (Day: `#1C1C1E`) or OLED Black (Night: `#000000`) with high-blur translucency (`fill-opacity-transition: { duration: 300 }`). No base map details, pins, or labels visible beneath. |
-| **Explored** | Cleared but Inactive | Base MapTiler `streets-v2` style rendered through a permanently dimmed raster layer (`rasterSaturation: -1.0`). H3 hex outlines display as faint, semi-transparent borders. **No POI markers or labels.** |
-| **Active** | Current Vicinity (200m) | Full-color, unmasked satellite/street rendering within a 200m radius of the user's live GPS position. Street names, building footprints, and Ghost POI nodes render here and **only** here. |
+| **Explored** | Cleared but Inactive | Base MapTiler Streets v2 vector style with full-color building footprints, street grid, and park fills. H3 hex outlines display as faint, semi-transparent amber borders (optional via Settings). **No commercial POI markers or labels** — transit station POIs from the native runtime layer are visible if the station hex is in `explored_hexes`. |
+| **Active** | Current Vicinity (200m) | Full-color MapTiler Streets v2 vector rendering within a 200m radius of the user's live GPS position. Street names, building footprints, commercial POI labels, and Ghost POI nodes render here and **only** here. |
 
 > **Strict Rule:** If a map element (pin, label, text, POI) is outside the 200m Active Vicinity Bubble, it **must** be hidden. No exceptions.
+>
+> **Architectural Note (Wave J.1):** Satellite imagery raster layers and 3D terrain tilting were removed in Wave J.1. The map renders strictly in 2D top-down (`pitch = 0`) with MapTiler Streets v2 vector tiles and flat 2D building footprints. This ensures 1:1 geographic alignment between the H3 Fog of War polygon mask and the underlying cartography.
 
 ### 2.1 Zoom Level Framework & Smart Zoom Cartography
 
@@ -182,21 +184,51 @@ Standard cartographic data (streets, parks, travel direction) is handled entirel
 
 > **Selected Route Trace:** When any route or train is inspected in Screen 2 (`TransitRevealSheet`), only that specific route's physical polyline illuminates with full color saturation and 6px casing across the map through the fog, dissolving on dismiss.
 
-### 2.2 The 6-Layer Rendering Stack
+### 2.2 The MapLibre Layer Stack
 
-The MapLibre layer stack **must** follow this exact Z-index order. See [architecture.md §8](file:///Volumes/T7ssd/derivee/docs/architecture.md) for implementation specifics.
+The MapLibre layer stack **must** follow this exact Z-index order. All layers are defined in the bundled `composite_style.json` (vector-only, no raster satellite layers) or injected as runtime `MLNShapeSource` / `MLNStyleLayer` objects. See [architecture.md §8](file:///Volumes/T7ssd/derivee/docs/architecture.md) for implementation specifics and [diagrams.md §4](file:///Volumes/T7ssd/derivee/docs/diagrams.md) for the full annotated stack.
 
-| Z-Index | Layer Name | Purpose |
-|:---|:---|:---|
-| 1 | The Explored Base | `RasterLayer` — satellite imagery permanently dimmed (`rasterSaturation: -1.0`, reduced brightness). |
-| 2 | The Visible Base | Full-color satellite `RasterLayer`, masked strictly by the user's active line-of-sight polygon. |
-| 3 | The Sub-Context | Faint vectors (major arteries, coastlines) with zero text labels. |
-| 4 | The Cloud Layer | The 50km bounding box fog polygon. Soft, translucent, high blur radius. `fill-opacity-transition: { duration: 300 }`. |
-| 5 | The Holes (DDS) | Unlocked H3 hexes (Explored + Active) filtered via MapLibre `['match']` expression on `fill-opacity`. |
-| 6 | The Vicinity Bubble | Active 200m radius rendering street names, transit nodes, and Ghost POI geometry. |
+```
+▲ Top of Z-Stack
+│
+├── Layer 6: POI Hierarchy (poi-source)
+│   ├── [Z: 6c] poi-archive-layer  (CircleLayer: r=4.5, amber #FFB300, opacity=0.85, minZoom=11.0)
+│   ├── [Z: 6b] poi-active-layer   (SymbolLayer: subway diamond / bus dot)
+│   └── [Z: 6a] poi-lure-layer     (CircleLayer: r=12..18 pulse, amber glow)
+│
+├── Layer 5: Nearby Bus Stops (nearby-bus-stops-source)
+│   └── nearby-bus-stops-layer     (CircleLayer: 6pt cyan #00A1DE with 1.5pt white stroke)
+│
+├── Layer 4: Ephemeral Route Inspection (ephemeral-route-source)
+│   ├── [Z: 4b] ephemeral-route-layer         (LineLayer: 4pt MTA route color)
+│   └── [Z: 4a] ephemeral-route-casing-layer  (LineLayer: 6pt semi-transparent silver casing)
+│
+├── Layer 3: Transient Hex Unlock & Pulse (transient-hex-source & transient-pulse-source)
+│   ├── transient-pulse-layer (CircleLayer: 0..80pt amber expanding wave, 1.2s easeOut)
+│   └── transient-hex-layer   (FillLayer: 0.3 -> 0.0 opacity flash on new hex unlock)
+│
+├── Layer 2: The Fog Mask (fog-source)
+│   ├── [Z: 2b] fog-border-layer (LineLayer: 1.5pt #FFB300 amber boundary outline)
+│   └── [Z: 2a] cloud-layer      (FillLayer: CW bounding polygon with CW H3 hex interior
+│       │                          hole cutouts and interior fog islands)
+│       └── Opacity: 0.60..0.98 (@AppStorage) | Day: #1C1C1E | Night/OLED: #000000
+│
+├── Layer 1.5: Transit Thoroughfares & Sub-Fog Bullets (subway-lines-source)
+│   ├── [Z: 1.5c] subway-station-bullets-layer (CircleLayer: 4.5pt adaptive fill & stroke)
+│   ├── [Z: 1.5b] subway-lines-layer           (LineLayer: 3.0pt dynamic route color)
+│   └── [Z: 1.5a] subway-lines-casing-layer    (LineLayer: 4.5pt day/night adaptive casing)
+│
+└── Layer 1: Base Vector Style
+    └── MapTiler Streets v2 (coastlines, water, street grid, typography,
+        and full-zoom 2D building footprints; 3D extrusions disabled)
+▼ Bottom of Z-Stack
+```
+
+> [!NOTE]
+> **Fog Bounding Polygon:** The current implementation uses a city-scoped bounding polygon loaded from the active `CityConfig.bounds`. Wave M.5.1 (`WM5.1-GLOBAL-FOG`) will replace this with a global world outer polygon covering `[-85.0511, 85.0511]` latitude, eliminating artificial rectangular fog edges at city boundaries.
 
 > [!IMPORTANT]
-> **Cold-Start Fog Contract:** On app launch after a force-quit, the Cloud Layer (Z-Index 4) must render with all previously explored hex holes visible **immediately** when the map finishes loading. The `SpatialStore` fog polygon computation must complete before or synchronize with MapLibre's `didFinishLoading` callback. A solid, hole-less fog flash on cold start is a rendering bug. See [architecture.md §5.2](file:///Volumes/T7ssd/derivee/docs/architecture.md) for the synchronization mechanism.
+> **Cold-Start Fog Contract:** On app launch after a force-quit, the Cloud Layer (Layer 2) must render with all previously explored hex holes visible **immediately** when the map finishes loading. The `SpatialStore` fog polygon computation must complete before or synchronize with MapLibre's `didFinishLoading` callback. A solid, hole-less fog flash on cold start is a rendering bug. See [architecture.md §5.2](file:///Volumes/T7ssd/derivee/docs/architecture.md) for the synchronization mechanism.
 
 ---
 
@@ -250,7 +282,7 @@ The app has exactly **four** screens. If a screen is not enumerated below, the a
 
 **Definition of Done:**
 - [ ] Hydration flag is stored in GRDB, not UserDefaults.
-- [ ] Offline tile region downloads successfully for the 50km bounding box.
+- [ ] Offline tile region downloads successfully for the active city bounding polygon.
 - [ ] Transit delta file decompresses and attaches to the local database.
 - [ ] No map is rendered until hydration is verified complete.
 - [ ] Subsequent launches skip this screen entirely (direct to Screen 1).

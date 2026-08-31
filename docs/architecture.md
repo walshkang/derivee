@@ -26,13 +26,13 @@ We use `GRDB.swift` to manage the database connection.
 - **QoS Configuration:** `Configuration.qos` is set to `.userInitiated` to prevent priority inversion. Without this, GRDB's internal `Pool` barrier and wait queues default to `.default` QoS, causing the main thread (`User-Interactive`) to hang on `Pool.get()` when background writes hold connections.
 
 ### 2.2 Schema & Region Tracking
-The `explored_hexes` table tracks all discovered H3 indices.
+Per-city exploration tables track all discovered H3 indices. Since Wave L-B.2, each city has its own table (`explored_hexes_nyc`, `explored_hexes_bos`, etc.) created dynamically by `SpatialDatabaseManager`. Legacy installs undergo zero-downtime migration via `ALTER TABLE explored_hexes RENAME TO explored_hexes_nyc;` on first launch.
 ```sql
-CREATE TABLE explored_hexes (
+CREATE TABLE explored_hexes_{slug} (
     h3_index TEXT PRIMARY KEY
 );
 ```
-Standard SQLite ROWID tables ensure that SQLite update hooks and GRDB `ValueObservation` region tracking reliably detect every row insertion across threads.
+Standard SQLite ROWID tables ensure that SQLite update hooks and GRDB `ValueObservation` region tracking reliably detect every row insertion across threads. Background GPS tracking routes new hexes to the correct city table based on bounding-box coordinate math, regardless of which city is actively viewed in the UI.
 
 ### 2.3 Reactive Observation
 The `SpatialStore` (`@Observable`) acts as the bridge between GRDB and SwiftUI. It uses GRDB's `ValueObservation` with `ExploredHex: TableRecord, FetchableRecord` to track changes in the `explored_hexes` table. When new hexes are written by the background `AmbientTrackingEngine`, `ValueObservation` fires `onChange`, which calls `recomputeFogShape()` inside a `Task.detached(priority: .userInitiated)`. The resulting `MLNPolygon` is set on `currentFogShape` on `MainActor`, which SwiftUI observes via `@Observable`, triggering `MapView.updateUIView()` to push the new shape into the MapLibre fog source.
@@ -47,7 +47,15 @@ When the Swift client mounts a City Pack via `ATTACH DATABASE '<path>/transit.sq
 iOS terminates backgrounded processes with exception code `0xdead10cc` if an application holds an open file lock on an SQLite database (under WAL or attached schemas) during suspension. The `CityPackManager` hot-swap protocol executes a **Coordinated Two-Phase Barrier**: Phase 1 tears down all in-flight foreground transit queries (`TransitRealtimeService` feed polling, `NearbyBusesCapsule` spatial scans, `TransitRevealSheet` if open), then Phase 2 invokes `dbPool.releaseMemory()` followed by the `DETACH`/`ATTACH` sequence inside a serial `dbWriter.writeWithoutTransaction` barrier. See [docs/multi-city.md §4.1](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full reference implementation.
 
 ### 2.7 `WITHOUT ROWID` Applicability Nuance
-The prohibition on `WITHOUT ROWID` tables (documented in AGENTS.md) applies strictly to **mutable tables in the primary database** that are observed by GRDB `ValueObservation` (e.g., `explored_hexes`). `WITHOUT ROWID` breaks the SQLite update hook region tracking that GRDB relies on to fire `onChange` callbacks. However, **static read-only lookup tables in attached databases** (e.g., `transit.stop_resolution`) are never mutated or observed by `ValueObservation`, and benefit from `WITHOUT ROWID`'s clustered B-Tree leaf storage for $\mathcal{O}(1)$ point reads.
+The prohibition on `WITHOUT ROWID` tables (documented in AGENTS.md) applies strictly to **mutable tables in the primary database** that are observed by GRDB `ValueObservation` (e.g., `explored_hexes_{slug}`). `WITHOUT ROWID` breaks the SQLite update hook region tracking that GRDB relies on to fire `onChange` callbacks. However, **static read-only lookup tables in attached databases** (e.g., `transit.stop_resolution`) are never mutated or observed by `ValueObservation`, and benefit from `WITHOUT ROWID`'s clustered B-Tree leaf storage for $\mathcal{O}(1)$ point reads.
+
+### 2.8 H3 Index Type Conventions
+H3 indices have a dual representation across the codebase:
+- **SQLite layer:** Stored as **15-character hexadecimal TEXT strings** (e.g., `"8b2a100d213fff"`). This preserves human readability in database inspection and ensures lossless storage via `INSERT OR IGNORE`. All `explored_hexes_{slug}` tables, GRDB `TableRecord` types, and reactive `ValueObservation` queries use string H3 indices.
+- **Native Swift / C++ / Metal layer:** Handled as **`UInt64` / `uint64_t` / `H3Index`** for performance-critical paths. Required for GPU `MTLBuffer` open-addressing hash tables ([Doc 06](file:///Volumes/T7ssd/derivee/docs/research/06_sparse_gpu_spatial_memory_h3_buffering.md)), C++ RAPTOR timetable packed structs ([Doc 10](file:///Volumes/T7ssd/derivee/docs/research/10_hybrid_raptor_algorithm_cpp20_interop.md)), and bitwise parent LOD masking in Metal fragment shaders.
+
+> [!NOTE]
+> The historical ban on 64-bit integer H3 casting was a JavaScript-era guardrail (IEEE-754 `Number` silently truncates 64-bit integers to 53-bit precision). This restriction does **not** apply to native Swift, C++, or Metal code paths.
 
 ---
 
@@ -129,7 +137,7 @@ All `recomputeFogShape()` invocations run inside `Task.detached(priority: .userI
 
 ### 5.4 Subway Thoroughfares, Station Markers & Transit Context (Waves J.13 & J.15)
 To orient the explorer without spoiling unexplored territory:
-- **High-Precision GTFS Track Geometries:** Complete NYC Subway track alignments (`subway-lines.geojson` loaded via `MtaSubwayNetworkData`) render beneath the fog layer with day/night adaptive casings (silver `#FFFFFF` / slate `#222433`) and MTA agency colors. All 11 trunk line groups follow exact street curvature and align with 0.0m delta to all 496 subway station points.
+- **High-Precision GTFS Track Geometries:** City-specific transit line alignments (loaded via `TransitLineLoader` from per-city pack `transit-lines.geojson`, replacing the retired `MtaSubwayNetworkData` static geometry since Wave L-D.1) render beneath the fog layer with day/night adaptive casings (silver `#FFFFFF` / slate `#222433`) and agency route colors. Track geometries follow exact street curvature and align with 0.0m delta to station points.
 - Subway thoroughfares glow vibrantly where fog has been uncovered, while providing subtle orienting context under the fog.
 - **Sub-Fog Subway Station Bullets (`subway-station-bullets-layer`):** All ~496 NYC subway station complexes render beneath the fog as 4.5pt circle discs with theme-adaptive fill/casing.
 - **Database Route Mapping:** All 496 subway stations in `derivee_transit.sqlite` store their exact serving lines in `stops.routes` (e.g. `101` -> `1`, `120` -> `1,2,3`, `635` -> `4,5,6`), queried asynchronously by `SpatialDatabaseManager.fetchStopDetails`.
@@ -202,14 +210,14 @@ This section defines the implementation parameters and algorithmic constraints e
 - **Mandated Implementation:**
   - **Zero-Pitch Hard-Lock:** `mapView.allowsTilting = false` on `MLNMapView`. In `MLNMapViewDelegate.mapView(_:shouldChangeFrom:to:reason:)`, reject any camera transition where `reason.contains(.gestureTilt)` or `newCamera.pitch > 0.001`.
   - **Architectural Flat Footprints:** Buildings render strictly as flat 2D polygons across all zoom levels ($z = 13..24$) via the `Building` fill layer in `composite_style.json`. The `Building 3D` extrusion layer is disabled (`visibility: "none"`).
-  - **Boundary Damping & Rollback:** Intercept camera changes via `CameraBounds.shouldAllowCameraChange`. Mathematically evaluate if the projected `newCamera.centerCoordinate` falls outside the active NYC envelope ($40.0^\circ\text{N} \le \text{lat} \le 41.5^\circ\text{N}$, $-74.5^\circ\text{W} \le \text{lon} \le -73.0^\circ\text{W}$). For gestures (`.gesturePan`, `.gesturePinch`, `.gestureRotate`), allow temporary rubber-band overflow up to $0.35^\circ$ (~38km), then asynchronously animate a smooth corrective rollback to hard bounds using `mapView.setCamera(correctedCamera, withDuration: 0.4, animationTimingFunction: .easeOut)` enforcing `pitch: 0.0`.
+  - **Boundary Damping & Rollback:** Intercept camera changes via `CameraBounds.shouldAllowCameraChange`. Mathematically evaluate if the projected `newCamera.centerCoordinate` falls outside the active city envelope (loaded dynamically from `CityConfig.bounds`). For gestures (`.gesturePan`, `.gesturePinch`, `.gestureRotate`), allow temporary rubber-band overflow up to $0.05^\circ$ (~5km), then asynchronously animate a smooth corrective rollback to hard bounds using `mapView.setCamera(correctedCamera, withDuration: 0.4, animationTimingFunction: .easeOut)` enforcing `pitch: 0.0`. *(Tightened from 0.35° in Wave K.6; dynamic bounds loading from Wave L-B.2.)*
 
 ### 8.2 The Spatial Unioning Imperative for 120Hz ProMotion (`WJ2-PERF-OPTIMIZATION`)
 - **The Bottleneck:** Passing raw, un-dissolved H3 hexagons as individual interior rings to `MLNPolygon` causes MapLibre's underlying `earcut.hpp` triangulation to degrade from $O(N \log N)$ to $O(N^2)$. Pushing thousands of disconnected micro-holes freezes the `@MainActor` render loop and causes severe thermal throttling.
 - **Rejected Alternatives:**
   - *Incremental Graph / Cluster Cache:* Rejected. Maintaining an in-memory spatial graph of connected components adds state management complexity disproportionate to the gains. Res-11 NYC exploration hex counts (hundreds to low thousands) dissolve in <5ms in C/Swift H3.
   - *Zoom-Tiered Level-of-Detail Dissolution (`h3Compact`):* Rejected. Res-9/Res-8 compaction at low zoom levels introduces visual pop-in artifacts at zoom transitions and adds a secondary code path with independent winding order bugs.
-  - *Nested Donut Hole/Island Support:* Rejected for MVP. Real-world walking drifts produce contiguous corridors or clumps. Traversing nested inner holes inside cluster loops introduces complex non-convex polygon triangulation edge cases without meaningful user benefit.
+  - *Nested Donut Hole/Island Support:* ~~Rejected for MVP.~~ **Shipped in Wave J.11 (`WJ11-FOG-ISLANDS`).** `FogPolygonMath.cellsToFogGeometry()` traverses interior `LinkedGeoLoop.next` holes within `LinkedGeoPolygon` clusters to extract unvisited center island polygons, reversing vertex coordinates for clockwise outer winding. The resulting `MLNShapeCollection` contains the main bounding polygon with interior cutout holes plus disjoint interior fog island polygons, preserving unexplored city blocks encircled by closed-loop walks.
 - **Mandated Implementation:** Full Res-11 dissolution on every hex change via `cellsToLinkedMultiPolygon` in `Task.detached(priority: .userInitiated)`.
   - Traverse the linked list of `LinkedGeoPolygon` clusters produced by H3.
   - For each cluster, extract its primary outer boundary loop (`loop.pointee.first`), convert coordinates to `CLLocationCoordinate2D`, and enforce counter-clockwise vertex order (`coords.reversed()`) to match MapLibre's clockwise exterior ring convention.
@@ -491,7 +499,7 @@ CREATE TABLE trip_slot_profiles (
 | C++ RAPTOR timetable | ~20.64 MB | `timetable.bin` |
 | ULTRA CSR arrays | ~4 MB | `ultra_transfers.csr` (~8 MB) |
 | GBFS sync worker | ~1.5 MB | `gbfs_cache.sqlite` (~150 KB WAL) |
-| Walk graph (query-time A*) | TBD | `walk_graph.bin` (< 25 MB) |
+| Walk graph (query-time A*) | ~1.2 MB (active tile scratchpad) | `walk_graph.bin` (< 25 MB) |
 | **Combined routing engine** | **~26 MB** | |
 
 Headroom under the 30 MB Jetsam ceiling: **~4 MB**.

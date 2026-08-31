@@ -261,6 +261,18 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **N-D.3** | **WND3-CONFIDENCE-BANDS** | **P10/P50/P90 Confidence Interval Visualization:** Render percentile wait-time bands from `[Float]` buffer using `Canvas` or `Path`-based area fills. Statistical variance disutility coloring: narrow bands (reliable, green tint) vs wide bands (unreliable, amber/red tint). Tap-to-inspect detail overlay. | **S** | Planned |
 | **N-D.4** | **WND4-TRAIN-INSPECTOR-SMART-ZOOM** | **Deep Train Inspector & Smart Zoom Station Badges:** (1) Train Inspector sub-sheet on tapping live arrival row (Track Thermometer, GTFS-RT `occupancy_status` / crowd fallback, 15-min slot regularity card, map synchronizer). (2) Smart Zoom MapLibre station symbol layer resolving discrete route bullets (`[4][5][6]` vs `[6]`) at $z \ge 14.5$. | **M** | Planned |
 
+### 🔮 Wave O: MetalFogEngine (GPU Alpha Masking & Spatial Hashing) [TO-DO]
+
+> [!NOTE]
+> **TO-DO:** Detailed task breakdown for Wave O to be written based on Research Docs 05–09 in [`docs/research/`](file:///Volumes/T7ssd/derivee/docs/research/):
+> - **Doc 05:** Web Mercator $\rightarrow$ Metal NDC RTC Coordinate Projection & Zero-Lag Camera VSync Sync
+> - **Doc 06:** Open-Addressing GPU Hash Table in `MTLBuffer` ($<10\text{ MB}$ VRAM limit, bitwise parent LOD aggregation)
+> - **Doc 07:** `MLNCustomStyleLayer` Zero-Lag In-Pipeline Injection & Occlusion Preservation
+> - **Doc 08:** 120 FPS CADisplayLink Telemetry Suite & Visual Parity Regression Tests
+> - **Doc 09:** MSL Full-Screen Quad Shader, Screen-Space Derivative AA (`dfdx`/`dfdy`), and Analytical Amber Glow
+> 
+> *Task breakdown pending — research spikes fully completed.*
+
 ### Post-Ship (Completed Post-Launch Waves)
 
 | Wave | Task ID | Title | Size | Status |

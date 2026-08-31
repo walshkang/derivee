@@ -162,6 +162,7 @@ classDiagram
 
     class AmbientTrackingEngine {
         <<@MainActor, ObservableObject>>
+        %% Legacy pre-Wave N pattern — migration to @Observable tracked separately
         -locationManager: CLLocationManager
         -backgroundSession: CLBackgroundActivitySession?
         -updatesTask: Task
@@ -194,9 +195,9 @@ classDiagram
         +reset()
     }
 
-    class MtaSubwayNetworkData {
-        <<Static Geometry>>
-        +createSubwayNetworkShape() → MLNShapeCollectionFeature
+    class TransitLineLoader {
+        <<Dynamic GeoJSON Loader>>
+        +loadLinesFromCityPack(path) → MLNShapeCollectionFeature
     }
 
     class FogPolygonMath {
@@ -398,7 +399,7 @@ sequenceDiagram
 
     rect rgb(45, 45, 60)
         Note over Fog, MLN: Off-main-thread polygon math
-        Fog->>Fog: Build 50km bounding box (CW)<br/>with jitter for cache invalidation
+        Fog->>Fog: Build bounding polygon (CW)<br/>from CityConfig.bounds or world mask
         loop For each hex in Set
             Fog->>H3B: cellToBoundary(cell)
             H3B-->>Fog: [LatLng] (CCW from H3)
@@ -522,7 +523,7 @@ The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/
 │
 ├── Layer 2: The Fog Mask (fog-source)
 │   ├── [Z: 2b] fog-border-layer (LineLayer: 1.5pt #FFB300 amber boundary outline, opacity 0.0 or 0.75)
-│   └── [Z: 2a] cloud-layer      (FillLayer: 50km CW Bounding Box with CW H3 hex interior hole cutouts and interior fog islands)
+│   └── [Z: 2a] cloud-layer      (FillLayer: CW Bounding Polygon with CW H3 hex interior hole cutouts and interior fog islands — city-scoped or global world mask, see M.5.1)
 │       └── Opacity: 0.60..0.98 (@AppStorage) | Day: #1C1C1E | Night/OLED: #000000 | Transit: #0A0C10
 │
 ├── Layer 1.5: Subway Network Thoroughfares & Sub-Fog Bullets (subway-lines-source & subway-station-bullets-source)
@@ -541,8 +542,8 @@ The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/
 
 ```mermaid
 erDiagram
-    explored_hexes {
-        TEXT h3_index PK "H3 res-11 hex string"
+    explored_hexes_slug {
+        TEXT h3_index PK "H3 res-11 hex string (per-city: explored_hexes_nyc, explored_hexes_bos, etc.)"
     }
 
     meta {
@@ -601,7 +602,7 @@ erDiagram
     }
 
     neighborhood_stats ||--o{ neighborhood_hexes : "contains"
-    neighborhood_hexes }o--o| explored_hexes : "JOIN on h3_index"
+    neighborhood_hexes }o--o| explored_hexes_slug : "JOIN on h3_index"
     stops ||--o{ headway_history : "has history"
     stops ||--o{ stop_resolution : "parent lookup"
     stops ||--o{ scheduled_hourly_patterns : "timetable"
@@ -609,7 +610,7 @@ erDiagram
 
 | Database File | Attached As | Tables |
 |:---|:---|:---|
-| `derivee_spatial.sqlite` | *(main)* | `explored_hexes`, `meta`, `discovered_pois` |
+| `derivee_spatial.sqlite` | *(main)* | `explored_hexes_{slug}` (per-city), `meta`, `discovered_pois` |
 | `derivee_transit.sqlite` | `transit` | `stops`, `stop_resolution` (**WITHOUT ROWID**), `scheduled_hourly_patterns`, `headway_history` |
 | `derivee_neighborhood.sqlite` | `neighborhood` | `neighborhood_stats`, `neighborhood_hexes` |
 
@@ -626,8 +627,8 @@ Dérivée achieves high performance and reliability through three mathematical a
     $$S_{t+1} = S_t \cup \{h\}$$
   - Handled via idempotent `INSERT OR IGNORE INTO explored_hexes`. Replaying a walk (live GPS, GPX workout file, or mock simulation stream) yields identical output state.
 - **Geometric Inversion:**
-  $$\text{FogPolygon} = \text{BoundingBox}(50\text{km}) \setminus \bigcup_{h \in Explored} \text{HexBoundary}(h)$$
-  Both exterior bounding boxes and interior holes require **Clockwise (CW)** winding in MapLibre Native.
+  $$\text{FogPolygon} = \text{BoundingPolygon}(\text{CityConfig or World}) \setminus \bigcup_{h \in Explored} \text{HexBoundary}(h)$$
+  Both exterior bounding polygons and interior holes require **Clockwise (CW)** winding in MapLibre Native. Interior fog island polygons (unexplored blocks encircled by explored hexes) are extracted as separate CW polygons and combined in an `MLNShapeCollection`.
 
 ### B. The Relational Projection Isomorphism
 - Neighborhood exploration percentages are computed as indexed relational projections over attached SQLite tables:
