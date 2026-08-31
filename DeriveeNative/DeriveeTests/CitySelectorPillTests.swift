@@ -71,6 +71,24 @@ final class CitySelectorPillTests: XCTestCase {
         XCTAssertEqual(summary.cityOverviews[1].percentage, 5.0, accuracy: 1e-4)
     }
     
+    func testCitySelectorPillManageCitiesAction() {
+        var manageCitiesInvoked = false
+        let manifest = CityManifest.defaultManifest.cities
+        
+        let pill = CitySelectorPill(
+            browsingMode: .city(slug: "nyc"),
+            installedPacks: manifest,
+            onSelectMode: { _ in },
+            onManageCities: {
+                manageCitiesInvoked = true
+            }
+        )
+        
+        XCTAssertNotNil(pill.onManageCities)
+        pill.onManageCities?()
+        XCTAssertTrue(manageCitiesInvoked, "onManageCities callback should be executed when triggered")
+    }
+    
     @MainActor
     func testCitySelectorPillSnapshots() {
         let manifest = CityManifest.defaultManifest.cities

@@ -2,12 +2,25 @@ import SwiftUI
 import CoreLocation
 import UserNotifications
 
+public enum SettingsSection: String, Hashable, CaseIterable, Identifiable {
+    case mapAesthetics = "mapAesthetics"
+    case transitWayfinding = "transitWayfinding"
+    case tracking = "tracking"
+    case notifications = "notifications"
+    case citiesStorage = "citiesStorage"
+    case dataManagement = "dataManagement"
+    case about = "about"
+    
+    public var id: String { rawValue }
+}
+
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject var trackingEngine: AmbientTrackingEngine
     var spatialStore: SpatialStore
     var onDismissToMap: (() -> Void)? = nil
+    var scrollToSection: SettingsSection? = nil
     
     @AppStorage(AppStorageKeys.selectedBasemapTheme) private var storedTheme: String = BasemapTheme.day.rawValue
     @AppStorage(AppStorageKeys.fogOpacity) private var fogOpacity: Double = MapCustomizationDefaults.defaultFogOpacity
@@ -23,202 +36,217 @@ struct SettingsView: View {
     @State private var notificationsEnabled: Bool = false
     
     var body: some View {
-        Form {
-            Section(header: Text("Map Aesthetics & Exploration"), footer: Text("Visual styles and boundary highlights update instantly on the GPU with zero database overhead.")) {
-                Picker("Basemap Theme", selection: $storedTheme) {
-                    ForEach(BasemapTheme.allCases) { theme in
-                        Text(theme.displayName).tag(theme.rawValue)
-                    }
-                }
-                .onChange(of: storedTheme) { _, newTheme in
-                    if newTheme == BasemapTheme.transit.rawValue {
-                        withAnimation {
-                            fogOpacity = MapCustomizationDefaults.transitFogOpacity
-                        }
-                    } else if newTheme == BasemapTheme.day.rawValue {
-                        withAnimation {
-                            fogOpacity = MapCustomizationDefaults.defaultFogOpacity
+        ScrollViewReader { proxy in
+            Form {
+                Section(header: Text("Map Aesthetics & Exploration"), footer: Text("Visual styles and boundary highlights update instantly on the GPU with zero database overhead.")) {
+                    Picker("Basemap Theme", selection: $storedTheme) {
+                        ForEach(BasemapTheme.allCases) { theme in
+                            Text(theme.displayName).tag(theme.rawValue)
                         }
                     }
+                    .onChange(of: storedTheme) { _, newTheme in
+                        if newTheme == BasemapTheme.transit.rawValue {
+                            withAnimation {
+                                fogOpacity = MapCustomizationDefaults.transitFogOpacity
+                            }
+                        } else if newTheme == BasemapTheme.day.rawValue {
+                            withAnimation {
+                                fogOpacity = MapCustomizationDefaults.defaultFogOpacity
+                            }
+                        }
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Fog Density")
+                            Spacer()
+                            Text("\(Int(round(fogOpacity * 100)))%")
+                                .font(.system(.subheadline, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                        Slider(
+                            value: $fogOpacity,
+                            in: MapCustomizationDefaults.minFogOpacity...MapCustomizationDefaults.maxFogOpacity,
+                            step: 0.01
+                        )
+                        .tint(Color.primary)
+                    }
+                    .padding(.vertical, 4)
+                    
+                    Toggle("Exploration Boundary Borders", isOn: $showBoundaryBorders)
                 }
+                .id(SettingsSection.mapAesthetics)
                 
-                VStack(alignment: .leading, spacing: 8) {
+                Section(header: Text("Transit & Wayfinding"), footer: Text("Subway thoroughfares render as ambient orienting sub-context under the fog, lighting up vibrantly in explored territory.")) {
+                    Toggle("Subway Thoroughfares", isOn: $showSubwayThoroughfares)
+                    
+                    Picker("Station Markers", selection: $storedStationMarkerStyle) {
+                        ForEach(SubwayStationMarkerStyle.allCases) { style in
+                            Text(style.rawValue).tag(style.rawValue)
+                        }
+                    }
+                    
+                    Toggle("Nearby Buses Quick Lens", isOn: $showNearbyBusesLens)
+                }
+                .id(SettingsSection.transitWayfinding)
+                
+                Section(header: Text("Tracking")) {
+                    Toggle("Ambient Tracking", isOn: Binding(
+                        get: { trackingEngine.isTracking },
+                        set: { newValue in
+                            if newValue {
+                                trackingEngine.isTrackingEnabled = true
+                                trackingEngine.startTracking()
+                            } else {
+                                showPauseTrackingAlert = true
+                            }
+                        }
+                    ))
+                    .alert("Pause Ambient Exploration?", isPresented: $showPauseTrackingAlert) {
+                        Button("Keep Tracking On", role: .cancel) { }
+                        Button("Pause Tracking", role: .destructive) {
+                            trackingEngine.isTrackingEnabled = false
+                            Task {
+                                await trackingEngine.stopTracking()
+                            }
+                        }
+                    } message: {
+                        Text("Pausing tracking will stop discovering new hexes while your screen is off or the app is closed. Remember to re-enable tracking before your next drift.")
+                    }
+                    
+                    Toggle("Dynamic Island Glance", isOn: Binding(
+                        get: { trackingEngine.isLiveActivityEnabled },
+                        set: { newValue in
+                            trackingEngine.updateLiveActivityPreference(enabled: newValue)
+                        }
+                    ))
+                    
                     HStack {
-                        Text("Fog Density")
+                        Text("Permission Status")
                         Spacer()
-                        Text("\(Int(round(fogOpacity * 100)))%")
-                            .font(.system(.subheadline, design: .monospaced))
+                        Text(locationStatus)
                             .foregroundColor(.secondary)
                     }
-                    Slider(
-                        value: $fogOpacity,
-                        in: MapCustomizationDefaults.minFogOpacity...MapCustomizationDefaults.maxFogOpacity,
-                        step: 0.01
-                    )
-                    .tint(Color.primary)
-                }
-                .padding(.vertical, 4)
-                
-                Toggle("Exploration Boundary Borders", isOn: $showBoundaryBorders)
-            }
-            
-            Section(header: Text("Transit & Wayfinding"), footer: Text("Subway thoroughfares render as ambient orienting sub-context under the fog, lighting up vibrantly in explored territory.")) {
-                Toggle("Subway Thoroughfares", isOn: $showSubwayThoroughfares)
-                
-                Picker("Station Markers", selection: $storedStationMarkerStyle) {
-                    ForEach(SubwayStationMarkerStyle.allCases) { style in
-                        Text(style.rawValue).tag(style.rawValue)
-                    }
-                }
-                
-                Toggle("Nearby Buses Quick Lens", isOn: $showNearbyBusesLens)
-            }
-            
-            Section(header: Text("Tracking")) {
-                Toggle("Ambient Tracking", isOn: Binding(
-                    get: { trackingEngine.isTracking },
-                    set: { newValue in
-                        if newValue {
-                            trackingEngine.isTrackingEnabled = true
-                            trackingEngine.startTracking()
-                        } else {
-                            showPauseTrackingAlert = true
+                    
+                    if locationStatus == "Not Determined" || locationStatus == "Denied" {
+                        Button("Request Permissions") {
+                            trackingEngine.requestPermissions()
+                            updateLocationStatus()
                         }
                     }
-                ))
-                .alert("Pause Ambient Exploration?", isPresented: $showPauseTrackingAlert) {
-                    Button("Keep Tracking On", role: .cancel) { }
-                    Button("Pause Tracking", role: .destructive) {
-                        trackingEngine.isTrackingEnabled = false
-                        Task {
-                            await trackingEngine.stopTracking()
-                        }
-                    }
-                } message: {
-                    Text("Pausing tracking will stop discovering new hexes while your screen is off or the app is closed. Remember to re-enable tracking before your next drift.")
                 }
+                .id(SettingsSection.tracking)
                 
-                Toggle("Dynamic Island Glance", isOn: Binding(
-                    get: { trackingEngine.isLiveActivityEnabled },
-                    set: { newValue in
-                        trackingEngine.updateLiveActivityPreference(enabled: newValue)
-                    }
-                ))
-                
-                HStack {
-                    Text("Permission Status")
-                    Spacer()
-                    Text(locationStatus)
-                        .foregroundColor(.secondary)
-                }
-                
-                if locationStatus == "Not Determined" || locationStatus == "Denied" {
-                    Button("Request Permissions") {
-                        trackingEngine.requestPermissions()
-                        updateLocationStatus()
-                    }
-                }
-            }
-            
-            Section(header: Text("Notifications")) {
-                Toggle("Push Notifications", isOn: Binding(
-                    get: { notificationsEnabled },
-                    set: { newValue in
-                        if newValue {
-                            requestNotificationPermissions()
-                        } else {
-                            notificationsEnabled = false
-                        }
-                    }
-                ))
-            }
-            
-            Section(header: Text("Cities & Storage"), footer: Text("Manage offline city packs, GTFS transit databases, and vector route lines with zero loss to your personal exploration history.")) {
-                NavigationLink(destination: CitiesStorageManagerView()) {
-                    HStack {
-                        Image(systemName: "internaldrive")
-                            .foregroundColor(Color(hex: "#FFB300"))
-                        Text("Manage Cities & Storage")
-                    }
-                }
-            }
-            
-            Section(header: Text("Data Management"), footer: Text("Clearing the cache will require downloading transit and tile data on the next launch.")) {
-                Button(role: .destructive) {
-                    showCacheAlert = true
-                } label: {
-                    Text("Clear Local Cache")
-                }
-                .alert("Clear Cache?", isPresented: $showCacheAlert) {
-                    Button("Cancel", role: .cancel) { }
-                    Button("Clear", role: .destructive) {
-                        Task {
-                            do {
-                                try await SpatialDatabaseManager.shared.clearLocalCache()
-                            } catch {
-                                print("Failed to clear cache: \(error)")
+                Section(header: Text("Notifications")) {
+                    Toggle("Push Notifications", isOn: Binding(
+                        get: { notificationsEnabled },
+                        set: { newValue in
+                            if newValue {
+                                requestNotificationPermissions()
+                            } else {
+                                notificationsEnabled = false
                             }
                         }
-                    }
-                } message: {
-                    Text("This will force the Onboarding Gate to download base data on the next launch.")
+                    ))
                 }
+                .id(SettingsSection.notifications)
                 
-                Button(role: .destructive) {
-                    showResetAlert = true
-                } label: {
-                    Text("Reset Exploration Data")
+                Section(header: Text("Cities & Storage"), footer: Text("Manage offline city packs, GTFS transit databases, and vector route lines with zero loss to your personal exploration history.")) {
+                    NavigationLink(destination: CitiesStorageManagerView()) {
+                        HStack {
+                            Image(systemName: "internaldrive")
+                                .foregroundColor(Color(hex: "#FFB300"))
+                            Text("Manage Cities & Storage")
+                        }
+                    }
                 }
-                .alert("Reset Data?", isPresented: $showResetAlert) {
-                    Button("Cancel", role: .cancel) { }
-                    Button("Reset", role: .destructive) {
-                        Task {
-                            do {
-                                try await SpatialDatabaseManager.shared.resetExplorationData()
-                                await MainActor.run {
-                                    spatialStore.clearData()
+                .id(SettingsSection.citiesStorage)
+                .id("citiesStorage")
+                
+                Section(header: Text("Data Management"), footer: Text("Clearing the cache will require downloading transit and tile data on the next launch.")) {
+                    Button(role: .destructive) {
+                        showCacheAlert = true
+                    } label: {
+                        Text("Clear Local Cache")
+                    }
+                    .alert("Clear Cache?", isPresented: $showCacheAlert) {
+                        Button("Cancel", role: .cancel) { }
+                        Button("Clear", role: .destructive) {
+                            Task {
+                                do {
+                                    try await SpatialDatabaseManager.shared.clearLocalCache()
+                                } catch {
+                                    print("Failed to clear cache: \(error)")
                                 }
-                            } catch {
-                                print("Failed to reset exploration data: \(error)")
                             }
                         }
+                    } message: {
+                        Text("This will force the Onboarding Gate to download base data on the next launch.")
                     }
-                } message: {
-                    Text("This will permanently delete all your explored hexes and discovered transit stops across all cities. The fog will return entirely.")
+                    
+                    Button(role: .destructive) {
+                        showResetAlert = true
+                    } label: {
+                        Text("Reset Exploration Data")
+                    }
+                    .alert("Reset Data?", isPresented: $showResetAlert) {
+                        Button("Cancel", role: .cancel) { }
+                        Button("Reset", role: .destructive) {
+                            Task {
+                                do {
+                                    try await SpatialDatabaseManager.shared.resetExplorationData()
+                                    await MainActor.run {
+                                        spatialStore.clearData()
+                                    }
+                                } catch {
+                                    print("Failed to reset exploration data: \(error)")
+                                }
+                            }
+                        }
+                    } message: {
+                        Text("This will permanently delete all your explored hexes and discovered transit stops across all cities. The fog will return entirely.")
+                    }
                 }
-            }
-            
-            Section(header: Text("About & Open Data")) {
-                NavigationLink(destination: PhilosophyView()) {
-                    Text("The Philosophy")
-                }
+                .id(SettingsSection.dataManagement)
                 
-                NavigationLink(destination: TransitAttributionsView()) {
-                    Text("Open Data & Attributions")
+                Section(header: Text("About & Open Data")) {
+                    NavigationLink(destination: PhilosophyView()) {
+                        Text("The Philosophy")
+                    }
+                    
+                    NavigationLink(destination: TransitAttributionsView()) {
+                        Text("Open Data & Attributions")
+                    }
+                }
+                .id(SettingsSection.about)
+                
+                Section {
+                    ApertureSignatureView()
+                        .listRowBackground(Color.clear)
                 }
             }
-            
-            Section {
-                ApertureSignatureView()
-                    .listRowBackground(Color.clear)
-            }
-        }
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Done") {
-                    if let onDismissToMap = onDismissToMap {
-                        onDismissToMap()
-                    } else {
-                        dismiss()
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        if let onDismissToMap = onDismissToMap {
+                            onDismissToMap()
+                        } else {
+                            dismiss()
+                        }
                     }
                 }
             }
-        }
-        .onAppear {
-            updateLocationStatus()
-            checkNotificationStatus()
+            .onAppear {
+                updateLocationStatus()
+                checkNotificationStatus()
+                if let target = scrollToSection {
+                    withAnimation {
+                        proxy.scrollTo(target, anchor: .top)
+                    }
+                }
+            }
         }
     }
     

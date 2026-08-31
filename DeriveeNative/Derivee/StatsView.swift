@@ -31,6 +31,7 @@ struct StatsView: View {
     @State private var importSummaryAlertMessage: String? = nil
     @State private var showImportAlert = false
     @State private var showSettings = false
+    @State private var showCitiesStorage = false
     @State private var showFileImporter = false
     @State private var isLoading = true
     
@@ -58,8 +59,8 @@ struct StatsView: View {
                                 await loadAllData()
                             }
                         },
-                        onOpenSettings: {
-                            showSettings = true
+                        onManageCities: {
+                            showCitiesStorage = true
                         }
                     )
                     Spacer()
@@ -161,6 +162,16 @@ struct StatsView: View {
                 }
                 .presentationDragIndicator(.visible)
                 .presentationContentInteraction(.scrolls)
+            }
+            .navigationDestination(isPresented: $showCitiesStorage) {
+                CitiesStorageManagerView()
+            }
+            .onChange(of: showCitiesStorage) { _, isShowing in
+                if !isShowing {
+                    Task {
+                        await loadAllData()
+                    }
+                }
             }
             .task {
                 if let activeSlug = cityDetectionService?.activeCitySlug {

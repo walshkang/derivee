@@ -7,6 +7,7 @@ public struct CitySelectorPill: View {
     public let userLocation: CLLocationCoordinate2D?
     public let onSelectMode: (StatsBrowsingMode) -> Void
     public let onOpenSettings: (() -> Void)?
+    public let onManageCities: (() -> Void)?
     
     @Environment(\.colorScheme) private var colorScheme
     
@@ -15,13 +16,15 @@ public struct CitySelectorPill: View {
         installedPacks: [CityManifestEntry],
         userLocation: CLLocationCoordinate2D? = nil,
         onSelectMode: @escaping (StatsBrowsingMode) -> Void,
-        onOpenSettings: (() -> Void)? = nil
+        onOpenSettings: (() -> Void)? = nil,
+        onManageCities: (() -> Void)? = nil
     ) {
         self.browsingMode = browsingMode
         self.installedPacks = installedPacks
         self.userLocation = userLocation
         self.onSelectMode = onSelectMode
         self.onOpenSettings = onOpenSettings
+        self.onManageCities = onManageCities
     }
     
     private var selectedCityEntry: CityManifestEntry? {
@@ -74,11 +77,11 @@ public struct CitySelectorPill: View {
                 }
             }
             
-            // 3. Settings Quick Action
-            if let openSettings = onOpenSettings {
+            // 3. Manage Cities Quick Action
+            if let manageAction = onManageCities ?? onOpenSettings {
                 Section {
-                    Button(action: openSettings) {
-                        Label("Manage Cities...", systemImage: "gearshape")
+                    Button(action: manageAction) {
+                        Label("Manage Cities...", systemImage: "internaldrive")
                     }
                 }
             }
