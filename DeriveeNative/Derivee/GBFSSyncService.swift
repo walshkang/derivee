@@ -24,7 +24,7 @@ public actor GBFSSyncService {
     // MARK: - Initialization
     
     public init(
-        config: GBFSConfig? = CityConfig.nycDefault.transit?.gbfs,
+        config: GBFSConfig? = CityConfig.nycDefault.effectiveGBFS,
         databaseManager: GBFSDatabaseManager = .shared,
         session: URLSession = .shared
     ) {

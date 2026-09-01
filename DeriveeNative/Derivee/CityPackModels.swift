@@ -158,7 +158,12 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
     public let bounds: CityBounds
     public let center: CityCenter
     public let transit: CityTransitConfig?
+    public let gbfs: GBFSConfig?
     public let sha256: String?
+    
+    public var effectiveGBFS: GBFSConfig? {
+        gbfs ?? transit?.gbfs
+    }
     
     public init(
         version: Int = 1,
@@ -168,6 +173,7 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
         bounds: CityBounds,
         center: CityCenter,
         transit: CityTransitConfig? = nil,
+        gbfs: GBFSConfig? = nil,
         sha256: String? = nil
     ) {
         self.version = version
@@ -177,6 +183,7 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
         self.bounds = bounds
         self.center = center
         self.transit = transit
+        self.gbfs = gbfs
         self.sha256 = sha256
     }
     

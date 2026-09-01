@@ -297,5 +297,96 @@ final class CityPackManagerTests: XCTestCase {
             XCTAssertGreaterThan(stopCount ?? 0, 0)
         }
     }
+    
+    // MARK: - GBFS Configuration Ingestion Tests (Wave N-A.4)
+    
+    func testGBFSConfigurationDecodingNested() throws {
+        let jsonStr = """
+        {
+          "version": 1,
+          "slug": "nyc",
+          "displayName": "New York City",
+          "region": "New York, USA",
+          "bounds": {
+            "minLatitude": 40.48,
+            "maxLatitude": 40.95,
+            "minLongitude": -74.28,
+            "maxLongitude": -73.68
+          },
+          "center": {
+            "latitude": 40.7128,
+            "longitude": -74.0060,
+            "defaultZoom": 13.0
+          },
+          "transit": {
+            "agencyName": "MTA",
+            "attributions": ["MTA New York City Transit"],
+            "realtimeEndpoints": [],
+            "gbfs": {
+              "systemId": "citi_bike_nyc",
+              "stationInfoUrl": "https://gbfs.citibikenyc.com/gbfs/en/station_information.json",
+              "stationStatusUrl": "https://gbfs.citibikenyc.com/gbfs/en/station_status.json",
+              "pollIntervalSeconds": 30.0,
+              "stalenessThresholdSeconds": 600.0
+            }
+          }
+        }
+        """
+        
+        let data = jsonStr.data(using: .utf8)!
+        let config = try JSONDecoder().decode(CityConfig.self, from: data)
+        
+        XCTAssertNotNil(config.effectiveGBFS)
+        XCTAssertEqual(config.effectiveGBFS?.systemId, "citi_bike_nyc")
+        XCTAssertEqual(config.effectiveGBFS?.stationInfoUrl, "https://gbfs.citibikenyc.com/gbfs/en/station_information.json")
+        XCTAssertEqual(config.effectiveGBFS?.stationStatusUrl, "https://gbfs.citibikenyc.com/gbfs/en/station_status.json")
+        XCTAssertEqual(config.effectiveGBFS?.pollIntervalSeconds, 30.0)
+        XCTAssertEqual(config.effectiveGBFS?.stalenessThresholdSeconds, 600.0)
+    }
+    
+    func testGBFSConfigurationDecodingTopLevel() throws {
+        let jsonStr = """
+        {
+          "version": 2,
+          "slug": "bos",
+          "displayName": "Boston",
+          "region": "Massachusetts, USA",
+          "bounds": {
+            "minLatitude": 42.20,
+            "maxLatitude": 42.50,
+            "minLongitude": -71.25,
+            "maxLongitude": -70.90
+          },
+          "center": {
+            "latitude": 42.3601,
+            "longitude": -71.0589,
+            "defaultZoom": 13.0
+          },
+          "transit": {
+            "agencyName": "MBTA",
+            "attributions": ["MBTA"],
+            "realtimeEndpoints": []
+          },
+          "gbfs": {
+            "systemId": "bluebikes_boston",
+            "stationInfoUrl": "https://gbfs.bluebikes.com/gbfs/en/station_information.json",
+            "stationStatusUrl": "https://gbfs.bluebikes.com/gbfs/en/station_status.json",
+            "pollIntervalSeconds": 30.0,
+            "stalenessThresholdSeconds": 600.0
+          }
+        }
+        """
+        
+        let data = jsonStr.data(using: .utf8)!
+        let config = try JSONDecoder().decode(CityConfig.self, from: data)
+        
+        XCTAssertNotNil(config.effectiveGBFS)
+        XCTAssertEqual(config.effectiveGBFS?.systemId, "bluebikes_boston")
+        XCTAssertEqual(config.effectiveGBFS?.stationInfoUrl, "https://gbfs.bluebikes.com/gbfs/en/station_information.json")
+        XCTAssertEqual(config.effectiveGBFS?.stationStatusUrl, "https://gbfs.bluebikes.com/gbfs/en/station_status.json")
+        XCTAssertEqual(config.effectiveGBFS?.pollIntervalSeconds, 30.0)
+        XCTAssertEqual(config.effectiveGBFS?.stalenessThresholdSeconds, 600.0)
+    }
 }
+
 

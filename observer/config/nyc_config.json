@@ -115,6 +115,14 @@
       "startDate": "2026-06-01",
       "endDate": "2026-09-01",
       "seasonLabel": "Summer 2026 Timetable"
+    },
+    "gbfs": {
+      "systemId": "citi_bike_nyc",
+      "stationInfoUrl": "https://gbfs.citibikenyc.com/gbfs/en/station_information.json",
+      "stationStatusUrl": "https://gbfs.citibikenyc.com/gbfs/en/station_status.json",
+      "pollIntervalSeconds": 30,
+      "stalenessThresholdSeconds": 600
     }
   }
 }
+

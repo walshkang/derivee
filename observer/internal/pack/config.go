@@ -36,6 +36,16 @@ type ScheduleValidity struct {
 	SeasonLabel string `json:"seasonLabel"`
 }
 
+// GBFSConfig defines micro-mobility bikeshare GBFS feed configuration
+type GBFSConfig struct {
+	SystemID                  string            `json:"systemId,omitempty"`
+	StationInfoURL            string            `json:"stationInfoUrl,omitempty"`
+	StationStatusURL          string            `json:"stationStatusUrl"`
+	PollIntervalSeconds       float64           `json:"pollIntervalSeconds"`
+	StalenessThresholdSeconds float64           `json:"stalenessThresholdSeconds"`
+	Headers                   map[string]string `json:"headers,omitempty"`
+}
+
 // TransitConfig contains transit metadata, endpoints, attributions, and route mappings
 type TransitConfig struct {
 	AgencyName        string             `json:"agencyName"`
@@ -43,6 +53,7 @@ type TransitConfig struct {
 	RealtimeEndpoints []RealtimeEndpoint `json:"realtimeEndpoints"`
 	FeedRouteMapping  map[string]string  `json:"feedRouteMapping"`
 	ScheduleValidity  ScheduleValidity   `json:"scheduleValidity"`
+	GBFS              *GBFSConfig        `json:"gbfs,omitempty"`
 }
 
 // CityConfig defines the schema of city_config.json
@@ -54,6 +65,7 @@ type CityConfig struct {
 	Bounds      GeoBounds     `json:"bounds"`
 	Center      MapCenter     `json:"center"`
 	Transit     TransitConfig `json:"transit"`
+	GBFS        *GBFSConfig   `json:"gbfs,omitempty"`
 	SHA256      string        `json:"sha256,omitempty"`
 }
 
@@ -76,6 +88,14 @@ type CitiesManifest struct {
 	Cities      []CityManifestEntry `json:"cities"`
 }
 
+// GetGBFS returns the active GBFSConfig checking top-level first, then transit.gbfs
+func (cfg *CityConfig) GetGBFS() *GBFSConfig {
+	if cfg.GBFS != nil {
+		return cfg.GBFS
+	}
+	return cfg.Transit.GBFS
+}
+
 // ValidateCityConfig verifies that required fields are present and valid
 func ValidateCityConfig(cfg *CityConfig) error {
 	if cfg.Slug == "" {
@@ -95,6 +115,42 @@ func ValidateCityConfig(cfg *CityConfig) error {
 	}
 	if cfg.Center.Longitude < cfg.Bounds.MinLongitude || cfg.Center.Longitude > cfg.Bounds.MaxLongitude {
 		return fmt.Errorf("center longitude (%.4f) is outside bounding box", cfg.Center.Longitude)
+	}
+
+	if gbfs := cfg.GetGBFS(); gbfs != nil {
+		if err := ValidateGBFSConfig(gbfs); err != nil {
+			return fmt.Errorf("invalid gbfs config: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// ValidateGBFSConfig validates GBFS endpoint configuration and defaults values if needed
+func ValidateGBFSConfig(gbfs *GBFSConfig) error {
+	if gbfs.StationStatusURL == "" {
+		return fmt.Errorf("missing required 'stationStatusUrl'")
+	}
+	if len(gbfs.StationStatusURL) < 8 || (gbfs.StationStatusURL[:7] != "http://" && gbfs.StationStatusURL[:8] != "https://") {
+		return fmt.Errorf("stationStatusUrl must start with http:// or https:// (got %q)", gbfs.StationStatusURL)
+	}
+	if gbfs.StationInfoURL != "" {
+		if len(gbfs.StationInfoURL) < 8 || (gbfs.StationInfoURL[:7] != "http://" && gbfs.StationInfoURL[:8] != "https://") {
+			return fmt.Errorf("stationInfoUrl must start with http:// or https:// (got %q)", gbfs.StationInfoURL)
+		}
+	}
+	if gbfs.PollIntervalSeconds == 0 {
+		gbfs.PollIntervalSeconds = 30.0
+	} else if gbfs.PollIntervalSeconds < 0 {
+		return fmt.Errorf("pollIntervalSeconds must be positive (got %.1f)", gbfs.PollIntervalSeconds)
+	}
+	if gbfs.StalenessThresholdSeconds == 0 {
+		gbfs.StalenessThresholdSeconds = 600.0
+	} else if gbfs.StalenessThresholdSeconds < 0 {
+		return fmt.Errorf("stalenessThresholdSeconds must be positive (got %.1f)", gbfs.StalenessThresholdSeconds)
+	}
+	if gbfs.StalenessThresholdSeconds < gbfs.PollIntervalSeconds {
+		return fmt.Errorf("stalenessThresholdSeconds (%.1f) cannot be less than pollIntervalSeconds (%.1f)", gbfs.StalenessThresholdSeconds, gbfs.PollIntervalSeconds)
 	}
 	return nil
 }

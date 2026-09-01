@@ -197,6 +197,13 @@ city-bos.pack/
       "startDate": "2026-06-01",
       "endDate": "2026-09-01",
       "seasonLabel": "Summer 2026 Timetable"
+    },
+    "gbfs": {
+      "systemId": "citi_bike_nyc",
+      "stationInfoUrl": "https://gbfs.citibikenyc.com/gbfs/en/station_information.json",
+      "stationStatusUrl": "https://gbfs.citibikenyc.com/gbfs/en/station_status.json",
+      "pollIntervalSeconds": 30,
+      "stalenessThresholdSeconds": 600
     }
   },
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -205,7 +212,7 @@ city-bos.pack/
 
 #### Wave N Additions to `city_config.json`
 
-Version 2 city packs add routing and GBFS configuration:
+Version 2 city packs add routing and micro-mobility GBFS configuration (supported both under `transit.gbfs` and at the root `gbfs` level):
 
 ```json
 {
@@ -218,6 +225,8 @@ Version 2 city packs add routing and GBFS configuration:
     "maxRounds": 8
   },
   "gbfs": {
+    "systemId": "citi_bike_nyc",
+    "stationInfoUrl": "https://gbfs.citibikenyc.com/gbfs/en/station_information.json",
     "stationStatusUrl": "https://gbfs.citibikenyc.com/gbfs/en/station_status.json",
     "pollIntervalSeconds": 30,
     "stalenessThresholdSeconds": 600
