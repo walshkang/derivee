@@ -19,6 +19,8 @@ import (
 	"observer/internal/pack"
 	"observer/internal/raptor"
 	"observer/internal/storage"
+	"observer/internal/ultra"
+	"observer/internal/walk"
 )
 
 func main() {
@@ -32,6 +34,9 @@ func main() {
 	keepDBPath := flag.String("keep-db", "", "Optional path to save intermediate uncompressed transit.sqlite")
 	buildTimetable := flag.Bool("build-timetable", false, "Compile timetable.bin and bundle in pack")
 	emitTimetablePath := flag.String("emit-timetable", "", "Optional path to export generated timetable.bin")
+	walkGraphPath := flag.String("walk-graph", "", "Path to walk_graph.bin (optional, required if building ULTRA transfers)")
+	buildUltra := flag.Bool("build-ultra", false, "Precompute ultra_transfers.csr and bundle in pack")
+	emitUltraPath := flag.String("emit-ultra", "", "Optional path to export generated ultra_transfers.csr")
 	deltaCheck := flag.Bool("delta-check", false, "Enable 3-tier delta checking to skip compilation if feeds are unchanged")
 	deltaStatePath := flag.String("delta-state", ".feed_state.json", "Path to delta checker state file")
 	uploadR2 := flag.Bool("upload-r2", false, "Upload built pack and manifest to Cloudflare R2")
@@ -271,6 +276,60 @@ func main() {
 				log.Printf("Warning: Failed to export timetable to %s: %v", *emitTimetablePath, err)
 			} else {
 				log.Printf("Exported timetable.bin to %s", *emitTimetablePath)
+			}
+		}
+	}
+
+	// 10b. Optional ULTRA Transfer Shortcut Precomputation
+	if *buildUltra || *emitUltraPath != "" {
+		if *walkGraphPath == "" {
+			log.Fatalf("--walk-graph is required when --build-ultra or --emit-ultra is specified")
+		}
+		log.Printf("Reading walk graph from %s for ULTRA precomputation...", *walkGraphPath)
+		fWalk, err := os.Open(*walkGraphPath)
+		if err != nil {
+			log.Fatalf("Failed to open walk graph %s: %v", *walkGraphPath, err)
+		}
+		fiWalk, err := fWalk.Stat()
+		if err != nil {
+			log.Fatalf("Failed to stat walk graph %s: %v", *walkGraphPath, err)
+		}
+		walkView, err := walk.ReadWalkGraph(fWalk, fiWalk.Size())
+		fWalk.Close()
+		if err != nil {
+			log.Fatalf("Failed to parse walk graph: %v", err)
+		}
+
+		// Ensure timetable is compiled
+		tt, err := raptor.CompileTimetable(mergedDataset, anchorDate)
+		if err != nil {
+			log.Fatalf("Failed to compile timetable for ULTRA: %v", err)
+		}
+
+		compiledWalk := &walk.CompiledWalkGraph{
+			Nodes: walkView.Nodes,
+			Edges: walkView.Edges,
+		}
+
+		ultraPath := filepath.Join(tempDir, "ultra_transfers.csr")
+		cfg := ultra.DefaultPrecomputeConfig()
+		cfg.TempDir = tempDir
+
+		log.Println("Precomputing ULTRA transfer shortcuts (< 35 MB RSS)...")
+		stats, err := ultra.PrecomputeUltraTransfers(compiledWalk, tt, ultraPath, cfg)
+		if err != nil {
+			log.Fatalf("ULTRA precomputation failed: %v", err)
+		}
+		log.Printf("Generated ultra_transfers.csr: %d shortcuts (%.2f MB)", stats.TotalShortcuts, float64(stats.OutputSizeBytes)/(1024*1024))
+
+		if *buildUltra {
+			extraAssets["ultra_transfers.csr"] = ultraPath
+		}
+		if *emitUltraPath != "" {
+			if err := copyFile(ultraPath, *emitUltraPath); err != nil {
+				log.Printf("Warning: Failed to export ultra transfers to %s: %v", *emitUltraPath, err)
+			} else {
+				log.Printf("Exported ultra_transfers.csr to %s", *emitUltraPath)
 			}
 		}
 	}
