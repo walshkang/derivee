@@ -15,6 +15,11 @@ require (
 )
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/qedus/osmpbf v1.2.0 // indirect
+)
+
+require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.8 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12 // indirect
