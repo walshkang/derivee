@@ -98,7 +98,7 @@ func SerializeWalkGraph(graph *CompiledWalkGraph, w io.Writer) (*MasterHeader, e
 		ChecksumXXH64: checksum,
 		NumSections:   2,
 		Flags:         0,
-		TOC: [4]SectionDesc{
+		TOC: [8]SectionDesc{
 			{
 				Offset:    section0Offset,
 				SizeBytes: nodeBytesLen,
@@ -109,6 +109,10 @@ func SerializeWalkGraph(graph *CompiledWalkGraph, w io.Writer) (*MasterHeader, e
 				SizeBytes: edgeBytesLen,
 				ItemCount: numEdges,
 			},
+			{},
+			{},
+			{},
+			{},
 			{},
 			{},
 		},

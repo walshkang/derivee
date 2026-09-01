@@ -14,6 +14,11 @@ import (
 
 // CreateCityPack packages city_config.json, transit.sqlite, and transit-lines.geojson into a .pack.zst archive
 func CreateCityPack(configPath, transitDBPath, geojsonPath, outputPath string) (*CityManifestEntry, error) {
+	return CreateCityPackWithAssets(configPath, transitDBPath, geojsonPath, nil, outputPath)
+}
+
+// CreateCityPackWithAssets packages base assets plus optional extra binary assets (e.g. timetable.bin) into .pack.zst
+func CreateCityPackWithAssets(configPath, transitDBPath, geojsonPath string, extraAssets map[string]string, outputPath string) (*CityManifestEntry, error) {
 	cfg, err := LoadCityConfig(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -46,6 +51,15 @@ func CreateCityPack(configPath, transitDBPath, geojsonPath, outputPath string) (
 		{"city_config.json", configPath},
 		{"transit.sqlite", transitDBPath},
 		{"transit-lines.geojson", geojsonPath},
+	}
+
+	for archiveName, srcPath := range extraAssets {
+		if srcPath != "" {
+			filesToPack = append(filesToPack, struct {
+				ArchiveName string
+				SourcePath  string
+			}{archiveName, srcPath})
+		}
 	}
 
 	var totalUncompressedSize int64

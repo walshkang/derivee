@@ -1,0 +1,7 @@
+framework module DeriveeCore {
+    umbrella header "DeriveeCore.h"
+    export *
+    module * { export * }
+    requires cplusplus
+}
+

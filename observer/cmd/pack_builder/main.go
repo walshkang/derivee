@@ -17,6 +17,7 @@ import (
 	"observer/internal/fetcher"
 	"observer/internal/gtfs"
 	"observer/internal/pack"
+	"observer/internal/raptor"
 	"observer/internal/storage"
 )
 
@@ -29,6 +30,8 @@ func main() {
 	manifestPath := flag.String("manifest", "", "Optional path to cities.json to update with new pack entry")
 	anchorDateStr := flag.String("anchor", "", "Optional anchor date YYYY-MM-DD (defaults to today UTC)")
 	keepDBPath := flag.String("keep-db", "", "Optional path to save intermediate uncompressed transit.sqlite")
+	buildTimetable := flag.Bool("build-timetable", false, "Compile timetable.bin and bundle in pack")
+	emitTimetablePath := flag.String("emit-timetable", "", "Optional path to export generated timetable.bin")
 	deltaCheck := flag.Bool("delta-check", false, "Enable 3-tier delta checking to skip compilation if feeds are unchanged")
 	deltaStatePath := flag.String("delta-state", ".feed_state.json", "Path to delta checker state file")
 	uploadR2 := flag.Bool("upload-r2", false, "Upload built pack and manifest to Cloudflare R2")
@@ -244,18 +247,46 @@ func main() {
 		}
 	}
 
-	// 10. Package into .pack.zst
+	// 10. Optional Timetable Compilation
+	extraAssets := make(map[string]string)
+	if *buildTimetable || *emitTimetablePath != "" {
+		log.Println("Compiling RAPTOR timetable.bin with stochastic weights...")
+		tt, err := raptor.CompileTimetable(mergedDataset, anchorDate)
+		if err != nil {
+			log.Fatalf("Failed to compile RAPTOR timetable: %v", err)
+		}
+		timetablePath := filepath.Join(tempDir, "timetable.bin")
+		header, err := raptor.WriteTimetableFile(tt, timetablePath)
+		if err != nil {
+			log.Fatalf("Failed to write timetable.bin: %v", err)
+		}
+		log.Printf("Generated timetable.bin: %d bytes (%.2f MB, Checksum XXH64: 0x%016X)",
+			header.FileSize, float64(header.FileSize)/(1024*1024), header.ChecksumXXH64)
+
+		if *buildTimetable {
+			extraAssets["timetable.bin"] = timetablePath
+		}
+		if *emitTimetablePath != "" {
+			if err := copyFile(timetablePath, *emitTimetablePath); err != nil {
+				log.Printf("Warning: Failed to export timetable to %s: %v", *emitTimetablePath, err)
+			} else {
+				log.Printf("Exported timetable.bin to %s", *emitTimetablePath)
+			}
+		}
+	}
+
+	// 11. Package into .pack.zst
 	log.Printf("Packaging city pack to %s...", *outputPath)
 	if err := os.MkdirAll(filepath.Dir(*outputPath), 0755); err != nil {
 		log.Fatalf("Failed to create output directory: %v", err)
 	}
 
-	manifestEntry, err := pack.CreateCityPack(*configPath, dbPath, actualGeoJSONPath, *outputPath)
+	manifestEntry, err := pack.CreateCityPackWithAssets(*configPath, dbPath, actualGeoJSONPath, extraAssets, *outputPath)
 	if err != nil {
 		log.Fatalf("Failed to create city pack: %v", err)
 	}
 
-	// 11. Verify Pack
+	// 12. Verify Pack
 	if err := pack.VerifyCityPack(*outputPath); err != nil {
 		log.Fatalf("Pack verification failed: %v", err)
 	}

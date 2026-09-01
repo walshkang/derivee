@@ -412,25 +412,27 @@ struct ReliabilityHeatmapCanvas: View {
 }
 
 #Preview {
-    let sample = (0..<7).flatMap { dow in
-        (0..<24).map { h in
-            SpatialDatabaseManager.HourlyReliabilityRecord(
-                routeId: "L",
-                stopId: "stop_bedford",
-                directionId: 0,
-                hourOfDay: h,
-                dayOfWeek: dow,
-                medianDelaySec: 75,
-                p90DelaySec: 220,
-                medianHeadwaySec: 300,
-                headwayStdDevSec: 60,
-                ewtSeconds: 60.0,
-                onTimePct: Double((dow * 13 + h * 7) % 100),
-                sampleCount: 40
-            )
-        }
-    }
-    
-    ReliabilityHeatmapCanvas(records: sample, initialDay: 3, initialHour: 8)
-        .padding()
+    ReliabilityHeatmapCanvas(
+        records: (0..<7).flatMap { dow in
+            (0..<24).map { h in
+                SpatialDatabaseManager.HourlyReliabilityRecord(
+                    routeId: "L",
+                    stopId: "stop_bedford",
+                    directionId: 0,
+                    hourOfDay: h,
+                    dayOfWeek: dow,
+                    medianDelaySec: 75,
+                    p90DelaySec: 220,
+                    medianHeadwaySec: 300,
+                    headwayStdDevSec: 60,
+                    ewtSeconds: 60.0,
+                    onTimePct: Double((dow * 13 + h * 7) % 100),
+                    sampleCount: 40
+                )
+            }
+        },
+        initialDay: 3,
+        initialHour: 8
+    )
+    .padding()
 }

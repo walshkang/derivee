@@ -12,8 +12,8 @@ const (
 	EndianMarker uint32 = 0x01020304
 	// SchemaVersion is the current binary format version
 	SchemaVersion uint32 = 1
-	// MasterHeaderSize is the exact size of the master file header in bytes (40 + 4*24 = 136 bytes)
-	MasterHeaderSize uint32 = 136
+	// MasterHeaderSize is the exact size of the master file header in bytes (40 + 8*24 = 232 bytes)
+	MasterHeaderSize uint32 = 232
 )
 
 // EdgeFlags bitmask defining pedestrian path characteristics
@@ -35,7 +35,7 @@ type SectionDesc struct {
 	ItemCount uint64 // Number of typed elements
 }
 
-// MasterHeader is the universal 128-byte binary file header matching C++ observer::format::MasterHeader
+// MasterHeader is the universal 232-byte binary file header matching C++ observer::format::MasterHeader
 type MasterHeader struct {
 	Magic         uint32
 	SchemaVersion uint32
@@ -45,7 +45,7 @@ type MasterHeader struct {
 	ChecksumXXH64 uint64
 	NumSections   uint32
 	Flags         uint32
-	TOC           [4]SectionDesc
+	TOC           [8]SectionDesc
 }
 
 // WalkNode represents a quantized pedestrian intersection or waypoint (16 bytes)
@@ -69,8 +69,8 @@ func ValidateLayout() error {
 	if sz := unsafe.Sizeof(SectionDesc{}); sz != 24 {
 		return fmt.Errorf("SectionDesc size mismatch: expected 24 bytes, got %d", sz)
 	}
-	if sz := unsafe.Sizeof(MasterHeader{}); sz != 136 {
-		return fmt.Errorf("MasterHeader size mismatch: expected 136 bytes, got %d", sz)
+	if sz := unsafe.Sizeof(MasterHeader{}); sz != 232 {
+		return fmt.Errorf("MasterHeader size mismatch: expected 232 bytes, got %d", sz)
 	}
 	if sz := unsafe.Sizeof(WalkNode{}); sz != 16 {
 		return fmt.Errorf("WalkNode size mismatch: expected 16 bytes, got %d", sz)

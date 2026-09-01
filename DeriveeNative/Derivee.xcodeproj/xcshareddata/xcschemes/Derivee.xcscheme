@@ -23,6 +23,34 @@
          </BuildActionEntry>
          <BuildActionEntry
             buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "3491759ED4C580ABE4FB78AC"
+               BuildableName = "DeriveeCore.framework"
+               BlueprintName = "DeriveeCore"
+               ReferencedContainer = "container:Derivee.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "BE9C3C90A0B146A309A6FAB9"
+               BuildableName = "DeriveeCoreTests.xctest"
+               BlueprintName = "DeriveeCoreTests"
+               ReferencedContainer = "container:Derivee.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
             buildForRunning = "NO"
             buildForProfiling = "NO"
             buildForArchiving = "NO"
@@ -67,6 +95,17 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "BE9C3C90A0B146A309A6FAB9"
+               BuildableName = "DeriveeCoreTests.xctest"
+               BlueprintName = "DeriveeCoreTests"
+               ReferencedContainer = "container:Derivee.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
          <TestableReference
             skipped = "NO"
             parallelizable = "NO">

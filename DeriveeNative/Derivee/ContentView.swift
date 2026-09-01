@@ -398,6 +398,9 @@ struct ContentView: View {
         nearbyBusStops = []
         
         Task {
+            await GBFSSyncService.shared.prepareForCitySwap()
+            await GBFSSyncService.shared.configureForCity(config: newConfig.transit?.gbfs)
+            
             // Phase 2: GRDB Serialized Write Barrier & Hot-Swap
             let packTransitURL = CityPackManager.shared.transitDatabaseURL(for: slug)
             let packNbhdURL = CityPackManager.shared.neighborhoodDatabaseURL(for: slug)

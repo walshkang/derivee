@@ -1564,5 +1564,32 @@ final class TransitRevealSheetTests: XCTestCase {
         sheetVc.overrideUserInterfaceStyle = .light
         assertSnapshot(of: sheetVc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 650)), precision: 0.98))
     }
+    
+    func testDepartureMatrixCanvasSnapshot() throws {
+        let fixture = DepartureMatrixBuffer.syntheticFixture(lowVariance: false)
+        let canvasView = DepartureMatrixCanvas(
+            buffer: fixture,
+            maxWaitThreshold: 15.0
+        )
+        .frame(width: 375, height: 280)
+        
+        let vc = UIHostingController(rootView: canvasView)
+        vc.overrideUserInterfaceStyle = .light
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 280)), precision: 0.98))
+    }
+    
+    func testDepartureMatrixCanvasSelectedSlotSnapshot() throws {
+        let fixture = DepartureMatrixBuffer.syntheticFixture(lowVariance: false)
+        let canvasView = DepartureMatrixCanvas(
+            buffer: fixture,
+            maxWaitThreshold: 15.0,
+            initialSelectedSlot: 8 * 60 + 30 // 08:30 morning peak
+        )
+        .frame(width: 375, height: 280)
+        
+        let vc = UIHostingController(rootView: canvasView)
+        vc.overrideUserInterfaceStyle = .light
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 280)), precision: 0.98))
+    }
 }
 

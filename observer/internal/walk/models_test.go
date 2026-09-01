@@ -6,8 +6,8 @@ import (
 )
 
 func TestStructSizes(t *testing.T) {
-	if sz := unsafe.Sizeof(MasterHeader{}); sz != 136 {
-		t.Fatalf("MasterHeader size must be exactly 136 bytes, got %d", sz)
+	if sz := unsafe.Sizeof(MasterHeader{}); sz != 232 {
+		t.Fatalf("MasterHeader size must be exactly 232 bytes, got %d", sz)
 	}
 	if sz := unsafe.Sizeof(SectionDesc{}); sz != 24 {
 		t.Fatalf("SectionDesc size must be exactly 24 bytes, got %d", sz)

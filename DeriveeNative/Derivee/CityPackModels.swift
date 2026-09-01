@@ -96,25 +96,53 @@ public struct ScheduleValidity: Codable, Sendable, Equatable, Hashable {
     }
 }
 
+public struct GBFSConfig: Codable, Sendable, Equatable, Hashable {
+    public let systemId: String
+    public let stationInfoUrl: String
+    public let stationStatusUrl: String
+    public let pollIntervalSeconds: Double
+    public let stalenessThresholdSeconds: Double
+    public let headers: [String: String]?
+    
+    public init(
+        systemId: String,
+        stationInfoUrl: String,
+        stationStatusUrl: String,
+        pollIntervalSeconds: Double = 30.0,
+        stalenessThresholdSeconds: Double = 600.0,
+        headers: [String: String]? = nil
+    ) {
+        self.systemId = systemId
+        self.stationInfoUrl = stationInfoUrl
+        self.stationStatusUrl = stationStatusUrl
+        self.pollIntervalSeconds = pollIntervalSeconds
+        self.stalenessThresholdSeconds = stalenessThresholdSeconds
+        self.headers = headers
+    }
+}
+
 public struct CityTransitConfig: Codable, Sendable, Equatable, Hashable {
     public let agencyName: String
     public let attributions: [String]
     public let realtimeEndpoints: [RealtimeEndpoint]
     public let feedRouteMapping: [String: String]?
     public let scheduleValidity: ScheduleValidity?
+    public let gbfs: GBFSConfig?
     
     public init(
         agencyName: String,
         attributions: [String] = [],
         realtimeEndpoints: [RealtimeEndpoint] = [],
         feedRouteMapping: [String: String]? = nil,
-        scheduleValidity: ScheduleValidity? = nil
+        scheduleValidity: ScheduleValidity? = nil,
+        gbfs: GBFSConfig? = nil
     ) {
         self.agencyName = agencyName
         self.attributions = attributions
         self.realtimeEndpoints = realtimeEndpoints
         self.feedRouteMapping = feedRouteMapping
         self.scheduleValidity = scheduleValidity
+        self.gbfs = gbfs
     }
 }
 
@@ -188,6 +216,13 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
                 startDate: "2026-06-01",
                 endDate: "2026-09-01",
                 seasonLabel: "Summer 2026 Timetable"
+            ),
+            gbfs: GBFSConfig(
+                systemId: "citi_bike_nyc",
+                stationInfoUrl: "https://gbfs.citibikenyc.com/gbfs/en/station_information.json",
+                stationStatusUrl: "https://gbfs.citibikenyc.com/gbfs/en/station_status.json",
+                pollIntervalSeconds: 30.0,
+                stalenessThresholdSeconds: 600.0
             )
         ),
         sha256: nil
@@ -214,7 +249,14 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
             attributions: [
                 "MBTA Subway, Bus & Commuter Rail",
                 "MassDOT Ferry Operations"
-            ]
+            ],
+            gbfs: GBFSConfig(
+                systemId: "bluebikes_boston",
+                stationInfoUrl: "https://gbfs.bluebikes.com/gbfs/en/station_information.json",
+                stationStatusUrl: "https://gbfs.bluebikes.com/gbfs/en/station_status.json",
+                pollIntervalSeconds: 30.0,
+                stalenessThresholdSeconds: 600.0
+            )
         )
     )
     
@@ -239,7 +281,14 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
             attributions: [
                 "CTA Subway 'L' & Bus",
                 "Metra Commuter Rail"
-            ]
+            ],
+            gbfs: GBFSConfig(
+                systemId: "divvy_chicago",
+                stationInfoUrl: "https://gbfs.divvybikes.com/gbfs/en/station_information.json",
+                stationStatusUrl: "https://gbfs.divvybikes.com/gbfs/en/station_status.json",
+                pollIntervalSeconds: 30.0,
+                stalenessThresholdSeconds: 600.0
+            )
         )
     )
 }
