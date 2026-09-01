@@ -214,19 +214,20 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 ### 🚀 On-Device Multimodal Routing & Reliability Engine (Wave N)
 
 > [!NOTE]
-> **Gated on:** Wave M (field hardening) complete. Wave N introduces an **on-device C++ Hybrid RAPTOR routing engine** with Swift interop, ULTRA precomputed transfer shortcuts, real-time GBFS micro-mobility integration, Observer historical slot profiling, and a 120Hz immediate-mode Canvas for reliability visualization.
+> **Gated on:** Wave M (field hardening) complete. Wave N introduces an **on-device C++ Hybrid RAPTOR routing engine** with Swift interop, ULTRA precomputed transfer shortcuts, real-time GBFS micro-mobility integration, Observer historical slot profiling, 120Hz immediate-mode Canvas, and multimodal cognitive UX architecture.
 >
 > **Parallel Execution:** Wave N is architected across **4 parallel tracks** (A, B, C, D) that can be developed concurrently:
 > - **Track A (Observer / Go / CLI):** OSM PBF extraction, ULTRA shortcut precomputation, RAPTOR binary compilation, Service Alerts ingestion & 15-min origin dispatch slot profiling.
 > - **Track B (C++ Engine / Swift):** Swift-C++ interop scaffold, Hybrid RAPTOR core algorithm (0–45m real-time active trains + frequency expansion beyond), dynamic disruption bitmask, Pareto evaluation.
 > - **Track C (Dynamic Data / GRDB):** GBFS station sync service & multi-modal dock gating, `service_disruptions` & `trip_slot_profiles` integration, circular midnight delay math.
-> - **Track D (SwiftUI / Canvas):** Predictive route comparison cards with confidence bands, Train Inspector sheet, Smart Zoom station badges, 120Hz Canvas.
+> - **Track D (SwiftUI / Canvas / Multimodal UX):** Predictive route comparison cards with confidence bands, Train Inspector sheet, Smart Zoom station badges, 120Hz Canvas, and Doc 14 UX tightening (3-tier GTFS-RT confidence, subterranean exit mapping, train car positioning, landmark walking guidance, dynamic GBFS dock gating, 15%/50%/90% bottom sheet ergonomics).
 >
 > **Prerequisite Research Spikes (All ✅ Resolved):**
 > 1. C++ RAPTOR Timetable Compaction — 20.64 MB for NYC-scale (9.36 MB headroom under 30 MB ceiling). Byte layout locked.
 > 2. OSM Pedestrian Graph + ULTRA — < 25 MB per city. CSR shortcuts (~8 MB) eliminate live Dijkstra. Go extraction ~4.5s.
 > 3. GBFS Polling — ~75 KB gzip payload. SQLite ingestion via GRDB. Spatial bounding box query < 0.8ms.
 > 4. Reliability Distribution Math — Pre-squared sum SQLite aggregation. 4,320-element flat `[Float]` buffer for 120Hz Canvas.
+> 5. Multimodal Navigation Mental Models & UX Architecture — Doc 14 table stakes, cognitive models, and ergonomics locked.
 >
 > **Combined On-Device Memory Budget:** RAPTOR timetable (20.64 MB) + ULTRA CSR (4 MB) + GBFS worker (1.5 MB) = **~26 MB** (4 MB headroom under 30 MB Jetsam ceiling).
 
@@ -238,7 +239,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **N-A.3** | **WNA3-ULTRA-PRECOMPUTE** | **ULTRA Transfer Shortcut Precomputation & CSR Serialization:** Run bounded Dijkstra ($\tau_{\max} \le 15\text{m}$) from each transit stop across the pedestrian graph to produce Pareto-optimal stop-level shortcut tuples $(u, v, \tau_\theta)$. Serialize as Compressed Sparse Row (CSR) binary `ultra_transfers.csr`: `stop_offsets` array (`uint32_t[|S|+1]`) + packed `ULTRACompressedTransfer` structs (7B: `target_stop_id` u32, `duration_seconds` u16, `flags` u8). ~8 MB on disk per city. | **L** | Planned |
 | **N-A.4** | **WNA4-GBFS-CONFIG** | **GBFS Endpoint Configuration in City Packs:** Add `gbfs` section to `city_config.json` schema with `stationStatusUrl`, `pollIntervalSeconds` (30), `stalenessThresholdSeconds` (600). Update NYC pack with Citi Bike endpoints, Boston pack with Bluebikes endpoints. Update `cities.json` manifest. | **S** | Planned |
 | **N-A.5** | **WNA5-PACK-FORMAT** | **City Pack v2 Format Extension:** Update city pack directory structure to include `timetable.bin`, `ultra_transfers.csr`, `walk_graph.bin` alongside existing `transit.sqlite` and `transit-lines.geojson`. Bump `city_config.json` version to `2`. Regenerate and upload NYC + Boston packs to R2. | **M** | Planned |
-| **N-A.6** | **WNA6-OBSERVER-ALERTS-SLOTS** | **Observer Service Disruptions & 15-Minute Origin Dispatch Slot Profiler:** (1) Ingest GTFS `calendar_dates.txt` and planned construction alerts into `service_disruptions` in `transit.sqlite`. (2) Aggregate 30-day stop arrivals into 15-minute origin departure intervals (`trip_slot_profiles`) for GTFS-update-immune P10/P50/P90 transit durations and slot regularity metrics. | **M** | Planned |
+| **N-A.6** | **WNA6-OBSERVER-ALERTS-SLOTS** | **Observer Service Disruptions & 15-Minute Origin Dispatch Slot Profiler:** (1) Ingest GTFS `calendar_dates.txt` and planned construction alerts into `service_disruptions` in `transit.sqlite`. (2) Aggregate 30-day stop arrivals into 15-minute origin departure intervals (`trip_slot_profiles`) for GTFS-update-immune P10/P50/P90 transit durations and slot regularity metrics. (3) Compute backend ETA Completeness Benchmark ($\text{Score} = (N_{\text{communicated}} / N_{\text{scheduled}}) \times 100$). | **M** | Planned |
 
 #### Track B: C++ RAPTOR Engine & Swift Interop (C++ / Swift)
 | Wave | Task ID | Title | Size | Status |
@@ -251,29 +252,41 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 #### Track C: Dynamic Data Layer (Swift / GRDB)
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
-| **N-C.1** | **WNC1-GBFS-SYNC** | **`GBFSSyncService` & Multi-Modal Dock Validation:** Implement `GBFSSyncService` with `Task`-based 30s async polling. Ephemeral `gbfs_cache.sqlite` (`DatabaseQueue`, `.userInitiated` QoS). Live dock validation ($\ge 2$ bikes at origin dock, $\ge 2$ open docks at destination) gating multi-modal bike+subway transfer suggestions. Staleness gate: 600s. | **M** | ✅ Done |
+| **N-C.1** | **WNC1-GBFS-SYNC** | **`GBFSSyncService` & Multi-Modal Dock Validation:** Implement `GBFSSyncService` with `Task`-based 30s async polling. Ephemeral `gbfs_cache.sqlite` (`DatabaseQueue`, `.userInitiated` QoS). Dynamic 3-tier dock availability gating product ($G(e) = g_{\text{pick}} \cdot g_{\text{drop}}$): $>3$ low risk, 1–2 moderate risk (pre-arm secondary fallback dock), 0 high risk (auto-reroute to dock within 3m walk). Staleness gate: 600s. | **M** | ✅ Done |
 | **N-C.2** | **WNC2-RELIABILITY-ENGINE** | **`TransitDatabaseEngine` & Slot/Disruption Queries:** Implement async GRDB queries for `service_disruptions` (time-bounded calendar work) and `trip_slot_profiles` (15-min origin dispatch stats). Aggregates $SWT$, $AWT$, $EWT$, and $OTP$ over 168-hour rolling windows. | **M** | Planned |
 | **N-C.3** | **WNC3-CIRCULAR-TIME** | **`GTFSMidnightResolver` & Euclidean Modulo Circular Distance:** Implement `euclideanModulo(a, n) = (a % n + n) % n` for non-negative modular arithmetic. `calculateSignedCircularDelay` mapping GTFS-RT timestamps to signed $[-720, +720]$ minute offsets on the 1,440-minute clock face. `GTFSRealtimeStreamProcessor` actor for processing `StopTimeUpdate` payloads with midnight-safe delay computation. | **S** | Planned |
 
-#### Track D: UI & Visualization (SwiftUI / Canvas / Metal)
+#### Track D: UI, Visualization & Multimodal UX (SwiftUI / Canvas / Metal)
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
 | **N-D.1** | **WND1-DEPARTURE-CANVAS** | **120Hz Immediate-Mode `DepartureMatrixCanvas`:** Metal-backed `Canvas(rendersAsynchronously: true)` + `.drawingGroup()`. Flat contiguous `[Float]` buffer (4,320 elements: $24\text{h} \times 60\text{m} \times 3$ percentiles). Index stride: $\text{Offset}(h, m, p) = (h \times 60 + m) \times 3 + p$. Direct RGBA interpolation avoiding SwiftUI modifier chains. Target: 0.8ms–1.9ms per frame (< 8.33ms 120Hz budget). | **M** | ✅ Done |
-| **N-D.2** | **WND2-ROUTE-CARDS** | **Predictive Route Comparison Cards & Multi-Profile Selector:** `JourneyItinerary` result cards showing arrival time with P10–P90 confidence intervals, transfer count badges, walking/biking effort, and inline disruption callouts. Multi-profile selector (`[Most Reliable]`, `[Fastest]`, `[Fewest Transfers]`, `[Step-Free]`, `[Multi-Modal Bike + Rail]`). | **M** | Planned |
+| **N-D.2** | **WND2-ROUTE-CARDS** | **Predictive Route Comparison Cards, 3-Tier Confidence Badges & Multi-Profile Selector:** `JourneyItinerary` result cards showing arrival time with P10–P90 confidence intervals, 3-tier GTFS-RT confidence badges (`Verified` live pulsing dot, `Estimated` stale tag, `Static` schedule fallback), total cost/distance/time summaries per mode, transfer count badges, walking/biking effort, and inline disruption callouts. Multi-profile selector (`[Most Reliable]`, `[Fastest]`, `[Fewest Transfers]`, `[Step-Free]`, `[Multi-Modal Bike + Rail]`). | **M** | Planned |
 | **N-D.3** | **WND3-CONFIDENCE-BANDS** | **P10/P50/P90 Confidence Interval Visualization:** Render percentile wait-time bands from `[Float]` buffer using `Canvas` or `Path`-based area fills. Statistical variance disutility coloring: narrow bands (reliable, green tint) vs wide bands (unreliable, amber/red tint). Tap-to-inspect detail overlay. | **S** | Planned |
-| **N-D.4** | **WND4-TRAIN-INSPECTOR-SMART-ZOOM** | **Deep Train Inspector & Smart Zoom Station Badges:** (1) Train Inspector sub-sheet on tapping live arrival row (Track Thermometer, GTFS-RT `occupancy_status` / crowd fallback, 15-min slot regularity card, map synchronizer). (2) Smart Zoom MapLibre station symbol layer resolving discrete route bullets (`[4][5][6]` vs `[6]`) at $z \ge 14.5$. | **M** | Planned |
+| **N-D.4** | **WND4-TRAIN-INSPECTOR-SMART-ZOOM** | **Deep Train Inspector, Car Exit Badges & Smart Zoom Station Bullets:** (1) Train Inspector sub-sheet on tapping live arrival row (Track Thermometer, GTFS-RT `occupancy_status` / crowd fallback, 15-min slot regularity card, map synchronizer). (2) Platform train car recommendation badges (`Board near front/middle/rear car` for transfer & egress alignment) and deterministic subterranean exit codes (e.g. `Exit 4B - NW Corner 42nd & Broadway`). (3) Smart Zoom MapLibre station symbol layer resolving discrete route bullets (`[4][5][6]` vs `[6]`) at $z \ge 14.5$. | **M** | Planned |
+| **N-D.5** | **WND5-THUMB-ZONE-DETENTS** | **Standardized 3-Tier Bottom Sheet Ergonomics & One-Handed Thumb Zone:** Standardize navigation sheets across 3 ergonomic detents: `15%` (Collapsed Peek for next upcoming step), `50%` (Half-Screen Step-by-Step Guidance), and `90%` (Full-Screen Expanded Timetable / Alternatives). Floating hero map viewport preservation. Primary action buttons (`Start Journey`, `Reroute`, `Unlock Bike`) anchored strictly in lower-third thumb zone. | **S** | Planned |
+| **N-D.6** | **WND6-LANDMARK-WALKING-DIRECTIONS** | **Landmark-Anchored Walking Guidance & Microclimate Shaded Routes:** Replace numerical distance-only prompts ("turn in 300ft") with 3–5 salient visual landmark anchors per walking route ("Turn left after the red brick pharmacy"). Multi-attribute cost weighting factoring urban tree canopy cover and building shadow vectors ($\text{PET}$ cost model) for shaded cool walking routes. | **M** | Planned |
+| **N-D.7** | **WND7-GBFS-DOCK-GATING-UI** | **Dynamic GBFS Dock Gating, E-Bike Battery SOC Overlays & Cycling Ergonomics:** Real-time 3-tier dock availability gating badges (>3 low risk, 1–2 moderate fallback pre-armed, 0 auto-reroute to nearest dock within 3m walk). E-bike state-of-charge (SOC %) overlays and usable range radiuses. Expanded 56×56pt touch targets and high-contrast WCAG AAA cycling HUD (0.5s glance window). | **M** | Planned |
+| **N-D.8** | **WND8-LIVE-DYNAMIC-RECOVERY** | **Live Dynamic Recovery & Multimodal Live Activity / Dynamic Island:** Automated missed-connection detection via live GPS vs platform departure timestamps. Instant 1-tap recovery card suggesting alternate bus/bike/walk legs. Native iOS Live Activity and Dynamic Island trip progress tracking with transfer countdowns, step transitions, and subterranean exit guidance. | **M** | Planned |
 
-### 🔮 Wave O: MetalFogEngine (GPU Alpha Masking & Spatial Hashing) [TO-DO]
+### 🔮 Wave O: MetalFogEngine & GPU Spatial Rendering Pipeline
 
 > [!NOTE]
-> **TO-DO:** Detailed task breakdown for Wave O to be written based on Research Docs 05–09 in [`docs/research/`](file:///Volumes/T7ssd/derivee/docs/research/):
-> - **Doc 05:** Web Mercator $\rightarrow$ Metal NDC RTC Coordinate Projection & Zero-Lag Camera VSync Sync
-> - **Doc 06:** Open-Addressing GPU Hash Table in `MTLBuffer` ($<10\text{ MB}$ VRAM limit, bitwise parent LOD aggregation)
-> - **Doc 07:** `MLNCustomStyleLayer` Zero-Lag In-Pipeline Injection & Occlusion Preservation
-> - **Doc 08:** 120 FPS CADisplayLink Telemetry Suite & Visual Parity Regression Tests
-> - **Doc 09:** MSL Full-Screen Quad Shader, Screen-Space Derivative AA (`dfdx`/`dfdy`), and Analytical Amber Glow
-> 
-> *Task breakdown pending — research spikes fully completed.*
+> **Wave O Architecture:** Upgrades the fog rendering pipeline from MapLibre CPU geometry generation (`cellsToLinkedMultiPolygon` shape assignment) to a direct, hardware-accelerated **Metal in-pipeline custom style layer (`MLNCustomStyleLayer`)**. Built strictly on Research Docs 05–09 in [`docs/research/`](file:///Volumes/T7ssd/derivee/docs/research/).
+>
+> **Core Constraints & Invariants:**
+> - **Zero-Lag VSync:** EPSG:3857 $\rightarrow$ Metal NDC Relative-to-Center (RTC) projection with 0-frame latency (Doc 05).
+> - **GPU Memory Cap:** Open-addressing GPU hash table in shared `MTLBuffer` strictly $< 10\text{ MB}$ VRAM (Doc 06).
+> - **Compositing & Label Legibility:** In-pipeline injection below `MLNSymbolStyleLayer` preserving text legibility (Doc 07).
+> - **Anti-Aliasing & Glow:** 4-vertex full-screen quad fragment shader with screen-space derivative AA (`dfdx`/`dfdy`) and single-pass Electric Amber (`#FFB300`) analytical glow (Doc 09).
+> - **Performance Target:** Headless 120 FPS CADisplayLink telemetry, $\text{P99} \le 8.33\text{ms}$, 0% CPU geometry time, $\text{RMSD} < 0.001$ visual parity (Doc 08).
+
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **O.1** | **WO1-CAMERA-PROJECTION** | **Web Mercator to Metal NDC RTC Projection & VSync Engine (Doc 05):** Implement `MapProjectionMath` translating EPSG:3857 coordinates to Metal Normalized Device Coordinates (NDC) using Relative-to-Center (RTC) precision offsets ($S(z) = 512 \cdot 2^z$) mitigating float32 jitter at $z \ge 18$. Zero-lag CADisplayLink camera synchronization with MapLibre viewport. | **M** | Planned |
+| **O.2** | **WO2-GPU-SPATIAL-HASH** | **Open-Addressing GPU Spatial Hash Table in `MTLBuffer` (Doc 06):** 16-byte aligned `H3HashSlot` and 64-byte `H3HashTableHeader` in shared `MTLBuffer` (<4.26 MB VRAM for 100k hexes, <10 MB budget). In-shader bitwise parent LOD aggregation (Res 11 $\rightarrow$ Res 10/9/8). `.storageModeShared` zero-copy CPU pointer writes. | **L** | Planned |
+| **O.3** | **WO3-LAYER-INJECTION** | **In-Pipeline `MLNCustomStyleLayer` Metal Injection & Label Occlusion (Doc 07):** Direct `id<MTLRenderCommandEncoder>` reuse within MapLibre render pipeline. Z-index insertion below `MLNSymbolStyleLayer` preserving station/street label legibility with zero auxiliary texture overhead. | **M** | Planned |
+| **O.4** | **WO4-MSL-QUAD-SHADERS** | **MSL Full-Screen Quad Fragment Pipeline, Derivative AA & Analytical Amber Glow (Doc 09):** 4-vertex full-screen quad vertex shader ($O(1)$ vertex load). Screen-space partial derivatives (`dfdx`, `dfdy`) for constant 1.0–1.5px boundary anti-aliasing across $z0 \dots z18$. Single-pass analytical Hermite glow ($I_{\text{glow}}(C)$) in Electric Amber (`#FFB300`) executing in $<0.3\text{ms}$ on Apple Silicon. | **M** | Planned |
+| **O.5** | **WO5-120HZ-TELEMETRY** | **Empirical 120 FPS CADisplayLink Telemetry Suite & Visual Parity Tests (Doc 08):** Automated headless XCTest telemetry suite verifying locked $\ge 118\text{ FPS}$ (P99 $\le 8.33\text{ms}$), 0% CPU geometry time ($\le 0.05\text{ms}$ uniform write), and $\text{RMSD} < 0.001$ visual parity against MapLibre polygon reference. | **M** | Planned |
 
 ### Post-Ship (Completed Post-Launch Waves)
 

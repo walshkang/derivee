@@ -22,6 +22,7 @@
 | **Real-Time GBFS Micro-Mobility & Dock Gating** | Wave N.3 | [`11_gbfs_micromobility_dock_gating.md`](11_gbfs_micromobility_dock_gating.md) | `GBFSRealtimeService`, `gbfs_cache.sqlite` (`DatabaseQueue`) | Ephemeral SQLite in `NSTemporaryDirectory()`; dock gating ($G(e) = g_{\text{pick}} \cdot g_{\text{drop}}$); $0.12\text{ms}$ spatial query; zero `0xdead10cc` risk |
 | **120Hz Immediate-Mode Canvas & Reliability Heatmap** | Wave N.4 | [`12_immediate_mode_canvas_reliability_heatmap.md`](12_immediate_mode_canvas_reliability_heatmap.md) | `ImmediateDepartureMatrixCanvas`, `CircularDensitySmoother` | `Canvas(rendersAsynchronously: true)` + `.drawingGroup()`; flat 4,320 `[Float]` array (17.28KB L1 cache); von Mises circular convolution in $<0.07\text{ms}$ via vDSP |
 | **Automated GIS Multi-City Compiler & Bridge Masking** | Wave M/L | [`13_automated_gis_city_pack_compiler.md`](13_automated_gis_city_pack_compiler.md) | `SpatialProcessor`, `WriteAlignedHeader`, `performAtomicDatabaseSwap` | $\text{Walkable} = (\text{Neighborhood} \setminus \text{Water}) \cup \text{Bridges}$; 16 KiB page-aligned `.pack.zst`; `WITHOUT ROWID` clustered tables; atomic POSIX `rename()` |
+| **Multimodal Navigation Mental Models & UX Architecture** | Wave N / Wave O | [`14_multimodal_navigation_mental_models_ux_architecture.md`](14_multimodal_navigation_mental_models_ux_architecture.md) | `ETACompleteness`, `DockGating`, `LandmarkAnchors`, `ThumbZoneDetents` | 3-tier GTFS-RT confidence; 3-tier dock availability gating; 3–5 landmark cues; 15%/50%/90% bottom sheet detents; WCAG AAA 56x56pt glance targets |
 
 ---
 
@@ -39,16 +40,17 @@
 │   • Track A (Binary Serialization & ULTRA CSR): Docs 01, 02, 03, 04     │
 │   • Track B (Hybrid RAPTOR Hot Loop & C++ Interop): Doc 10              │
 │   • Track C (GBFS Micro-Mobility & Dynamic GTFS-RT): Docs 04, 11        │
-│   • Track D (120Hz Departure Matrix Canvas): Doc 12                     │
+│   • Track D (120Hz Departure Matrix Canvas & UX Alignment): Docs 12, 14 │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
 ┌────────────────────────────────────▼────────────────────────────────────┐
-│ Wave O: MetalFogEngine (GPU Alpha Masking & Spatial Hashing) [Planned]  │
+│ Wave O: MetalFogEngine & System UX Hardening [Planned]                   │
 │   • Coordinate Projection & RTC Matrix: Doc 05                          │
 │   • Open-Addressing GPU Hash Table in MTLBuffer: Doc 06                 │
 │   • In-Pipeline MLNCustomStyleLayer Injection: Doc 07                   │
 │   • MSL Shader Pipeline & Amber Glow: Doc 09                            │
 │   • Empirical 120Hz Telemetry Benchmark Suite: Doc 08                   │
+│   • Multimodal UX/UI Tightening & Ergonomics: Doc 14                    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -107,3 +109,7 @@
 ### [13. Automated Multi-City GIS Compilation & Pedestrian Bridge Subtraction](13_automated_gis_city_pack_compiler.md)
 * **Scope:** Boolean GIS set algebra, OpenStreetMap Overpass pedestrian bridge extraction, H3 Res 11 polyfill validation, SQLite `WITHOUT ROWID` optimization, and 16 KiB page-aligned Zstandard stream packaging.
 * **Key Invariants:** Pedestrian bridge preservation formula $\text{Walkable} = (\text{Neighborhood} \setminus \text{Water}) \cup \text{Pedestrian\_Bridges}$; "Quiet Water Gliding" open-water cell purging ($-30\%$ index cardinality); `WITHOUT ROWID` clustered tables reducing cold queries to $1.8\text{ ms}$ ($-87.3\%$ latency); 16 KiB page-aligned Zstandard Skippable Frames (`0x184D2A50`) enabling zero-copy `mmap` ($2.1\text{ MB}$ client RAM, $-94.5\%$); atomic POSIX `rename()` swaps in $4.2\text{ ms}$ with zero downtime.
+
+### [14. Multimodal Navigation Mental Models & UX System Architecture](14_multimodal_navigation_mental_models_ux_architecture.md)
+* **Scope:** Cognitive mental models across transit commuter psychology, pedestrian landmark orientation, GBFS micro-mobility dock anxiety, multimodal chaining, and mobile ergonomics.
+* **Key Invariants:** 3-tier GTFS-RT confidence hierarchy (Verified $\rightarrow$ Estimated $\rightarrow$ Static); ETA completeness score tracking; deterministic subterranean exit mapping & train car exit badges; 3–5 visual landmark anchors per walking route; microclimate shaded path routing ($\text{PET}$ cost model); 3-tier dynamic dock gating ($>3$ low risk, 1–2 fallback, 0 reroute); Level of Traffic Stress (LTS) protected cycle track prioritization; 15%/50%/90% bottom sheet thumb detents; WCAG AAA 56x56pt glance targets; native iOS Dynamic Island and Live Activity progress tracking.
