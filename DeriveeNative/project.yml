@@ -13,12 +13,13 @@ targets:
       CLANG_CXX_LIBRARY: "libc++"
       OTHER_SWIFT_FLAGS: "-cxx-interoperability-mode=default -Xcc -std=c++20"
       DEFINES_MODULE: YES
+      MODULEMAP_FILE: "$(SRCROOT)/DeriveeCore/include/module.modulemap"
       DEVELOPMENT_TEAM: K9HJ6RGKU6
       CODE_SIGN_STYLE: Automatic
       HEADER_SEARCH_PATHS: "$(SRCROOT)/DeriveeCore/include"
     sources:
       - path: DeriveeCore/include
-        public: true
+        headerVisibility: public
       - path: DeriveeCore/src
   Derivee:
     type: application
@@ -73,6 +74,7 @@ targets:
       CLANG_CXX_LANGUAGE_STANDARD: "c++20"
       CLANG_CXX_LIBRARY: "libc++"
       OTHER_SWIFT_FLAGS: "-cxx-interoperability-mode=default -Xcc -std=c++20"
+      HEADER_SEARCH_PATHS: "$(SRCROOT)/DeriveeCore/include"
     sources:
       - path: DeriveeCoreTests
     dependencies:
@@ -88,6 +90,7 @@ targets:
       CLANG_CXX_LANGUAGE_STANDARD: "c++20"
       CLANG_CXX_LIBRARY: "libc++"
       OTHER_SWIFT_FLAGS: "-cxx-interoperability-mode=default -Xcc -std=c++20"
+      HEADER_SEARCH_PATHS: "$(SRCROOT)/DeriveeCore/include"
     sources:
       - path: DeriveeTests
     dependencies:

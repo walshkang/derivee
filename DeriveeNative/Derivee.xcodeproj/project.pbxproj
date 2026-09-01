@@ -76,6 +76,7 @@
 		6F13F292B3644870F603E823 /* GBFSSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818C9FA874236379986C6F46 /* GBFSSyncService.swift */; };
 		6F7AFB2044DA5AE96EB8CFB8 /* SpatialStoreFogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3018C4BA13CF89BEBFCCBA /* SpatialStoreFogTests.swift */; };
 		6F8F1E60DAA690CB2A8C06AA /* TransitRouteBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769592D64F1678EB59A70440 /* TransitRouteBadge.swift */; };
+		6FB02C54946134767E4997E6 /* testDepartureMatrixCanvasSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 2FD3D98069B7D8F11CDB4AE6 /* testDepartureMatrixCanvasSnapshot.1.png */; };
 		6FCEBA160AFA3F9482632386 /* DeriveeCore.h in Headers */ = {isa = PBXBuildFile; fileRef = E5A8D0C2C43AF162793051E9 /* DeriveeCore.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		71668E6AACFA1BF41E48906C /* testProfileFABSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 0A5292C34F0F973F8D1DB737 /* testProfileFABSnapshot.1.png */; };
 		76CB18D060B0DDE765BCFF8B /* DeriveeCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4995AF0BA66896744846FCA8 /* DeriveeCore.framework */; };
@@ -111,8 +112,11 @@
 		A6469CC3CDE5A3558B090348 /* TrackingLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C14A94454A0845801D4442 /* TrackingLiveActivity.swift */; };
 		A64B7ADC6D740C113EB25D78 /* DepartureMatrixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F6A53E84867BAE6EE1B6ACC /* DepartureMatrixView.swift */; };
 		A825909AB76BEA7ABCC21986 /* H3 in Frameworks */ = {isa = PBXBuildFile; productRef = 9406C642B57B83517386E129 /* H3 */; };
+		A86DBEE237C8A92E6EBEBF29 /* ULTRADataStore.hpp in Headers */ = {isa = PBXBuildFile; fileRef = D2D74FCE2FD2A3CF62EA38A6 /* ULTRADataStore.hpp */; settings = {ATTRIBUTES = (Public, ); }; };
 		A95DFA40CCA84CFAB1DCC153 /* subway-lines.geojson in Resources */ = {isa = PBXBuildFile; fileRef = 445AD172FC50D843E3DEA9E7 /* subway-lines.geojson */; };
 		A9725147E4D56FCC9789CF14 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482E45C732819866B4B63747 /* SettingsView.swift */; };
+		A9BC3563FB3AA23387300521 /* testDepartureMatrixCanvasSelectedSlotSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = B558B4369DD1A7F9A915F679 /* testDepartureMatrixCanvasSelectedSlotSnapshot.1.png */; };
+		A9E00CB3110E365FDD1EE7DB /* RaptorCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C0A610C91153CAAABBBAF4 /* RaptorCoreTests.swift */; };
 		AC6A1907D9A87160479E874F /* testTransitSparklineViewSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 5FA1E40A44F1C7D276AEF000 /* testTransitSparklineViewSnapshot.1.png */; };
 		AFA9229E7141965BE1572E48 /* TransitHotSwapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CFB41819645FF7A1F85119 /* TransitHotSwapTests.swift */; };
 		B07637BA68FC00CAAAEC1B56 /* neighborhood.sqlite in Resources */ = {isa = PBXBuildFile; fileRef = 80384B383FEE2FACF5DEF57F /* neighborhood.sqlite */; };
@@ -282,6 +286,7 @@
 		29C14A94454A0845801D4442 /* TrackingLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingLiveActivity.swift; sourceTree = "<group>"; };
 		2D59730F8717703FBA54BE4C /* ColdStartLocationFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColdStartLocationFilter.swift; sourceTree = "<group>"; };
 		2ED6E13E39675378FBBE5388 /* CityPromptSheetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPromptSheetTests.swift; sourceTree = "<group>"; };
+		2FD3D98069B7D8F11CDB4AE6 /* testDepartureMatrixCanvasSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testDepartureMatrixCanvasSnapshot.1.png; sourceTree = "<group>"; };
 		34154FDD24C6585667198AC4 /* POIMaskManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POIMaskManager.swift; sourceTree = "<group>"; };
 		37A682CC32847F6246006469 /* testReliabilityHeatmapCanvasSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testReliabilityHeatmapCanvasSnapshot.1.png; sourceTree = "<group>"; };
 		37F63864F1E6316756366180 /* testApertureSignatureViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testApertureSignatureViewSnapshot.1.png; sourceTree = "<group>"; };
@@ -338,6 +343,7 @@
 		863A532D137F91C7E2021C95 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		86B2FFDED57A84490398B9F8 /* derivee_transit.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = derivee_transit.sqlite; sourceTree = "<group>"; };
 		878744028003B6170BB298EA /* MapFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapFAB.swift; sourceTree = "<group>"; };
+		88C0A610C91153CAAABBBAF4 /* RaptorCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaptorCoreTests.swift; sourceTree = "<group>"; };
 		8B6EE07ABA7FA06682C990C7 /* testTransitMatrixInspectorViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testTransitMatrixInspectorViewSnapshot.1.png; sourceTree = "<group>"; };
 		8C620FF203F57ED5764A4BF7 /* TrackingEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingEngineTests.swift; sourceTree = "<group>"; };
 		8CB6441E329AB503A0902905 /* TarExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TarExtractor.swift; sourceTree = "<group>"; };
@@ -366,6 +372,7 @@
 		AF626E8EA1D36226174C6F8E /* DeriveeWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeriveeWidgetBundle.swift; sourceTree = "<group>"; };
 		AF81045CC27721884C49C776 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B22F1CEC7D6CA37F1609163B /* testDepartureMatrixViewDisabledDirectionSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testDepartureMatrixViewDisabledDirectionSnapshot.1.png; sourceTree = "<group>"; };
+		B558B4369DD1A7F9A915F679 /* testDepartureMatrixCanvasSelectedSlotSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testDepartureMatrixCanvasSelectedSlotSnapshot.1.png; sourceTree = "<group>"; };
 		B62FBA7B0CF27AE86B662199 /* TransitHitTestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitHitTestTests.swift; sourceTree = "<group>"; };
 		B72EA056FF7C3DB3CC5DBCB7 /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = module.modulemap; sourceTree = "<group>"; };
 		B78DE3D729CFDDAA29570FF6 /* CameraBoundsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraBoundsTests.swift; sourceTree = "<group>"; };
@@ -387,6 +394,7 @@
 		CEAF23FBABFEF686C30223AD /* AllMetrosSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllMetrosSummaryView.swift; sourceTree = "<group>"; };
 		CFAC15B31EFF91C40E2E93EB /* ExplorationResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExplorationResetTests.swift; sourceTree = "<group>"; };
 		D0786225B07AB50A074567E9 /* FogPolygonMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FogPolygonMath.swift; sourceTree = "<group>"; };
+		D2D74FCE2FD2A3CF62EA38A6 /* ULTRADataStore.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ULTRADataStore.hpp; sourceTree = "<group>"; };
 		D71C1EF9BB8CB7783240BD04 /* testCitySelectorPillSnapshots.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testCitySelectorPillSnapshots.1.png; sourceTree = "<group>"; };
 		D7565F6B0E0AE526D3E3AA4D /* DiscoveryToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryToast.swift; sourceTree = "<group>"; };
 		D7D9DCD362FB2ADD8F63B6B2 /* TrackingAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingAttributes.swift; sourceTree = "<group>"; };
@@ -471,6 +479,7 @@
 				14B903F25198586BC0920B5F /* RaptorEngine.hpp */,
 				EC4FF27CBDA648976E2A66B8 /* TimetableStructs.hpp */,
 				4E32B3AE32C69C0BB8C5D65D /* TransitTime.hpp */,
+				D2D74FCE2FD2A3CF62EA38A6 /* ULTRADataStore.hpp */,
 			);
 			name = include;
 			path = DeriveeCore/include;
@@ -621,6 +630,7 @@
 			children = (
 				4032DCABB51243EF7C507D85 /* BinaryHeaderValidationTests.swift */,
 				A30D02CD2D9B66E3094BEFD9 /* ParetoDominanceTests.swift */,
+				88C0A610C91153CAAABBBAF4 /* RaptorCoreTests.swift */,
 				EAAD73184255F7D51334034E /* RaptorEngineInteropTests.swift */,
 				ED874B76ED1AD8AFFAF293F7 /* TimetableStructTests.swift */,
 				9F7340BC357B0AF2A8D0D060 /* TransitTimeTests.swift */,
@@ -730,6 +740,8 @@
 		FB3E1E28A8AD040F7FE995AC /* TransitRevealSheetTests */ = {
 			isa = PBXGroup;
 			children = (
+				B558B4369DD1A7F9A915F679 /* testDepartureMatrixCanvasSelectedSlotSnapshot.1.png */,
+				2FD3D98069B7D8F11CDB4AE6 /* testDepartureMatrixCanvasSnapshot.1.png */,
 				B22F1CEC7D6CA37F1609163B /* testDepartureMatrixViewDisabledDirectionSnapshot.1.png */,
 				7BF5DEEF4436C92EA5AF42BF /* testDepartureMatrixViewMultiRouteSnapshot.1.png */,
 				F452672A916B8CFFEED1E710 /* testDepartureMatrixViewSnapshot.1.png */,
@@ -759,6 +771,7 @@
 				CA4013ECCE3DC3CE13BB8E96 /* RaptorEngine.hpp in Headers */,
 				53823255581031434CADF367 /* TimetableStructs.hpp in Headers */,
 				D1578917C76E094E61C655FA /* TransitTime.hpp in Headers */,
+				A86DBEE237C8A92E6EBEBF29 /* ULTRADataStore.hpp in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -962,6 +975,8 @@
 				18E92EB2D877E0DE04CE376B /* testApertureSignatureViewSnapshot.1.png in Resources */,
 				F196DF354943AB224043F4A4 /* testCitiesStorageManagerViewSnapshot.1.png in Resources */,
 				EA03F6209F847793CCB2A4AA /* testCitySelectorPillSnapshots.1.png in Resources */,
+				A9BC3563FB3AA23387300521 /* testDepartureMatrixCanvasSelectedSlotSnapshot.1.png in Resources */,
+				6FB02C54946134767E4997E6 /* testDepartureMatrixCanvasSnapshot.1.png in Resources */,
 				24187F10D753FF1E9733907F /* testDepartureMatrixViewDisabledDirectionSnapshot.1.png in Resources */,
 				6D6C8F9EC06E0444E20B37D9 /* testDepartureMatrixViewMultiRouteSnapshot.1.png in Resources */,
 				0E6563455552FC22759DB579 /* testDepartureMatrixViewSnapshot.1.png in Resources */,
@@ -1118,6 +1133,7 @@
 			files = (
 				C310A3AF8E72E2E2307148F6 /* BinaryHeaderValidationTests.swift in Sources */,
 				FAC4F45A40E8AC9DB0AE7B5F /* ParetoDominanceTests.swift in Sources */,
+				A9E00CB3110E365FDD1EE7DB /* RaptorCoreTests.swift in Sources */,
 				4C953A5B3D13A9D91E732E11 /* RaptorEngineInteropTests.swift in Sources */,
 				FA423F52FD53637AECA5EDC0 /* TimetableStructTests.swift in Sources */,
 				D55DAC34BCF1D571DDF277CF /* TransitTimeTests.swift in Sources */,
@@ -1184,6 +1200,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MODULEMAP_FILE = "$(SRCROOT)/DeriveeCore/include/module.modulemap";
 				OTHER_SWIFT_FLAGS = "-cxx-interoperability-mode=default -Xcc -std=c++20";
 				PRODUCT_BUNDLE_IDENTIFIER = com.derivee.DeriveeCore;
 				SDKROOT = iphoneos;
@@ -1214,6 +1231,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MODULEMAP_FILE = "$(SRCROOT)/DeriveeCore/include/module.modulemap";
 				OTHER_SWIFT_FLAGS = "-cxx-interoperability-mode=default -Xcc -std=c++20";
 				PRODUCT_BUNDLE_IDENTIFIER = com.derivee.DeriveeCore;
 				SDKROOT = iphoneos;
@@ -1251,6 +1269,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1274,6 +1293,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1352,6 +1372,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1415,6 +1436,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
