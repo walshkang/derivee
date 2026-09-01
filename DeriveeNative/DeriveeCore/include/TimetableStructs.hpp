@@ -115,6 +115,11 @@ struct JourneySegment {
 };
 static_assert(sizeof(JourneySegment) == 24, "JourneySegment layout must be exactly 24 bytes");
 
+// Routing Flag Constants
+constexpr uint16_t ROUTING_FLAG_NONE                  = 0;
+constexpr uint16_t ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE = 1 << 0;
+constexpr uint16_t ROUTING_FLAG_AVOID_TRANSFERS       = 1 << 1;
+
 #pragma pack(pop)
 
 struct QueryParams {
@@ -122,12 +127,33 @@ struct QueryParams {
     uint32_t destination_stop_id;
     uint32_t departure_timestamp;
     uint16_t max_transfers;
+    uint16_t flags;
 
     constexpr QueryParams() noexcept
-        : origin_stop_id(0), destination_stop_id(0), departure_timestamp(0), max_transfers(4) {}
+        : origin_stop_id(0), destination_stop_id(0), departure_timestamp(0), max_transfers(4), flags(ROUTING_FLAG_NONE) {}
 
     constexpr QueryParams(uint32_t origin, uint32_t dest, uint32_t dep, uint16_t max_t) noexcept
-        : origin_stop_id(origin), destination_stop_id(dest), departure_timestamp(dep), max_transfers(max_t) {}
+        : origin_stop_id(origin), destination_stop_id(dest), departure_timestamp(dep), max_transfers(max_t), flags(ROUTING_FLAG_NONE) {}
+
+    constexpr QueryParams(uint32_t origin, uint32_t dest, uint32_t dep, uint16_t max_t, uint16_t f) noexcept
+        : origin_stop_id(origin), destination_stop_id(dest), departure_timestamp(dep), max_transfers(max_t), flags(f) {}
+};
+
+struct ParentPointer {
+    uint32_t from_stop_id = 0;
+    uint32_t trip_id = 0;        // 0 for transfer edge
+    uint32_t departure_time = 0;
+    uint32_t arrival_time = 0;
+    uint16_t route_id = 0;
+    uint16_t transfer_distance_m = 0;
+    bool is_transfer = false;
+
+    constexpr ParentPointer() noexcept = default;
+
+    constexpr ParentPointer(uint32_t from_stop, uint32_t trip, uint32_t dep, uint32_t arr,
+                          uint16_t route, uint16_t dist, bool transfer) noexcept
+        : from_stop_id(from_stop), trip_id(trip), departure_time(dep), arrival_time(arr),
+          route_id(route), transfer_distance_m(dist), is_transfer(transfer) {}
 };
 
 struct ParetoLabel {

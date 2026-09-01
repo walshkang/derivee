@@ -5,5 +5,6 @@
 #include "TransitTime.hpp"
 #include "ObserverFormat.hpp"
 #include "BinaryPayloadView.hpp"
+#include "ULTRADataStore.hpp"
 #include "RaptorEngine.hpp"
 #endif

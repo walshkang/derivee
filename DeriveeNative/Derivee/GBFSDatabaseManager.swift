@@ -78,8 +78,7 @@ public final class GBFSDatabaseManager: Sendable {
                     is_installed INTEGER NOT NULL,
                     is_renting INTEGER NOT NULL,
                     is_returning INTEGER NOT NULL,
-                    last_reported INTEGER NOT NULL,
-                    FOREIGN KEY(station_id) REFERENCES gbfs_station_info(station_id) ON DELETE CASCADE
+                    last_reported INTEGER NOT NULL
                 );
                 
                 CREATE INDEX IF NOT EXISTS idx_gbfs_spatial ON gbfs_station_info(lat, lon);

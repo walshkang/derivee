@@ -1,7 +1,11 @@
-framework module DeriveeCore {
-    umbrella header "DeriveeCore.h"
+module DeriveeCore {
+    header "DeriveeCore.h"
+    header "TimetableStructs.hpp"
+    header "TransitTime.hpp"
+    header "ObserverFormat.hpp"
+    header "BinaryPayloadView.hpp"
+    header "ULTRADataStore.hpp"
+    header "RaptorEngine.hpp"
     export *
-    module * { export * }
     requires cplusplus
 }
-
