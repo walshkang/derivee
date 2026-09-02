@@ -5,15 +5,18 @@ import SwiftUI
 public struct RouteComparisonCardView: View {
     public let itinerary: JourneyItinerary
     public var isSelected: Bool = false
+    public var showConfidenceBand: Bool = false
     public var onSelect: (() -> Void)?
     
     public init(
         itinerary: JourneyItinerary,
         isSelected: Bool = false,
+        showConfidenceBand: Bool = false,
         onSelect: (() -> Void)? = nil
     ) {
         self.itinerary = itinerary
         self.isSelected = isSelected
+        self.showConfidenceBand = showConfidenceBand
         self.onSelect = onSelect
     }
     
@@ -24,6 +27,12 @@ public struct RouteComparisonCardView: View {
             VStack(alignment: .leading, spacing: 12) {
                 // MARK: - Header: Times, Duration & Confidence
                 headerRow
+                
+                // MARK: - Compact Confidence Band Sparkline (if enabled)
+                if showConfidenceBand {
+                    ConfidenceBandCanvas(slice: itinerary.confidenceSlice, style: .compact)
+                        .padding(.vertical, -2)
+                }
                 
                 // MARK: - Multimodal Leg Chain
                 legChainView

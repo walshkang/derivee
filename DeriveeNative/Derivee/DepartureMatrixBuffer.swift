@@ -221,4 +221,39 @@ public struct DepartureMatrixBuffer: Equatable, Sendable {
         
         return DepartureMatrixBuffer(values: buffer)
     }
+    
+    // MARK: - Confidence Band Slicing
+    
+    /// Extracts a designated time window from the 24-hour departure matrix as a `ConfidenceBandSlice`.
+    public func extractConfidenceSlice(
+        startMinute: Int,
+        durationMinutes: Int,
+        stepMinutes: Int = 1
+    ) -> ConfidenceBandSlice {
+        let count = max(1, durationMinutes / max(1, stepMinutes))
+        var sliceValues = [Float](repeating: 0.0, count: count * Self.channels)
+        
+        for i in 0..<count {
+            let minOfDay = (startMinute + i * stepMinutes) % Self.totalMinutes
+            let baseOffset = minOfDay * Self.channels
+            let sliceBase = i * Self.channels
+            
+            sliceValues[sliceBase + Self.p10Channel] = values[baseOffset + Self.p10Channel]
+            sliceValues[sliceBase + Self.p50Channel] = values[baseOffset + Self.p50Channel]
+            sliceValues[sliceBase + Self.p90Channel] = values[baseOffset + Self.p90Channel]
+        }
+        
+        return ConfidenceBandSlice(
+            slotCount: count,
+            startMinute: startMinute,
+            stepMinutes: stepMinutes,
+            values: sliceValues
+        )
+    }
+    
+    /// Returns the complete 24-hour buffer as a 1,440-slot `ConfidenceBandSlice`.
+    public func asConfidenceSlice(stepMinutes: Int = 1) -> ConfidenceBandSlice {
+        extractConfidenceSlice(startMinute: 0, durationMinutes: Self.totalMinutes, stepMinutes: stepMinutes)
+    }
 }
+

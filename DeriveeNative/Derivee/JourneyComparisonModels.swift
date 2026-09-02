@@ -526,6 +526,41 @@ public struct JourneyItinerary: Identifiable, Sendable, Equatable, Hashable {
         return summary
     }
     
+    // MARK: - Confidence Band Slicing
+    
+    /// Generates a `ConfidenceBandSlice` representing the journey's time-series arrival and wait variance.
+    public var confidenceSlice: ConfidenceBandSlice {
+        let startMin = Int(departureTimeSec / 60)
+        let totalMin = max(10, Int(totalDurationSec / 60))
+        let slotCount = max(10, min(60, totalMin))
+        
+        let p10Arrival = Float(p10ArrivalSec > departureTimeSec ? p10ArrivalSec - departureTimeSec : 0) / 60.0
+        let p50Arrival = Float(p50ArrivalSec > departureTimeSec ? p50ArrivalSec - departureTimeSec : 0) / 60.0
+        let p90Arrival = Float(p90ArrivalSec > departureTimeSec ? p90ArrivalSec - departureTimeSec : 0) / 60.0
+        let variance = max(0.5, p90Arrival - p10Arrival)
+        
+        var raw = [Float](repeating: 0.0, count: slotCount * 3)
+        for i in 0..<slotCount {
+            let progress = Float(i) / Float(max(1, slotCount - 1))
+            let currentVar = variance * (0.3 + 0.7 * progress)
+            let p50 = max(1.0, 2.0 + progress * (p50Arrival - 2.0))
+            let p10 = max(0.5, p50 - currentVar * 0.4)
+            let p90 = p50 + currentVar * 0.6
+            
+            let base = i * 3
+            raw[base + 0] = p10
+            raw[base + 1] = p50
+            raw[base + 2] = p90
+        }
+        
+        return ConfidenceBandSlice(
+            slotCount: slotCount,
+            startMinute: startMin,
+            stepMinutes: max(1, totalMin / slotCount),
+            values: raw
+        )
+    }
+
     // MARK: - Internal Clock Formatter
     
     public static func formatSecondsToClock(_ secondsSinceMidnight: UInt32) -> String {
@@ -540,3 +575,4 @@ public struct JourneyItinerary: Identifiable, Sendable, Equatable, Hashable {
         return String(format: "%d:%02d %@", hour12, minute, period)
     }
 }
+

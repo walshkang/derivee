@@ -243,4 +243,66 @@ final class RouteComparisonViewTests: XCTestCase {
         let vc = UIHostingController(rootView: view)
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 750)), precision: 0.98))
     }
+
+    // MARK: - Confidence Band Canvas Snapshots
+    
+    func testConfidenceBandCanvasLowVarianceSnapshot() {
+        let slice = ConfidenceBandSlice.reliableSubwayFixture(slotCount: 60, startMinute: 480)
+        let view = VStack(spacing: 12) {
+            ConfidenceBandCanvas(slice: slice, style: .expanded)
+            ConfidenceBandCanvas(slice: slice, style: .compact)
+        }
+        .padding(16)
+        .background(Color(hex: "#F9F9F6"))
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 260)), precision: 0.98))
+    }
+
+    func testConfidenceBandCanvasHighVarianceSnapshot() {
+        let slice = ConfidenceBandSlice.volatileBusFixture(slotCount: 60, startMinute: 480)
+        let view = VStack(spacing: 12) {
+            ConfidenceBandCanvas(slice: slice, style: .expanded)
+            ConfidenceBandCanvas(slice: slice, style: .compact)
+        }
+        .padding(16)
+        .background(Color(hex: "#F9F9F6"))
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 260)), precision: 0.98))
+    }
+
+    func testConfidenceBandCanvasActiveScrubbingSnapshot() {
+        let slice = ConfidenceBandSlice.moderateRushHourFixture(slotCount: 60, startMinute: 480)
+        let view = ConfidenceBandCanvas(
+            slice: slice,
+            style: .expanded,
+            initialSelectedSlot: 28
+        )
+        .padding(16)
+        .background(Color(hex: "#F9F9F6"))
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 210)), precision: 0.98))
+    }
+
+    func testRouteComparisonCardWithSparkBandSnapshot() {
+        let vm = RouteComparisonViewModel()
+        guard let itinerary = vm.selectedItinerary else {
+            XCTFail("Default fixture must contain itineraries")
+            return
+        }
+        
+        let view = RouteComparisonCardView(
+            itinerary: itinerary,
+            isSelected: true,
+            showConfidenceBand: true
+        )
+        .padding(16)
+        .background(Color(hex: "#F9F9F6"))
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 220)), precision: 0.98))
+    }
 }
+

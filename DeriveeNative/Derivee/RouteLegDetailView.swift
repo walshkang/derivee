@@ -223,6 +223,15 @@ public struct RouteLegDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 
+                // Headway Reliability & Departure Variance Band
+                ConfidenceBandCanvas(
+                    slice: leg.mode == .bus
+                        ? ConfidenceBandSlice.volatileBusFixture(slotCount: 30, startMinute: Int(leg.departureTimeSec / 60))
+                        : ConfidenceBandSlice.reliableSubwayFixture(slotCount: 30, startMinute: Int(leg.departureTimeSec / 60)),
+                    style: .expanded
+                )
+                .padding(.top, 4)
+                
             case .bikeShare, .personalBike:
                 HStack(spacing: 6) {
                     Text("Ride \(leg.formattedDistance) (\(leg.formattedDuration))")
