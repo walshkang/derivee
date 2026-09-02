@@ -1839,6 +1839,50 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    // MARK: - Transit Reliability Engine Forwarding (Wave N-C.2)
+    
+    public var transitEngine: TransitDatabaseEngine {
+        TransitDatabaseEngine.shared
+    }
+    
+    public func fetchActiveDisruptions(at epoch: Int64 = Int64(Date().timeIntervalSince1970)) async throws -> [ServiceDisruptionRecord] {
+        return try await transitEngine.fetchActiveDisruptions(at: epoch)
+    }
+    
+    public func fetchDisruptionBitmask(at epoch: Int64 = Int64(Date().timeIntervalSince1970)) async throws -> TransitDisruptionBitmask {
+        return try await transitEngine.fetchDisruptionBitmask(at: epoch)
+    }
+    
+    public func fetchTripSlotProfile(
+        routeId: String,
+        directionId: Int,
+        stopId: String,
+        slotIndex: Int,
+        dayType: Int
+    ) async throws -> TripSlotProfileRecord? {
+        return try await transitEngine.fetchTripSlotProfile(
+            routeId: routeId,
+            directionId: directionId,
+            stopId: stopId,
+            slotIndex: slotIndex,
+            dayType: dayType
+        )
+    }
+    
+    public func fetchTripSlotProfiles(
+        routeId: String,
+        directionId: Int,
+        slotIndex: Int,
+        dayType: Int
+    ) async throws -> [TripSlotProfileRecord] {
+        return try await transitEngine.fetchTripSlotProfiles(
+            routeId: routeId,
+            directionId: directionId,
+            slotIndex: slotIndex,
+            dayType: dayType
+        )
+    }
+    
     public func fetchStopEvents(for stopId: String, hourOfDay: Int, dayOfWeek: Int) async throws -> [StopEventRecord] {
         let startTime = CFAbsoluteTimeGetCurrent()
         defer {

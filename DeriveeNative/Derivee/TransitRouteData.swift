@@ -2,16 +2,16 @@ import SwiftUI
 import CoreLocation
 import MapLibre
 
-struct TransitRouteData {
-    struct LineInfo: Sendable, Equatable {
-        let routeId: String
-        let name: String
-        let colorHex: String
-        let textColorHex: String
-        let modalClass: TransitModalClass
-        let routeType: Int
+public struct TransitRouteData {
+    public struct LineInfo: Sendable, Equatable, Hashable {
+        public let routeId: String
+        public let name: String
+        public let colorHex: String
+        public let textColorHex: String
+        public let modalClass: TransitModalClass
+        public let routeType: Int
         
-        init(
+        public init(
             routeId: String,
             name: String,
             colorHex: String,
@@ -27,16 +27,16 @@ struct TransitRouteData {
             self.routeType = routeType
         }
         
-        var color: Color {
+        public var color: Color {
             Color(hex: colorHex)
         }
         
-        var uiColor: UIColor {
+        public var uiColor: UIColor {
             UIColor(hex: colorHex)
         }
     }
     
-    static func lineInfo(for routeId: String) -> LineInfo {
+    public static func lineInfo(for routeId: String) -> LineInfo {
         let cleanId = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         
         // 1. Boston MBTA Multi-Modal Trunks
