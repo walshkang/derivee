@@ -25,6 +25,7 @@ public final class RouteComparisonViewModel {
     public var destinationLocation: RoutingLocation?
     
     public private(set) var bridge: RoutingEngineBridge?
+    public private(set) var planner: JourneyPlanner?
     
     public var selectedItinerary: JourneyItinerary? {
         guard let id = selectedItineraryId else {
@@ -33,8 +34,13 @@ public final class RouteComparisonViewModel {
         return filteredJourneys.first(where: { $0.id == id }) ?? filteredJourneys.first
     }
     
-    public init(bridge: RoutingEngineBridge? = nil, journeys: [JourneyItinerary]? = nil) {
-        self.bridge = bridge
+    public init(
+        bridge: RoutingEngineBridge? = nil,
+        planner: JourneyPlanner? = nil,
+        journeys: [JourneyItinerary]? = nil
+    ) {
+        self.planner = planner
+        self.bridge = bridge ?? planner?.bridge
         if let custom = journeys {
             self.allJourneys = custom
             self.recalculateFilteredJourneys()
@@ -43,9 +49,9 @@ public final class RouteComparisonViewModel {
         }
     }
     
-    // MARK: - Live Search via RoutingEngineBridge
+    // MARK: - Live Search via RoutingEngineBridge / JourneyPlanner
     
-    /// Executes an async transit routing query via the injected RoutingEngineBridge.
+    /// Executes an async transit routing query via the injected JourneyPlanner or RoutingEngineBridge.
     public func searchJourneys(
         origin: RoutingLocation,
         destination: RoutingLocation,
@@ -56,6 +62,22 @@ public final class RouteComparisonViewModel {
         self.destinationLocation = destination
         self.originName = origin.displayName
         self.destinationName = destination.displayName
+        
+        if let planner = self.planner, planner.isReady {
+            let results = await planner.planJourneys(
+                origin: origin,
+                destination: destination,
+                departureTime: departureTime,
+                profile: selectedProfile,
+                options: options
+            )
+            self.executionLatencyMs = planner.executionLatencyMs
+            if !results.isEmpty {
+                self.allJourneys = results
+                self.recalculateFilteredJourneys()
+            }
+            return
+        }
         
         guard let bridge = self.bridge, await bridge.isLoaded else {
             // If bridge is not loaded or unavailable, preserve or refresh default fixtures

@@ -14,16 +14,34 @@ public actor RoutingEngineBridge {
     private var ultraData: Data?
     private var walkGraphData: Data?
     private var metadataProvider: (any StopMetadataProvider)?
+    private var gbfsService: GBFSSyncService?
     
     // MARK: - Lifecycle & Initialization
     
-    public init(metadataProvider: (any StopMetadataProvider)? = nil) {
+    public init(
+        metadataProvider: (any StopMetadataProvider)? = nil,
+        gbfsService: GBFSSyncService? = nil
+    ) {
         self.engine = RaptorEngine()
         self.metadataProvider = metadataProvider
+        self.gbfsService = gbfsService
     }
     
     public func setMetadataProvider(_ provider: any StopMetadataProvider) {
         self.metadataProvider = provider
+    }
+    
+    public func setGbfsService(_ service: GBFSSyncService?) {
+        self.gbfsService = service
+    }
+    
+    /// Resets all loaded binary memory references and recreates the C++ engine instance.
+    /// Essential for clean city switching during Coordinated Two-Phase Barrier.
+    public func reset() {
+        self.timetableData = nil
+        self.ultraData = nil
+        self.walkGraphData = nil
+        self.engine = RaptorEngine()
     }
     
     // MARK: - Binary Data Loading
@@ -255,7 +273,7 @@ public actor RoutingEngineBridge {
         departureTimestampSec: UInt32,
         profile: RoutingProfile,
         options: RoutingOptions
-    ) -> [JourneyItinerary] {
+    ) async -> [JourneyItinerary] {
         var itineraries: [JourneyItinerary] = []
         
         // 1. Direct Walking Itinerary Evaluation
@@ -340,8 +358,8 @@ public actor RoutingEngineBridge {
                     }
                     if segments.isEmpty { continue }
                     
-                    // Build full multimodal legs (Initial Walk + Transit Segments + Final Walk)
-                    let candidateItinerary = buildMultimodalItinerary(
+                    // Build full multimodal legs (Initial Walk/Bike + Transit Segments + Final Walk)
+                    let candidateItinerary = await buildMultimodalItinerary(
                         origin: origin,
                         destination: destination,
                         origStop: origStop,
@@ -392,13 +410,91 @@ public actor RoutingEngineBridge {
         cost: ParetoCost,
         nominalDepSec: UInt32,
         profile: RoutingProfile
-    ) -> JourneyItinerary {
+    ) async -> JourneyItinerary {
         var legs: [JourneyLeg] = []
         var containsRealtime = false
         var disruptions: [JourneyDisruption] = []
+        var bikeLegSynthesized = false
         
-        // 1. Initial Walk Leg
-        if origStop.distance_meters > 5.0 {
+        // 1. Check for GBFS Bike-Share Chaining if profile is .multiModalBikeRail
+        if profile == .multiModalBikeRail,
+           let origCoord = origin.coordinate,
+           let gbfs = self.gbfsService,
+           origStop.distance_meters > 200.0 {
+            
+            let stopCoord = metadataProvider?.stopCoordinate(for: origStop.stop_id) ?? (Double(origStop.latitude), Double(origStop.longitude))
+            let originCLLocation = CLLocationCoordinate2D(latitude: origCoord.latitude, longitude: origCoord.longitude)
+            let stopCLLocation = CLLocationCoordinate2D(latitude: stopCoord.latitude, longitude: stopCoord.longitude)
+            
+            if let pickStations = try? await gbfs.fetchCandidateStations(near: originCLLocation, radiusMeters: 500),
+               let dropStations = try? await gbfs.fetchCandidateStations(near: stopCLLocation, radiusMeters: 500),
+               let pickStation = pickStations.first(where: { $0.numBikesAvailable >= 1 }),
+               let dropStation = dropStations.first(where: { $0.numDocksAvailable >= 1 }) {
+                
+                let walkToPickDist = BoundedAStarRouter.calculate_distance_meters(
+                    Float(origCoord.latitude), Float(origCoord.longitude),
+                    Float(pickStation.coordinate.latitude), Float(pickStation.coordinate.longitude)
+                )
+                let walkToPickDur = UInt32(walkToPickDist / 1.3)
+                
+                let bikeDist = BoundedAStarRouter.calculate_distance_meters(
+                    Float(pickStation.coordinate.latitude), Float(pickStation.coordinate.longitude),
+                    Float(dropStation.coordinate.latitude), Float(dropStation.coordinate.longitude)
+                )
+                let bikeDur = UInt32(bikeDist / 4.5) + 60 // 60s unlock/dock buffer
+                
+                let walkFromDropDist = BoundedAStarRouter.calculate_distance_meters(
+                    Float(dropStation.coordinate.latitude), Float(dropStation.coordinate.longitude),
+                    Float(stopCoord.latitude), Float(stopCoord.longitude)
+                )
+                let walkFromDropDur = UInt32(walkFromDropDist / 1.3)
+                
+                let t0 = nominalDepSec
+                let t1 = t0 + walkToPickDur
+                let t2 = t1 + bikeDur
+                let t3 = t2 + walkFromDropDur
+                
+                // Walk to origin bike dock
+                legs.append(JourneyLeg(
+                    mode: .walk,
+                    originName: origin.displayName,
+                    destinationName: pickStation.name,
+                    departureTimeSec: t0,
+                    arrivalTimeSec: t1,
+                    distanceMeters: UInt32(walkToPickDist),
+                    landmarkCue: "Walk to bike station (\(pickStation.numBikesAvailable) bikes available)"
+                ))
+                
+                // Bike share leg
+                let dockStatusCue = dropStation.numDocksAvailable > 3 ? "Dock verified (>3 empty docks)" : "Dock caution (\(dropStation.numDocksAvailable) docks available)"
+                legs.append(JourneyLeg(
+                    mode: .bikeShare,
+                    originName: pickStation.name,
+                    destinationName: dropStation.name,
+                    departureTimeSec: t1,
+                    arrivalTimeSec: t2,
+                    distanceMeters: UInt32(bikeDist),
+                    landmarkCue: dockStatusCue
+                ))
+                
+                // Walk from destination bike dock to transit entrance
+                let origStopName = metadataProvider?.stopName(for: origStop.stop_id) ?? "Stop #\(origStop.stop_id)"
+                legs.append(JourneyLeg(
+                    mode: .walk,
+                    originName: dropStation.name,
+                    destinationName: origStopName,
+                    departureTimeSec: t2,
+                    arrivalTimeSec: t3,
+                    distanceMeters: UInt32(walkFromDropDist),
+                    landmarkCue: "Station entrance from bike dock"
+                ))
+                
+                bikeLegSynthesized = true
+            }
+        }
+        
+        // Fallback: Standard Initial Walk Leg
+        if !bikeLegSynthesized && origStop.distance_meters > 5.0 {
             let initialWalkArr = nominalDepSec + origStop.walk_duration_sec
             let origStopName = metadataProvider?.stopName(for: origStop.stop_id) ?? "Stop #\(origStop.stop_id)"
             let landmarkCue = metadataProvider?.landmarkCue(for: origStop.stop_id)

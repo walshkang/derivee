@@ -32,6 +32,9 @@ struct ContentView: View {
     @State private var isNearbyBusesExpanded: Bool = false
     @State private var isScanningBuses: Bool = false
     @State private var isReadyForToasts: Bool = false
+    @State private var activeNavigationItinerary: JourneyItinerary? = nil
+    @State private var showNavigationSheet: Bool = false
+    @State private var navigationDetent: PresentationDetent = NavigationSheetDetent.half.presentationDetent
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
@@ -56,6 +59,10 @@ struct ContentView: View {
                         }
                         isHydrationComplete = (try? await SpatialDatabaseManager.shared.isHydrationComplete()) ?? false
                         isCheckingHydration = false
+                        let targetSlug = activeSlug
+                        Task {
+                            try? await JourneyPlanner.shared.configureForCity(slug: targetSlug)
+                        }
                     }
             } else if !isHydrationComplete {
                 OnboardingView(trackingEngine: trackingEngine, isHydrationComplete: $isHydrationComplete)
@@ -276,6 +283,29 @@ struct ContentView: View {
                             .presentationContentInteraction(.scrolls)
                     }
                 }
+                .sheet(isPresented: Binding(
+                    get: { showNavigationSheet && activeNavigationItinerary != nil },
+                    set: { newValue in
+                        showNavigationSheet = newValue
+                        if !newValue {
+                            activeNavigationItinerary = nil
+                        }
+                    }
+                )) {
+                    if let itinerary = activeNavigationItinerary {
+                        NavigationGuidanceSheet(
+                            itinerary: itinerary,
+                            selectedDetent: $navigationDetent,
+                            onFocusLeg: { leg in
+                                isMapCentered = false
+                            },
+                            onEndJourney: {
+                                showNavigationSheet = false
+                                activeNavigationItinerary = nil
+                            }
+                        )
+                    }
+                }
                 .sheet(isPresented: $showStatsView) {
                     StatsView(
                         trackingEngine: trackingEngine,
@@ -401,6 +431,7 @@ struct ContentView: View {
         nearbyBusStops = []
         
         Task {
+            await JourneyPlanner.shared.prepareForCitySwap()
             await GBFSSyncService.shared.prepareForCitySwap()
             await GBFSSyncService.shared.configureForCity(config: newConfig.transit?.gbfs)
             
@@ -418,6 +449,7 @@ struct ContentView: View {
             }
             
             // Phase 3: Post-Swap State Sync & Re-enablement
+            try? await JourneyPlanner.shared.configureForCity(slug: slug)
             await MainActor.run {
                 if showNearbyBusesLens {
                     scanNearbyBuses(force: true)

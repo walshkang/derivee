@@ -5,14 +5,20 @@ import SwiftUI
 /// subterranean exit mapping, and GBFS dock availability gating.
 public struct RouteLegDetailView: View {
     public let itinerary: JourneyItinerary
+    public var activeLegIndex: Int?
     public var onClose: (() -> Void)?
+    public var onSelectLeg: ((Int) -> Void)?
     
     public init(
         itinerary: JourneyItinerary,
-        onClose: (() -> Void)? = nil
+        activeLegIndex: Int? = nil,
+        onClose: (() -> Void)? = nil,
+        onSelectLeg: ((Int) -> Void)? = nil
     ) {
         self.itinerary = itinerary
+        self.activeLegIndex = activeLegIndex
         self.onClose = onClose
+        self.onSelectLeg = onSelectLeg
     }
     
     public var body: some View {
@@ -26,7 +32,7 @@ public struct RouteLegDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(itinerary.legs.enumerated()), id: \.element.id) { index, leg in
-                        legTimelineRow(leg: leg, isLast: index == itinerary.legs.count - 1)
+                        legTimelineRow(leg: leg, index: index, isLast: index == itinerary.legs.count - 1)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -82,61 +88,94 @@ public struct RouteLegDetailView: View {
     // MARK: - Timeline Leg Row
     
     @ViewBuilder
-    private func legTimelineRow(leg: JourneyLeg, isLast: Bool) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            // Timeline Line & Icon Node
-            VStack(spacing: 0) {
-                timelineNode(for: leg)
-                
-                if !isLast {
-                    Rectangle()
-                        .fill(timelineLineColor(for: leg))
-                        .frame(width: 2)
-                        .frame(minHeight: 40)
-                }
-            }
-            .frame(width: 24)
-            
-            // Content
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(leg.originName)
-                        .font(.system(size: 14.5, weight: .bold, design: .rounded))
-                        .foregroundColor(Color(hex: "#0F172A"))
+    private func legTimelineRow(leg: JourneyLeg, index: Int, isLast: Bool) -> some View {
+        let isActive = activeLegIndex == index
+        
+        Button {
+            onSelectLeg?(index)
+        } label: {
+            HStack(alignment: .top, spacing: 14) {
+                // Timeline Line & Icon Node
+                VStack(spacing: 0) {
+                    timelineNode(for: leg, isActive: isActive)
                     
-                    Spacer()
-                    
-                    Text(JourneyItinerary.formatSecondsToClock(leg.departureTimeSec))
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.secondary)
+                    if !isLast {
+                        Rectangle()
+                            .fill(timelineLineColor(for: leg))
+                            .frame(width: 2)
+                            .frame(minHeight: 40)
+                    }
                 }
+                .frame(width: 24)
                 
-                legSpecificDetails(for: leg)
-                
-                if isLast {
+                // Content
+                VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(leg.destinationName)
-                            .font(.system(size: 14.5, weight: .bold, design: .rounded))
-                            .foregroundColor(Color(hex: "#0F172A"))
+                        HStack(spacing: 6) {
+                            Text(leg.originName)
+                                .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                                .foregroundColor(Color(hex: "#0F172A"))
+                            
+                            if isActive {
+                                Text("Current Step")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundColor(Color(hex: "#92400E"))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color(hex: "#FFB300").opacity(0.25))
+                                    .clipShape(Capsule())
+                            }
+                        }
                         
                         Spacer()
                         
-                        Text(JourneyItinerary.formatSecondsToClock(leg.arrivalTimeSec))
+                        Text(JourneyItinerary.formatSecondsToClock(leg.departureTimeSec))
                             .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
-                    .padding(.top, 8)
+                    
+                    legSpecificDetails(for: leg)
+                    
+                    if isLast {
+                        HStack {
+                            Text(leg.destinationName)
+                                .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                                .foregroundColor(Color(hex: "#0F172A"))
+                            
+                            Spacer()
+                            
+                            Text(JourneyItinerary.formatSecondsToClock(leg.arrivalTimeSec))
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.top, 8)
+                    }
                 }
+                .padding(.bottom, isLast ? 8 : 20)
             }
-            .padding(.bottom, isLast ? 8 : 20)
+            .padding(.horizontal, isActive ? 8 : 0)
+            .padding(.vertical, isActive ? 6 : 0)
+            .background(
+                isActive
+                    ? RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(hex: "#FFB300").opacity(0.08))
+                    : nil
+            )
         }
+        .buttonStyle(.plain)
     }
     
     // MARK: - Leg Node & Details
     
     @ViewBuilder
-    private func timelineNode(for leg: JourneyLeg) -> some View {
+    private func timelineNode(for leg: JourneyLeg, isActive: Bool = false) -> some View {
         ZStack {
+            if isActive {
+                Circle()
+                    .strokeBorder(Color(hex: "#FFB300"), lineWidth: 2.5)
+                    .frame(width: 28, height: 28)
+            }
+            
             Circle()
                 .fill(timelineNodeBackground(for: leg))
                 .frame(width: 22, height: 22)

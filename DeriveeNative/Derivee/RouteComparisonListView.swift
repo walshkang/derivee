@@ -59,8 +59,7 @@ public struct RouteComparisonListView: View {
                 RouteLegDetailView(itinerary: activeItinerary) {
                     showingDetailSheet = false
                 }
-                .presentationDetents([.fraction(0.5), .fraction(0.9)])
-                .presentationDragIndicator(.visible)
+                .standardNavigationDetents(interactiveUpThrough: NavigationSheetDetent.half.presentationDetent)
             }
         }
     }
@@ -110,58 +109,15 @@ public struct RouteComparisonListView: View {
     
     @ViewBuilder
     private var bottomActionBar: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 12) {
-                // Inspect Steps Button
-                Button {
-                    showingDetailSheet = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "list.bullet")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("Steps")
-                            .font(.system(size: 14.5, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundColor(Color(hex: "#0F172A"))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.primary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        ThumbZoneActionBar(
+            primary: .startJourney(action: {
+                if let chosen = viewModel.selectedItinerary {
+                    onStartNavigation?(chosen)
                 }
-                .buttonStyle(.plain)
-                .frame(width: 110)
-                
-                // Primary Action Button (Start Navigation)
-                Button {
-                    if let chosen = viewModel.selectedItinerary {
-                        let generator = UIImpactFeedbackGenerator(style: .medium)
-                        generator.prepare()
-                        generator.impactOccurred()
-                        onStartNavigation?(chosen)
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 14, weight: .bold))
-                        Text("Start Journey")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                    }
-                    .foregroundColor(Color(hex: "#0F172A"))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color(hex: "#FFB300"))
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .shadow(color: Color(hex: "#FFB300").opacity(0.4), radius: 8, x: 0, y: 3)
-                }
-                .buttonStyle(.plain)
+            }),
+            secondary: .steps {
+                showingDetailSheet = true
             }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 16)
-        .background(Color.white)
-        .overlay(
-            Divider(), alignment: .top
         )
     }
 }
