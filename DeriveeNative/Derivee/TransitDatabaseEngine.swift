@@ -274,6 +274,23 @@ public final class TransitDatabaseEngine: Sendable {
     
     // MARK: - 15-Minute Origin Dispatch Slot Profiler Queries
     
+    /// Convenience alias for `fetchTripSlotProfile`.
+    public func fetchSlotProfile(
+        routeId: String,
+        directionId: Int,
+        stopId: String,
+        slotIndex: Int,
+        dayType: Int
+    ) async throws -> TripSlotProfileRecord? {
+        try await fetchTripSlotProfile(
+            routeId: routeId,
+            directionId: directionId,
+            stopId: stopId,
+            slotIndex: slotIndex,
+            dayType: dayType
+        )
+    }
+    
     /// Fetches a specific origin slot profile for a route, direction, stop, slot index, and day type.
     public func fetchTripSlotProfile(
         routeId: String,

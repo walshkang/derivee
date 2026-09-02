@@ -146,6 +146,7 @@ struct MapView: UIViewRepresentable {
         let ferryLinesLayerId = MapCustomizationDefaults.ferryLinesLayerId
         let subwayStationBulletsSourceId = MapCustomizationDefaults.subwayStationBulletsSourceId
         let subwayStationBulletsLayerId = MapCustomizationDefaults.subwayStationBulletsLayerId
+        let smartZoomStationBulletsLayerId = MapCustomizationDefaults.smartZoomStationBulletsLayerId
         let nearbyBusStopsSourceId = MapCustomizationDefaults.nearbyBusStopsSourceId
         let nearbyBusStopsLayerId = MapCustomizationDefaults.nearbyBusStopsLayerId
         
@@ -278,19 +279,31 @@ struct MapView: UIViewRepresentable {
                 do {
                     let loadedPOIs = try await SpatialDatabaseManager.shared.dbWriter.read { db in
                         try SpatialDatabaseManager.shared.ensureTransitAttached(in: db)
-                        let rows = try Row.fetchAll(db, sql: "SELECT stop_id, stop_name, stop_lat, stop_lon FROM transit.stops WHERE location_type = 1")
+                        let rows = try Row.fetchAll(db, sql: """
+                            SELECT p.stop_id, p.stop_name, p.stop_lat, p.stop_lon,
+                                   COALESCE(GROUP_CONCAT(DISTINCT c.routes), p.routes, '') AS child_routes
+                            FROM transit.stops p
+                            LEFT JOIN transit.stops c ON c.parent_station = p.stop_id AND c.routes IS NOT NULL AND c.routes != ''
+                            WHERE p.location_type = 1
+                            GROUP BY p.stop_id
+                        """)
                         return rows.map { row in
                             let lat: Double = row["stop_lat"]
                             let lon: Double = row["stop_lon"]
                             let id: String = row["stop_id"]
                             let name: String = row["stop_name"]
+                            let childRoutes: String = row["child_routes"] ?? ""
+                            let parsedRoutes = StationBulletRenderer.parseAndNormalizeRoutes(childRoutes)
+                            let iconName = StationBulletRenderer.bulletIconIdentifier(for: parsedRoutes)
                             let h3 = POIMaskManager.computeH3Index(latitude: lat, longitude: lon)
                             return GhostPOI(
                                 id: id,
                                 name: name,
                                 coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
                                 type: 1,
-                                h3Index: h3
+                                h3Index: h3,
+                                routes: parsedRoutes,
+                                bulletIconName: iconName
                             )
                         }
                     }
@@ -501,6 +514,18 @@ struct MapView: UIViewRepresentable {
             bulletsLayer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)
             style.insertLayer(bulletsLayer, above: subwayLinesLayer)
             
+            // Smart Zoom Station Bullets Layer (z >= 14.5): Resolves discrete route bullets ([4][5][6] vs [6])
+            let smartZoomBulletsLayer = MLNSymbolStyleLayer(identifier: smartZoomStationBulletsLayerId, source: bulletsSource)
+            smartZoomBulletsLayer.minimumZoomLevel = 14.5
+            smartZoomBulletsLayer.iconImageName = NSExpression(forKeyPath: "bullet_icon_name")
+            smartZoomBulletsLayer.iconAllowsOverlap = NSExpression(forConstantValue: false)
+            smartZoomBulletsLayer.iconIgnoresPlacement = NSExpression(forConstantValue: false)
+            smartZoomBulletsLayer.iconAnchor = NSExpression(forConstantValue: "bottom")
+            smartZoomBulletsLayer.iconOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: -6)))
+            smartZoomBulletsLayer.iconOpacity = NSExpression(forConstantValue: parent.subwayStationMarkerStyle == .allStations ? 1.0 : 0.0)
+            smartZoomBulletsLayer.iconOpacityTransition = MLNTransition(duration: 0.2, delay: 0)
+            style.insertLayer(smartZoomBulletsLayer, above: bulletsLayer)
+            
             // VERIFIED: MapLibre Native (iOS) initial fog shape requires CW winding order for exterior bounds.
             // Matches SpatialStore bounds order (Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left -> Top-Left).
             // Tested & hardened in Wave I.2 (WI2-WINDING) & Wave M.5.1 (WM5.1-GLOBAL-FOG).
@@ -635,10 +660,26 @@ struct MapView: UIViewRepresentable {
                 bulletsLayer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)
                 bulletsLayer.circleOpacity = NSExpression(forConstantValue: markerStyle == .allStations ? 0.95 : 0.0)
             }
+            if let smartZoomLayer = style.layer(withIdentifier: smartZoomStationBulletsLayerId) as? MLNSymbolStyleLayer {
+                smartZoomLayer.iconOpacityTransition = MLNTransition(duration: 0, delay: 0)
+                smartZoomLayer.iconOpacity = NSExpression(forConstantValue: markerStyle == .allStations ? 1.0 : 0.0)
+            }
         }
         
         func populateSubwayStationBullets(in style: MLNStyle) {
             guard let bulletsSource = style.source(withIdentifier: subwayStationBulletsSourceId) as? MLNShapeSource else { return }
+            
+            // Pre-render and register composite multi-route bullet images into MLNStyle
+            var registeredIcons = Set<String>()
+            for poi in pois where !poi.routes.isEmpty {
+                let iconName = poi.bulletIconName
+                if !registeredIcons.contains(iconName) && style.image(forName: iconName) == nil {
+                    let img = StationBulletRenderer.renderCompositeBulletImage(routes: poi.routes)
+                    style.setImage(img, forName: iconName)
+                    registeredIcons.insert(iconName)
+                }
+            }
+            
             var features: [MLNPointFeature] = []
             for poi in pois {
                 let feature = MLNPointFeature()
@@ -646,7 +687,10 @@ struct MapView: UIViewRepresentable {
                 feature.attributes = [
                     "id": poi.id,
                     "name": poi.name,
-                    "type": poi.type
+                    "type": poi.type,
+                    "bullet_icon_name": poi.bulletIconName,
+                    "routes_count": poi.routes.count,
+                    "routes_label": poi.routes.joined(separator: " • ")
                 ]
                 features.append(feature)
             }
@@ -918,6 +962,7 @@ struct MapView: UIViewRepresentable {
                 activeLayerId,
                 archiveLayerId,
                 subwayStationBulletsLayerId,
+                smartZoomStationBulletsLayerId,
                 nearbyBusStopsLayerId
             ]
             let features = mapView.visibleFeatures(in: hitBox, styleLayerIdentifiers: targetLayers)
@@ -943,6 +988,8 @@ struct GhostPOI {
     let coordinate: CLLocationCoordinate2D
     let type: Int
     var h3Index: String = ""
+    var routes: [String] = []
+    var bulletIconName: String = ""
 }
 
 extension UIColor {

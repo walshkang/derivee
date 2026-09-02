@@ -60,6 +60,7 @@ public enum MapCustomizationDefaults {
     public static let ferryLinesLayerId = "ferry-lines-layer"
     public static let subwayStationBulletsSourceId = "subway-station-bullets-source"
     public static let subwayStationBulletsLayerId = "subway-station-bullets-layer"
+    public static let smartZoomStationBulletsLayerId = "subway-station-smart-zoom-bullets-layer"
     public static let nearbyBusStopsSourceId = "nearby-bus-stops-source"
     public static let nearbyBusStopsLayerId = "nearby-bus-stops-layer"
 }

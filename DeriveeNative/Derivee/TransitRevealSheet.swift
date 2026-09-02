@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 struct TransitRevealSheet: View {
     let stopId: String
@@ -36,8 +37,10 @@ struct TransitRevealSheet: View {
     @State private var isLivePulsing: Bool = false
     @State private var isRefreshing: Bool = false
     let referenceDate: Date?
+    var onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
     @State private var pollProgress: Double = 0.0
     @State private var pollGeneration: Int = 0
+    @State private var inspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil
     
     init(
         stopId: String,
@@ -45,7 +48,8 @@ struct TransitRevealSheet: View {
         initialLiveArrivals: [SpatialDatabaseManager.ArrivalInfo] = [],
         initialAlerts: [TransitAlert] = [],
         initialAvailableDirections: Set<Int> = [0, 1],
-        referenceDate: Date? = nil
+        referenceDate: Date? = nil,
+        onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
     ) {
         self.stopId = stopId
         self._stopDetails = State(initialValue: initialDetails)
@@ -54,6 +58,7 @@ struct TransitRevealSheet: View {
         self._availableDirections = State(initialValue: initialAvailableDirections)
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
         self.referenceDate = referenceDate
+        self.onFocusMap = onFocusMap
     }
     
     var displayedArrivals: [SpatialDatabaseManager.ArrivalInfo] {
@@ -343,66 +348,72 @@ struct TransitRevealSheet: View {
                                             // Arrival Rows within Direction
                                             VStack(spacing: 2) {
                                                 ForEach(group.arrivals) { arrival in
-                                                    HStack(alignment: .center, spacing: 10) {
-                                                        let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
-                                                        TransitRouteBadge(routeId: arrival.line, lineInfo: arrivalInfo, size: .compact)
-                                                        
-                                                        VStack(alignment: .leading, spacing: 1) {
-                                                            HStack(spacing: 4) {
-                                                                Text(arrival.destination)
-                                                                    .font(.subheadline)
-                                                                    .fontWeight(.medium)
-                                                                    .foregroundColor(.primary)
-                                                                    .lineLimit(1)
+                                                    Button {
+                                                        inspectingArrival = arrival
+                                                    } label: {
+                                                        HStack(alignment: .center, spacing: 10) {
+                                                            let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
+                                                            TransitRouteBadge(routeId: arrival.line, lineInfo: arrivalInfo, size: .compact)
+                                                            
+                                                            VStack(alignment: .leading, spacing: 1) {
+                                                                HStack(spacing: 4) {
+                                                                    Text(arrival.destination)
+                                                                        .font(.subheadline)
+                                                                        .fontWeight(.medium)
+                                                                        .foregroundColor(.primary)
+                                                                        .lineLimit(1)
+                                                                    
+                                                                    if arrival.destination.contains("Short Turn") || arrival.destination.contains("Local") {
+                                                                        Text("ALERT")
+                                                                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                                                            .padding(.horizontal, 3)
+                                                                            .padding(.vertical, 1)
+                                                                            .background(Color(hex: "#FF9500"))
+                                                                            .foregroundColor(.white)
+                                                                            .clipShape(Capsule())
+                                                                    }
+                                                                }
                                                                 
-                                                                if arrival.destination.contains("Short Turn") || arrival.destination.contains("Local") {
-                                                                    Text("ALERT")
-                                                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                                                        .padding(.horizontal, 3)
-                                                                        .padding(.vertical, 1)
-                                                                        .background(Color(hex: "#FF9500"))
-                                                                        .foregroundColor(.white)
-                                                                        .clipShape(Capsule())
+                                                                if let dist = arrival.distanceDescription {
+                                                                    Text(dist)
+                                                                        .font(.caption2)
+                                                                        .foregroundColor(.secondary)
                                                                 }
                                                             }
                                                             
-                                                            if let dist = arrival.distanceDescription {
-                                                                Text(dist)
-                                                                    .font(.caption2)
-                                                                    .foregroundColor(.secondary)
+                                                            Spacer()
+                                                            
+                                                            if arrival.minutes == 0 {
+                                                                HStack(spacing: 4) {
+                                                                    Circle()
+                                                                        .fill(Color(hex: "#FFB300"))
+                                                                        .frame(width: 5, height: 5)
+                                                                        .opacity(isLivePulsing ? 1.0 : 0.35)
+                                                                        .shadow(color: Color(hex: "#FFB300").opacity(0.8), radius: 2)
+                                                                    Text("BOARDING")
+                                                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                                        .foregroundColor(Color(hex: "#FFB300"))
+                                                                }
+                                                                .padding(.horizontal, 6)
+                                                                .padding(.vertical, 3)
+                                                                .background(Color(hex: "#FFB300").opacity(0.12))
+                                                                .clipShape(Capsule())
+                                                            } else {
+                                                                HStack(spacing: 3) {
+                                                                    Text("\(arrival.minutes)")
+                                                                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                                                        .foregroundColor(.primary)
+                                                                    Text("min")
+                                                                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                                                        .foregroundColor(.secondary)
+                                                                }
                                                             }
                                                         }
-                                                        
-                                                        Spacer()
-                                                        
-                                                        if arrival.minutes == 0 {
-                                                            HStack(spacing: 4) {
-                                                                Circle()
-                                                                    .fill(Color(hex: "#FFB300"))
-                                                                    .frame(width: 5, height: 5)
-                                                                    .opacity(isLivePulsing ? 1.0 : 0.35)
-                                                                    .shadow(color: Color(hex: "#FFB300").opacity(0.8), radius: 2)
-                                                                Text("BOARDING")
-                                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                                                    .foregroundColor(Color(hex: "#FFB300"))
-                                                            }
-                                                            .padding(.horizontal, 6)
-                                                            .padding(.vertical, 3)
-                                                            .background(Color(hex: "#FFB300").opacity(0.12))
-                                                            .clipShape(Capsule())
-                                                        } else {
-                                                            HStack(spacing: 3) {
-                                                                Text("\(arrival.minutes)")
-                                                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                                                    .foregroundColor(.primary)
-                                                                Text("min")
-                                                                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                                                    .foregroundColor(.secondary)
-                                                            }
-                                                        }
+                                                        .contentShape(Rectangle())
+                                                        .padding(.vertical, 3)
+                                                        .padding(.horizontal, 4)
                                                     }
-                                                    .padding(.vertical, 3)
-                                                    .padding(.horizontal, 4)
+                                                    .buttonStyle(.plain)
                                                 }
                                             }
                                         }
@@ -453,6 +464,16 @@ struct TransitRevealSheet: View {
                 .presentationDetents([.fraction(0.5), .large])
                 .presentationDragIndicator(.visible)
                 .presentationContentInteraction(.scrolls)
+        }
+        .sheet(item: $inspectingArrival) { arr in
+            TrainInspectorSheet(
+                arrival: arr,
+                currentStopId: stopId,
+                currentStopName: stopDetails?.name ?? "Current Station",
+                onFocusMap: onFocusMap
+            )
+            .presentationDetents([.fraction(0.48), .fraction(0.88), .large])
+            .presentationDragIndicator(.visible)
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {

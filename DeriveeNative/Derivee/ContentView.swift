@@ -267,7 +267,10 @@ struct ContentView: View {
                     }
                 )) {
                     if let stopId = selectedTransitStop {
-                        TransitRevealSheet(stopId: stopId)
+                        TransitRevealSheet(stopId: stopId, onFocusMap: { coord in
+                            targetCoordinate = coord
+                            isMapCentered = false
+                        })
                             .presentationDetents([.medium, .large])
                             .presentationDragIndicator(.visible)
                             .presentationContentInteraction(.scrolls)
