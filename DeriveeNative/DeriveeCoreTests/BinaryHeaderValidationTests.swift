@@ -7,8 +7,14 @@ final class BinaryHeaderValidationTests: XCTestCase {
         XCTAssertEqual(observer.format.MAGIC_TIMETABLE, 0x31565244, "MAGIC_TIMETABLE must be 'DRV1'")
         XCTAssertEqual(observer.format.MAGIC_ULTRA_TRANSFERS, 0x41525455, "MAGIC_ULTRA_TRANSFERS must be 'UTRA'")
         XCTAssertEqual(observer.format.MAGIC_WALK_GRAPH, 0x4B4C4157, "MAGIC_WALK_GRAPH must be 'WALK'")
+        XCTAssertEqual(observer.format.MAGIC_WALK_OFFSETS, 0x53464F57, "MAGIC_WALK_OFFSETS must be 'WOFS'")
+        XCTAssertEqual(observer.format.MAGIC_WALK_EDGES, 0x47444557, "MAGIC_WALK_EDGES must be 'WEDG'")
+        XCTAssertEqual(observer.format.MAGIC_WALK_RTREE, 0x54524C57, "MAGIC_WALK_RTREE must be 'WLRT'")
         XCTAssertEqual(observer.format.ENDIAN_MARKER, 0x01020304, "ENDIAN_MARKER must be 0x01020304")
         XCTAssertEqual(observer.format.MASTER_HEADER_SIZE, 232, "Master header must be 232 bytes")
+        
+        XCTAssertEqual(MemoryLayout<observer.format.RTreeNodeItem>.size, 24, "RTreeNodeItem must be exactly 24 bytes")
+        XCTAssertEqual(MemoryLayout<observer.format.RTreeMetadata>.size, 32, "RTreeMetadata must be exactly 32 bytes")
     }
     
     func testHeaderConstructionAndOffsets() {

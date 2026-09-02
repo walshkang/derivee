@@ -97,3 +97,98 @@ func TestDijkstraEngineGenerationReset(t *testing.T) {
 		t.Errorf("expected node 0 to be InfDist in generation %d, got %d", engine.CurrentGen, d)
 	}
 }
+
+func TestDijkstraEngineCSR(t *testing.T) {
+	// Graph: 0 -> 1 (10s) -> 2 (20s) -> 3 (60s)
+	nodes := []walk.WalkNode{
+		{FirstEdgeIdx: 0, EdgeCount: 1, AccessFlags: uint16(walk.FlagWalkable | walk.FlagWheelchairAccessible)},
+		{FirstEdgeIdx: 1, EdgeCount: 1, AccessFlags: uint16(walk.FlagWalkable | walk.FlagWheelchairAccessible)},
+		{FirstEdgeIdx: 2, EdgeCount: 1, AccessFlags: uint16(walk.FlagWalkable)},
+		{FirstEdgeIdx: 3, EdgeCount: 0, AccessFlags: uint16(walk.FlagWalkable)},
+	}
+	edges := []walk.WalkEdge{
+		{TargetNodeIdx: 1, DistanceCM: 1330, WeightMS: 10000}, // 10s
+		{TargetNodeIdx: 2, DistanceCM: 2660, WeightMS: 20000}, // 20s
+		{TargetNodeIdx: 3, DistanceCM: 8000, WeightMS: 60000}, // 60s
+	}
+	offsets := []uint32{0, 1, 2, 3, 3}
+	flags := []uint16{
+		uint16(walk.FlagWalkable | walk.FlagWheelchairAccessible),
+		uint16(walk.FlagWalkable | walk.FlagWheelchairAccessible),
+		uint16(walk.FlagWalkable),
+		uint16(walk.FlagWalkable),
+	}
+
+	walkNodeToStops := [][]SnappedStop{
+		{{StopIndex: 0, TimeSec: 0, IsWheelchair: true}},
+		{{StopIndex: 1, TimeSec: 0, IsWheelchair: true}},
+		{{StopIndex: 2, TimeSec: 0, IsWheelchair: true}},
+		{{StopIndex: 3, TimeSec: 0, IsWheelchair: true}},
+	}
+
+	engine := NewDijkstraEngine(int32(len(nodes)))
+	buf := make([]TransferCandidate, 0, 10)
+
+	// Standard candidate search
+	cStandard := engine.FindCandidateTransfers(nodes, edges, 0, 0, 0, 50, walkNodeToStops, buf)
+
+	// CSR candidate search
+	cCSR := engine.FindCandidateTransfersCSR(offsets, edges, flags, 0, 0, 0, 50, walkNodeToStops, buf)
+
+	if len(cCSR) != len(cStandard) {
+		t.Fatalf("CSR result count mismatch: got %d, expected %d", len(cCSR), len(cStandard))
+	}
+
+	for i := range cStandard {
+		if cCSR[i].TargetStop != cStandard[i].TargetStop || cCSR[i].Duration != cStandard[i].Duration || cCSR[i].Flags != cStandard[i].Flags {
+			t.Errorf("candidate %d mismatch: CSR=%+v, Standard=%+v", i, cCSR[i], cStandard[i])
+		}
+	}
+}
+
+func TestDijkstraEngineZeroAllocations(t *testing.T) {
+	offsets := []uint32{0, 1, 2, 3, 3}
+	edges := []walk.WalkEdge{
+		{TargetNodeIdx: 1, DistanceCM: 1330, WeightMS: 10000},
+		{TargetNodeIdx: 2, DistanceCM: 2660, WeightMS: 20000},
+		{TargetNodeIdx: 3, DistanceCM: 8000, WeightMS: 60000},
+	}
+	flags := []uint16{
+		uint16(walk.FlagWalkable | walk.FlagWheelchairAccessible),
+		uint16(walk.FlagWalkable | walk.FlagWheelchairAccessible),
+		uint16(walk.FlagWalkable),
+		uint16(walk.FlagWalkable),
+	}
+	nodes := []walk.WalkNode{
+		{FirstEdgeIdx: 0, EdgeCount: 1, AccessFlags: flags[0]},
+		{FirstEdgeIdx: 1, EdgeCount: 1, AccessFlags: flags[1]},
+		{FirstEdgeIdx: 2, EdgeCount: 1, AccessFlags: flags[2]},
+		{FirstEdgeIdx: 3, EdgeCount: 0, AccessFlags: flags[3]},
+	}
+
+	walkNodeToStops := [][]SnappedStop{
+		{{StopIndex: 0, TimeSec: 0, IsWheelchair: true}},
+		{{StopIndex: 1, TimeSec: 0, IsWheelchair: true}},
+		{{StopIndex: 2, TimeSec: 0, IsWheelchair: true}},
+		{{StopIndex: 3, TimeSec: 0, IsWheelchair: true}},
+	}
+
+	engine := NewDijkstraEngine(4)
+	buf := make([]TransferCandidate, 16)
+
+	// 1. Verify 0 allocs in FindCandidateTransfers
+	allocsStandard := testing.AllocsPerRun(100, func() {
+		_ = engine.FindCandidateTransfers(nodes, edges, 0, 0, 0, 50, walkNodeToStops, buf[:0])
+	})
+	if allocsStandard != 0 {
+		t.Errorf("FindCandidateTransfers generated %.2f allocations, expected 0", allocsStandard)
+	}
+
+	// 2. Verify 0 allocs in FindCandidateTransfersCSR
+	allocsCSR := testing.AllocsPerRun(100, func() {
+		_ = engine.FindCandidateTransfersCSR(offsets, edges, flags, 0, 0, 0, 50, walkNodeToStops, buf[:0])
+	})
+	if allocsCSR != 0 {
+		t.Errorf("FindCandidateTransfersCSR generated %.2f allocations, expected 0", allocsCSR)
+	}
+}

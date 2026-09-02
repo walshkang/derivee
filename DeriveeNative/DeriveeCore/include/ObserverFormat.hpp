@@ -11,6 +11,9 @@ namespace observer::format {
 constexpr uint32_t MAGIC_TIMETABLE       = 0x31565244; // "DRV1"
 constexpr uint32_t MAGIC_ULTRA_TRANSFERS = 0x41525455; // "UTRA"
 constexpr uint32_t MAGIC_WALK_GRAPH      = 0x4B4C4157; // "WALK"
+constexpr uint32_t MAGIC_WALK_OFFSETS    = 0x53464F57; // "WOFS"
+constexpr uint32_t MAGIC_WALK_EDGES      = 0x47444557; // "WEDG"
+constexpr uint32_t MAGIC_WALK_RTREE      = 0x54524C57; // "WLRT"
 constexpr uint32_t ENDIAN_MARKER         = 0x01020304;
 constexpr uint32_t MASTER_HEADER_SIZE    = 232;
 
@@ -68,6 +71,9 @@ struct alignas(8) WalkNode {
 
     constexpr WalkNode() noexcept
         : lat_quantized(0), lon_quantized(0), first_edge_idx(0), edge_count(0), access_flags(0) {}
+
+    constexpr WalkNode(int32_t lat_q, int32_t lon_q, uint32_t first_edge, uint16_t count, uint16_t flags = 0) noexcept
+        : lat_quantized(lat_q), lon_quantized(lon_q), first_edge_idx(first_edge), edge_count(count), access_flags(flags) {}
 };
 static_assert(sizeof(WalkNode) == 16, "WalkNode layout mismatch");
 
@@ -79,7 +85,43 @@ struct alignas(4) WalkEdge {
 
     constexpr WalkEdge() noexcept
         : target_node_idx(0), distance_cm(0), weight_ms(0) {}
+
+    constexpr WalkEdge(uint32_t target, uint16_t dist, uint16_t weight) noexcept
+        : target_node_idx(target), distance_cm(dist), weight_ms(weight) {}
 };
 static_assert(sizeof(WalkEdge) == 8, "WalkEdge layout mismatch");
+
+// Static Packed Hilbert R-Tree Node (walk_rtree.bin)
+struct alignas(8) RTreeNodeItem {
+    int32_t min_lat_q;     // Minimum latitude * 1e7
+    int32_t min_lon_q;     // Minimum longitude * 1e7
+    int32_t max_lat_q;     // Maximum latitude * 1e7
+    int32_t max_lon_q;     // Maximum longitude * 1e7
+    uint32_t child_offset; // Index of first child in array, or NodeIdx if leaf
+    uint16_t num_children; // Number of active child items (<= BranchingFactor)
+    uint16_t flags;        // 0 = internal branch node, 1 = leaf node
+
+    constexpr RTreeNodeItem() noexcept
+        : min_lat_q(0), min_lon_q(0), max_lat_q(0), max_lon_q(0),
+          child_offset(0), num_children(0), flags(0) {}
+};
+static_assert(sizeof(RTreeNodeItem) == 24, "RTreeNodeItem layout mismatch");
+
+// Static Packed Hilbert R-Tree Metadata (walk_rtree.bin)
+struct alignas(4) RTreeMetadata {
+    int32_t min_lat_q;
+    int32_t min_lon_q;
+    int32_t max_lat_q;
+    int32_t max_lon_q;
+    uint32_t branching_factor;
+    uint32_t num_levels;
+    uint32_t total_nodes;
+    uint32_t num_leaves;
+
+    constexpr RTreeMetadata() noexcept
+        : min_lat_q(0), min_lon_q(0), max_lat_q(0), max_lon_q(0),
+          branching_factor(0), num_levels(0), total_nodes(0), num_leaves(0) {}
+};
+static_assert(sizeof(RTreeMetadata) == 32, "RTreeMetadata layout mismatch");
 
 } // namespace observer::format
