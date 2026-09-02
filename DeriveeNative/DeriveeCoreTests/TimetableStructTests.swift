@@ -59,4 +59,24 @@ final class TimetableStructTests: XCTestCase {
         XCTAssertEqual(transfer.duration_sec, 180)
         XCTAssertEqual(transfer.distance_meters, 250)
     }
+
+    func testParetoCostAndRangeQueryParamsFieldAccess() {
+        let cost = ParetoCost(30000, 2, 240, 15, 12)
+        XCTAssertEqual(cost.arrival_time_sec, 30000)
+        XCTAssertEqual(cost.transfer_count, 2)
+        XCTAssertEqual(cost.effort_duration_sec, 240)
+        XCTAssertEqual(cost.layover_penalty, 15)
+        XCTAssertEqual(cost.variance_disutility, 12)
+
+        let rangeParams = RangeQueryParams(10, 50, 28800, 32400, 3, ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE)
+        XCTAssertEqual(rangeParams.origin_stop_id, 10)
+        XCTAssertEqual(rangeParams.destination_stop_id, 50)
+        XCTAssertEqual(rangeParams.departure_start_timestamp, 28800)
+        XCTAssertEqual(rangeParams.departure_end_timestamp, 32400)
+        XCTAssertEqual(rangeParams.max_transfers, 3)
+        XCTAssertEqual(rangeParams.flags, ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE)
+        XCTAssertEqual(rangeParams.stochastic_horizon_sec, 2700)
+        XCTAssertEqual(rangeParams.sampling_step_sec, 60)
+    }
 }
+

@@ -16,7 +16,6 @@ class RaptorEngine {
 public:
     static constexpr uint32_t MAX_ROUNDS = 8;
     static constexpr uint32_t INF_TIME   = 0xFFFFFFFF;
-    static constexpr uint32_t TRIP_TRANSFER = 0;
 
 private:
     const uint8_t* timetable_blob_ptr_ = nullptr;
@@ -93,6 +92,33 @@ public:
     // Execute multi-criteria single-query RAPTOR search
     [[nodiscard]] std::vector<JourneySegment> compute_journey(
         const QueryParams& params) const noexcept;
+
+    // Execute Range-RAPTOR continuous departure window sweep returning ParetoSet
+    [[nodiscard]] ParetoSet compute_range_journeys(
+        const RangeQueryParams& params) const noexcept;
+
+    // Helpers for Pareto metrics and stochastic costs
+    [[nodiscard]] uint32_t calculate_layover_penalty(
+        const std::vector<JourneySegment>& segments) const noexcept;
+
+    [[nodiscard]] uint32_t calculate_effort_duration(
+        const std::vector<JourneySegment>& segments) const noexcept;
+
+    [[nodiscard]] uint32_t calculate_variance_disutility(
+        const std::vector<JourneySegment>& segments,
+        uint32_t departure_time_sec,
+        uint32_t base_time_sec,
+        uint32_t horizon_sec) const noexcept;
+
+    [[nodiscard]] static uint32_t calculate_probabilistic_wait_time(
+        uint32_t headway_sec,
+        uint32_t variance_sec_sq) noexcept;
+
+    [[nodiscard]] std::vector<uint32_t> extract_range_departures(
+        uint32_t origin_stop_id,
+        uint32_t start_time,
+        uint32_t end_time,
+        uint32_t sampling_step) const noexcept;
 
     // Direct span access to outgoing transfers
     [[nodiscard]] std::span<const Transfer> get_outgoing_transfers(

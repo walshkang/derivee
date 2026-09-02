@@ -2,6 +2,7 @@
 #include <cstring>
 #include <algorithm>
 #include <limits>
+#include <cmath>
 
 RaptorEngine::RaptorEngine() = default;
 
@@ -237,10 +238,10 @@ void RaptorEngine::relax_intra_transfers(
             tau_k[target_stop] = tr_arrival;
             parents[target_stop] = ParentPointer(
                 from_stop_id,
-                0, // trip_id = 0 for transfer edge
+                TRIP_TRANSFER,
                 current_arrival_sec,
                 tr_arrival,
-                0,
+                ROUTE_TRANSFER,
                 tr.distance_meters,
                 true
             );
@@ -384,10 +385,37 @@ std::vector<JourneySegment> RaptorEngine::compute_journey(const QueryParams& par
 
                 // 2a. Update arrival at stop_id if currently boarded on a trip
                 if (boarded_trip_idx >= 0) {
-                    // Check route segment disruption
-                    if (!is_route_segment_active(r_id, board_stop_id, stop_id)) {
-                        boarded_trip_idx = -1; // Segment is disrupted, trip dropped
-                    } else if (is_stop_active(stop_id)) {
+                    uint32_t prev_stop_id = (seq > 0) ? route_stops_[start_stops + seq - 1] : board_stop_id;
+
+                    bool is_disrupted = !is_stop_active(stop_id) ||
+                                        !is_route_segment_active(r_id, board_stop_id, stop_id) ||
+                                        !is_route_segment_active(r_id, prev_stop_id, stop_id);
+
+                    if (!is_disrupted && !disrupted_segments_.empty()) {
+                        for (uint64_t d_key : disrupted_segments_) {
+                            if ((d_key >> 32) == r_id) {
+                                uint32_t d_from = static_cast<uint32_t>((d_key >> 16) & 0xFFFF);
+                                uint32_t d_to = static_cast<uint32_t>(d_key & 0xFFFF);
+                                uint32_t d_from_seq = UINT32_MAX;
+                                uint32_t d_to_seq = UINT32_MAX;
+                                for (uint32_t s_idx = 0; s_idx < s_cnt && (start_stops + s_idx) < route_stops_.size(); ++s_idx) {
+                                    uint32_t sid = route_stops_[start_stops + s_idx];
+                                    if (sid == d_from && d_from_seq == UINT32_MAX) d_from_seq = s_idx;
+                                    if (sid == d_to) d_to_seq = s_idx;
+                                }
+                                if (d_from_seq != UINT32_MAX && d_to_seq != UINT32_MAX && d_from_seq < d_to_seq) {
+                                    if (seq > d_from_seq && seq <= d_to_seq) {
+                                        is_disrupted = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (is_disrupted) {
+                        boarded_trip_idx = -1; // Segment or station disrupted, trip dropped
+                    } else {
                         const auto& curr_trip = trips_[boarded_trip_idx];
                         if (seq < curr_trip.stop_times_count) {
                             uint32_t st_idx = curr_trip.stop_times_offset + seq;
@@ -552,3 +580,287 @@ std::vector<JourneySegment> RaptorEngine::compute_journey(const QueryParams& par
     std::reverse(results.begin(), results.end());
     return results;
 }
+
+uint32_t RaptorEngine::calculate_layover_penalty(const std::vector<JourneySegment>& segments) const noexcept {
+    if (segments.size() <= 1) {
+        return 0;
+    }
+
+    uint32_t total_penalty = 0;
+    constexpr uint32_t S_IDEAL = 180; // 180 seconds (3 min) ideal transfer buffer
+    constexpr float ALPHA = 0.001f;
+
+    for (size_t i = 0; i + 1 < segments.size(); ++i) {
+        const auto& leg1 = segments[i];
+        const auto& leg2 = segments[i + 1];
+
+        // Connection slack = leg2 departure - leg1 arrival
+        if (leg2.departure_time >= leg1.arrival_time) {
+            uint32_t raw_slack = leg2.departure_time - leg1.arrival_time;
+            if (raw_slack < S_IDEAL) {
+                uint32_t deficit = S_IDEAL - raw_slack;
+                uint32_t p = static_cast<uint32_t>(std::ceil(ALPHA * static_cast<float>(deficit * deficit)));
+                total_penalty += std::min<uint32_t>(p, 10000);
+            }
+        } else {
+            // Negative slack / missed connection: severely penalized
+            total_penalty += 10000;
+        }
+    }
+
+    return total_penalty;
+}
+
+uint32_t RaptorEngine::calculate_effort_duration(const std::vector<JourneySegment>& segments) const noexcept {
+    uint32_t effort = 0;
+    for (const auto& seg : segments) {
+        if (seg.is_transfer_leg()) {
+            if (seg.arrival_time >= seg.departure_time) {
+                effort += (seg.arrival_time - seg.departure_time);
+            } else if (seg.transfer_distance_m > 0) {
+                effort += static_cast<uint32_t>(seg.transfer_distance_m / 1.3f);
+            }
+        }
+    }
+    return effort;
+}
+
+uint32_t RaptorEngine::calculate_probabilistic_wait_time(uint32_t headway_sec, uint32_t variance_sec_sq) noexcept {
+    if (headway_sec == 0) return 0;
+    // Osuna-Newell formula: E[wait] = h / 2 + sigma^2 / (2 * h)
+    double h = static_cast<double>(headway_sec);
+    double var = static_cast<double>(variance_sec_sq);
+    double e_wait = (h / 2.0) + (var / (2.0 * h));
+    return static_cast<uint32_t>(std::ceil(e_wait));
+}
+
+uint32_t RaptorEngine::calculate_variance_disutility(
+    const std::vector<JourneySegment>& segments,
+    uint32_t departure_time_sec,
+    uint32_t base_time_sec,
+    uint32_t horizon_sec
+) const noexcept {
+    uint32_t total_disutility = 0;
+    bool is_beyond_horizon = (departure_time_sec > base_time_sec + horizon_sec);
+
+    if (!stochastic_weights_.empty()) {
+        uint32_t hour = (departure_time_sec / 3600) % 24;
+        uint32_t day_of_week = (departure_time_sec / 86400) % 7;
+        uint32_t slot_base = (day_of_week * 24 + hour);
+
+        for (const auto& seg : segments) {
+            if (!seg.is_transfer_leg() && seg.board_stop_id < stops_.size()) {
+                size_t weight_idx = (slot_base * stops_.size() + seg.board_stop_id) % stochastic_weights_.size();
+                const auto& sw = stochastic_weights_[weight_idx];
+                total_disutility += sw.variance_penalty;
+
+                if (is_beyond_horizon) {
+                    total_disutility += (sw.expected_wait_sec / 10);
+                }
+            }
+        }
+    } else {
+        // Fallback default variance penalty when stochastic weights table is not bundled
+        for (const auto& seg : segments) {
+            if (!seg.is_transfer_leg()) {
+                total_disutility += is_beyond_horizon ? 25 : 5;
+            }
+        }
+    }
+
+    return total_disutility;
+}
+
+std::vector<uint32_t> RaptorEngine::extract_range_departures(
+    uint32_t origin_stop_id,
+    uint32_t start_time,
+    uint32_t end_time,
+    uint32_t sampling_step
+) const noexcept {
+    std::vector<uint32_t> departures;
+    std::unordered_set<uint32_t> seen;
+
+    if (!is_loaded_ || origin_stop_id >= stops_.size()) {
+        return departures;
+    }
+
+    // Direct route departures from origin stop
+    const auto& s = stops_[origin_stop_id];
+    for (uint32_t ri = s.routes_offset; ri < s.routes_offset + s.route_count && ri < stop_routes_.size(); ++ri) {
+        uint32_t r_id = stop_routes_[ri];
+        if (r_id >= routes_.size()) continue;
+
+        const auto& route = routes_[r_id];
+        uint32_t origin_seq = UINT32_MAX;
+        for (uint32_t seq = 0; seq < route.stop_count && (route.route_stops_offset + seq) < route_stops_.size(); ++seq) {
+            if (route_stops_[route.route_stops_offset + seq] == origin_stop_id) {
+                origin_seq = seq;
+                break;
+            }
+        }
+
+        if (origin_seq == UINT32_MAX) continue;
+
+        for (uint32_t ti = route.trips_offset; ti < route.trips_offset + route.trip_count && ti < trips_.size(); ++ti) {
+            const auto& tr = trips_[ti];
+            if (origin_seq < tr.stop_times_count) {
+                uint32_t st_idx = tr.stop_times_offset + origin_seq;
+                if (st_idx < stop_times_.size()) {
+                    uint32_t dep = TransitTime::normalize_schedule_time(
+                        stop_times_[st_idx].departure_time_sec,
+                        get_realtime_delay(ti)
+                    );
+                    if (dep >= start_time && dep <= end_time) {
+                        if (seen.insert(dep).second) {
+                            departures.push_back(dep);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Also include initial transfer targets departures
+    auto transfers = get_outgoing_transfers(origin_stop_id);
+    for (const auto& tr : transfers) {
+        uint32_t target_s = tr.target_stop_id;
+        if (target_s >= stops_.size()) continue;
+        const auto& ts = stops_[target_s];
+        for (uint32_t ri = ts.routes_offset; ri < ts.routes_offset + ts.route_count && ri < stop_routes_.size(); ++ri) {
+            uint32_t r_id = stop_routes_[ri];
+            if (r_id >= routes_.size()) continue;
+            const auto& route = routes_[r_id];
+            uint32_t target_seq = UINT32_MAX;
+            for (uint32_t seq = 0; seq < route.stop_count && (route.route_stops_offset + seq) < route_stops_.size(); ++seq) {
+                if (route_stops_[route.route_stops_offset + seq] == target_s) {
+                    target_seq = seq;
+                    break;
+                }
+            }
+            if (target_seq == UINT32_MAX) continue;
+
+            for (uint32_t ti = route.trips_offset; ti < route.trips_offset + route.trip_count && ti < trips_.size(); ++ti) {
+                const auto& trip = trips_[ti];
+                if (target_seq < trip.stop_times_count) {
+                    uint32_t st_idx = trip.stop_times_offset + target_seq;
+                    if (st_idx < stop_times_.size()) {
+                        uint32_t target_dep = TransitTime::normalize_schedule_time(
+                            stop_times_[st_idx].departure_time_sec,
+                            get_realtime_delay(ti)
+                        );
+                        if (target_dep >= tr.duration_sec) {
+                            uint32_t origin_dep = target_dep - tr.duration_sec;
+                            if (origin_dep >= start_time && origin_dep <= end_time) {
+                                if (seen.insert(origin_dep).second) {
+                                    departures.push_back(origin_dep);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: if no discrete timetable departures were identified, sample window with step
+    if (departures.empty()) {
+        uint32_t step = (sampling_step > 0) ? sampling_step : 60;
+        for (uint32_t t = start_time; t <= end_time; t += step) {
+            departures.push_back(t);
+        }
+    } else {
+        // Ensure boundary start_time is present
+        if (seen.insert(start_time).second) {
+            departures.push_back(start_time);
+        }
+    }
+
+    // Sort descending for Range-RAPTOR backward sweep: latest departure first
+    std::sort(departures.begin(), departures.end(), std::greater<uint32_t>());
+    return departures;
+}
+
+ParetoSet RaptorEngine::compute_range_journeys(const RangeQueryParams& params) const noexcept {
+    ParetoSet pareto_set;
+
+    if (!is_loaded_ || stops_.empty()) {
+        return pareto_set;
+    }
+
+    if (params.origin_stop_id == params.destination_stop_id) {
+        return pareto_set;
+    }
+
+    uint32_t n_stops = static_cast<uint32_t>(stops_.size());
+    if (params.origin_stop_id >= n_stops || params.destination_stop_id >= n_stops) {
+        return pareto_set;
+    }
+
+    if (!is_stop_active(params.origin_stop_id) || !is_stop_active(params.destination_stop_id)) {
+        return pareto_set;
+    }
+
+    uint32_t start_time = params.departure_start_timestamp;
+    uint32_t end_time = std::max(params.departure_end_timestamp, start_time);
+
+    // Extract discrete departures within [start_time, end_time], sorted descending
+    std::vector<uint32_t> departure_times = extract_range_departures(
+        params.origin_stop_id,
+        start_time,
+        end_time,
+        params.sampling_step_sec
+    );
+
+    // Range-RAPTOR backward sweep loop
+    for (uint32_t dep_time : departure_times) {
+        QueryParams single_params(
+            params.origin_stop_id,
+            params.destination_stop_id,
+            dep_time,
+            params.max_transfers,
+            params.flags
+        );
+
+        auto segments = compute_journey(single_params);
+        if (segments.empty()) {
+            continue;
+        }
+
+        uint32_t arrival_time = segments.back().arrival_time;
+
+        // Count vehicle transfers: number of transit segments minus 1
+        uint16_t transfers_count = 0;
+        uint16_t transit_legs = 0;
+        for (const auto& seg : segments) {
+            if (!seg.is_transfer_leg()) {
+                transit_legs++;
+            }
+        }
+        if (transit_legs > 1) {
+            transfers_count = transit_legs - 1;
+        }
+
+        uint32_t effort_dur = calculate_effort_duration(segments);
+        uint32_t layover_pen = calculate_layover_penalty(segments);
+        uint32_t var_dis = calculate_variance_disutility(
+            segments,
+            dep_time,
+            start_time,
+            params.stochastic_horizon_sec
+        );
+
+        ParetoCost cost(
+            arrival_time,
+            transfers_count,
+            effort_dur,
+            layover_pen,
+            var_dis
+        );
+
+        ParetoJourney journey(cost, dep_time, std::move(segments));
+        pareto_set.insert(journey);
+    }
+
+    return pareto_set;
+}
+

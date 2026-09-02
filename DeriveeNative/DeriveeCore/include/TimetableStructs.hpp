@@ -94,7 +94,14 @@ struct StochasticWeight {
 };
 static_assert(sizeof(StochasticWeight) == 4, "StochasticWeight layout must be exactly 4 bytes");
 
-// JourneySegment: Represents an individual transit or transfer leg in a computed route (22 Bytes)
+// Routing & Special Segment Constants
+constexpr uint16_t ROUTING_FLAG_NONE                  = 0;
+constexpr uint16_t ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE = 1 << 0;
+constexpr uint16_t ROUTING_FLAG_AVOID_TRANSFERS       = 1 << 1;
+constexpr uint32_t TRIP_TRANSFER                      = 0xFFFFFFFF;
+constexpr uint16_t ROUTE_TRANSFER                     = 0xFFFF;
+
+// JourneySegment: Represents an individual transit or transfer leg in a computed route (24 Bytes)
 struct JourneySegment {
     uint32_t board_stop_id;
     uint32_t exit_stop_id;
@@ -112,15 +119,17 @@ struct JourneySegment {
                              uint32_t dep, uint32_t arr, uint16_t route, uint16_t dist) noexcept
         : board_stop_id(board), exit_stop_id(exit), trip_id(trip),
           departure_time(dep), arrival_time(arr), route_id(route), transfer_distance_m(dist) {}
+
+    [[nodiscard]] constexpr bool is_transfer_leg() const noexcept {
+        return trip_id == TRIP_TRANSFER || route_id == ROUTE_TRANSFER;
+    }
 };
 static_assert(sizeof(JourneySegment) == 24, "JourneySegment layout must be exactly 24 bytes");
 
-// Routing Flag Constants
-constexpr uint16_t ROUTING_FLAG_NONE                  = 0;
-constexpr uint16_t ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE = 1 << 0;
-constexpr uint16_t ROUTING_FLAG_AVOID_TRANSFERS       = 1 << 1;
-
 #pragma pack(pop)
+
+#include <vector>
+#include <algorithm>
 
 struct QueryParams {
     uint32_t origin_stop_id;
@@ -139,9 +148,42 @@ struct QueryParams {
         : origin_stop_id(origin), destination_stop_id(dest), departure_timestamp(dep), max_transfers(max_t), flags(f) {}
 };
 
+struct RangeQueryParams {
+    uint32_t origin_stop_id;
+    uint32_t destination_stop_id;
+    uint32_t departure_start_timestamp; // T_0
+    uint32_t departure_end_timestamp;   // T_max
+    uint16_t max_transfers;             // default 4
+    uint16_t flags;                     // e.g. ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE
+    uint32_t stochastic_horizon_sec;    // default 2700 (45m)
+    uint32_t sampling_step_sec;         // default 60s
+
+    constexpr RangeQueryParams() noexcept
+        : origin_stop_id(0), destination_stop_id(0), departure_start_timestamp(0),
+          departure_end_timestamp(0), max_transfers(4), flags(ROUTING_FLAG_NONE),
+          stochastic_horizon_sec(2700), sampling_step_sec(60) {}
+
+    constexpr RangeQueryParams(uint32_t origin, uint32_t dest, uint32_t dep_start, uint32_t dep_end) noexcept
+        : origin_stop_id(origin), destination_stop_id(dest), departure_start_timestamp(dep_start),
+          departure_end_timestamp(dep_end), max_transfers(4), flags(ROUTING_FLAG_NONE),
+          stochastic_horizon_sec(2700), sampling_step_sec(60) {}
+
+    constexpr RangeQueryParams(uint32_t origin, uint32_t dest, uint32_t dep_start, uint32_t dep_end,
+                               uint16_t max_t) noexcept
+        : origin_stop_id(origin), destination_stop_id(dest), departure_start_timestamp(dep_start),
+          departure_end_timestamp(dep_end), max_transfers(max_t), flags(ROUTING_FLAG_NONE),
+          stochastic_horizon_sec(2700), sampling_step_sec(60) {}
+
+    constexpr RangeQueryParams(uint32_t origin, uint32_t dest, uint32_t dep_start, uint32_t dep_end,
+                               uint16_t max_t, uint16_t f) noexcept
+        : origin_stop_id(origin), destination_stop_id(dest), departure_start_timestamp(dep_start),
+          departure_end_timestamp(dep_end), max_transfers(max_t), flags(f),
+          stochastic_horizon_sec(2700), sampling_step_sec(60) {}
+};
+
 struct ParentPointer {
     uint32_t from_stop_id = 0;
-    uint32_t trip_id = 0;        // 0 for transfer edge
+    uint32_t trip_id = 0;        // TRIP_TRANSFER for transfer edge
     uint32_t departure_time = 0;
     uint32_t arrival_time = 0;
     uint16_t route_id = 0;
@@ -149,17 +191,17 @@ struct ParentPointer {
     bool is_transfer = false;
 
     constexpr ParentPointer() noexcept = default;
-
-    constexpr ParentPointer(uint32_t from_stop, uint32_t trip, uint32_t dep, uint32_t arr,
-                          uint16_t route, uint16_t dist, bool transfer) noexcept
-        : from_stop_id(from_stop), trip_id(trip), departure_time(dep), arrival_time(arr),
+    constexpr ParentPointer(uint32_t from, uint32_t trip, uint32_t dep, uint32_t arr,
+                            uint16_t route = 0, uint16_t dist = 0, bool transfer = false) noexcept
+        : from_stop_id(from), trip_id(trip), departure_time(dep), arrival_time(arr),
           route_id(route), transfer_distance_m(dist), is_transfer(transfer) {}
 };
 
+// 4D Multi-Criteria Pareto Label for RAPTOR Search Space Optimization
 struct ParetoLabel {
-    uint32_t arrival_time;      // Criterion 1: Earliest Arrival Time (seconds)
-    uint16_t transfer_count;    // Criterion 2: Number of Transfers
-    uint16_t walk_distance;     // Criterion 3: Total Walking Distance (meters)
+    uint32_t arrival_time;      // Criterion 1: Arrival timestamp (seconds from midnight)
+    uint16_t transfer_count;    // Criterion 2: Number of transfers
+    uint16_t walk_distance;     // Criterion 3: Total walking distance (meters)
     uint16_t reliability_risk;  // Criterion 4: Historical Reliability Risk Score (0-1000)
 
     constexpr ParetoLabel() noexcept
@@ -177,4 +219,104 @@ struct ParetoLabel {
                (arrival_time < o.arrival_time || transfer_count < o.transfer_count ||
                 walk_distance < o.walk_distance || reliability_risk < o.reliability_risk);
     }
+};
+
+// 5D Multi-Criteria Pareto Cost Vector
+// C = (tau_arrival, N_transfers, t_effort, P_layover, Var_disutility)
+struct ParetoCost {
+    uint32_t arrival_time_sec;      // Criterion 1: Destination arrival time in seconds
+    uint16_t transfer_count;        // Criterion 2: Number of transit vehicle transfers
+    uint32_t effort_duration_sec;   // Criterion 3: Total physical effort / walking duration in seconds
+    uint32_t layover_penalty;       // Criterion 4: Continuous quadratic connection risk penalty
+    uint32_t variance_disutility;   // Criterion 5: Accumulated headway variance / punctuality risk
+
+    constexpr ParetoCost() noexcept
+        : arrival_time_sec(0), transfer_count(0), effort_duration_sec(0), layover_penalty(0), variance_disutility(0) {}
+
+    constexpr ParetoCost(uint32_t arr, uint16_t trans, uint32_t effort, uint32_t layover, uint32_t var_dis) noexcept
+        : arrival_time_sec(arr), transfer_count(trans), effort_duration_sec(effort), layover_penalty(layover), variance_disutility(var_dis) {}
+
+    // Inline Pareto Dominance: returns true if this dominates o
+    [[nodiscard]] inline bool dominates(const ParetoCost& o) const noexcept {
+        return (arrival_time_sec <= o.arrival_time_sec) &&
+               (transfer_count <= o.transfer_count) &&
+               (effort_duration_sec <= o.effort_duration_sec) &&
+               (layover_penalty <= o.layover_penalty) &&
+               (variance_disutility <= o.variance_disutility) &&
+               (arrival_time_sec < o.arrival_time_sec ||
+                transfer_count < o.transfer_count ||
+                effort_duration_sec < o.effort_duration_sec ||
+                layover_penalty < o.layover_penalty ||
+                variance_disutility < o.variance_disutility);
+    }
+};
+
+struct ParetoJourney {
+    ParetoCost cost;
+    uint32_t departure_time_sec;
+    std::vector<JourneySegment> segments;
+
+    ParetoJourney() noexcept : cost(), departure_time_sec(0), segments() {}
+
+    ParetoJourney(const ParetoCost& c, uint32_t dep, std::vector<JourneySegment> segs) noexcept
+        : cost(c), departure_time_sec(dep), segments(std::move(segs)) {}
+
+    // Multi-criteria dominance for Range-RAPTOR:
+    // Journey A dominates Journey B iff A leaves at or after B, arrives at or before B,
+    // has <= transfers, effort, layover penalty, and variance, and is strictly better in >= 1 metric.
+    [[nodiscard]] inline bool dominates(const ParetoJourney& o) const noexcept {
+        return (departure_time_sec >= o.departure_time_sec) &&
+               (cost.arrival_time_sec <= o.cost.arrival_time_sec) &&
+               (cost.transfer_count <= o.cost.transfer_count) &&
+               (cost.effort_duration_sec <= o.cost.effort_duration_sec) &&
+               (cost.layover_penalty <= o.cost.layover_penalty) &&
+               (cost.variance_disutility <= o.cost.variance_disutility) &&
+               (departure_time_sec > o.departure_time_sec ||
+                cost.arrival_time_sec < o.cost.arrival_time_sec ||
+                cost.transfer_count < o.cost.transfer_count ||
+                cost.effort_duration_sec < o.cost.effort_duration_sec ||
+                cost.layover_penalty < o.cost.layover_penalty ||
+                cost.variance_disutility < o.cost.variance_disutility);
+    }
+};
+
+class ParetoSet {
+private:
+    std::vector<ParetoJourney> journeys_;
+
+public:
+    ParetoSet() noexcept = default;
+
+    // Dominance-based insertion:
+    // Returns true if candidate was inserted (non-dominated)
+    bool insert(const ParetoJourney& candidate) noexcept {
+        // 1. Check if candidate is dominated by any existing journey
+        for (const auto& existing : journeys_) {
+            if (existing.dominates(candidate)) {
+                return false;
+            }
+        }
+
+        // 2. Remove all existing journeys dominated by candidate
+        journeys_.erase(
+            std::remove_if(journeys_.begin(), journeys_.end(),
+                [&candidate](const ParetoJourney& existing) {
+                    return candidate.dominates(existing);
+                }),
+            journeys_.end()
+        );
+
+        // 3. Insert candidate
+        journeys_.push_back(candidate);
+        return true;
+    }
+
+    [[nodiscard]] size_t size() const noexcept { return journeys_.size(); }
+    [[nodiscard]] bool empty() const noexcept { return journeys_.empty(); }
+    [[nodiscard]] std::vector<ParetoJourney> get_journeys() const noexcept { return journeys_; }
+
+    const ParetoJourney& operator[](size_t index) const {
+        return journeys_[index];
+    }
+    void clear() noexcept { journeys_.clear(); }
 };

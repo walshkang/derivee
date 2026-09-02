@@ -273,7 +273,8 @@ final class RaptorCoreTests: XCTestCase {
         XCTAssertEqual(seg2.exit_stop_id, 2)
         XCTAssertEqual(seg2.departure_time, 29100)
         XCTAssertEqual(seg2.arrival_time, 29220) // 29100 + 120 = 29220 (08:07:00)
-        XCTAssertEqual(seg2.trip_id, 0, "Transfer trip_id must be 0")
+        XCTAssertTrue(seg2.is_transfer_leg())
+        XCTAssertEqual(seg2.trip_id, TRIP_TRANSFER)
 
         // Segment 3: Route 1 (Stop 2 -> Stop 3)
         let seg3 = journeys[2]

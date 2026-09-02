@@ -158,3 +158,13 @@ schemes:
       targets:
         - DeriveeCoreTests
         - DeriveeTests
+  DeriveeCoreTests:
+    build:
+      targets:
+        DeriveeCore: all
+        DeriveeCoreTests: [test]
+    test:
+      config: Debug
+      targets:
+        - DeriveeCoreTests
+

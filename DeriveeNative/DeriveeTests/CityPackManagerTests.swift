@@ -291,7 +291,9 @@ final class CityPackManagerTests: XCTestCase {
         
         // Database must now be valid and queryable
         XCTAssertTrue(CityPackManager.isValidDatabase(at: transitURL))
-        let dbQueue = try DatabaseQueue(path: transitURL.path)
+        var config = Configuration()
+        config.readonly = true
+        let dbQueue = try DatabaseQueue(path: transitURL.path, configuration: config)
         try dbQueue.read { db in
             let stopCount = try Int.fetchOne(db, sql: "SELECT count(*) FROM stops")
             XCTAssertGreaterThan(stopCount ?? 0, 0)
