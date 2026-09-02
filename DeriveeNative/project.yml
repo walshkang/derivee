@@ -32,6 +32,7 @@ targets:
       CLANG_CXX_LANGUAGE_STANDARD: "c++20"
       CLANG_CXX_LIBRARY: "libc++"
       OTHER_SWIFT_FLAGS: "-cxx-interoperability-mode=default -Xcc -std=c++20"
+      HEADER_SEARCH_PATHS: "$(SRCROOT)/DeriveeCore/include"
     sources:
       - path: Derivee
       - path: ../observer/transit_delta.sqlite

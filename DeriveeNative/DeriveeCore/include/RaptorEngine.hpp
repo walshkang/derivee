@@ -5,6 +5,7 @@
 #include "BinaryPayloadView.hpp"
 #include "TransitTime.hpp"
 #include "ULTRADataStore.hpp"
+#include "BoundedAStarRouter.hpp"
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -124,6 +125,16 @@ public:
     [[nodiscard]] std::span<const Transfer> get_outgoing_transfers(
         uint32_t stop_id) const noexcept;
 
+    // Stop and spatial accessors
+    [[nodiscard]] std::span<const Stop> get_stops() const noexcept { return stops_; }
+    [[nodiscard]] Stop get_stop(uint32_t stop_id) const noexcept;
+    [[nodiscard]] std::vector<CandidateStop> find_candidate_stops(
+        float lat,
+        float lon,
+        float max_radius_meters = BoundedAStarRouter::DEFAULT_MAX_RADIUS_METERS,
+        uint16_t required_flags = 0,
+        size_t max_results = 16) const noexcept;
+
     // State inspections
     [[nodiscard]] bool is_loaded() const noexcept { return is_loaded_; }
     [[nodiscard]] bool is_ultra_loaded() const noexcept { return ultra_store_.is_loaded(); }
@@ -134,3 +145,4 @@ public:
     [[nodiscard]] size_t stop_times_count() const noexcept { return stop_times_.size(); }
     [[nodiscard]] size_t transfers_count() const noexcept { return transfers_.size(); }
 };
+

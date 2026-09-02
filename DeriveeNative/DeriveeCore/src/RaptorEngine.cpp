@@ -864,3 +864,21 @@ ParetoSet RaptorEngine::compute_range_journeys(const RangeQueryParams& params) c
     return pareto_set;
 }
 
+Stop RaptorEngine::get_stop(uint32_t stop_id) const noexcept {
+    if (stop_id < stops_.size()) {
+        return stops_[stop_id];
+    }
+    return Stop{};
+}
+
+std::vector<CandidateStop> RaptorEngine::find_candidate_stops(
+    float lat,
+    float lon,
+    float max_radius_meters,
+    uint16_t required_flags,
+    size_t max_results) const noexcept {
+    return BoundedAStarRouter::find_candidate_stops(
+        stops_, lat, lon, max_radius_meters, required_flags, max_results);
+}
+
+

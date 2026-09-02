@@ -17,9 +17,14 @@ public final class RouteComparisonViewModel {
     public var filteredJourneys: [JourneyItinerary] = []
     public var selectedItineraryId: UUID?
     public var isLoading: Bool = false
+    public var executionLatencyMs: Double = 0.0
     
     public var originName: String = "Astor Place"
     public var destinationName: String = "Grand Central - 42 St"
+    public var originLocation: RoutingLocation?
+    public var destinationLocation: RoutingLocation?
+    
+    public private(set) var bridge: RoutingEngineBridge?
     
     public var selectedItinerary: JourneyItinerary? {
         guard let id = selectedItineraryId else {
@@ -28,7 +33,8 @@ public final class RouteComparisonViewModel {
         return filteredJourneys.first(where: { $0.id == id }) ?? filteredJourneys.first
     }
     
-    public init(journeys: [JourneyItinerary]? = nil) {
+    public init(bridge: RoutingEngineBridge? = nil, journeys: [JourneyItinerary]? = nil) {
+        self.bridge = bridge
         if let custom = journeys {
             self.allJourneys = custom
             self.recalculateFilteredJourneys()
@@ -36,6 +42,47 @@ public final class RouteComparisonViewModel {
             self.loadDefaultFixtures()
         }
     }
+    
+    // MARK: - Live Search via RoutingEngineBridge
+    
+    /// Executes an async transit routing query via the injected RoutingEngineBridge.
+    public func searchJourneys(
+        origin: RoutingLocation,
+        destination: RoutingLocation,
+        departureTime: Date = Date(),
+        options: RoutingOptions = .default
+    ) async {
+        self.originLocation = origin
+        self.destinationLocation = destination
+        self.originName = origin.displayName
+        self.destinationName = destination.displayName
+        
+        guard let bridge = self.bridge, await bridge.isLoaded else {
+            // If bridge is not loaded or unavailable, preserve or refresh default fixtures
+            return
+        }
+        
+        self.isLoading = true
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        let results = await bridge.computeJourneys(
+            origin: origin,
+            destination: destination,
+            departureTime: departureTime,
+            profile: selectedProfile,
+            options: options
+        )
+        
+        let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+        self.executionLatencyMs = elapsed
+        self.isLoading = false
+        
+        if !results.isEmpty {
+            self.allJourneys = results
+            self.recalculateFilteredJourneys()
+        }
+    }
+
     
     // MARK: - Profile Filtering & Sorting Logic
     

@@ -6,5 +6,6 @@
 #include "ObserverFormat.hpp"
 #include "BinaryPayloadView.hpp"
 #include "ULTRADataStore.hpp"
+#include "BoundedAStarRouter.hpp"
 #include "RaptorEngine.hpp"
 #endif
