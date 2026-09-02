@@ -2,6 +2,7 @@ package pack
 
 import (
 	"database/sql"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
@@ -169,12 +170,132 @@ func TestEndToEnd_PackCreationAndVerification(t *testing.T) {
 	}
 }
 
+func TestEndToEnd_CityPackV2_CreationAndVerification(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// 1. Create city_config.json (Version 2 with Routing)
+	cfg := CityConfig{
+		Version:     2,
+		Slug:        "v2metro",
+		DisplayName: "V2 Metro Test",
+		Region:      "Test Region",
+		Bounds: GeoBounds{
+			MinLatitude:  40.0,
+			MaxLatitude:  41.0,
+			MinLongitude: -74.0,
+			MaxLongitude: -73.0,
+		},
+		Center: MapCenter{
+			Latitude:    40.5,
+			Longitude:   -73.5,
+			DefaultZoom: 13.0,
+		},
+		Routing: &RoutingConfig{
+			TimetableBinFile: "timetable.bin",
+			UltraCsrFile:     "ultra_transfers.csr",
+			WalkGraphFile:    "walk_graph.bin",
+			MaxWalkMinutes:   15,
+			MaxRounds:        8,
+		},
+		Transit: TransitConfig{
+			AgencyName:   "V2 Agency",
+			Attributions: []string{"V2 Transit Authority"},
+			RealtimeEndpoints: []RealtimeEndpoint{
+				{
+					FeedID:              "v2_feed",
+					URL:                 "https://example.com/gtfs-rt",
+					PollIntervalSeconds: 15,
+				},
+			},
+		},
+	}
+
+	configPath := filepath.Join(tempDir, "city_config.json")
+	if err := SaveCityConfig(&cfg, configPath); err != nil {
+		t.Fatalf("Failed to save city config: %v", err)
+	}
+
+	// 2. Dummy transit-lines.geojson
+	geojsonPath := filepath.Join(tempDir, "transit-lines.geojson")
+	if err := os.WriteFile(geojsonPath, []byte(`{"type":"FeatureCollection","features":[]}`), 0644); err != nil {
+		t.Fatalf("Failed to write geojson: %v", err)
+	}
+
+	// 3. Dummy transit.sqlite
+	dbPath := filepath.Join(tempDir, "transit.sqlite")
+	db, err := builder.InitTransitDB(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to init transit DB: %v", err)
+	}
+	db.Close()
+
+	// 4. Create synthetic 128-byte binary assets for routing
+	createDummyBinary := func(filename string, magic uint32) string {
+		path := filepath.Join(tempDir, filename)
+		data := make([]byte, 256) // 128-byte header + payload
+		binary.LittleEndian.PutUint32(data[0:4], magic)
+		binary.LittleEndian.PutUint32(data[4:8], 1)          // schema_version
+		binary.LittleEndian.PutUint32(data[8:12], 0x01020304) // endian_marker
+		binary.LittleEndian.PutUint32(data[12:16], 128)       // header_size
+		binary.LittleEndian.PutUint64(data[16:24], 256)       // file_size
+		if err := os.WriteFile(path, data, 0644); err != nil {
+			t.Fatalf("Failed to write dummy %s: %v", filename, err)
+		}
+		return path
+	}
+
+	timetablePath := createDummyBinary("timetable.bin", 0x31565244)       // "DRV1"
+	ultraPath := createDummyBinary("ultra_transfers.csr", 0x41525455)    // "UTRA"
+	walkGraphPath := createDummyBinary("walk_graph.bin", 0x4B4C4157)     // "WALK"
+
+	// 5. Build City Pack V2
+	packPath := filepath.Join(tempDir, "city-v2metro.pack.zst")
+	entry, err := CreateCityPackV2(configPath, dbPath, geojsonPath, timetablePath, ultraPath, walkGraphPath, packPath)
+	if err != nil {
+		t.Fatalf("CreateCityPackV2 failed: %v", err)
+	}
+
+	if entry.Slug != "v2metro" {
+		t.Errorf("Expected slug 'v2metro', got %s", entry.Slug)
+	}
+	if entry.Version != "2.0.0" {
+		t.Errorf("Expected version '2.0.0', got %s", entry.Version)
+	}
+
+	// 6. Verify City Pack V2
+	if err := VerifyCityPack(packPath); err != nil {
+		t.Fatalf("VerifyCityPack on v2 pack failed: %v", err)
+	}
+
+	// 7. Extract and ensure all 6 files exist
+	extractDir := filepath.Join(tempDir, "extracted_v2")
+	if err := ExtractCityPack(packPath, extractDir); err != nil {
+		t.Fatalf("ExtractCityPack on v2 pack failed: %v", err)
+	}
+
+	expectedFiles := []string{
+		"city_config.json",
+		"transit.sqlite",
+		"transit-lines.geojson",
+		"timetable.bin",
+		"ultra_transfers.csr",
+		"walk_graph.bin",
+	}
+
+	for _, name := range expectedFiles {
+		p := filepath.Join(extractDir, name)
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("Expected file %s to exist in extracted v2 pack", name)
+		}
+	}
+}
+
 func TestManifestSaveLoad(t *testing.T) {
 	tempDir := t.TempDir()
 	manifestPath := filepath.Join(tempDir, "cities.json")
 
 	manifest := CitiesManifest{
-		Version:     1,
+		Version:     2,
 		LastUpdated: time.Now().UTC().Format(time.RFC3339),
 		Cities: []CityManifestEntry{
 			{
@@ -184,7 +305,7 @@ func TestManifestSaveLoad(t *testing.T) {
 				CompressedSizeBytes:   12800000,
 				UncompressedSizeBytes: 28500000,
 				IsBundled:             true,
-				Version:               "1.1.0",
+				Version:               "2.0.0",
 				SHA256:                "abc123",
 			},
 		},
@@ -201,5 +322,8 @@ func TestManifestSaveLoad(t *testing.T) {
 
 	if len(loaded.Cities) != 1 || loaded.Cities[0].Slug != "nyc" {
 		t.Errorf("Loaded manifest mismatch: %+v", loaded)
+	}
+	if loaded.Cities[0].Version != "2.0.0" {
+		t.Errorf("Expected version 2.0.0, got %s", loaded.Cities[0].Version)
 	}
 }

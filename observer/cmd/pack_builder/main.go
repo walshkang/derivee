@@ -32,9 +32,12 @@ func main() {
 	manifestPath := flag.String("manifest", "", "Optional path to cities.json to update with new pack entry")
 	anchorDateStr := flag.String("anchor", "", "Optional anchor date YYYY-MM-DD (defaults to today UTC)")
 	keepDBPath := flag.String("keep-db", "", "Optional path to save intermediate uncompressed transit.sqlite")
+	timetableInputPath := flag.String("timetable", "", "Path to pre-compiled timetable.bin (optional, bundled in pack if provided)")
 	buildTimetable := flag.Bool("build-timetable", false, "Compile timetable.bin and bundle in pack")
 	emitTimetablePath := flag.String("emit-timetable", "", "Optional path to export generated timetable.bin")
-	walkGraphPath := flag.String("walk-graph", "", "Path to walk_graph.bin (optional, required if building ULTRA transfers)")
+	walkGraphPath := flag.String("walk-graph", "", "Path to walk_graph.bin (optional, bundled in pack and used for ULTRA)")
+	bundleWalkGraph := flag.Bool("bundle-walk-graph", true, "Bundle walk_graph.bin into pack when available")
+	ultraInputPath := flag.String("ultra", "", "Path to pre-compiled ultra_transfers.csr (optional, bundled in pack if provided)")
 	buildUltra := flag.Bool("build-ultra", false, "Precompute ultra_transfers.csr and bundle in pack")
 	emitUltraPath := flag.String("emit-ultra", "", "Optional path to export generated ultra_transfers.csr")
 	deltaCheck := flag.Bool("delta-check", false, "Enable 3-tier delta checking to skip compilation if feeds are unchanged")
@@ -64,7 +67,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load city config: %v", err)
 	}
-	log.Printf("Loaded config for metro: %s (%s)", cfg.DisplayName, cfg.Slug)
+	log.Printf("Loaded config for metro: %s (%s, version %d)", cfg.DisplayName, cfg.Slug, cfg.Version)
 
 	// 3. Ingest GTFS Sources (with optional 3-tier delta checking)
 	var deltaChecker *fetcher.DeltaChecker
@@ -252,9 +255,14 @@ func main() {
 		}
 	}
 
-	// 10. Optional Timetable Compilation
+	// 10. Optional Timetable Compilation & Extra Assets
 	extraAssets := make(map[string]string)
-	if *buildTimetable || *emitTimetablePath != "" {
+
+	// Direct input timetable asset
+	if *timetableInputPath != "" {
+		extraAssets["timetable.bin"] = *timetableInputPath
+		log.Printf("Bundling pre-compiled timetable from %s", *timetableInputPath)
+	} else if *buildTimetable || *emitTimetablePath != "" {
 		log.Println("Compiling RAPTOR timetable.bin with stochastic weights...")
 		tt, err := raptor.CompileTimetable(mergedDataset, anchorDate)
 		if err != nil {
@@ -280,8 +288,17 @@ func main() {
 		}
 	}
 
-	// 10b. Optional ULTRA Transfer Shortcut Precomputation
-	if *buildUltra || *emitUltraPath != "" {
+	// Direct input walk graph asset
+	if *walkGraphPath != "" && *bundleWalkGraph {
+		extraAssets["walk_graph.bin"] = *walkGraphPath
+		log.Printf("Bundling walk graph from %s", *walkGraphPath)
+	}
+
+	// Direct input ultra asset
+	if *ultraInputPath != "" {
+		extraAssets["ultra_transfers.csr"] = *ultraInputPath
+		log.Printf("Bundling pre-computed ultra transfers from %s", *ultraInputPath)
+	} else if *buildUltra || *emitUltraPath != "" {
 		if *walkGraphPath == "" {
 			log.Fatalf("--walk-graph is required when --build-ultra or --emit-ultra is specified")
 		}
@@ -352,6 +369,7 @@ func main() {
 
 	log.Printf("✅ Pack build successful!")
 	log.Printf("  Slug:               %s", manifestEntry.Slug)
+	log.Printf("  Version:            %s", manifestEntry.Version)
 	log.Printf("  Uncompressed Size:  %.2f MB (%d bytes)", float64(manifestEntry.UncompressedSizeBytes)/(1024*1024), manifestEntry.UncompressedSizeBytes)
 	log.Printf("  Compressed Size:    %.2f MB (%d bytes)", float64(manifestEntry.CompressedSizeBytes)/(1024*1024), manifestEntry.CompressedSizeBytes)
 	log.Printf("  SHA-256 Hash:       %s", manifestEntry.SHA256)

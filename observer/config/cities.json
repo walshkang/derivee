@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "lastUpdated": "2026-09-01T14:55:00Z",
+  "version": 2,
+  "lastUpdated": "2026-09-02T12:00:00Z",
   "cities": [
     {
       "slug": "nyc",
@@ -9,7 +9,7 @@
       "compressedSizeBytes": 1841977,
       "uncompressedSizeBytes": 13355518,
       "isBundled": true,
-      "version": "1.1.0",
+      "version": "2.0.0",
       "sha256": "12b3711a1077514c6cf471f278640434b86203a361eaa593623069f5daa8e458"
     },
     {
@@ -19,7 +19,7 @@
       "compressedSizeBytes": 9400000,
       "uncompressedSizeBytes": 22100000,
       "isBundled": false,
-      "version": "1.0.0"
+      "version": "2.0.0"
     }
   ]
 }

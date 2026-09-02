@@ -50,6 +50,21 @@ public final class CityPackManager: Sendable {
         packDirectoryURL(for: slug).appendingPathComponent("transit-lines.geojson")
     }
     
+    public func timetableURL(for slug: String) -> URL {
+        let filename = (try? loadConfig(for: slug))?.routing?.timetableBinFile ?? "timetable.bin"
+        return packDirectoryURL(for: slug).appendingPathComponent(filename)
+    }
+    
+    public func ultraTransfersURL(for slug: String) -> URL {
+        let filename = (try? loadConfig(for: slug))?.routing?.ultraCsrFile ?? "ultra_transfers.csr"
+        return packDirectoryURL(for: slug).appendingPathComponent(filename)
+    }
+    
+    public func walkGraphURL(for slug: String) -> URL {
+        let filename = (try? loadConfig(for: slug))?.routing?.walkGraphFile ?? "walk_graph.bin"
+        return packDirectoryURL(for: slug).appendingPathComponent(filename)
+    }
+    
     // MARK: - SQLite Database Validation Helper
     
     /// Validates that a file at the given URL exists, is >= 4096 bytes, and begins with the SQLite 3 magic header.
@@ -73,7 +88,7 @@ public final class CityPackManager: Sendable {
     
     /// Locates the bundled city pack `.pack.zst` across all bundle naming variants.
     public static func locateBundledPackURL(for slug: String = "nyc") -> URL? {
-        var bundles = [Bundle.main, Bundle(for: CityPackManager.self)] + Bundle.allBundles
+        var bundles = [Bundle.main, Bundle(for: SpatialDatabaseManager.self)] + Bundle.allBundles + Bundle.allFrameworks
         var seenBundlePaths = Set<String>()
         let uniqueBundles = bundles.filter { bundle in
             let path = bundle.bundlePath
@@ -186,7 +201,6 @@ public final class CityPackManager: Sendable {
         print("📦 [CityPackManager] Initialized default NYC pack in \(nycDir.path)")
         return defaultConfig
     }
-
     
     // MARK: - Unpack & Install Pipeline
     
@@ -351,14 +365,20 @@ public final class CityPackManager: Sendable {
         let nbhdURL = neighborhoodDatabaseURL(for: slug)
         let linesURL = transitLinesGeoJSONURL(for: slug)
         let configPath = configURL(for: slug)
+        let ttURL = timetableURL(for: slug)
+        let ultraURL = ultraTransfersURL(for: slug)
+        let walkURL = walkGraphURL(for: slug)
         
         let transitSize = (try? fileManager.attributesOfItem(atPath: transitURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         let nbhdSize = (try? fileManager.attributesOfItem(atPath: nbhdURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         let linesSize = (try? fileManager.attributesOfItem(atPath: linesURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         let configSize = (try? fileManager.attributesOfItem(atPath: configPath.path)[.size] as? NSNumber)?.int64Value ?? 0
+        let timetableSize = (try? fileManager.attributesOfItem(atPath: ttURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        let ultraSize = (try? fileManager.attributesOfItem(atPath: ultraURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        let walkSize = (try? fileManager.attributesOfItem(atPath: walkURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         
         let totalSize = calculatePackDiskSize(slug: slug)
-        let knownSize = transitSize + nbhdSize + linesSize + configSize
+        let knownSize = transitSize + nbhdSize + linesSize + configSize + timetableSize + ultraSize + walkSize
         let otherSize = max(0, totalSize - knownSize)
         
         return CityPackDiskBreakdown(
@@ -366,6 +386,9 @@ public final class CityPackManager: Sendable {
             neighborhoodDatabaseBytes: nbhdSize,
             transitLinesGeoJSONBytes: linesSize,
             configBytes: configSize,
+            timetableBytes: timetableSize,
+            ultraTransfersBytes: ultraSize,
+            walkGraphBytes: walkSize,
             otherBytes: otherSize,
             totalBytes: totalSize
         )
@@ -376,7 +399,7 @@ public final class CityPackManager: Sendable {
               let remote = manifest.findCity(bySlug: slug) else {
             return false
         }
-        let installedVersion = "1.\(installed.config.version).0"
+        let installedVersion = "\(installed.config.version).0.0"
         return remote.isNewerThan(installedVersion: installedVersion)
     }
     
@@ -456,8 +479,6 @@ public final class CityPackManager: Sendable {
             throw CityPackError.downloadFailed(reason: error.localizedDescription)
         }
     }
-
-
     
     // MARK: - Manifest Fetcher & Offline Caching
     
@@ -487,7 +508,7 @@ public final class CityPackManager: Sendable {
             
             // Default built-in fallback manifest
             return CityManifest(
-                version: 1,
+                version: 2,
                 lastUpdated: ISO8601DateFormatter().string(from: Date()),
                 cities: [
                     CityManifestEntry(
@@ -497,7 +518,7 @@ public final class CityPackManager: Sendable {
                         compressedSizeBytes: 12800000,
                         uncompressedSizeBytes: 28500000,
                         isBundled: true,
-                        version: "1.0.0"
+                        version: "2.0.0"
                     )
                 ]
             )

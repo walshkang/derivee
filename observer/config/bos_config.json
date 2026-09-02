@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "slug": "bos",
   "displayName": "Boston",
   "region": "Massachusetts, USA",
@@ -13,6 +13,13 @@
     "latitude": 42.3601,
     "longitude": -71.0589,
     "defaultZoom": 13.0
+  },
+  "routing": {
+    "timetableBinFile": "timetable.bin",
+    "ultraCsrFile": "ultra_transfers.csr",
+    "walkGraphFile": "walk_graph.bin",
+    "maxWalkMinutes": 15,
+    "maxRounds": 8
   },
   "transit": {
     "agencyName": "Massachusetts Bay Transportation Authority",
@@ -78,4 +85,3 @@
     }
   }
 }
-

@@ -2,8 +2,10 @@ package pack
 
 import (
 	"archive/tar"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +17,21 @@ import (
 // CreateCityPack packages city_config.json, transit.sqlite, and transit-lines.geojson into a .pack.zst archive
 func CreateCityPack(configPath, transitDBPath, geojsonPath, outputPath string) (*CityManifestEntry, error) {
 	return CreateCityPackWithAssets(configPath, transitDBPath, geojsonPath, nil, outputPath)
+}
+
+// CreateCityPackV2 packages all standard version 2 assets into a .pack.zst archive
+func CreateCityPackV2(configPath, transitDBPath, geojsonPath, timetablePath, ultraPath, walkGraphPath, outputPath string) (*CityManifestEntry, error) {
+	extraAssets := make(map[string]string)
+	if timetablePath != "" {
+		extraAssets["timetable.bin"] = timetablePath
+	}
+	if ultraPath != "" {
+		extraAssets["ultra_transfers.csr"] = ultraPath
+	}
+	if walkGraphPath != "" {
+		extraAssets["walk_graph.bin"] = walkGraphPath
+	}
+	return CreateCityPackWithAssets(configPath, transitDBPath, geojsonPath, extraAssets, outputPath)
 }
 
 // CreateCityPackWithAssets packages base assets plus optional extra binary assets (e.g. timetable.bin) into .pack.zst
@@ -111,6 +128,11 @@ func CreateCityPackWithAssets(configPath, transitDBPath, geojsonPath string, ext
 
 	hashStr := hex.EncodeToString(hasher.Sum(nil))
 
+	versionStr := fmt.Sprintf("%d.0.0", cfg.Version)
+	if cfg.Version == 1 {
+		versionStr = "1.1.0"
+	}
+
 	return &CityManifestEntry{
 		Slug:                  cfg.Slug,
 		DisplayName:           cfg.DisplayName,
@@ -118,7 +140,7 @@ func CreateCityPackWithAssets(configPath, transitDBPath, geojsonPath string, ext
 		CompressedSizeBytes:   outInfo.Size(),
 		UncompressedSizeBytes: totalUncompressedSize,
 		IsBundled:             cfg.Slug == "nyc",
-		Version:               fmt.Sprintf("1.%d.0", cfg.Version),
+		Version:               versionStr,
 		SHA256:                hashStr,
 	}, nil
 }
@@ -196,6 +218,7 @@ func VerifyCityPack(packPath string) error {
 
 	tarReader := tar.NewReader(zstdReader)
 	foundFiles := make(map[string]bool)
+	var configBytes []byte
 
 	for {
 		header, err := tarReader.Next()
@@ -206,12 +229,45 @@ func VerifyCityPack(packPath string) error {
 			return fmt.Errorf("tar reading error: %w", err)
 		}
 		foundFiles[header.Name] = true
+
+		if header.Name == "city_config.json" {
+			var buf bytes.Buffer
+			if _, err := io.Copy(&buf, tarReader); err != nil {
+				return fmt.Errorf("failed to read city_config.json: %w", err)
+			}
+			configBytes = buf.Bytes()
+		}
 	}
 
 	requiredFiles := []string{"city_config.json", "transit.sqlite", "transit-lines.geojson"}
 	for _, rf := range requiredFiles {
 		if !foundFiles[rf] {
 			return fmt.Errorf("missing required file in pack: %s", rf)
+		}
+	}
+
+	if len(configBytes) > 0 {
+		var cfg CityConfig
+		if err := json.Unmarshal(configBytes, &cfg); err == nil {
+			if cfg.Version >= 2 || cfg.Routing != nil {
+				routingFiles := []string{"timetable.bin", "ultra_transfers.csr", "walk_graph.bin"}
+				if cfg.Routing != nil {
+					if cfg.Routing.TimetableBinFile != "" {
+						routingFiles[0] = cfg.Routing.TimetableBinFile
+					}
+					if cfg.Routing.UltraCsrFile != "" {
+						routingFiles[1] = cfg.Routing.UltraCsrFile
+					}
+					if cfg.Routing.WalkGraphFile != "" {
+						routingFiles[2] = cfg.Routing.WalkGraphFile
+					}
+				}
+				for _, rf := range routingFiles {
+					if !foundFiles[rf] {
+						return fmt.Errorf("missing required routing file in v2 pack: %s", rf)
+					}
+				}
+			}
 		}
 	}
 

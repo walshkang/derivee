@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "slug": "nyc",
   "displayName": "New York City",
   "region": "New York, USA",
@@ -13,6 +13,13 @@
     "latitude": 40.7128,
     "longitude": -74.0060,
     "defaultZoom": 13.0
+  },
+  "routing": {
+    "timetableBinFile": "timetable.bin",
+    "ultraCsrFile": "ultra_transfers.csr",
+    "walkGraphFile": "walk_graph.bin",
+    "maxWalkMinutes": 15,
+    "maxRounds": 8
   },
   "transit": {
     "agencyName": "Metropolitan Transportation Authority",
@@ -125,4 +132,3 @@
     }
   }
 }
-

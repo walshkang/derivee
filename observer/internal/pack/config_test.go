@@ -220,3 +220,100 @@ func TestLoadCityConfig_WithGBFS(t *testing.T) {
 		t.Errorf("unexpected stationStatusUrl: %s", gbfs.StationStatusURL)
 	}
 }
+
+func TestRoutingConfigValidation_V2(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "city_config_v2.json")
+
+	cfg := &CityConfig{
+		Version:     2,
+		Slug:        "nyc",
+		DisplayName: "New York City",
+		Region:      "New York, USA",
+		Bounds: GeoBounds{
+			MinLatitude:  40.48,
+			MaxLatitude:  40.95,
+			MinLongitude: -74.28,
+			MaxLongitude: -73.68,
+		},
+		Center: MapCenter{
+			Latitude:    40.7128,
+			Longitude:   -74.0060,
+			DefaultZoom: 13.0,
+		},
+		Routing: &RoutingConfig{
+			TimetableBinFile: "timetable.bin",
+			UltraCsrFile:     "ultra_transfers.csr",
+			WalkGraphFile:    "walk_graph.bin",
+			MaxWalkMinutes:   20,
+			MaxRounds:        6,
+		},
+		Transit: TransitConfig{
+			AgencyName: "MTA",
+		},
+	}
+
+	if err := ValidateCityConfig(cfg); err != nil {
+		t.Fatalf("expected valid v2 config, got: %v", err)
+	}
+
+	routing := cfg.GetRouting()
+	if routing == nil {
+		t.Fatalf("expected non-nil RoutingConfig")
+	}
+	if routing.TimetableBinFile != "timetable.bin" || routing.UltraCsrFile != "ultra_transfers.csr" || routing.WalkGraphFile != "walk_graph.bin" {
+		t.Errorf("unexpected routing filenames: %+v", routing)
+	}
+	if routing.MaxWalkMinutes != 20 || routing.MaxRounds != 6 {
+		t.Errorf("unexpected routing parameters: %+v", routing)
+	}
+
+	if err := SaveCityConfig(cfg, configPath); err != nil {
+		t.Fatalf("failed to save city config: %v", err)
+	}
+
+	loaded, err := LoadCityConfig(configPath)
+	if err != nil {
+		t.Fatalf("failed to load city config: %v", err)
+	}
+	if loaded.Version != 2 {
+		t.Errorf("expected version 2, got %d", loaded.Version)
+	}
+	if loaded.Routing == nil || loaded.Routing.TimetableBinFile != "timetable.bin" {
+		t.Errorf("expected loaded routing to match: %+v", loaded.Routing)
+	}
+}
+
+func TestRoutingConfigDefaults_ForV2WithoutExplicitRouting(t *testing.T) {
+	cfg := &CityConfig{
+		Version:     2,
+		Slug:        "bos",
+		DisplayName: "Boston",
+		Region:      "Massachusetts, USA",
+		Bounds: GeoBounds{
+			MinLatitude:  42.20,
+			MaxLatitude:  42.50,
+			MinLongitude: -71.25,
+			MaxLongitude: -70.90,
+		},
+		Center: MapCenter{
+			Latitude:    42.3601,
+			Longitude:   -71.0589,
+			DefaultZoom: 13.0,
+		},
+		Transit: TransitConfig{
+			AgencyName: "MBTA",
+		},
+	}
+
+	routing := cfg.GetRouting()
+	if routing == nil {
+		t.Fatalf("expected GetRouting() to return default for version 2")
+	}
+	if routing.TimetableBinFile != "timetable.bin" || routing.UltraCsrFile != "ultra_transfers.csr" || routing.WalkGraphFile != "walk_graph.bin" {
+		t.Errorf("expected default routing filenames, got: %+v", routing)
+	}
+	if routing.MaxWalkMinutes != 15 || routing.MaxRounds != 8 {
+		t.Errorf("expected default limits, got: %+v", routing)
+	}
+}

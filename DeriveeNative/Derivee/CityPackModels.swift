@@ -121,6 +121,30 @@ public struct GBFSConfig: Codable, Sendable, Equatable, Hashable {
     }
 }
 
+// MARK: - City Routing Config
+
+public struct CityRoutingConfig: Codable, Sendable, Equatable, Hashable {
+    public let timetableBinFile: String
+    public let ultraCsrFile: String
+    public let walkGraphFile: String
+    public let maxWalkMinutes: Int
+    public let maxRounds: Int
+    
+    public init(
+        timetableBinFile: String = "timetable.bin",
+        ultraCsrFile: String = "ultra_transfers.csr",
+        walkGraphFile: String = "walk_graph.bin",
+        maxWalkMinutes: Int = 15,
+        maxRounds: Int = 8
+    ) {
+        self.timetableBinFile = timetableBinFile
+        self.ultraCsrFile = ultraCsrFile
+        self.walkGraphFile = walkGraphFile
+        self.maxWalkMinutes = maxWalkMinutes
+        self.maxRounds = maxRounds
+    }
+}
+
 public struct CityTransitConfig: Codable, Sendable, Equatable, Hashable {
     public let agencyName: String
     public let attributions: [String]
@@ -159,6 +183,7 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
     public let center: CityCenter
     public let transit: CityTransitConfig?
     public let gbfs: GBFSConfig?
+    public let routing: CityRoutingConfig?
     public let sha256: String?
     
     public var effectiveGBFS: GBFSConfig? {
@@ -166,7 +191,7 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
     }
     
     public init(
-        version: Int = 1,
+        version: Int = 2,
         slug: String,
         displayName: String,
         region: String,
@@ -174,6 +199,7 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
         center: CityCenter,
         transit: CityTransitConfig? = nil,
         gbfs: GBFSConfig? = nil,
+        routing: CityRoutingConfig? = nil,
         sha256: String? = nil
     ) {
         self.version = version
@@ -184,11 +210,12 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
         self.center = center
         self.transit = transit
         self.gbfs = gbfs
+        self.routing = routing
         self.sha256 = sha256
     }
     
     public static let nycDefault = CityConfig(
-        version: 1,
+        version: 2,
         slug: "nyc",
         displayName: "New York City",
         region: "New York, USA",
@@ -232,11 +259,12 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
                 stalenessThresholdSeconds: 600.0
             )
         ),
+        routing: CityRoutingConfig(),
         sha256: nil
     )
     
     public static let bostonDefault = CityConfig(
-        version: 1,
+        version: 2,
         slug: "bos",
         displayName: "Boston",
         region: "Massachusetts, USA",
@@ -264,11 +292,12 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
                 pollIntervalSeconds: 30.0,
                 stalenessThresholdSeconds: 600.0
             )
-        )
+        ),
+        routing: CityRoutingConfig()
     )
     
     public static let chicagoDefault = CityConfig(
-        version: 1,
+        version: 2,
         slug: "chi",
         displayName: "Chicago",
         region: "Illinois, USA",
@@ -296,7 +325,8 @@ public struct CityConfig: Codable, Sendable, Equatable, Identifiable, Hashable {
                 pollIntervalSeconds: 30.0,
                 stalenessThresholdSeconds: 600.0
             )
-        )
+        ),
+        routing: CityRoutingConfig()
     )
 }
 
@@ -322,7 +352,7 @@ public struct CityManifestEntry: Codable, Sendable, Equatable, Identifiable, Has
         compressedSizeBytes: Int64,
         uncompressedSizeBytes: Int64,
         isBundled: Bool = false,
-        version: String = "1.0.0",
+        version: String = "2.0.0",
         bounds: CityBounds? = nil,
         center: CityCenter? = nil
     ) {
@@ -353,7 +383,7 @@ public struct CityManifest: Codable, Sendable, Equatable {
     public let lastUpdated: String
     public let cities: [CityManifestEntry]
     
-    public init(version: Int = 1, lastUpdated: String = "2026-08-24T00:00:00Z", cities: [CityManifestEntry] = []) {
+    public init(version: Int = 2, lastUpdated: String = "2026-09-02T12:00:00Z", cities: [CityManifestEntry] = []) {
         self.version = version
         self.lastUpdated = lastUpdated
         self.cities = cities
@@ -382,8 +412,8 @@ public struct CityManifest: Codable, Sendable, Equatable {
     
     /// Default bundled static manifest used for fast offline operation and test environments.
     public static let defaultManifest = CityManifest(
-        version: 1,
-        lastUpdated: "2026-08-24T00:00:00Z",
+        version: 2,
+        lastUpdated: "2026-09-02T12:00:00Z",
         cities: [
             CityManifestEntry(
                 slug: "nyc",
@@ -392,7 +422,7 @@ public struct CityManifest: Codable, Sendable, Equatable {
                 compressedSizeBytes: 12_800_000,
                 uncompressedSizeBytes: 28_500_000,
                 isBundled: true,
-                version: "1.1.0",
+                version: "2.0.0",
                 bounds: CityConfig.nycDefault.bounds,
                 center: CityConfig.nycDefault.center
             ),
@@ -403,7 +433,7 @@ public struct CityManifest: Codable, Sendable, Equatable {
                 compressedSizeBytes: 9_400_000,
                 uncompressedSizeBytes: 22_100_000,
                 isBundled: false,
-                version: "1.0.0",
+                version: "2.0.0",
                 bounds: CityConfig.bostonDefault.bounds,
                 center: CityConfig.bostonDefault.center
             ),
@@ -414,7 +444,7 @@ public struct CityManifest: Codable, Sendable, Equatable {
                 compressedSizeBytes: 11_200_000,
                 uncompressedSizeBytes: 25_400_000,
                 isBundled: false,
-                version: "1.0.0",
+                version: "2.0.0",
                 bounds: CityConfig.chicagoDefault.bounds,
                 center: CityConfig.chicagoDefault.center
             )
@@ -429,6 +459,9 @@ public struct CityPackDiskBreakdown: Sendable, Equatable, Hashable {
     public let neighborhoodDatabaseBytes: Int64
     public let transitLinesGeoJSONBytes: Int64
     public let configBytes: Int64
+    public let timetableBytes: Int64
+    public let ultraTransfersBytes: Int64
+    public let walkGraphBytes: Int64
     public let otherBytes: Int64
     public let totalBytes: Int64
     
@@ -437,6 +470,9 @@ public struct CityPackDiskBreakdown: Sendable, Equatable, Hashable {
         neighborhoodDatabaseBytes: Int64 = 0,
         transitLinesGeoJSONBytes: Int64,
         configBytes: Int64,
+        timetableBytes: Int64 = 0,
+        ultraTransfersBytes: Int64 = 0,
+        walkGraphBytes: Int64 = 0,
         otherBytes: Int64 = 0,
         totalBytes: Int64? = nil
     ) {
@@ -444,8 +480,11 @@ public struct CityPackDiskBreakdown: Sendable, Equatable, Hashable {
         self.neighborhoodDatabaseBytes = neighborhoodDatabaseBytes
         self.transitLinesGeoJSONBytes = transitLinesGeoJSONBytes
         self.configBytes = configBytes
+        self.timetableBytes = timetableBytes
+        self.ultraTransfersBytes = ultraTransfersBytes
+        self.walkGraphBytes = walkGraphBytes
         self.otherBytes = otherBytes
-        self.totalBytes = totalBytes ?? (transitDatabaseBytes + neighborhoodDatabaseBytes + transitLinesGeoJSONBytes + configBytes + otherBytes)
+        self.totalBytes = totalBytes ?? (transitDatabaseBytes + neighborhoodDatabaseBytes + transitLinesGeoJSONBytes + configBytes + timetableBytes + ultraTransfersBytes + walkGraphBytes + otherBytes)
     }
     
     public var formattedTotal: String { CityManifest.formatBytes(totalBytes) }
@@ -453,6 +492,9 @@ public struct CityPackDiskBreakdown: Sendable, Equatable, Hashable {
     public var formattedNeighborhoodDB: String { CityManifest.formatBytes(neighborhoodDatabaseBytes) }
     public var formattedTransitLines: String { CityManifest.formatBytes(transitLinesGeoJSONBytes) }
     public var formattedConfig: String { CityManifest.formatBytes(configBytes) }
+    public var formattedTimetable: String { CityManifest.formatBytes(timetableBytes) }
+    public var formattedUltraTransfers: String { CityManifest.formatBytes(ultraTransfersBytes) }
+    public var formattedWalkGraph: String { CityManifest.formatBytes(walkGraphBytes) }
     public var formattedOther: String { CityManifest.formatBytes(otherBytes) }
 }
 

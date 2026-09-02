@@ -271,6 +271,15 @@ public struct CitiesStorageManagerView: View {
                         breakdownRow(title: "neighborhood.sqlite (GIS Walkable Boundaries)", size: pack.breakdown.formattedNeighborhoodDB)
                     }
                     breakdownRow(title: "transit-lines.geojson (Route Lines)", size: pack.breakdown.formattedTransitLines)
+                    if pack.breakdown.timetableBytes > 0 {
+                        breakdownRow(title: "timetable.bin (RAPTOR Timetable)", size: pack.breakdown.formattedTimetable)
+                    }
+                    if pack.breakdown.ultraTransfersBytes > 0 {
+                        breakdownRow(title: "ultra_transfers.csr (ULTRA Shortcuts)", size: pack.breakdown.formattedUltraTransfers)
+                    }
+                    if pack.breakdown.walkGraphBytes > 0 {
+                        breakdownRow(title: "walk_graph.bin (OSM Walk Graph)", size: pack.breakdown.formattedWalkGraph)
+                    }
                     breakdownRow(title: "city_config.json (Metro Bounds)", size: pack.breakdown.formattedConfig)
                     if pack.breakdown.otherBytes > 0 {
                         breakdownRow(title: "auxiliary / indexes", size: pack.breakdown.formattedOther)
@@ -549,7 +558,6 @@ public struct CitiesStorageManagerView: View {
     private func startUpdate(for entry: CityManifestEntry) {
         startDownload(for: entry)
     }
-
 }
 
 #Preview {

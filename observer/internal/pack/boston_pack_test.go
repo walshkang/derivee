@@ -2,6 +2,7 @@ package pack
 
 import (
 	"database/sql"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"observer/internal/builder"
 	"observer/internal/gtfs"
+	"observer/internal/raptor"
 )
 
 func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
@@ -331,7 +333,7 @@ func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
 	} else {
 		// Fallback to synthetic config if relative path differs
 		bostonConfig = &CityConfig{
-			Version:     1,
+			Version:     2,
 			Slug:        "bos",
 			DisplayName: "Boston",
 			Region:      "Massachusetts, USA",
@@ -346,6 +348,13 @@ func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
 				Longitude:   -71.0589,
 				DefaultZoom: 13.0,
 			},
+			Routing: &RoutingConfig{
+				TimetableBinFile: "timetable.bin",
+				UltraCsrFile:     "ultra_transfers.csr",
+				WalkGraphFile:    "walk_graph.bin",
+				MaxWalkMinutes:   15,
+				MaxRounds:        8,
+			},
 			Transit: TransitConfig{
 				AgencyName:   "Massachusetts Bay Transportation Authority",
 				Attributions: []string{"MBTA Subway, Bus & Commuter Rail", "MassDOT Ferry Operations"},
@@ -358,11 +367,39 @@ func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
 		t.Fatalf("Failed to save city config: %v", err)
 	}
 
-	// 7. Package into city-bos.pack.zst
-	packPath := filepath.Join(tempDir, "city-bos.pack.zst")
-	manifestEntry, err := CreateCityPack(configPath, dbPath, geojsonPath, packPath)
+	// 6b. Compile Boston RAPTOR Timetable
+	tt, err := raptor.CompileTimetable(ds, anchorDate)
 	if err != nil {
-		t.Fatalf("CreateCityPack failed: %v", err)
+		t.Fatalf("Failed to compile RAPTOR timetable: %v", err)
+	}
+	timetablePath := filepath.Join(tempDir, "timetable.bin")
+	if _, err := raptor.WriteTimetableFile(tt, timetablePath); err != nil {
+		t.Fatalf("Failed to write timetable.bin: %v", err)
+	}
+
+	// 6c. Generate synthetic ultra_transfers.csr and walk_graph.bin for packaging
+	createDummyBinary := func(filename string, magic uint32) string {
+		path := filepath.Join(tempDir, filename)
+		data := make([]byte, 256)
+		binary.LittleEndian.PutUint32(data[0:4], magic)
+		binary.LittleEndian.PutUint32(data[4:8], 1)
+		binary.LittleEndian.PutUint32(data[8:12], 0x01020304)
+		binary.LittleEndian.PutUint32(data[12:16], 128)
+		binary.LittleEndian.PutUint64(data[16:24], 256)
+		if err := os.WriteFile(path, data, 0644); err != nil {
+			t.Fatalf("Failed to write %s: %v", filename, err)
+		}
+		return path
+	}
+
+	ultraPath := createDummyBinary("ultra_transfers.csr", 0x41525455)
+	walkGraphPath := createDummyBinary("walk_graph.bin", 0x4B4C4157)
+
+	// 7. Package into city-bos.pack.zst (V2 Pack)
+	packPath := filepath.Join(tempDir, "city-bos.pack.zst")
+	manifestEntry, err := CreateCityPackV2(configPath, dbPath, geojsonPath, timetablePath, ultraPath, walkGraphPath, packPath)
+	if err != nil {
+		t.Fatalf("CreateCityPackV2 failed: %v", err)
 	}
 
 	if manifestEntry.Slug != "bos" {
@@ -373,6 +410,9 @@ func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
 	}
 	if len(manifestEntry.SHA256) != 64 {
 		t.Errorf("Expected 64-char SHA256 hex digest, got %s", manifestEntry.SHA256)
+	}
+	if manifestEntry.Version != "2.0.0" {
+		t.Errorf("Expected version '2.0.0', got %s", manifestEntry.Version)
 	}
 
 	// 8. Verify Pack Structure
@@ -417,5 +457,13 @@ func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
 	}
 	if len(extractedFC.Features) != len(fc.Features) {
 		t.Errorf("Feature count mismatch: expected %d, got %d", len(fc.Features), len(extractedFC.Features))
+	}
+
+	// Inspect extracted routing assets
+	for _, fname := range []string{"timetable.bin", "ultra_transfers.csr", "walk_graph.bin"} {
+		p := filepath.Join(extractDir, fname)
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("Expected extracted file %s to exist: %v", fname, err)
+		}
 	}
 }

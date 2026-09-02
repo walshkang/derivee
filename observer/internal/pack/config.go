@@ -46,6 +46,15 @@ type GBFSConfig struct {
 	Headers                   map[string]string `json:"headers,omitempty"`
 }
 
+// RoutingConfig defines on-device RAPTOR / ULTRA / Walk Graph binary assets and limits
+type RoutingConfig struct {
+	TimetableBinFile string `json:"timetableBinFile,omitempty"`
+	UltraCsrFile     string `json:"ultraCsrFile,omitempty"`
+	WalkGraphFile    string `json:"walkGraphFile,omitempty"`
+	MaxWalkMinutes   int    `json:"maxWalkMinutes,omitempty"`
+	MaxRounds        int    `json:"maxRounds,omitempty"`
+}
+
 // TransitConfig contains transit metadata, endpoints, attributions, and route mappings
 type TransitConfig struct {
 	AgencyName        string             `json:"agencyName"`
@@ -58,15 +67,16 @@ type TransitConfig struct {
 
 // CityConfig defines the schema of city_config.json
 type CityConfig struct {
-	Version     int           `json:"version"`
-	Slug        string        `json:"slug"`
-	DisplayName string        `json:"displayName"`
-	Region      string        `json:"region"`
-	Bounds      GeoBounds     `json:"bounds"`
-	Center      MapCenter     `json:"center"`
-	Transit     TransitConfig `json:"transit"`
-	GBFS        *GBFSConfig   `json:"gbfs,omitempty"`
-	SHA256      string        `json:"sha256,omitempty"`
+	Version     int            `json:"version"`
+	Slug        string         `json:"slug"`
+	DisplayName string         `json:"displayName"`
+	Region      string         `json:"region"`
+	Bounds      GeoBounds      `json:"bounds"`
+	Center      MapCenter      `json:"center"`
+	Transit     TransitConfig  `json:"transit"`
+	GBFS        *GBFSConfig    `json:"gbfs,omitempty"`
+	Routing     *RoutingConfig `json:"routing,omitempty"`
+	SHA256      string         `json:"sha256,omitempty"`
 }
 
 // CityManifestEntry defines metadata for a single city in cities.json
@@ -88,12 +98,34 @@ type CitiesManifest struct {
 	Cities      []CityManifestEntry `json:"cities"`
 }
 
+// DefaultRoutingConfig provides standard filenames and defaults for version 2 city packs
+func DefaultRoutingConfig() *RoutingConfig {
+	return &RoutingConfig{
+		TimetableBinFile: "timetable.bin",
+		UltraCsrFile:     "ultra_transfers.csr",
+		WalkGraphFile:    "walk_graph.bin",
+		MaxWalkMinutes:   15,
+		MaxRounds:        8,
+	}
+}
+
 // GetGBFS returns the active GBFSConfig checking top-level first, then transit.gbfs
 func (cfg *CityConfig) GetGBFS() *GBFSConfig {
 	if cfg.GBFS != nil {
 		return cfg.GBFS
 	}
 	return cfg.Transit.GBFS
+}
+
+// GetRouting returns the active RoutingConfig or default if version >= 2
+func (cfg *CityConfig) GetRouting() *RoutingConfig {
+	if cfg.Routing != nil {
+		return cfg.Routing
+	}
+	if cfg.Version >= 2 {
+		return DefaultRoutingConfig()
+	}
+	return nil
 }
 
 // ValidateCityConfig verifies that required fields are present and valid
@@ -123,6 +155,32 @@ func ValidateCityConfig(cfg *CityConfig) error {
 		}
 	}
 
+	if routing := cfg.Routing; routing != nil {
+		if err := ValidateRoutingConfig(routing); err != nil {
+			return fmt.Errorf("invalid routing config: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// ValidateRoutingConfig validates on-device routing binary configuration
+func ValidateRoutingConfig(routing *RoutingConfig) error {
+	if routing.TimetableBinFile == "" {
+		routing.TimetableBinFile = "timetable.bin"
+	}
+	if routing.UltraCsrFile == "" {
+		routing.UltraCsrFile = "ultra_transfers.csr"
+	}
+	if routing.WalkGraphFile == "" {
+		routing.WalkGraphFile = "walk_graph.bin"
+	}
+	if routing.MaxWalkMinutes <= 0 {
+		routing.MaxWalkMinutes = 15
+	}
+	if routing.MaxRounds <= 0 {
+		routing.MaxRounds = 8
+	}
 	return nil
 }
 

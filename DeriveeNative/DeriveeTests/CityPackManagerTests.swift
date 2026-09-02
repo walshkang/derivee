@@ -225,7 +225,7 @@ final class CityPackManagerTests: XCTestCase {
     
     func testManifestOfflineFallback() async throws {
         let manifest = try await manager.fetchRemoteManifest()
-        XCTAssertEqual(manifest.version, 1)
+        XCTAssertEqual(manifest.version, 2)
         XCTAssertFalse(manifest.cities.isEmpty)
         XCTAssertTrue(manifest.cities.contains { $0.slug == "nyc" })
     }
@@ -389,6 +389,107 @@ final class CityPackManagerTests: XCTestCase {
         XCTAssertEqual(config.effectiveGBFS?.pollIntervalSeconds, 30.0)
         XCTAssertEqual(config.effectiveGBFS?.stalenessThresholdSeconds, 600.0)
     }
+    
+    // MARK: - City Pack v2 & Routing Configuration Tests (Wave N-A.5)
+    
+    func testCityPackV2DecompressionAndRoutingAssets() throws {
+        let v2Config = CityConfig(
+            version: 2,
+            slug: "bos",
+            displayName: "Boston",
+            region: "Massachusetts, USA",
+            bounds: CityBounds(minLatitude: 42.20, maxLatitude: 42.50, minLongitude: -71.25, maxLongitude: -70.90),
+            center: CityCenter(latitude: 42.3601, longitude: -71.0589, defaultZoom: 13.0),
+            transit: CityTransitConfig(
+                agencyName: "MBTA",
+                attributions: ["Massachusetts Bay Transportation Authority"],
+                realtimeEndpoints: []
+            ),
+            routing: CityRoutingConfig(
+                timetableBinFile: "timetable.bin",
+                ultraCsrFile: "ultra_transfers.csr",
+                walkGraphFile: "walk_graph.bin",
+                maxWalkMinutes: 15,
+                maxRounds: 8
+            )
+        )
+        
+        let configData = try JSONEncoder().encode(v2Config)
+        let sqliteData = "SQLite format 3\0test_transit_db".data(using: .utf8)!
+        let geojsonData = "{\"type\": \"FeatureCollection\", \"features\": []}".data(using: .utf8)!
+        let timetableData = Data(repeating: 0xAA, count: 512)
+        let ultraData = Data(repeating: 0xBB, count: 256)
+        let walkGraphData = Data(repeating: 0xCC, count: 1024)
+        
+        let tarFiles = [
+            (name: "city_config.json", data: configData),
+            (name: "transit.sqlite", data: sqliteData),
+            (name: "transit-lines.geojson", data: geojsonData),
+            (name: "timetable.bin", data: timetableData),
+            (name: "ultra_transfers.csr", data: ultraData),
+            (name: "walk_graph.bin", data: walkGraphData)
+        ]
+        
+        let tarData = TarExtractor.createTarArchive(files: tarFiles)
+        let processor = ZSTDProcessor()
+        guard let compressedData = try? processor.compressBuffer(tarData, compressionLevel: 3) else {
+            XCTFail("Failed to compress v2 test archive")
+            return
+        }
+        
+        let installed = try manager.unpackAndInstall(archiveData: compressedData)
+        XCTAssertEqual(installed.version, 2)
+        XCTAssertEqual(installed.slug, "bos")
+        XCTAssertNotNil(installed.routing)
+        XCTAssertEqual(installed.routing?.timetableBinFile, "timetable.bin")
+        XCTAssertEqual(installed.routing?.maxWalkMinutes, 15)
+        XCTAssertEqual(installed.routing?.maxRounds, 8)
+        
+        // Verify URL helpers
+        let ttURL = manager.timetableURL(for: "bos")
+        let ultraURL = manager.ultraTransfersURL(for: "bos")
+        let walkURL = manager.walkGraphURL(for: "bos")
+        
+        XCTAssertTrue(fileManager.fileExists(atPath: ttURL.path))
+        XCTAssertTrue(fileManager.fileExists(atPath: ultraURL.path))
+        XCTAssertTrue(fileManager.fileExists(atPath: walkURL.path))
+        
+        // Verify disk breakdown
+        let breakdown = manager.calculateDiskBreakdown(slug: "bos")
+        XCTAssertEqual(breakdown.timetableBytes, 512)
+        XCTAssertEqual(breakdown.ultraTransfersBytes, 256)
+        XCTAssertEqual(breakdown.walkGraphBytes, 1024)
+        XCTAssertGreaterThan(breakdown.totalBytes, 1792)
+    }
+    
+    func testCityRoutingConfigDecodingAndDefaults() throws {
+        let jsonStr = """
+        {
+          "version": 2,
+          "slug": "nyc",
+          "displayName": "New York City",
+          "region": "New York, USA",
+          "bounds": { "minLatitude": 40.0, "maxLatitude": 41.5, "minLongitude": -74.5, "maxLongitude": -73.0 },
+          "center": { "latitude": 40.7128, "longitude": -74.0060, "defaultZoom": 13.0 },
+          "routing": {
+            "timetableBinFile": "custom_tt.bin",
+            "ultraCsrFile": "custom_ultra.csr",
+            "walkGraphFile": "custom_walk.bin",
+            "maxWalkMinutes": 20,
+            "maxRounds": 10
+          }
+        }
+        """
+        
+        let data = jsonStr.data(using: .utf8)!
+        let config = try JSONDecoder().decode(CityConfig.self, from: data)
+        
+        XCTAssertEqual(config.version, 2)
+        XCTAssertNotNil(config.routing)
+        XCTAssertEqual(config.routing?.timetableBinFile, "custom_tt.bin")
+        XCTAssertEqual(config.routing?.ultraCsrFile, "custom_ultra.csr")
+        XCTAssertEqual(config.routing?.walkGraphFile, "custom_walk.bin")
+        XCTAssertEqual(config.routing?.maxWalkMinutes, 20)
+        XCTAssertEqual(config.routing?.maxRounds, 10)
+    }
 }
-
-
