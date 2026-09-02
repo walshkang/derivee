@@ -4,7 +4,7 @@ import CoreGraphics
 /// Dérivée's 4-tier transit modal classification system.
 /// Normalizes standard GTFS `route_type` (0–7, 11) and Extended GTFS (Hierarchical Vehicle Types / HVT 100–1400)
 /// into 4 visual cartography layers and UI rendering paradigms.
-public enum TransitModalClass: Int, Sendable, CaseIterable, Codable, Comparable {
+public enum TransitModalClass: Int, Sendable, CaseIterable, Codable, Comparable, Hashable {
     case subway = 0    // Heavy Rail / Subway / Metro / Commuter Rail / PATH
     case lightRail = 1 // Light Rail (LRT) / Tram / Streetcar / Trolley
     case bus = 2       // BRT / Local Bus / Express Bus / Trolleybus
