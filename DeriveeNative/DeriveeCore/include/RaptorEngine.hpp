@@ -36,6 +36,9 @@ private:
     // External ULTRA CSR Transfer Data Store
     ULTRADataStore ultra_store_{};
 
+    // External Bounded Walk Router
+    BoundedAStarRouter walk_router_{};
+
     // Real-time GTFS-RT delays: trip_id -> delay in seconds
     std::unordered_map<uint32_t, int32_t> realtime_delays_;
 
@@ -73,6 +76,9 @@ public:
 
     // Load binary ULTRA transfer shortcuts blob (.csr)
     bool load_ultra_blob(const uint8_t* buffer_ptr, size_t length_bytes) noexcept;
+
+    // Load binary walk graph blob (walk_graph.bin)
+    bool load_walk_graph_blob(const uint8_t* buffer_ptr, size_t length_bytes) noexcept;
 
     // Apply real-time delay updates to dynamic trip arrays
     void update_realtime_delay(uint32_t trip_id, int32_t delay_seconds) noexcept;
@@ -138,6 +144,12 @@ public:
     // State inspections
     [[nodiscard]] bool is_loaded() const noexcept { return is_loaded_; }
     [[nodiscard]] bool is_ultra_loaded() const noexcept { return ultra_store_.is_loaded(); }
+    [[nodiscard]] bool is_walk_graph_loaded() const noexcept;
+    [[nodiscard]] size_t walk_nodes_count() const noexcept;
+    [[nodiscard]] size_t walk_edges_count() const noexcept;
+    [[nodiscard]] DirectWalkResult compute_direct_walk(
+        float lat1, float lon1, float lat2, float lon2,
+        float max_distance_meters = 2000.0f, uint16_t flags = 0) const noexcept;
     [[nodiscard]] size_t registered_delays_count() const noexcept { return realtime_delays_.size(); }
     [[nodiscard]] size_t stops_count() const noexcept { return stops_.size(); }
     [[nodiscard]] size_t routes_count() const noexcept { return routes_.size(); }

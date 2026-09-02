@@ -12,6 +12,7 @@ public actor RoutingEngineBridge {
     private var engine: RaptorEngine
     private var timetableData: Data?
     private var ultraData: Data?
+    private var walkGraphData: Data?
     private var metadataProvider: (any StopMetadataProvider)?
     
     // MARK: - Lifecycle & Initialization
@@ -56,11 +57,29 @@ public actor RoutingEngineBridge {
         return success
     }
     
-    /// Loads ULTRA transfers from disk URL.
+    /// Loads binary ULTRA transfers from disk URL.
     @discardableResult
     public func loadUltra(from fileURL: URL) throws -> Bool {
         let data = try Data(contentsOf: fileURL, options: .alwaysMapped)
         return loadUltraBlob(data)
+    }
+
+    /// Loads memory-mapped binary walk graph blob directly into the C++ engine.
+    @discardableResult
+    public func loadWalkGraphBlob(_ data: Data) -> Bool {
+        self.walkGraphData = data
+        let success = data.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return self.engine.load_walk_graph_blob(base, raw.count)
+        }
+        return success
+    }
+
+    /// Loads walk graph from disk URL using Darwin kernel clean memory (`.alwaysMapped`).
+    @discardableResult
+    public func loadWalkGraph(from fileURL: URL) throws -> Bool {
+        let data = try Data(contentsOf: fileURL, options: .alwaysMapped)
+        return loadWalkGraphBlob(data)
     }
     
     // MARK: - State Inspection
@@ -71,6 +90,18 @@ public actor RoutingEngineBridge {
     
     public var isUltraLoaded: Bool {
         engine.is_ultra_loaded()
+    }
+
+    public var isWalkGraphLoaded: Bool {
+        engine.is_walk_graph_loaded()
+    }
+
+    public var walkNodesCount: Int {
+        Int(engine.walk_nodes_count())
+    }
+
+    public var walkEdgesCount: Int {
+        Int(engine.walk_edges_count())
     }
     
     public var stopsCount: Int {
@@ -160,7 +191,7 @@ public actor RoutingEngineBridge {
         profile: RoutingProfile = .mostReliable,
         options: RoutingOptions = .default
     ) async -> [JourneyItinerary] {
-        guard engine.is_loaded() else { return [] }
+        guard engine.is_loaded() || engine.is_walk_graph_loaded() else { return [] }
         
         // Convert Date to seconds past midnight
         let calendar = Calendar.current
@@ -231,14 +262,19 @@ public actor RoutingEngineBridge {
         if options.includeDirectWalk,
            let origCoord = origin.coordinate,
            let destCoord = destination.coordinate {
-            let distMeters = BoundedAStarRouter.calculate_distance_meters(
+            let directResult = engine.compute_direct_walk(
                 Float(origCoord.latitude), Float(origCoord.longitude),
-                Float(destCoord.latitude), Float(destCoord.longitude)
+                Float(destCoord.latitude), Float(destCoord.longitude),
+                2000.0,
+                options.flags
             )
+            let distMeters = directResult.distance_meters
             
             // Allow direct walk if within 2.0 km
-            if distMeters <= 2000.0 {
-                let walkDurSec = BoundedAStarRouter.calculate_walk_duration_sec(distMeters, Float(options.walkingSpeedMps))
+            if distMeters > 0.0 && distMeters <= 2000.0 {
+                let walkDurSec = directResult.walk_duration_sec > 0 ?
+                    directResult.walk_duration_sec :
+                    BoundedAStarRouter.calculate_walk_duration_sec(distMeters, Float(options.walkingSpeedMps))
                 let arrSec = departureTimestampSec + walkDurSec
                 
                 let directWalkLeg = JourneyLeg(
@@ -248,7 +284,7 @@ public actor RoutingEngineBridge {
                     departureTimeSec: departureTimestampSec,
                     arrivalTimeSec: arrSec,
                     distanceMeters: UInt32(distMeters),
-                    landmarkCue: "Direct pedestrian path to destination"
+                    landmarkCue: directResult.path_found ? "Direct pedestrian path via street network" : "Direct pedestrian path to destination"
                 )
                 
                 let directWalkItinerary = JourneyItinerary(

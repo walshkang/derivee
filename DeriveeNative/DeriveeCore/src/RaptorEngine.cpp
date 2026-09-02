@@ -21,6 +21,7 @@ RaptorEngine::RaptorEngine(RaptorEngine&& other) noexcept
       route_stops_(other.route_stops_),
       stochastic_weights_(other.stochastic_weights_),
       ultra_store_(std::move(other.ultra_store_)),
+      walk_router_(std::move(other.walk_router_)),
       realtime_delays_(std::move(other.realtime_delays_)),
       stop_active_bitmask_(std::move(other.stop_active_bitmask_)),
       disrupted_segments_(std::move(other.disrupted_segments_)) {
@@ -51,6 +52,7 @@ RaptorEngine& RaptorEngine::operator=(RaptorEngine&& other) noexcept {
         route_stops_ = other.route_stops_;
         stochastic_weights_ = other.stochastic_weights_;
         ultra_store_ = std::move(other.ultra_store_);
+        walk_router_ = std::move(other.walk_router_);
         realtime_delays_ = std::move(other.realtime_delays_);
         stop_active_bitmask_ = std::move(other.stop_active_bitmask_);
         disrupted_segments_ = std::move(other.disrupted_segments_);
@@ -111,6 +113,7 @@ bool RaptorEngine::load_timetable_blob(const uint8_t* buffer_ptr, size_t length_
         timetable_blob_ptr_ = buffer_ptr;
         timetable_blob_size_ = length_bytes;
         is_loaded_ = true;
+        walk_router_.bind_stops(stops_);
         return true;
     } catch (...) {
         timetable_blob_ptr_ = nullptr;
@@ -132,6 +135,32 @@ bool RaptorEngine::load_timetable_blob(const uint8_t* buffer_ptr, size_t length_
 
 bool RaptorEngine::load_ultra_blob(const uint8_t* buffer_ptr, size_t length_bytes) noexcept {
     return ultra_store_.load_ultra_blob(buffer_ptr, length_bytes);
+}
+
+bool RaptorEngine::load_walk_graph_blob(const uint8_t* buffer_ptr, size_t length_bytes) noexcept {
+    bool ok = walk_router_.load_walk_graph_blob(buffer_ptr, length_bytes);
+    if (ok && !stops_.empty()) {
+        walk_router_.bind_stops(stops_);
+    }
+    return ok;
+}
+
+bool RaptorEngine::is_walk_graph_loaded() const noexcept {
+    return walk_router_.is_walk_graph_loaded();
+}
+
+size_t RaptorEngine::walk_nodes_count() const noexcept {
+    return walk_router_.walk_nodes_count();
+}
+
+size_t RaptorEngine::walk_edges_count() const noexcept {
+    return walk_router_.walk_edges_count();
+}
+
+DirectWalkResult RaptorEngine::compute_direct_walk(
+    float lat1, float lon1, float lat2, float lon2,
+    float max_distance_meters, uint16_t flags) const noexcept {
+    return walk_router_.compute_direct_walk(lat1, lon1, lat2, lon2, max_distance_meters, flags);
 }
 
 void RaptorEngine::update_realtime_delay(uint32_t trip_id, int32_t delay_seconds) noexcept {
@@ -877,6 +906,10 @@ std::vector<CandidateStop> RaptorEngine::find_candidate_stops(
     float max_radius_meters,
     uint16_t required_flags,
     size_t max_results) const noexcept {
+    if (walk_router_.is_walk_graph_loaded()) {
+        return walk_router_.find_reachable_stops(
+            lat, lon, max_radius_meters, required_flags, max_results);
+    }
     return BoundedAStarRouter::find_candidate_stops(
         stops_, lat, lon, max_radius_meters, required_flags, max_results);
 }

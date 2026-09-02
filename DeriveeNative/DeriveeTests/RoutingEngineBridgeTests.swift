@@ -232,4 +232,89 @@ final class RoutingEngineBridgeTests: XCTestCase {
         let isNowActive = await bridge.isStopActive(stopId: 1)
         XCTAssertTrue(isNowActive)
     }
+
+    func testWalkGraphLoadingAndDirectWalk() async {
+        let bridge = RoutingEngineBridge()
+        let isWalkLoadedInitial = await bridge.isWalkGraphLoaded
+        XCTAssertFalse(isWalkLoadedInitial)
+
+        func align64(_ offset: Int) -> Int {
+            let rem = offset % 64
+            return rem == 0 ? offset : offset + (64 - rem)
+        }
+
+        var n0 = observer.format.WalkNode()
+        n0.lat_quantized = Int32(40.7300 * 1e7)
+        n0.lon_quantized = Int32(-73.9925 * 1e7)
+        n0.first_edge_idx = 0
+        n0.edge_count = 1
+        n0.access_flags = UInt16(WALK_FLAG_WALKABLE)
+
+        var n1 = observer.format.WalkNode()
+        n1.lat_quantized = Int32(40.7320 * 1e7)
+        n1.lon_quantized = Int32(-73.9925 * 1e7)
+        n1.first_edge_idx = 1
+        n1.edge_count = 0
+        n1.access_flags = UInt16(WALK_FLAG_WALKABLE)
+
+        var e0 = observer.format.WalkEdge()
+        e0.target_node_idx = 1
+        e0.distance_cm = 22200 // 222m
+        e0.weight_ms = 17000
+
+        let headerSize = 232
+        let lenS0 = 2 * MemoryLayout<observer.format.WalkNode>.size
+        let lenS1 = 1 * MemoryLayout<observer.format.WalkEdge>.size
+        let offS0 = align64(headerSize)
+        let offS1 = align64(offS0 + lenS0)
+        let totalSize = align64(offS1 + lenS1)
+
+        var data = Data(count: totalSize)
+        data.withUnsafeMutableBytes { rawBuf in
+            let ptr = rawBuf.baseAddress!
+            ptr.storeBytes(of: observer.format.MAGIC_WALK_GRAPH, toByteOffset: 0, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(1), toByteOffset: 4, as: UInt32.self)
+            ptr.storeBytes(of: observer.format.ENDIAN_MARKER, toByteOffset: 8, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(232), toByteOffset: 12, as: UInt32.self)
+            ptr.storeBytes(of: UInt64(totalSize), toByteOffset: 16, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(0), toByteOffset: 24, as: UInt64.self)
+            ptr.storeBytes(of: UInt32(2), toByteOffset: 32, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(0), toByteOffset: 36, as: UInt32.self)
+
+            let tocBase0 = 40
+            ptr.storeBytes(of: UInt64(offS0), toByteOffset: tocBase0, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(lenS0), toByteOffset: tocBase0 + 8, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(2), toByteOffset: tocBase0 + 16, as: UInt64.self)
+
+            let tocBase1 = 40 + 24
+            ptr.storeBytes(of: UInt64(offS1), toByteOffset: tocBase1, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(lenS1), toByteOffset: tocBase1 + 8, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(1), toByteOffset: tocBase1 + 16, as: UInt64.self)
+
+            ptr.storeBytes(of: n0, toByteOffset: offS0, as: observer.format.WalkNode.self)
+            ptr.storeBytes(of: n1, toByteOffset: offS0 + MemoryLayout<observer.format.WalkNode>.size, as: observer.format.WalkNode.self)
+            ptr.storeBytes(of: e0, toByteOffset: offS1, as: observer.format.WalkEdge.self)
+        }
+
+        let ttBlob = buildSyntheticTimetable()
+        await bridge.loadTimetableBlob(ttBlob)
+
+        let loaded = await bridge.loadWalkGraphBlob(data)
+        XCTAssertTrue(loaded)
+        let isWalkLoaded = await bridge.isWalkGraphLoaded
+        XCTAssertTrue(isWalkLoaded)
+        let nodesCount = await bridge.walkNodesCount
+        XCTAssertEqual(nodesCount, 2)
+        let edgesCount = await bridge.walkEdgesCount
+        XCTAssertEqual(edgesCount, 1)
+
+        // Compute journey between Node 0 and Node 1
+        let origin = RoutingLocation.coordinate(latitude: 40.7300, longitude: -73.9925, name: "Origin")
+        let dest = RoutingLocation.coordinate(latitude: 40.7320, longitude: -73.9925, name: "Destination")
+        let itineraries = await bridge.computeJourneys(origin: origin, destination: dest, profile: .fastest)
+        XCTAssertFalse(itineraries.isEmpty)
+        let directWalk = itineraries.first(where: { $0.legs.count == 1 && $0.legs[0].mode == .walk })
+        XCTAssertNotNil(directWalk)
+        XCTAssertEqual(directWalk?.legs[0].landmarkCue, "Direct pedestrian path via street network")
+    }
 }
