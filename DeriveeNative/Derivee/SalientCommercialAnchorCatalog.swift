@@ -29,6 +29,7 @@ public struct SalientCommercialAnchor: Identifiable, Sendable, Equatable, Hashab
     public let primaryStreet: String
     public let crossStreet: String?
     public let usesDefiniteArticle: Bool
+    public let hasTrafficSignal: Bool
     
     public init(
         id: String,
@@ -37,7 +38,8 @@ public struct SalientCommercialAnchor: Identifiable, Sendable, Equatable, Hashab
         coordinate: CLLocationCoordinate2D,
         primaryStreet: String,
         crossStreet: String? = nil,
-        usesDefiniteArticle: Bool = true
+        usesDefiniteArticle: Bool = true,
+        hasTrafficSignal: Bool = true
     ) {
         self.id = id
         self.name = name
@@ -46,6 +48,7 @@ public struct SalientCommercialAnchor: Identifiable, Sendable, Equatable, Hashab
         self.primaryStreet = primaryStreet
         self.crossStreet = crossStreet
         self.usesDefiniteArticle = usesDefiniteArticle
+        self.hasTrafficSignal = hasTrafficSignal
     }
     
     public static func == (lhs: SalientCommercialAnchor, rhs: SalientCommercialAnchor) -> Bool {

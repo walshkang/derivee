@@ -33,6 +33,7 @@ struct ContentView: View {
     @State private var isScanningBuses: Bool = false
     @State private var isReadyForToasts: Bool = false
     @State private var activeNavigationItinerary: JourneyItinerary? = nil
+    @State private var activeNavigationSession: ActiveWalkingNavigationSession? = nil
     @State private var showNavigationSheet: Bool = false
     @State private var navigationDetent: PresentationDetent = NavigationSheetDetent.half.presentationDetent
     
@@ -85,6 +86,7 @@ struct ContentView: View {
                             showSubwayThoroughfares: showSubwayThoroughfares,
                             subwayStationMarkerStyle: stationMarkerStyle,
                             nearbyBusStops: nearbyBusStops,
+                            activeSignalCoordinate: activeNavigationSession?.activeSignalCoordinate,
                             onAmbientMapTap: {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                     isNearbyBusesExpanded = false
@@ -224,6 +226,7 @@ struct ContentView: View {
                 .onChange(of: trackingEngine.lastKnownLocation) { _, newLoc in
                     if let loc = newLoc {
                         cityDetectionService.evaluateLocation(loc)
+                        activeNavigationSession?.updateUserLocation(loc.coordinate, horizontalAccuracy: loc.horizontalAccuracy)
                     }
                     if showNearbyBusesLens {
                         scanNearbyBuses()
@@ -289,6 +292,7 @@ struct ContentView: View {
                         showNavigationSheet = newValue
                         if !newValue {
                             activeNavigationItinerary = nil
+                            activeNavigationSession = nil
                         }
                     }
                 )) {
@@ -296,12 +300,14 @@ struct ContentView: View {
                         NavigationGuidanceSheet(
                             itinerary: itinerary,
                             selectedDetent: $navigationDetent,
+                            navigationSession: activeNavigationSession,
                             onFocusLeg: { leg in
                                 isMapCentered = false
                             },
                             onEndJourney: {
                                 showNavigationSheet = false
                                 activeNavigationItinerary = nil
+                                activeNavigationSession = nil
                             }
                         )
                     }

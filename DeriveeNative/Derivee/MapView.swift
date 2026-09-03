@@ -23,6 +23,7 @@ struct MapView: UIViewRepresentable {
     var showSubwayThoroughfares: Bool = MapCustomizationDefaults.defaultShowSubwayThoroughfares
     var subwayStationMarkerStyle: SubwayStationMarkerStyle = MapCustomizationDefaults.defaultSubwayStationMarkerStyle
     var nearbyBusStops: [SpatialDatabaseManager.NearbyBusStop] = []
+    var activeSignalCoordinate: CLLocationCoordinate2D? = nil
     var onAmbientMapTap: (() -> Void)? = nil
     var onMapGesture: (() -> Void)? = nil
     
@@ -93,6 +94,7 @@ struct MapView: UIViewRepresentable {
             context.coordinator.updateSubwayStationBullets(style: subwayStationMarkerStyle, theme: selectedTheme, in: style)
             context.coordinator.updateNearbyBusStops(nearbyBusStops, in: style)
             context.coordinator.updatePOIs(in: style)
+            context.coordinator.updateActiveSignalPin(at: activeSignalCoordinate, in: uiView)
         }
         
         let bottomInset = uiView.safeAreaInsets.bottom > 0 ? uiView.safeAreaInsets.bottom : (uiView.window?.safeAreaInsets.bottom ?? 34.0)
@@ -149,12 +151,15 @@ struct MapView: UIViewRepresentable {
         let smartZoomStationBulletsLayerId = MapCustomizationDefaults.smartZoomStationBulletsLayerId
         let nearbyBusStopsSourceId = MapCustomizationDefaults.nearbyBusStopsSourceId
         let nearbyBusStopsLayerId = MapCustomizationDefaults.nearbyBusStopsLayerId
+        let activeSignalSourceId = "active-signal-source"
+        let activeSignalLayerId = "active-signal-layer"
         
         var pois: [GhostPOI] = []
         var lastLocation: CLLocation?
         var lastRecenterTrigger: Bool = false
         var lastTransientHexShape: MLNShape? = nil
         var lastPulseLocation: CLLocationCoordinate2D? = nil
+        var lastActiveSignalCoord: CLLocationCoordinate2D? = nil
         var pulseTimer: DispatchWorkItem? = nil
         var lastSelectedStop: String? = nil
         var isMapStyleLoaded: Bool = false
@@ -611,6 +616,18 @@ struct MapView: UIViewRepresentable {
             archiveLayer.minimumZoomLevel = 11.0
             style.insertLayer(archiveLayer, above: activeLayer)
             
+            // Ephemeral Active Traffic Signal Pin (Wave N-D.6.1)
+            let signalSource = MLNShapeSource(identifier: activeSignalSourceId, shape: nil, options: nil)
+            style.addSource(signalSource)
+            
+            let signalLayer = MLNCircleStyleLayer(identifier: activeSignalLayerId, source: signalSource)
+            signalLayer.circleColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
+            signalLayer.circleRadius = NSExpression(forConstantValue: 6.5)
+            signalLayer.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
+            signalLayer.circleStrokeWidth = NSExpression(forConstantValue: 2.0)
+            signalLayer.circleOpacity = NSExpression(forConstantValue: 1.0)
+            style.insertLayer(signalLayer, above: archiveLayer)
+            
             // Suppress commercial/park vector POIs & base stations in favor of subway POIs
             POIMaskManager.configureBaseVectorLayers(in: style)
         }
@@ -833,6 +850,25 @@ struct MapView: UIViewRepresentable {
                 }
                 pulseTimer = workItem
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.3, execute: workItem)
+            }
+        }
+        
+        func updateActiveSignalPin(at location: CLLocationCoordinate2D?, in mapView: MLNMapView) {
+            guard let style = mapView.style,
+                  let source = style.source(withIdentifier: activeSignalSourceId) as? MLNShapeSource else { return }
+            
+            if let coord = location {
+                if lastActiveSignalCoord?.latitude != coord.latitude || lastActiveSignalCoord?.longitude != coord.longitude {
+                    lastActiveSignalCoord = coord
+                    let feature = MLNPointFeature()
+                    feature.coordinate = coord
+                    source.shape = feature
+                }
+            } else {
+                if lastActiveSignalCoord != nil {
+                    lastActiveSignalCoord = nil
+                    source.shape = nil
+                }
             }
         }
         

@@ -171,6 +171,102 @@ final class NavigationDetentTests: XCTestCase {
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 85)), precision: 0.98))
     }
 
+    func testNavigationCollapsedPeekViewNaturalWalkingForesightSnapshot() {
+        let itinerary = makeMultimodalItineraryFixture()
+        let walkLeg = itinerary.legs[0]
+        
+        let cue = NaturalGuidanceCue(
+            primaryHeadline: "In 3 blocks, turn left",
+            secondaryContext: "onto 5th Ave • past Starbucks",
+            decisionZone: .foresight,
+            blockCount: 3,
+            intersectionControl: .trafficSignal,
+            maneuver: .turnLeft,
+            targetStreet: "5th Ave",
+            landmarkName: "Starbucks",
+            isIntermediateReminder: false,
+            distanceMeters: 240,
+            promptBadgeText: "3 blocks",
+            iconName: "arrow.turn.up.left"
+        )
+        
+        let view = NavigationCollapsedPeekView(
+            leg: walkLeg,
+            totalDurationFormatted: itinerary.formattedDuration,
+            arrivalTimeFormatted: itinerary.formattedArrivalTime,
+            naturalCue: cue
+        )
+        .frame(width: 375)
+        .background(Color.white)
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 85)), precision: 0.98))
+    }
+
+    func testNavigationCollapsedPeekViewNaturalWalkingApproachSignalSnapshot() {
+        let itinerary = makeMultimodalItineraryFixture()
+        let walkLeg = itinerary.legs[0]
+        
+        let cue = NaturalGuidanceCue(
+            primaryHeadline: "At the next light, turn left",
+            secondaryContext: "onto Broadway • past CVS",
+            decisionZone: .approach,
+            blockCount: 1,
+            intersectionControl: .trafficSignal,
+            maneuver: .turnLeft,
+            targetStreet: "Broadway",
+            landmarkName: "CVS",
+            isIntermediateReminder: false,
+            distanceMeters: 80,
+            promptBadgeText: "At light",
+            iconName: "light.beacon.max.fill"
+        )
+        
+        let view = NavigationCollapsedPeekView(
+            leg: walkLeg,
+            totalDurationFormatted: itinerary.formattedDuration,
+            arrivalTimeFormatted: itinerary.formattedArrivalTime,
+            naturalCue: cue
+        )
+        .frame(width: 375)
+        .background(Color.white)
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 85)), precision: 0.98))
+    }
+
+    func testNavigationCollapsedPeekViewNaturalWalkingImminentSnapshot() {
+        let itinerary = makeMultimodalItineraryFixture()
+        let walkLeg = itinerary.legs[0]
+        
+        let cue = NaturalGuidanceCue(
+            primaryHeadline: "Turn left at the light",
+            secondaryContext: "onto Broadway",
+            decisionZone: .imminent,
+            blockCount: nil,
+            intersectionControl: .trafficSignal,
+            maneuver: .turnLeft,
+            targetStreet: "Broadway",
+            landmarkName: "CVS",
+            isIntermediateReminder: false,
+            distanceMeters: 18,
+            promptBadgeText: "Turn here",
+            iconName: "arrow.turn.up.left"
+        )
+        
+        let view = NavigationCollapsedPeekView(
+            leg: walkLeg,
+            totalDurationFormatted: itinerary.formattedDuration,
+            arrivalTimeFormatted: itinerary.formattedArrivalTime,
+            naturalCue: cue
+        )
+        .frame(width: 375)
+        .background(Color.white)
+        
+        let vc = UIHostingController(rootView: view)
+        assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 85)), precision: 0.98))
+    }
+
     // MARK: - 6. Snapshot Tests: NavigationGuidanceSheet Half & Peek Detents
 
     func testNavigationGuidanceSheetHalfDetentSnapshot() {

@@ -10,6 +10,7 @@ import SwiftUI
 public struct NavigationGuidanceSheet: View {
     public let itinerary: JourneyItinerary
     public var alternatives: [JourneyItinerary]
+    public var navigationSession: ActiveWalkingNavigationSession?
     
     @Binding public var selectedDetent: PresentationDetent
     @State public var currentLegIndex: Int
@@ -25,6 +26,7 @@ public struct NavigationGuidanceSheet: View {
         alternatives: [JourneyItinerary] = [],
         selectedDetent: Binding<PresentationDetent>,
         initialLegIndex: Int = 0,
+        navigationSession: ActiveWalkingNavigationSession? = nil,
         onSelectAlternative: ((JourneyItinerary) -> Void)? = nil,
         onFocusLeg: ((JourneyLeg) -> Void)? = nil,
         onUnlockBike: ((JourneyLeg) -> Void)? = nil,
@@ -35,6 +37,7 @@ public struct NavigationGuidanceSheet: View {
         self.alternatives = alternatives
         self._selectedDetent = selectedDetent
         self._currentLegIndex = State(initialValue: initialLegIndex)
+        self.navigationSession = navigationSession
         self.onSelectAlternative = onSelectAlternative
         self.onFocusLeg = onFocusLeg
         self.onUnlockBike = onUnlockBike
@@ -79,6 +82,25 @@ public struct NavigationGuidanceSheet: View {
         return itinerary.legs[safeIndex]
     }
     
+    private var activeNaturalCue: NaturalGuidanceCue? {
+        if let session = navigationSession {
+            return session.currentCue
+        }
+        guard let leg = activeLeg, leg.mode == .walk else { return nil }
+        if let anchor = leg.landmarkAnchors.first {
+            let hasSignal = anchor.streetName?.localizedCaseInsensitiveContains("Avenue") == true ||
+                            anchor.streetName?.localizedCaseInsensitiveContains("Broadway") == true
+            return NaturalWalkingGuidanceEngine.shared.synthesizeDynamicCue(
+                anchor: anchor,
+                distanceMeters: Double(anchor.distanceMeters),
+                hasTrafficSignal: hasSignal,
+                isGridTopology: true,
+                exitCode: leg.exitCode
+            )
+        }
+        return nil
+    }
+    
     // MARK: - 15% Detent: Collapsed Peek View
     
     @ViewBuilder
@@ -89,6 +111,7 @@ public struct NavigationGuidanceSheet: View {
                     leg: leg,
                     totalDurationFormatted: itinerary.formattedDuration,
                     arrivalTimeFormatted: itinerary.formattedArrivalTime,
+                    naturalCue: activeNaturalCue,
                     onExpandToHalf: {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                             selectedDetent = NavigationSheetDetent.half.presentationDetent
@@ -432,6 +455,53 @@ public struct NavigationGuidanceSheet: View {
                 
                 if !leg.landmarkAnchors.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
+                        if let cue = activeNaturalCue, leg.id == activeLeg?.id {
+                            HStack(spacing: 6) {
+                                Image(systemName: cue.iconName)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(cue.intersectionControl == .trafficSignal ? Color(hex: "#D97706") : Color(hex: "#059669"))
+                                
+                                Text(cue.primaryHeadline)
+                                    .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                                    .foregroundColor(Color(hex: "#0F172A"))
+                                
+                                if let badge = cue.promptBadgeText {
+                                    Text(badge)
+                                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                        .foregroundColor(Color(hex: "#92400E"))
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1.5)
+                                        .background(Color(hex: "#FFB300").opacity(0.2))
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color(hex: "#FFB300").opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        }
+                        
+                        if leg.distanceMeters >= 250,
+                           let reassurance = NaturalWalkingGuidanceEngine.shared.synthesizeStraightReassurance(
+                                distanceRemainingMeters: Double(leg.distanceMeters) * 0.6,
+                                totalSegmentMeters: Double(leg.distanceMeters),
+                                prominentLandmark: leg.landmarkAnchors.first?.landmarkName,
+                                isGridTopology: true
+                           ) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(Color(hex: "#047857"))
+                                Text("\(reassurance.primaryHeadline) • \(reassurance.secondaryContext)")
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .foregroundColor(Color(hex: "#065F46"))
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color(hex: "#D1FAE5").opacity(0.7))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        }
+                        
                         ForEach(leg.landmarkAnchors) { anchor in
                             HStack(alignment: .top, spacing: 8) {
                                 Image(systemName: anchor.maneuver.systemIcon)

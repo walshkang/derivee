@@ -75,6 +75,13 @@ struct alignas(8) WalkNode {
     constexpr WalkNode(int32_t lat_q, int32_t lon_q, uint32_t first_edge, uint16_t count, uint16_t flags = 0) noexcept
         : lat_quantized(lat_q), lon_quantized(lon_q), first_edge_idx(first_edge), edge_count(count), access_flags(flags) {}
 };
+// WalkNode access_flags bitmask definitions
+static constexpr uint16_t WALK_FLAG_WALKABLE         = 0x0001; // Bit 0: Walkable pedestrian surface
+static constexpr uint16_t WALK_FLAG_WHEELCHAIR       = 0x0002; // Bit 1: Step-free / wheelchair accessible
+static constexpr uint16_t WALK_FLAG_IS_STEPS         = 0x0004; // Bit 2: Pedestrian flight of stairs
+static constexpr uint16_t WALK_FLAG_IS_ELEVATOR      = 0x0008; // Bit 3: Elevator transit connection
+static constexpr uint16_t WALK_FLAG_TRAFFIC_SIGNAL   = 0x0010; // Bit 4: Verified Traffic Signal (Wave N-D.6.1)
+
 static_assert(sizeof(WalkNode) == 16, "WalkNode layout mismatch");
 
 // Quantized Pedestrian Edge (walk_graph.bin)

@@ -7,6 +7,7 @@ public struct NavigationCollapsedPeekView: View {
     public let leg: JourneyLeg
     public let totalDurationFormatted: String
     public let arrivalTimeFormatted: String
+    public var naturalCue: NaturalGuidanceCue?
     public var onExpandToHalf: (() -> Void)?
     public var onQuickAction: (() -> Void)?
     
@@ -14,12 +15,14 @@ public struct NavigationCollapsedPeekView: View {
         leg: JourneyLeg,
         totalDurationFormatted: String,
         arrivalTimeFormatted: String,
+        naturalCue: NaturalGuidanceCue? = nil,
         onExpandToHalf: (() -> Void)? = nil,
         onQuickAction: (() -> Void)? = nil
     ) {
         self.leg = leg
         self.totalDurationFormatted = totalDurationFormatted
         self.arrivalTimeFormatted = arrivalTimeFormatted
+        self.naturalCue = naturalCue
         self.onExpandToHalf = onExpandToHalf
         self.onQuickAction = onQuickAction
     }
@@ -40,6 +43,22 @@ public struct NavigationCollapsedPeekView: View {
                             .foregroundColor(Color(hex: "#0F172A"))
                             .lineLimit(1)
                         
+                        if let cue = naturalCue, let badge = cue.promptBadgeText {
+                            HStack(spacing: 3) {
+                                if cue.intersectionControl == .trafficSignal && cue.decisionZone == .approach {
+                                    Image(systemName: "light.beacon.max.fill")
+                                        .font(.system(size: 8, weight: .bold))
+                                }
+                                Text(badge)
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                            }
+                            .foregroundColor(badgeTextColor(for: cue))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(badgeBgColor(for: cue))
+                            .clipShape(Capsule())
+                        }
+                        
                         Spacer()
                         
                         Text(arrivalTimeFormatted)
@@ -48,7 +67,12 @@ public struct NavigationCollapsedPeekView: View {
                     }
                     
                     HStack(spacing: 6) {
-                        if let anchor = leg.primaryLandmarkAnchor {
+                        if let cue = naturalCue {
+                            Text(cue.secondaryContext)
+                                .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                                .foregroundColor(Color(hex: "#065F46"))
+                                .lineLimit(1)
+                        } else if let anchor = leg.primaryLandmarkAnchor {
                             HStack(spacing: 4) {
                                 Image(systemName: anchor.category.iconName)
                                     .font(.system(size: 10, weight: .bold))
@@ -145,6 +169,9 @@ public struct NavigationCollapsedPeekView: View {
     // MARK: - Instruction Title
     
     private var instructionTitle: String {
+        if let cue = naturalCue {
+            return cue.primaryHeadline
+        }
         switch leg.mode {
         case .walk:
             if let anchor = leg.primaryLandmarkAnchor {
@@ -170,7 +197,17 @@ public struct NavigationCollapsedPeekView: View {
     
     @ViewBuilder
     private var modeBadgeView: some View {
-        if let routeId = leg.routeId {
+        if let cue = naturalCue {
+            ZStack {
+                Circle()
+                    .fill(cue.intersectionControl == .trafficSignal && cue.decisionZone == .approach ? Color(hex: "#FFB300").opacity(0.2) : badgeBackgroundColor)
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: cue.iconName)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(cue.intersectionControl == .trafficSignal && cue.decisionZone == .approach ? Color(hex: "#D97706") : badgeForegroundColor)
+            }
+        } else if let routeId = leg.routeId {
             TransitRouteBadge(routeId: routeId, lineInfo: leg.lineInfo, size: .regular)
         } else {
             ZStack {
@@ -198,6 +235,24 @@ public struct NavigationCollapsedPeekView: View {
         case .walk: return Color(hex: "#0F172A")
         case .bikeShare, .personalBike: return Color(hex: "#0284C7")
         default: return Color(hex: "#D97706")
+        }
+    }
+    
+    // MARK: - Natural Cue Badge Colors
+    
+    private func badgeTextColor(for cue: NaturalGuidanceCue) -> Color {
+        switch cue.decisionZone {
+        case .imminent: return Color(hex: "#92400E")
+        case .approach: return cue.intersectionControl == .trafficSignal ? Color(hex: "#92400E") : Color(hex: "#0F172A")
+        case .foresight: return Color.secondary
+        }
+    }
+    
+    private func badgeBgColor(for cue: NaturalGuidanceCue) -> Color {
+        switch cue.decisionZone {
+        case .imminent: return Color(hex: "#FFB300").opacity(0.25)
+        case .approach: return cue.intersectionControl == .trafficSignal ? Color(hex: "#FFB300").opacity(0.2) : Color.secondary.opacity(0.12)
+        case .foresight: return Color.secondary.opacity(0.12)
         }
     }
 }

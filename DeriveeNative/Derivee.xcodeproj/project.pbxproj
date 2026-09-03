@@ -75,6 +75,7 @@
 		53823255581031434CADF367 /* TimetableStructs.hpp in Headers */ = {isa = PBXBuildFile; fileRef = EC4FF27CBDA648976E2A66B8 /* TimetableStructs.hpp */; settings = {ATTRIBUTES = (Public, ); }; };
 		54944FFAC6F68030C0915E70 /* NavigationDetentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5DF2255C339AE144F887C87 /* NavigationDetentTests.swift */; };
 		55031B6D0543C31F17B09277 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85968E07BB90EBA8E2B9F0D /* Secrets.swift */; };
+		5607E48F497E241233A0B116 /* NaturalWalkingGuidanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35CF94AB4B5E160D2F3AD6F3 /* NaturalWalkingGuidanceTests.swift */; };
 		5683D29B6885B009B5472CDC /* testThumbZoneActionBarStartJourneySnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = B3121D747653FA3D511D4B78 /* testThumbZoneActionBarStartJourneySnapshot.1.png */; };
 		57CC762930DAE5C3E2C5210C /* DatabaseQoSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E514583F05E73B9238D552A8 /* DatabaseQoSTests.swift */; };
 		57D75F9BB5C60BB4F1F72570 /* StationBulletRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0EB3AB9BE1C1D8C24A5D9A5 /* StationBulletRenderer.swift */; };
@@ -189,6 +190,7 @@
 		CEEA971B11DE5A4AA5A7CF2D /* testTransitMatrixInspectorViewSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 8B6EE07ABA7FA06682C990C7 /* testTransitMatrixInspectorViewSnapshot.1.png */; };
 		CF7CE669A319D8992A6BDAF1 /* testConfidenceBandCanvasHighVarianceSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 18307893EF479CA3A79D83D9 /* testConfidenceBandCanvasHighVarianceSnapshot.1.png */; };
 		CFD68966CCF9295382827C39 /* TransitRealtimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488C4F7958297C18652435E6 /* TransitRealtimeTests.swift */; };
+		D143E60F4347276C8794BF92 /* ActiveWalkingNavigationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092DF7AB26448D36C38ED875 /* ActiveWalkingNavigationSession.swift */; };
 		D1578917C76E094E61C655FA /* TransitTime.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 4E32B3AE32C69C0BB8C5D65D /* TransitTime.hpp */; settings = {ATTRIBUTES = (Public, ); }; };
 		D28B0A194DE28906F7CF9598 /* NearbyBusLensTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22985E8C3BC5CF4435B93C29 /* NearbyBusLensTests.swift */; };
 		D42817033BED22ADFDBFD067 /* BoundedAStarRouter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 664E7A8F40E896A173CD4006 /* BoundedAStarRouter.cpp */; };
@@ -202,6 +204,7 @@
 		DB02916BB3F72E2BC3B54314 /* testUnionSquareSnapshot.2.png in Resources */ = {isa = PBXBuildFile; fileRef = 6D6DD1103BBFD41FF750765B /* testUnionSquareSnapshot.2.png */; };
 		DBA140237C511CD7ABDE3104 /* JourneyPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF1DFE311EB00D95E1C8769 /* JourneyPlanner.swift */; };
 		DC34AAB9BFF466868C17558C /* TrackingAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D9DCD362FB2ADD8F63B6B2 /* TrackingAttributes.swift */; };
+		DCA9CC067B684B727EDD0E22 /* NaturalWalkingGuidanceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F122E05B8C9DDA91140F488F /* NaturalWalkingGuidanceEngine.swift */; };
 		DD8DC7C050483A543CCBC657 /* CitiesStorageManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C9563580F88533810DC822 /* CitiesStorageManagerTests.swift */; };
 		DDEF0035095C30865FC0BF48 /* DeriveeCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4995AF0BA66896744846FCA8 /* DeriveeCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		DE38F3D0E6DF9AA8330A4938 /* AllMetrosSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEAF23FBABFEF686C30223AD /* AllMetrosSummaryView.swift */; };
@@ -331,6 +334,7 @@
 		02E3592BCFC7AFB5E5EABF5A /* RoutingEngineBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingEngineBridgeTests.swift; sourceTree = "<group>"; };
 		0500776ED4832392061B6D44 /* BoundedAStarRouter.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = BoundedAStarRouter.hpp; sourceTree = "<group>"; };
 		08C048FE60010DC495C1C7AB /* HydrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HydrationManager.swift; sourceTree = "<group>"; };
+		092DF7AB26448D36C38ED875 /* ActiveWalkingNavigationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveWalkingNavigationSession.swift; sourceTree = "<group>"; };
 		0A5292C34F0F973F8D1DB737 /* testProfileFABSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testProfileFABSnapshot.1.png; sourceTree = "<group>"; };
 		0EFCFC3014D9FE6A95028C42 /* TransitCartographyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitCartographyTests.swift; sourceTree = "<group>"; };
 		106F4D5BCA05F21F2EB63614 /* testMultiProfileSelectorBarSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testMultiProfileSelectorBarSnapshot.1.png; sourceTree = "<group>"; };
@@ -364,6 +368,7 @@
 		2ED6E13E39675378FBBE5388 /* CityPromptSheetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPromptSheetTests.swift; sourceTree = "<group>"; };
 		2FD3D98069B7D8F11CDB4AE6 /* testDepartureMatrixCanvasSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testDepartureMatrixCanvasSnapshot.1.png; sourceTree = "<group>"; };
 		34154FDD24C6585667198AC4 /* POIMaskManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POIMaskManager.swift; sourceTree = "<group>"; };
+		35CF94AB4B5E160D2F3AD6F3 /* NaturalWalkingGuidanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NaturalWalkingGuidanceTests.swift; sourceTree = "<group>"; };
 		37A682CC32847F6246006469 /* testReliabilityHeatmapCanvasSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testReliabilityHeatmapCanvasSnapshot.1.png; sourceTree = "<group>"; };
 		37F63864F1E6316756366180 /* testApertureSignatureViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testApertureSignatureViewSnapshot.1.png; sourceTree = "<group>"; };
 		3894A4BE621AD2761C20CE53 /* CityDetectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityDetectionService.swift; sourceTree = "<group>"; };
@@ -535,6 +540,7 @@
 		EE0B9BF48594E24E1BB8D851 /* SalientCommercialAnchorCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalientCommercialAnchorCatalog.swift; sourceTree = "<group>"; };
 		F018F7014811EC01ECF37E59 /* NearbyBusesCapsule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyBusesCapsule.swift; sourceTree = "<group>"; };
 		F0D6CAC0567AAB8025F7150B /* CityPackManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPackManager.swift; sourceTree = "<group>"; };
+		F122E05B8C9DDA91140F488F /* NaturalWalkingGuidanceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NaturalWalkingGuidanceEngine.swift; sourceTree = "<group>"; };
 		F2EEED6CC29A4643A5793493 /* testApertureMicroGlyphSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testApertureMicroGlyphSnapshot.1.png; sourceTree = "<group>"; };
 		F309BC99CC7EF399C238B09C /* composite_style.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = composite_style.json; sourceTree = "<group>"; };
 		F3C15D252604ACEE00B82832 /* GBFSDatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GBFSDatabaseManager.swift; sourceTree = "<group>"; };
@@ -666,6 +672,7 @@
 		68481505568707C6723D2078 /* Derivee */ = {
 			isa = PBXGroup;
 			children = (
+				092DF7AB26448D36C38ED875 /* ActiveWalkingNavigationSession.swift */,
 				26A818AC294C5ADD0DAEF5D2 /* AllMetrosModels.swift */,
 				CEAF23FBABFEF686C30223AD /* AllMetrosSummaryView.swift */,
 				919E63B092F8F46CC84DF8B0 /* AmbientTrackingEngine.swift */,
@@ -718,6 +725,7 @@
 				C1269ACE7C6346A1302459B0 /* MapView.swift */,
 				A24558ABB620FC3D2824A803 /* MilestoneModels.swift */,
 				583973BC85588CB0BCFC2CEA /* MultiProfileSelectorBar.swift */,
+				F122E05B8C9DDA91140F488F /* NaturalWalkingGuidanceEngine.swift */,
 				C13E90D2D7744C2A51BB9C5F /* NavigationCollapsedPeekView.swift */,
 				DA46EB2F62050B718EF25B29 /* NavigationGuidanceSheet.swift */,
 				7D561ACC9DA545119DBD4BA4 /* NavigationSheetDetent.swift */,
@@ -842,6 +850,7 @@
 				B419E3FB460F995DAE744EF2 /* LandmarkWalkingGuidanceTests.swift */,
 				263E5C695DD8B6540A1EEDB8 /* MultiCityGPXImportTests.swift */,
 				4CDC2268C92BB790DF209019 /* MultiCityStatsTests.swift */,
+				35CF94AB4B5E160D2F3AD6F3 /* NaturalWalkingGuidanceTests.swift */,
 				F5DF2255C339AE144F887C87 /* NavigationDetentTests.swift */,
 				22985E8C3BC5CF4435B93C29 /* NearbyBusLensTests.swift */,
 				966E6957AA78D74369F921CC /* NeighborhoodTests.swift */,
@@ -1222,6 +1231,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D143E60F4347276C8794BF92 /* ActiveWalkingNavigationSession.swift in Sources */,
 				537A0EEDC7F5E3E89A5052A7 /* AllMetrosModels.swift in Sources */,
 				DE38F3D0E6DF9AA8330A4938 /* AllMetrosSummaryView.swift in Sources */,
 				A4BED02FF1B808AA720963C9 /* AmbientTrackingEngine.swift in Sources */,
@@ -1268,6 +1278,7 @@
 				094712DE5F55C5A2F994A612 /* MapView.swift in Sources */,
 				9B00A61BD18221D079F107AE /* MilestoneModels.swift in Sources */,
 				5DEC0940406F506A7219D913 /* MultiProfileSelectorBar.swift in Sources */,
+				DCA9CC067B684B727EDD0E22 /* NaturalWalkingGuidanceEngine.swift in Sources */,
 				A742900C5EBFB21344A45F66 /* NavigationCollapsedPeekView.swift in Sources */,
 				A5A207F5568A6135AF21439D /* NavigationGuidanceSheet.swift in Sources */,
 				3DF5D1A6E6594CB35C4066F1 /* NavigationSheetDetent.swift in Sources */,
@@ -1363,6 +1374,7 @@
 				6F23DDADC25CE6A74B9A9F31 /* LandmarkWalkingGuidanceTests.swift in Sources */,
 				14E45215E852C9D24631AD58 /* MultiCityGPXImportTests.swift in Sources */,
 				32D365721F5F07D5B1D87760 /* MultiCityStatsTests.swift in Sources */,
+				5607E48F497E241233A0B116 /* NaturalWalkingGuidanceTests.swift in Sources */,
 				54944FFAC6F68030C0915E70 /* NavigationDetentTests.swift in Sources */,
 				D28B0A194DE28906F7CF9598 /* NearbyBusLensTests.swift in Sources */,
 				09CDCC94B4DD8E0721584480 /* NeighborhoodTests.swift in Sources */,
