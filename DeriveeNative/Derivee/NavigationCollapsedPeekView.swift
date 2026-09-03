@@ -48,7 +48,33 @@ public struct NavigationCollapsedPeekView: View {
                     }
                     
                     HStack(spacing: 6) {
-                        if let cue = leg.landmarkCue {
+                        if let anchor = leg.primaryLandmarkAnchor {
+                            HStack(spacing: 4) {
+                                Image(systemName: anchor.category.iconName)
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(Color(hex: "#059669"))
+                                Text(anchor.landmarkName)
+                                    .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(Color(hex: "#065F46"))
+                            }
+                            
+                            Text("•")
+                                .foregroundColor(.secondary)
+                            
+                            if anchor.isShaded, let shade = anchor.shadePercentage {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "tree.fill")
+                                        .font(.system(size: 9, weight: .bold))
+                                    Text("\(Int(shade))% Shaded")
+                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                }
+                                .foregroundColor(Color(hex: "#047857"))
+                            } else {
+                                Text("\(leg.formattedDuration) • \(totalDurationFormatted) total")
+                                    .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                                    .foregroundColor(.secondary)
+                            }
+                        } else if let cue = leg.landmarkCue {
                             Text(cue)
                                 .font(.system(size: 11.5, weight: .medium, design: .rounded))
                                 .foregroundColor(Color(hex: "#065F46"))
@@ -121,6 +147,9 @@ public struct NavigationCollapsedPeekView: View {
     private var instructionTitle: String {
         switch leg.mode {
         case .walk:
+            if let anchor = leg.primaryLandmarkAnchor {
+                return anchor.prompt
+            }
             return "Walk to \(leg.destinationName)"
         case .subway, .bus, .lightRail, .ferry:
             if let headsign = leg.headsign {

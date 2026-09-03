@@ -45,36 +45,37 @@ final class BoundedAStarRouterTests: XCTestCase {
         let offS1 = align64(offS0 + lenS0)
         let totalSize = align64(offS1 + lenS1)
 
-        var data = Data(count: totalSize)
-        data.withUnsafeMutableBytes { rawBuf in
-            let ptr = rawBuf.baseAddress!
-            ptr.storeBytes(of: observer.format.MAGIC_WALK_GRAPH, toByteOffset: 0, as: UInt32.self)
-            ptr.storeBytes(of: UInt32(1), toByteOffset: 4, as: UInt32.self)
-            ptr.storeBytes(of: observer.format.ENDIAN_MARKER, toByteOffset: 8, as: UInt32.self)
-            ptr.storeBytes(of: UInt32(232), toByteOffset: 12, as: UInt32.self)
-            ptr.storeBytes(of: UInt64(totalSize), toByteOffset: 16, as: UInt64.self)
-            ptr.storeBytes(of: UInt64(0), toByteOffset: 24, as: UInt64.self)
-            ptr.storeBytes(of: UInt32(2), toByteOffset: 32, as: UInt32.self)
-            ptr.storeBytes(of: UInt32(0), toByteOffset: 36, as: UInt32.self)
+        let rawPtr = UnsafeMutableRawPointer.allocate(byteCount: totalSize, alignment: 64)
+        rawPtr.initializeMemory(as: UInt8.self, repeating: 0, count: totalSize)
+        rawPtr.storeBytes(of: observer.format.MAGIC_WALK_GRAPH, toByteOffset: 0, as: UInt32.self)
+        rawPtr.storeBytes(of: UInt32(1), toByteOffset: 4, as: UInt32.self)
+        rawPtr.storeBytes(of: observer.format.ENDIAN_MARKER, toByteOffset: 8, as: UInt32.self)
+        rawPtr.storeBytes(of: UInt32(232), toByteOffset: 12, as: UInt32.self)
+        rawPtr.storeBytes(of: UInt64(totalSize), toByteOffset: 16, as: UInt64.self)
+        rawPtr.storeBytes(of: UInt64(0), toByteOffset: 24, as: UInt64.self)
+        rawPtr.storeBytes(of: UInt32(2), toByteOffset: 32, as: UInt32.self)
+        rawPtr.storeBytes(of: UInt32(0), toByteOffset: 36, as: UInt32.self)
 
-            func writeTOC(index: Int, offset: Int, size: Int, count: Int) {
-                let tocBase = 40 + index * 24
-                ptr.storeBytes(of: UInt64(offset), toByteOffset: tocBase, as: UInt64.self)
-                ptr.storeBytes(of: UInt64(size), toByteOffset: tocBase + 8, as: UInt64.self)
-                ptr.storeBytes(of: UInt64(count), toByteOffset: tocBase + 16, as: UInt64.self)
-            }
-
-            writeTOC(index: 0, offset: offS0, size: lenS0, count: nodes.count)
-            writeTOC(index: 1, offset: offS1, size: lenS1, count: edges.count)
-
-            for (i, n) in nodes.enumerated() {
-                ptr.storeBytes(of: n, toByteOffset: offS0 + i * MemoryLayout<observer.format.WalkNode>.size, as: observer.format.WalkNode.self)
-            }
-            for (i, e) in edges.enumerated() {
-                ptr.storeBytes(of: e, toByteOffset: offS1 + i * MemoryLayout<observer.format.WalkEdge>.size, as: observer.format.WalkEdge.self)
-            }
+        func writeTOC(index: Int, offset: Int, size: Int, count: Int) {
+            let tocBase = 40 + index * 24
+            rawPtr.storeBytes(of: UInt64(offset), toByteOffset: tocBase, as: UInt64.self)
+            rawPtr.storeBytes(of: UInt64(size), toByteOffset: tocBase + 8, as: UInt64.self)
+            rawPtr.storeBytes(of: UInt64(count), toByteOffset: tocBase + 16, as: UInt64.self)
         }
-        return data
+
+        writeTOC(index: 0, offset: offS0, size: lenS0, count: nodes.count)
+        writeTOC(index: 1, offset: offS1, size: lenS1, count: edges.count)
+
+        for (i, n) in nodes.enumerated() {
+            rawPtr.storeBytes(of: n, toByteOffset: offS0 + i * MemoryLayout<observer.format.WalkNode>.size, as: observer.format.WalkNode.self)
+        }
+        for (i, e) in edges.enumerated() {
+            rawPtr.storeBytes(of: e, toByteOffset: offS1 + i * MemoryLayout<observer.format.WalkEdge>.size, as: observer.format.WalkEdge.self)
+        }
+
+        return Data(bytesNoCopy: rawPtr, count: totalSize, deallocator: .custom({ ptr, _ in
+            ptr.deallocate()
+        }))
     }
 
     func testDistanceCalculation() {

@@ -430,7 +430,54 @@ public struct NavigationGuidanceSheet: View {
                     .font(.system(size: 12.5, weight: .medium, design: .rounded))
                     .foregroundColor(.secondary)
                 
-                if let cue = leg.landmarkCue {
+                if !leg.landmarkAnchors.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(leg.landmarkAnchors) { anchor in
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: anchor.maneuver.systemIcon)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(anchor.isShaded ? Color(hex: "#047857") : Color(hex: "#D97706"))
+                                    .frame(width: 14)
+                                    .padding(.top, 2)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(anchor.prompt)
+                                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                        .foregroundColor(Color(hex: "#0F172A"))
+                                    
+                                    HStack(spacing: 5) {
+                                        HStack(spacing: 3) {
+                                            Image(systemName: anchor.category.iconName)
+                                                .font(.system(size: 9, weight: .bold))
+                                            Text(anchor.landmarkName)
+                                                .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                                        }
+                                        .foregroundColor(Color(hex: "#065F46"))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color(hex: "#D1FAE5"))
+                                        .clipShape(Capsule())
+                                        
+                                        if anchor.isShaded, let shade = anchor.shadePercentage {
+                                            HStack(spacing: 3) {
+                                                Image(systemName: "tree.fill")
+                                                    .font(.system(size: 9, weight: .bold))
+                                                Text("\(Int(shade))% Shaded")
+                                                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                                            }
+                                            .foregroundColor(Color(hex: "#047857"))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color(hex: "#D1FAE5").opacity(0.6))
+                                            .clipShape(Capsule())
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                } else if let cue = leg.landmarkCue {
                     HStack(spacing: 5) {
                         Image(systemName: "mappin.circle.fill")
                             .font(.system(size: 11, weight: .semibold))
@@ -443,6 +490,18 @@ public struct NavigationGuidanceSheet: View {
                     .padding(.vertical, 4)
                     .background(Color(hex: "#D1FAE5"))
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                
+                if let comfort = leg.thermalComfortSummary {
+                    HStack(spacing: 4) {
+                        Image(systemName: "leaf.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(Color(hex: "#059669"))
+                        Text(comfort)
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundColor(Color(hex: "#065F46"))
+                    }
+                    .padding(.top, 2)
                 }
                 
             case .subway, .bus, .lightRail, .ferry:

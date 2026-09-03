@@ -289,6 +289,90 @@ public struct BikeLegMetadata: Sendable, Equatable, Hashable {
     }
 }
 
+// MARK: - Landmark Walking Models
+
+/// Visual and structural category of an urban landmark anchor.
+public enum VisualLandmarkCategory: String, Sendable, Codable, Equatable, Hashable {
+    case civic = "civic"                     // Public library, post office, town hall, school
+    case park = "park"                       // City park, pocket garden, tree canopy grove, fountain
+    case commercialBrand = "commercial_brand" // Verified high-permanence business (Starbucks, Duane Reade, etc.)
+    case commercialGeneral = "commercial_gen" // Street-level retail, red brick pharmacy, corner bodega
+    case historic = "historic"               // Architectural landmark, clock tower, church spire
+    case transit = "transit"                 // Subway entrance stairs, rail portal, plaza kiosk
+    
+    public var iconName: String {
+        switch self {
+        case .civic: return "building.columns.fill"
+        case .park: return "tree.fill"
+        case .commercialBrand: return "cup.and.saucer.fill"
+        case .commercialGeneral: return "storefront.fill"
+        case .historic: return "star.circle.fill"
+        case .transit: return "tram.fill"
+        }
+    }
+}
+
+/// Turn or movement maneuver relative to the visual landmark anchor.
+public enum LandmarkManeuver: String, Sendable, Codable, Equatable, Hashable {
+    case depart = "depart"                   // "Start walking past..."
+    case turnLeft = "turn_left"             // "Turn left at/after..."
+    case turnRight = "turn_right"           // "Turn right at/after..."
+    case slightLeft = "slight_left"         // "Bear left past..."
+    case slightRight = "slight_right"       // "Bear right past..."
+    case straightPast = "straight_past"     // "Walk past ... on your left/right"
+    case arrive = "arrive"                   // "Arrive at ..."
+    
+    public var systemIcon: String {
+        switch self {
+        case .depart: return "figure.walk"
+        case .turnLeft: return "arrow.turn.up.left"
+        case .turnRight: return "arrow.turn.up.right"
+        case .slightLeft: return "arrow.up.left"
+        case .slightRight: return "arrow.up.right"
+        case .straightPast: return "arrow.up"
+        case .arrive: return "mappin.and.ellipse"
+        }
+    }
+}
+
+/// A salient visual landmark anchor along a pedestrian walking route.
+public struct LandmarkWalkingAnchor: Identifiable, Sendable, Codable, Equatable, Hashable {
+    public let id: UUID
+    public let prompt: String             // e.g. "Turn left at the Starbucks on 42nd St", "Turn left after the red brick pharmacy onto 42nd St"
+    public let landmarkName: String       // e.g. "Starbucks", "Red Brick Pharmacy", "Grand Central Terminal"
+    public let businessName: String?      // e.g. "Starbucks", "Duane Reade", "Whole Foods Market"
+    public let category: VisualLandmarkCategory
+    public let maneuver: LandmarkManeuver
+    public let streetName: String?        // e.g. "42nd St"
+    public let isShaded: Bool             // true if segment is under tree canopy / building canyon shade
+    public let shadePercentage: Float?    // e.g. 78.0
+    public let distanceMeters: UInt32     // distance for progress tracking / subtle context
+    
+    public init(
+        id: UUID = UUID(),
+        prompt: String,
+        landmarkName: String,
+        businessName: String? = nil,
+        category: VisualLandmarkCategory = .commercialGeneral,
+        maneuver: LandmarkManeuver = .straightPast,
+        streetName: String? = nil,
+        isShaded: Bool = false,
+        shadePercentage: Float? = nil,
+        distanceMeters: UInt32 = 0
+    ) {
+        self.id = id
+        self.prompt = prompt
+        self.landmarkName = landmarkName
+        self.businessName = businessName
+        self.category = category
+        self.maneuver = maneuver
+        self.streetName = streetName
+        self.isShaded = isShaded
+        self.shadePercentage = shadePercentage
+        self.distanceMeters = distanceMeters
+    }
+}
+
 // MARK: - Journey Leg
 
 public struct JourneyLeg: Identifiable, Sendable, Equatable, Hashable {
@@ -309,6 +393,7 @@ public struct JourneyLeg: Identifiable, Sendable, Equatable, Hashable {
     public let bikeMetadata: BikeLegMetadata?
     public let isTransferWalk: Bool
     public let landmarkCue: String?
+    public let landmarkAnchors: [LandmarkWalkingAnchor]
     public let exitCode: String?
     public let recommendedCarPosition: String?
     public let shadePercentage: Float?
@@ -333,6 +418,7 @@ public struct JourneyLeg: Identifiable, Sendable, Equatable, Hashable {
         bikeMetadata: BikeLegMetadata? = nil,
         isTransferWalk: Bool = false,
         landmarkCue: String? = nil,
+        landmarkAnchors: [LandmarkWalkingAnchor] = [],
         exitCode: String? = nil,
         recommendedCarPosition: String? = nil,
         shadePercentage: Float? = nil,
@@ -355,12 +441,17 @@ public struct JourneyLeg: Identifiable, Sendable, Equatable, Hashable {
         self.disruption = disruption
         self.bikeMetadata = bikeMetadata
         self.isTransferWalk = isTransferWalk
-        self.landmarkCue = landmarkCue
+        self.landmarkAnchors = landmarkAnchors
+        self.landmarkCue = landmarkCue ?? landmarkAnchors.first?.prompt
         self.exitCode = exitCode
         self.recommendedCarPosition = recommendedCarPosition
         self.shadePercentage = shadePercentage
         self.petIndexCelsius = petIndexCelsius
         self.thermalComfortSummary = thermalComfortSummary
+    }
+    
+    public var primaryLandmarkAnchor: LandmarkWalkingAnchor? {
+        landmarkAnchors.first
     }
     
     public var formattedDuration: String {

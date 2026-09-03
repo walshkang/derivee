@@ -94,7 +94,7 @@ public final class SpatialDatabaseStopMetadataProvider: StopMetadataProvider, @u
                     
                     // Generate deterministic exit code & landmark cue
                     let exitCode = Self.deriveExitCode(stopId: sId, index: i, name: name)
-                    let landmarkCue = Self.deriveLandmarkCue(name: name)
+                    let landmarkCue = Self.deriveLandmarkCue(name: name, latitude: lat, longitude: lon)
                     
                     loadedStops.append(CachedStop(
                         stopIdString: sId,
@@ -222,8 +222,44 @@ public final class SpatialDatabaseStopMetadataProvider: StopMetadataProvider, @u
         return "Exit \(exitNum)\(letter)"
     }
     
-    private static func deriveLandmarkCue(name: String) -> String? {
-        if name.localizedCaseInsensitiveContains("sq") || name.localizedCaseInsensitiveContains("square") {
+    private static func deriveLandmarkCue(name: String, latitude: Double = 0.0, longitude: Double = 0.0) -> String? {
+        if latitude != 0.0 && longitude != 0.0 {
+            let coord = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            
+            // 1. Check proximity to Historic Landmark (within 250m)
+            var closestHistoric: HistoricLandmarkItem?
+            var minHistoricDist = 250.0
+            for item in HistoricLandmarkCatalog.landmarks {
+                let d = SalientCommercialAnchorCatalog.distanceMeters(from: coord, to: item.coordinate)
+                if d < minHistoricDist {
+                    minHistoricDist = d
+                    closestHistoric = item
+                }
+            }
+            if let historic = closestHistoric {
+                return "Pedestrian portal near \(historic.name)"
+            }
+            
+            // 2. Check proximity to Commercial Anchor (within 50m)
+            if let brand = SalientCommercialAnchorCatalog.nearestAnchor(to: coord, maxRadiusMeters: 50.0) {
+                return "Corner entrance near \(brand.name) on \(brand.primaryStreet)"
+            }
+        }
+        
+        // 3. Iconic Hub Name Heuristics
+        if name.localizedCaseInsensitiveContains("Grand Central") {
+            return "Grand Central Terminal Beaux-Arts entrance"
+        } else if name.localizedCaseInsensitiveContains("Times Sq") {
+            return "Times Square illuminated pedestrian plaza"
+        } else if name.localizedCaseInsensitiveContains("Union Sq") {
+            return "Union Square Park pavilion & greenmarket"
+        } else if name.localizedCaseInsensitiveContains("Herald Sq") {
+            return "Herald Square pedestrian plaza near Macy's"
+        } else if name.localizedCaseInsensitiveContains("Columbus Circle") {
+            return "Columbus Circle monument portal"
+        } else if name.localizedCaseInsensitiveContains("World Trade") || name.localizedCaseInsensitiveContains("WTC") {
+            return "Oculus transit hall & memorial plaza"
+        } else if name.localizedCaseInsensitiveContains("sq") || name.localizedCaseInsensitiveContains("square") {
             return "Pedestrian plaza entrance near square kiosk"
         } else if name.localizedCaseInsensitiveContains("ave") || name.localizedCaseInsensitiveContains("avenue") {
             return "Corner entrance along broad avenue"

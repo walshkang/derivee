@@ -40,6 +40,11 @@ public struct RouteComparisonCardView: View {
                 // MARK: - Effort, Fare & Transfer Strip
                 metricsStripView
                 
+                // MARK: - Microclimate Thermal Comfort Callout
+                if let savings = itinerary.thermalComfortSavingsText {
+                    thermalComfortCalloutView(savings: savings)
+                }
+                
                 // MARK: - Inline Disruption Callouts
                 if !itinerary.disruptions.isEmpty {
                     disruptionsCalloutView
@@ -135,17 +140,23 @@ public struct RouteComparisonCardView: View {
     private func legPill(for leg: JourneyLeg) -> some View {
         switch leg.mode {
         case .walk:
+            let isShaded = (leg.shadePercentage ?? 0.0) >= 60.0
             HStack(spacing: 3.5) {
-                Image(systemName: "figure.walk")
+                Image(systemName: isShaded ? "tree.fill" : "figure.walk")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(isShaded ? Color(hex: "#047857") : .secondary)
                 Text(leg.formattedDuration)
                     .font(.system(size: 11.5, weight: .medium, design: .rounded))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(isShaded ? Color(hex: "#065F46") : .secondary)
+                if isShaded, let shade = leg.shadePercentage {
+                    Text("\(Int(shade))%")
+                        .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                        .foregroundColor(Color(hex: "#047857"))
+                }
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
-            .background(Color.primary.opacity(0.04))
+            .background(isShaded ? Color(hex: "#D1FAE5") : Color.primary.opacity(0.04))
             .clipShape(Capsule())
             
         case .subway, .bus, .lightRail, .ferry:
@@ -260,9 +271,48 @@ public struct RouteComparisonCardView: View {
                 .foregroundColor(Color(hex: "#0284C7"))
             }
             
+            // Microclimate Shaded Badge if present
+            if let avgShade = itinerary.averageShadePercentage, avgShade >= 50.0 {
+                Text("•")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color.secondary.opacity(0.5))
+                
+                HStack(spacing: 3.5) {
+                    Image(systemName: "tree.fill")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("\(Int(avgShade))% Shaded")
+                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                }
+                .foregroundColor(Color(hex: "#047857"))
+            }
+            
             Spacer()
         }
         .padding(.top, 2)
+    }
+    
+    // MARK: - Microclimate Thermal Comfort Callout
+    
+    @ViewBuilder
+    private func thermalComfortCalloutView(savings: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "tree.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(Color(hex: "#059669"))
+            Text(savings)
+                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                .foregroundColor(Color(hex: "#065F46"))
+            Spacer()
+            if let pet = itinerary.averagePetIndexCelsius {
+                Text(String(format: "PET %.0f°C", pet))
+                    .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color(hex: "#047857"))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(hex: "#D1FAE5"))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
     
     // MARK: - Inline Disruptions Callout

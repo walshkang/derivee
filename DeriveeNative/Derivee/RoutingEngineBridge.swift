@@ -341,6 +341,20 @@ public actor RoutingEngineBridge {
                     comfortSummary = String(format: "Sunlit Direct Route (%.0f%% Shade, PET %.0f°C)", directResult.shade_percentage, directResult.pet_index_celsius)
                 }
                 
+                let origCLLoc = CLLocationCoordinate2D(latitude: origCoord.latitude, longitude: origCoord.longitude)
+                let destCLLoc = CLLocationCoordinate2D(latitude: destCoord.latitude, longitude: destCoord.longitude)
+                let anchors = LandmarkWalkingGuidanceEngine.shared.generateAnchors(
+                    originName: origin.displayName,
+                    destinationName: destination.displayName,
+                    originCoord: origCLLoc,
+                    destinationCoord: destCLLoc,
+                    distanceMeters: UInt32(distMeters),
+                    durationSec: walkDurSec,
+                    shadePercentage: directResult.shade_percentage,
+                    petIndexCelsius: directResult.pet_index_celsius,
+                    isShadedRoute: profile == .summerShaded
+                )
+                
                 let directWalkLeg = JourneyLeg(
                     mode: .walk,
                     originName: origin.displayName,
@@ -348,7 +362,8 @@ public actor RoutingEngineBridge {
                     departureTimeSec: departureTimestampSec,
                     arrivalTimeSec: arrSec,
                     distanceMeters: UInt32(distMeters),
-                    landmarkCue: directResult.path_found ? "Direct pedestrian path via street network" : "Direct pedestrian path to destination",
+                    landmarkCue: anchors.first?.prompt ?? (directResult.path_found ? "Direct pedestrian path via street network" : "Direct pedestrian path to destination"),
+                    landmarkAnchors: anchors,
                     shadePercentage: directResult.shade_percentage,
                     petIndexCelsius: directResult.pet_index_celsius,
                     thermalComfortSummary: comfortSummary
@@ -560,7 +575,6 @@ public actor RoutingEngineBridge {
         if !bikeLegSynthesized && origStop.distance_meters > 5.0 {
             let initialWalkArr = nominalDepSec + origStop.walk_duration_sec
             let origStopName = metadataProvider?.stopName(for: origStop.stop_id) ?? "Stop #\(origStop.stop_id)"
-            let landmarkCue = metadataProvider?.landmarkCue(for: origStop.stop_id)
             
             let comfortSummary: String?
             if origStop.shade_percentage >= 60.0 {
@@ -568,6 +582,23 @@ public actor RoutingEngineBridge {
             } else {
                 comfortSummary = String(format: "Sunlit Direct Route (%.0f%% Shade, PET %.0f°C)", origStop.shade_percentage, origStop.pet_index_celsius)
             }
+            
+            let origCLLoc = origin.coordinate.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+            let stopCoord = metadataProvider?.stopCoordinate(for: origStop.stop_id)
+            let stopCLLoc = stopCoord.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+                ?? CLLocationCoordinate2D(latitude: Double(origStop.latitude), longitude: Double(origStop.longitude))
+            
+            let origAnchors = LandmarkWalkingGuidanceEngine.shared.generateAnchors(
+                originName: origin.displayName,
+                destinationName: origStopName,
+                originCoord: origCLLoc,
+                destinationCoord: stopCLLoc,
+                distanceMeters: UInt32(origStop.distance_meters),
+                durationSec: origStop.walk_duration_sec,
+                shadePercentage: origStop.shade_percentage,
+                petIndexCelsius: origStop.pet_index_celsius,
+                isShadedRoute: profile == .summerShaded
+            )
             
             legs.append(
                 JourneyLeg(
@@ -577,7 +608,8 @@ public actor RoutingEngineBridge {
                     departureTimeSec: nominalDepSec,
                     arrivalTimeSec: initialWalkArr,
                     distanceMeters: UInt32(origStop.distance_meters),
-                    landmarkCue: landmarkCue,
+                    landmarkCue: origAnchors.first?.prompt ?? metadataProvider?.landmarkCue(for: origStop.stop_id),
+                    landmarkAnchors: origAnchors,
                     shadePercentage: origStop.shade_percentage,
                     petIndexCelsius: origStop.pet_index_celsius,
                     thermalComfortSummary: comfortSummary
@@ -591,6 +623,20 @@ public actor RoutingEngineBridge {
             let exitName = metadataProvider?.stopName(for: seg.exit_stop_id) ?? "Stop #\(seg.exit_stop_id)"
             
             if seg.is_transfer_leg() {
+                let boardCoord = metadataProvider?.stopCoordinate(for: seg.board_stop_id).map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+                let exitCoord = metadataProvider?.stopCoordinate(for: seg.exit_stop_id).map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+                let transferAnchors = LandmarkWalkingGuidanceEngine.shared.generateAnchors(
+                    originName: boardName,
+                    destinationName: exitName,
+                    originCoord: boardCoord,
+                    destinationCoord: exitCoord,
+                    distanceMeters: UInt32(seg.transfer_distance_m),
+                    durationSec: seg.arrival_time > seg.departure_time ? (seg.arrival_time - seg.departure_time) : 120,
+                    shadePercentage: 100.0,
+                    petIndexCelsius: 22.0,
+                    isShadedRoute: true
+                )
+                
                 legs.append(
                     JourneyLeg(
                         mode: .walk,
@@ -600,7 +646,8 @@ public actor RoutingEngineBridge {
                         arrivalTimeSec: seg.arrival_time,
                         distanceMeters: UInt32(seg.transfer_distance_m),
                         isTransferWalk: true,
-                        landmarkCue: "Transfer via pedestrian connection"
+                        landmarkCue: transferAnchors.first?.prompt ?? "Transfer via pedestrian connection",
+                        landmarkAnchors: transferAnchors
                     )
                 )
             } else {
@@ -644,6 +691,23 @@ public actor RoutingEngineBridge {
                 destComfortSummary = String(format: "Sunlit Direct Route (%.0f%% Shade, PET %.0f°C)", destStop.shade_percentage, destStop.pet_index_celsius)
             }
             
+            let stopCoord = metadataProvider?.stopCoordinate(for: destStop.stop_id)
+            let stopCLLoc = stopCoord.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+                ?? CLLocationCoordinate2D(latitude: Double(destStop.latitude), longitude: Double(destStop.longitude))
+            let destCLLoc = destination.coordinate.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+            
+            let destAnchors = LandmarkWalkingGuidanceEngine.shared.generateAnchors(
+                originName: destStopName,
+                destinationName: destination.displayName,
+                originCoord: stopCLLoc,
+                destinationCoord: destCLLoc,
+                distanceMeters: UInt32(destStop.distance_meters),
+                durationSec: destStop.walk_duration_sec,
+                shadePercentage: destStop.shade_percentage,
+                petIndexCelsius: destStop.pet_index_celsius,
+                isShadedRoute: profile == .summerShaded
+            )
+            
             legs.append(
                 JourneyLeg(
                     mode: .walk,
@@ -652,6 +716,8 @@ public actor RoutingEngineBridge {
                     departureTimeSec: lastTransitArr,
                     arrivalTimeSec: finalArr,
                     distanceMeters: UInt32(destStop.distance_meters),
+                    landmarkCue: destAnchors.first?.prompt,
+                    landmarkAnchors: destAnchors,
                     exitCode: exitCode,
                     shadePercentage: destStop.shade_percentage,
                     petIndexCelsius: destStop.pet_index_celsius,
