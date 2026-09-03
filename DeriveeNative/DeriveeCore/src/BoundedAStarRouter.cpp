@@ -279,7 +279,8 @@ std::vector<CandidateStop> BoundedAStarRouter::find_reachable_stops(
     float query_lon,
     float max_radius_meters,
     uint16_t required_flags,
-    size_t max_results) const noexcept {
+    size_t max_results,
+    const derivee::climate::MicroClimateConfig& microclimate) const noexcept {
     if (!walk_store_.is_loaded() || stops_.empty()) {
         return find_candidate_stops(stops_, query_lat, query_lon, max_radius_meters, required_flags, max_results);
     }
@@ -298,9 +299,30 @@ std::vector<CandidateStop> BoundedAStarRouter::find_reachable_stops(
         return {};
     }
 
+    // Determine solar position for microclimate evaluation
+    derivee::climate::SolarPosition sun;
+    if (microclimate.has_custom_solar) {
+        sun = derivee::climate::SolarPosition(
+            microclimate.solar_altitude_rad,
+            microclimate.solar_azimuth_rad,
+            derivee::climate::MicroClimateEnergyEvaluator::PI * 0.5f - microclimate.solar_altitude_rad,
+            microclimate.solar_altitude_rad > 0.0f
+        );
+    } else {
+        uint32_t ts = 1751472000; // July 2, 2025 ~12:00 EDT default
+        if (microclimate.mode == derivee::climate::ThermalComfortMode::WinterSunlit) {
+            ts = 1736956800; // Jan 15, 2025 ~11:00 EST
+        }
+        sun = derivee::climate::MicroClimateEnergyEvaluator::calculate_solar_position(
+            static_cast<double>(query_lat),
+            static_cast<double>(query_lon),
+            ts
+        );
+    }
+
     reset_dijkstra();
 
-    set_node_dist(start_node, snap_dist_cm);
+    set_node_state(start_node, snap_dist_cm, snap_dist_cm, snap_dist_cm / 2);
     pq_.clear();
     pq_.push_back({ start_node, snap_dist_cm });
     std::push_heap(pq_.begin(), pq_.end(), std::greater<HeapEntry>());
@@ -334,12 +356,22 @@ std::vector<CandidateStop> BoundedAStarRouter::find_reachable_stops(
 
             for (uint32_t k = start_stop_idx; k < end_stop_idx; ++k) {
                 uint32_t stop_id = snapped_stops_[k];
-                uint32_t total_dist_cm = d_u + stop_snap_dist_cm_[stop_id];
-                if (total_dist_cm <= max_radius_cm) {
-                    float dist_m = static_cast<float>(total_dist_cm) * 0.01f;
+                uint32_t actual_cm = node_states_[u].actual_dist_cm + stop_snap_dist_cm_[stop_id];
+                uint32_t shaded_cm = node_states_[u].shaded_dist_cm + (stop_snap_dist_cm_[stop_id] / 2);
+                
+                if (actual_cm <= max_radius_cm) {
+                    float dist_m = static_cast<float>(actual_cm) * 0.01f;
                     uint32_t dur_sec = calculate_walk_duration_sec(dist_m, DEFAULT_WALK_SPEED_MPS);
+                    float shade_pct = actual_cm > 0 ? (static_cast<float>(shaded_cm) / static_cast<float>(actual_cm)) * 100.0f : 0.0f;
+                    float pet_c = derivee::climate::MicroClimateEnergyEvaluator::estimate_pet_celsius(
+                        microclimate.ambient_temp_c,
+                        microclimate.relative_humidity,
+                        microclimate.wind_speed_mps,
+                        shade_pct * 0.01f,
+                        sun.altitude_rad
+                    );
                     const auto& s = stops_[stop_id];
-                    results.emplace_back(stop_id, dist_m, dur_sec, s.latitude, s.longitude, required_flags);
+                    results.emplace_back(stop_id, dist_m, dur_sec, s.latitude, s.longitude, required_flags, shade_pct, pet_c);
                 }
             }
         }
@@ -348,6 +380,9 @@ std::vector<CandidateStop> BoundedAStarRouter::find_reachable_stops(
         const auto& node = nodes[u];
         uint32_t edge_start = node.first_edge_idx;
         uint32_t edge_end = edge_start + node.edge_count;
+
+        const double lat_u = static_cast<double>(node.lat_quantized) * 1e-7;
+        const double lon_u = static_cast<double>(node.lon_quantized) * 1e-7;
 
         for (uint32_t e = edge_start; e < edge_end && e < edges.size(); ++e) {
             const auto& edge = edges[e];
@@ -361,14 +396,29 @@ std::vector<CandidateStop> BoundedAStarRouter::find_reachable_stops(
                 }
             }
 
-            uint32_t new_dist = d_u + edge.distance_cm;
-            if (new_dist > max_radius_cm) {
+            const double lat_v = static_cast<double>(nodes[v].lat_quantized) * 1e-7;
+            const double lon_v = static_cast<double>(nodes[v].lon_quantized) * 1e-7;
+
+            const uint16_t edge_flags = nodes[u].access_flags | nodes[v].access_flags;
+            const float shade = derivee::climate::MicroClimateEnergyEvaluator::calculate_edge_shade_factor(
+                lat_u, lon_u, lat_v, lon_v, sun, edge_flags
+            );
+            const float weight_mult = derivee::climate::MicroClimateEnergyEvaluator::calculate_edge_weight_multiplier(
+                shade, microclimate
+            );
+
+            const uint32_t edge_dist_cm = edge.distance_cm;
+            const uint32_t weighted_edge_cm = static_cast<uint32_t>(std::round(static_cast<float>(edge_dist_cm) * weight_mult));
+            const uint32_t new_weighted_dist = d_u + weighted_edge_cm;
+            if (new_weighted_dist > max_radius_cm) {
                 continue; // Prune search exceeding radius
             }
 
-            if (new_dist < get_node_dist(v)) {
-                set_node_dist(v, new_dist);
-                pq_.push_back({ v, new_dist });
+            if (new_weighted_dist < get_node_dist(v)) {
+                const uint32_t new_actual = node_states_[u].actual_dist_cm + edge_dist_cm;
+                const uint32_t new_shaded = node_states_[u].shaded_dist_cm + static_cast<uint32_t>(std::round(static_cast<float>(edge_dist_cm) * shade));
+                set_node_state(v, new_weighted_dist, new_actual, new_shaded);
+                pq_.push_back({ v, new_weighted_dist });
                 std::push_heap(pq_.begin(), pq_.end(), std::greater<HeapEntry>());
             }
         }
@@ -400,11 +450,38 @@ DirectWalkResult BoundedAStarRouter::compute_direct_walk(
     float lat2,
     float lon2,
     float max_distance_meters,
-    uint16_t flags) const noexcept {
+    uint16_t flags,
+    const derivee::climate::MicroClimateConfig& microclimate) const noexcept {
     float straight_dist = calculate_distance_meters(lat1, lon1, lat2, lon2);
+
+    // Determine solar position for microclimate evaluation
+    derivee::climate::SolarPosition sun;
+    if (microclimate.has_custom_solar) {
+        sun = derivee::climate::SolarPosition(
+            microclimate.solar_altitude_rad,
+            microclimate.solar_azimuth_rad,
+            derivee::climate::MicroClimateEnergyEvaluator::PI * 0.5f - microclimate.solar_altitude_rad,
+            microclimate.solar_altitude_rad > 0.0f
+        );
+    } else {
+        uint32_t ts = 1751472000; // July 2, 2025 ~12:00 EDT
+        if (microclimate.mode == derivee::climate::ThermalComfortMode::WinterSunlit) {
+            ts = 1736956800; // Jan 15, 2025 ~11:00 EST
+        }
+        sun = derivee::climate::MicroClimateEnergyEvaluator::calculate_solar_position(
+            static_cast<double>(lat1),
+            static_cast<double>(lon1),
+            ts
+        );
+    }
+
+    const float default_pet = derivee::climate::MicroClimateEnergyEvaluator::estimate_pet_celsius(
+        microclimate.ambient_temp_c, microclimate.relative_humidity, microclimate.wind_speed_mps, 0.5f, sun.altitude_rad
+    );
+
     if (!walk_store_.is_loaded() || !spatial_grid_.is_built()) {
         uint32_t dur = calculate_walk_duration_sec(straight_dist, DEFAULT_WALK_SPEED_MPS);
-        return DirectWalkResult(straight_dist, dur, false);
+        return DirectWalkResult(straight_dist, dur, false, 50.0f, default_pet);
     }
 
     int32_t lat1_q = static_cast<int32_t>(std::round(static_cast<double>(lat1) * 1e7));
@@ -419,13 +496,13 @@ DirectWalkResult BoundedAStarRouter::compute_direct_walk(
 
     if (start_node == WalkSpatialGrid::NIL_NODE || goal_node == WalkSpatialGrid::NIL_NODE) {
         uint32_t dur = calculate_walk_duration_sec(straight_dist, DEFAULT_WALK_SPEED_MPS);
-        return DirectWalkResult(straight_dist, dur, false);
+        return DirectWalkResult(straight_dist, dur, false, 50.0f, default_pet);
     }
 
     if (start_node == goal_node) {
         float total_m = static_cast<float>(snap1_cm + snap2_cm) * 0.01f;
         uint32_t dur = calculate_walk_duration_sec(total_m, DEFAULT_WALK_SPEED_MPS);
-        return DirectWalkResult(total_m, dur, true);
+        return DirectWalkResult(total_m, dur, true, 50.0f, default_pet);
     }
 
     uint32_t max_dist_cm = static_cast<uint32_t>(std::round(max_distance_meters * 100.0f));
@@ -443,14 +520,13 @@ DirectWalkResult BoundedAStarRouter::compute_direct_walk(
     };
 
     uint32_t initial_h = h_func(start_node);
-    set_node_dist(start_node, snap1_cm);
+    set_node_state(start_node, snap1_cm, snap1_cm, snap1_cm / 2);
 
     astar_pq_.clear();
     astar_pq_.push_back({ start_node, snap1_cm + initial_h, snap1_cm });
     std::push_heap(astar_pq_.begin(), astar_pq_.end(), std::greater<AStarHeapEntry>());
 
     bool reached = false;
-    uint32_t goal_g = UINT32_MAX;
 
     while (!astar_pq_.empty()) {
         std::pop_heap(astar_pq_.begin(), astar_pq_.end(), std::greater<AStarHeapEntry>());
@@ -464,7 +540,6 @@ DirectWalkResult BoundedAStarRouter::compute_direct_walk(
 
         if (u == goal_node) {
             reached = true;
-            goal_g = g_u;
             break;
         }
 
@@ -476,6 +551,9 @@ DirectWalkResult BoundedAStarRouter::compute_direct_walk(
         uint32_t edge_start = node.first_edge_idx;
         uint32_t edge_end = edge_start + node.edge_count;
 
+        const double lat_u = static_cast<double>(node.lat_quantized) * 1e-7;
+        const double lon_u = static_cast<double>(node.lon_quantized) * 1e-7;
+
         for (uint32_t e = edge_start; e < edge_end && e < edges.size(); ++e) {
             const auto& edge = edges[e];
             uint32_t v = edge.target_node_idx;
@@ -485,11 +563,26 @@ DirectWalkResult BoundedAStarRouter::compute_direct_walk(
                 if (nodes[v].access_flags & WALK_FLAG_IS_STEPS) continue;
             }
 
-            uint32_t new_g = g_u + edge.distance_cm;
+            const double lat_v = static_cast<double>(nodes[v].lat_quantized) * 1e-7;
+            const double lon_v = static_cast<double>(nodes[v].lon_quantized) * 1e-7;
+
+            const uint16_t edge_flags = nodes[u].access_flags | nodes[v].access_flags;
+            const float shade = derivee::climate::MicroClimateEnergyEvaluator::calculate_edge_shade_factor(
+                lat_u, lon_u, lat_v, lon_v, sun, edge_flags
+            );
+            const float weight_mult = derivee::climate::MicroClimateEnergyEvaluator::calculate_edge_weight_multiplier(
+                shade, microclimate
+            );
+
+            const uint32_t edge_dist_cm = edge.distance_cm;
+            const uint32_t weighted_edge_cm = static_cast<uint32_t>(std::round(static_cast<float>(edge_dist_cm) * weight_mult));
+            const uint32_t new_g = g_u + weighted_edge_cm;
             if (new_g > max_dist_cm) continue;
 
             if (new_g < get_node_dist(v)) {
-                set_node_dist(v, new_g);
+                const uint32_t new_actual = node_states_[u].actual_dist_cm + edge_dist_cm;
+                const uint32_t new_shaded = node_states_[u].shaded_dist_cm + static_cast<uint32_t>(std::round(static_cast<float>(edge_dist_cm) * shade));
+                set_node_state(v, new_g, new_actual, new_shaded);
                 uint32_t f = new_g + h_func(v);
                 astar_pq_.push_back({ v, f, new_g });
                 std::push_heap(astar_pq_.begin(), astar_pq_.end(), std::greater<AStarHeapEntry>());
@@ -498,12 +591,21 @@ DirectWalkResult BoundedAStarRouter::compute_direct_walk(
     }
 
     if (reached) {
-        uint32_t total_cm = goal_g + snap2_cm;
-        float total_m = static_cast<float>(total_cm) * 0.01f;
+        uint32_t total_actual_cm = node_states_[goal_node].actual_dist_cm + snap2_cm;
+        uint32_t total_shaded_cm = node_states_[goal_node].shaded_dist_cm + (snap2_cm / 2);
+        float total_m = static_cast<float>(total_actual_cm) * 0.01f;
         uint32_t dur = calculate_walk_duration_sec(total_m, DEFAULT_WALK_SPEED_MPS);
-        return DirectWalkResult(total_m, dur, true);
+        float shade_pct = total_actual_cm > 0 ? (static_cast<float>(total_shaded_cm) / static_cast<float>(total_actual_cm)) * 100.0f : 0.0f;
+        float pet_c = derivee::climate::MicroClimateEnergyEvaluator::estimate_pet_celsius(
+            microclimate.ambient_temp_c,
+            microclimate.relative_humidity,
+            microclimate.wind_speed_mps,
+            shade_pct * 0.01f,
+            sun.altitude_rad
+        );
+        return DirectWalkResult(total_m, dur, true, shade_pct, pet_c);
     }
 
     uint32_t dur = calculate_walk_duration_sec(straight_dist, DEFAULT_WALK_SPEED_MPS);
-    return DirectWalkResult(straight_dist, dur, false);
+    return DirectWalkResult(straight_dist, dur, false, 50.0f, default_pet);
 }

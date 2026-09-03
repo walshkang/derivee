@@ -125,6 +125,7 @@
 		8DFCA233B00886FA3A4B9AEE /* DeriveeCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4995AF0BA66896744846FCA8 /* DeriveeCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		8E8502C72C8B9B78BED4614C /* CityDetectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3894A4BE621AD2761C20CE53 /* CityDetectionService.swift */; };
 		8EDBBA7ADBE785F76083027D /* CitySelectorPillTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C4FBD3DE070AA06CD7B75E6 /* CitySelectorPillTests.swift */; };
+		90EFDB0D1E0C57B61D0ACC02 /* MicroClimateEnergyEvaluator.hpp in Headers */ = {isa = PBXBuildFile; fileRef = D0E7008DEEC65AFB3D007B37 /* MicroClimateEnergyEvaluator.hpp */; settings = {ATTRIBUTES = (Public, ); }; };
 		926694893B82BC477DBBB522 /* ReliabilityHeatmapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE99F0C57D46BACC5466A29 /* ReliabilityHeatmapCanvas.swift */; };
 		92C7E58EE1FEB160494CB8C5 /* ObserverFormat.hpp in Headers */ = {isa = PBXBuildFile; fileRef = E99D23835DC4860DC059DCA5 /* ObserverFormat.hpp */; settings = {ATTRIBUTES = (Public, ); }; };
 		946BAB1A7ABBFCA5CAC702B4 /* GRDBObservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8AA6177CA7C6527DAE09E18 /* GRDBObservationTests.swift */; };
@@ -217,6 +218,7 @@
 		EAC17E9B196B23A083A1B458 /* ConfidenceBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D17F5390E1A53502E8FE8B88 /* ConfidenceBadgeView.swift */; };
 		EB9FF689C4861DEC3C01E5FC /* testConfidenceBadgeAllTiersSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 9B3BA87C530BD2823567320B /* testConfidenceBadgeAllTiersSnapshot.1.png */; };
 		EC99202B32B67D833CB29CE7 /* SettingsDeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAC4FDF126FEEE06EED9D7A /* SettingsDeepLinkTests.swift */; };
+		ED7B5DDCDF7988DCA80CDD92 /* MicroClimateEvaluatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C98008ECBE517AE425D0BF /* MicroClimateEvaluatorTests.swift */; };
 		EFAA78991CC5DEBA8AB16540 /* ThumbZoneActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D03B0D1C9B13EE0D4C25FBC6 /* ThumbZoneActionBar.swift */; };
 		F0F021435753467EB07CC8CB /* GBFSDatabaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9102C934349C056069D6F70D /* GBFSDatabaseTests.swift */; };
 		F196DF354943AB224043F4A4 /* testCitiesStorageManagerViewSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = E25B891FDA6964A00B81BEB5 /* testCitiesStorageManagerViewSnapshot.1.png */; };
@@ -321,6 +323,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		00C98008ECBE517AE425D0BF /* MicroClimateEvaluatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicroClimateEvaluatorTests.swift; sourceTree = "<group>"; };
 		02000EEB32AD1E9ADDB2D695 /* RaptorEngine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RaptorEngine.cpp; sourceTree = "<group>"; };
 		02E3592BCFC7AFB5E5EABF5A /* RoutingEngineBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingEngineBridgeTests.swift; sourceTree = "<group>"; };
 		0500776ED4832392061B6D44 /* BoundedAStarRouter.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = BoundedAStarRouter.hpp; sourceTree = "<group>"; };
@@ -495,6 +498,7 @@
 		CFAC15B31EFF91C40E2E93EB /* ExplorationResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExplorationResetTests.swift; sourceTree = "<group>"; };
 		D03B0D1C9B13EE0D4C25FBC6 /* ThumbZoneActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbZoneActionBar.swift; sourceTree = "<group>"; };
 		D0786225B07AB50A074567E9 /* FogPolygonMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FogPolygonMath.swift; sourceTree = "<group>"; };
+		D0E7008DEEC65AFB3D007B37 /* MicroClimateEnergyEvaluator.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = MicroClimateEnergyEvaluator.hpp; sourceTree = "<group>"; };
 		D17F5390E1A53502E8FE8B88 /* ConfidenceBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfidenceBadgeView.swift; sourceTree = "<group>"; };
 		D29252B85CFB08407EC3D8D8 /* GTFSRealtimeStreamProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GTFSRealtimeStreamProcessor.swift; sourceTree = "<group>"; };
 		D2D74FCE2FD2A3CF62EA38A6 /* ULTRADataStore.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ULTRADataStore.hpp; sourceTree = "<group>"; };
@@ -589,6 +593,7 @@
 				A65F578EC5D73941ABCC0E28 /* BinaryPayloadView.hpp */,
 				0500776ED4832392061B6D44 /* BoundedAStarRouter.hpp */,
 				E5A8D0C2C43AF162793051E9 /* DeriveeCore.h */,
+				D0E7008DEEC65AFB3D007B37 /* MicroClimateEnergyEvaluator.hpp */,
 				B72EA056FF7C3DB3CC5DBCB7 /* module.modulemap */,
 				E99D23835DC4860DC059DCA5 /* ObserverFormat.hpp */,
 				14B903F25198586BC0920B5F /* RaptorEngine.hpp */,
@@ -783,6 +788,7 @@
 			children = (
 				4032DCABB51243EF7C507D85 /* BinaryHeaderValidationTests.swift */,
 				5F5C9F33697C3C6D2AC8FE66 /* BoundedAStarRouterTests.swift */,
+				00C98008ECBE517AE425D0BF /* MicroClimateEvaluatorTests.swift */,
 				A30D02CD2D9B66E3094BEFD9 /* ParetoDominanceTests.swift */,
 				6E5C3BE22DCC13287CBDE819 /* RangeRaptorCoreTests.swift */,
 				88C0A610C91153CAAABBBAF4 /* RaptorCoreTests.swift */,
@@ -955,6 +961,7 @@
 				38E7B69313B8F60824A29BD9 /* BinaryPayloadView.hpp in Headers */,
 				6581B9446DEBE642B21A5712 /* BoundedAStarRouter.hpp in Headers */,
 				6FCEBA160AFA3F9482632386 /* DeriveeCore.h in Headers */,
+				90EFDB0D1E0C57B61D0ACC02 /* MicroClimateEnergyEvaluator.hpp in Headers */,
 				92C7E58EE1FEB160494CB8C5 /* ObserverFormat.hpp in Headers */,
 				CA4013ECCE3DC3CE13BB8E96 /* RaptorEngine.hpp in Headers */,
 				53823255581031434CADF367 /* TimetableStructs.hpp in Headers */,
@@ -1374,6 +1381,7 @@
 			files = (
 				C310A3AF8E72E2E2307148F6 /* BinaryHeaderValidationTests.swift in Sources */,
 				0CCCB0DBA3F0922F98D85C07 /* BoundedAStarRouterTests.swift in Sources */,
+				ED7B5DDCDF7988DCA80CDD92 /* MicroClimateEvaluatorTests.swift in Sources */,
 				FAC4F45A40E8AC9DB0AE7B5F /* ParetoDominanceTests.swift in Sources */,
 				499ABCAF4DAE214B77C4F608 /* RangeRaptorCoreTests.swift in Sources */,
 				A9E00CB3110E365FDD1EE7DB /* RaptorCoreTests.swift in Sources */,

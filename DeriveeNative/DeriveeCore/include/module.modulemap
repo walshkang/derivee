@@ -6,6 +6,7 @@ module DeriveeCore {
     header "BinaryPayloadView.hpp"
     header "ULTRADataStore.hpp"
     header "BoundedAStarRouter.hpp"
+    header "MicroClimateEnergyEvaluator.hpp"
     header "RaptorEngine.hpp"
     export *
     requires cplusplus

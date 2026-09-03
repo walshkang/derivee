@@ -267,6 +267,43 @@ public actor RoutingEngineBridge {
     
     // MARK: - Internal Query Orchestrator
     
+    // MARK: - Micro-Climate Config Helper
+    
+    private func makeCxxMicroClimateConfig(from options: RoutingOptions, profile: RoutingProfile) -> derivee.climate.MicroClimateConfig {
+        var cfg = derivee.climate.MicroClimateConfig()
+        
+        let effectiveMode: ThermalComfortMode
+        if profile == .summerShaded {
+            effectiveMode = .summerShaded
+        } else if profile == .winterSunlit {
+            effectiveMode = .winterSunlit
+        } else {
+            effectiveMode = options.thermalComfortMode
+        }
+        
+        switch effectiveMode {
+        case .neutral:
+            cfg.mode = derivee.climate.ThermalComfortMode.Neutral
+        case .summerShaded:
+            cfg.mode = derivee.climate.ThermalComfortMode.SummerShaded
+        case .winterSunlit:
+            cfg.mode = derivee.climate.ThermalComfortMode.WinterSunlit
+        }
+        
+        if let cond = options.microClimate {
+            cfg.ambient_temp_c = Float(cond.ambientTemperatureCelsius)
+            cfg.relative_humidity = Float(cond.relativeHumidity)
+            cfg.wind_speed_mps = Float(cond.windSpeedMps)
+            cfg.direct_irradiance_wm2 = Float(cond.directIrradianceWm2)
+            if let alt = cond.customSolarAltitudeRad, let az = cond.customSolarAzimuthRad {
+                cfg.has_custom_solar = true
+                cfg.solar_altitude_rad = Float(alt)
+                cfg.solar_azimuth_rad = Float(az)
+            }
+        }
+        return cfg
+    }
+
     private func internalComputeJourneys(
         origin: RoutingLocation,
         destination: RoutingLocation,
@@ -275,6 +312,7 @@ public actor RoutingEngineBridge {
         options: RoutingOptions
     ) async -> [JourneyItinerary] {
         var itineraries: [JourneyItinerary] = []
+        let microclimateCfg = makeCxxMicroClimateConfig(from: options, profile: profile)
         
         // 1. Direct Walking Itinerary Evaluation
         if options.includeDirectWalk,
@@ -284,7 +322,8 @@ public actor RoutingEngineBridge {
                 Float(origCoord.latitude), Float(origCoord.longitude),
                 Float(destCoord.latitude), Float(destCoord.longitude),
                 2000.0,
-                options.flags
+                options.flags,
+                microclimateCfg
             )
             let distMeters = directResult.distance_meters
             
@@ -295,6 +334,13 @@ public actor RoutingEngineBridge {
                     BoundedAStarRouter.calculate_walk_duration_sec(distMeters, Float(options.walkingSpeedMps))
                 let arrSec = departureTimestampSec + walkDurSec
                 
+                let comfortSummary: String?
+                if directResult.shade_percentage >= 60.0 {
+                    comfortSummary = String(format: "Shaded Tree Canopy & Canyon (%.0f%% Shade, PET %.0f°C)", directResult.shade_percentage, directResult.pet_index_celsius)
+                } else {
+                    comfortSummary = String(format: "Sunlit Direct Route (%.0f%% Shade, PET %.0f°C)", directResult.shade_percentage, directResult.pet_index_celsius)
+                }
+                
                 let directWalkLeg = JourneyLeg(
                     mode: .walk,
                     originName: origin.displayName,
@@ -302,8 +348,18 @@ public actor RoutingEngineBridge {
                     departureTimeSec: departureTimestampSec,
                     arrivalTimeSec: arrSec,
                     distanceMeters: UInt32(distMeters),
-                    landmarkCue: directResult.path_found ? "Direct pedestrian path via street network" : "Direct pedestrian path to destination"
+                    landmarkCue: directResult.path_found ? "Direct pedestrian path via street network" : "Direct pedestrian path to destination",
+                    shadePercentage: directResult.shade_percentage,
+                    petIndexCelsius: directResult.pet_index_celsius,
+                    thermalComfortSummary: comfortSummary
                 )
+                
+                var savingsText: String?
+                if profile == .summerShaded && directResult.shade_percentage >= 60.0 {
+                    savingsText = String(format: "%.0f%% Shaded Cooling Path", directResult.shade_percentage)
+                } else if profile == .winterSunlit && directResult.shade_percentage <= 40.0 {
+                    savingsText = String(format: "%.0f%% Sunlit Warmth Path", 100.0 - directResult.shade_percentage)
+                }
                 
                 let directWalkItinerary = JourneyItinerary(
                     profile: profile,
@@ -315,15 +371,18 @@ public actor RoutingEngineBridge {
                     totalCost: 0.0,
                     legs: [directWalkLeg],
                     disruptions: [],
-                    confidenceTier: .verified
+                    confidenceTier: .verified,
+                    averageShadePercentage: directResult.shade_percentage,
+                    averagePetIndexCelsius: directResult.pet_index_celsius,
+                    thermalComfortSavingsText: savingsText
                 )
                 itineraries.append(directWalkItinerary)
             }
         }
         
         // 2. Discover Candidate Boarding and Alighting Stops
-        let candidateOrigins = resolveCandidateStops(location: origin, options: options)
-        let candidateDests = resolveCandidateStops(location: destination, options: options)
+        let candidateOrigins = resolveCandidateStops(location: origin, options: options, microclimate: microclimateCfg)
+        let candidateDests = resolveCandidateStops(location: destination, options: options, microclimate: microclimateCfg)
         
         if candidateOrigins.isEmpty || candidateDests.isEmpty {
             return itineraries
@@ -381,14 +440,18 @@ public actor RoutingEngineBridge {
     
     // MARK: - Candidate Resolution Helper
     
-    private func resolveCandidateStops(location: RoutingLocation, options: RoutingOptions) -> [CandidateStop] {
+    private func resolveCandidateStops(
+        location: RoutingLocation,
+        options: RoutingOptions,
+        microclimate: derivee.climate.MicroClimateConfig
+    ) -> [CandidateStop] {
         switch location {
         case .stop(let id, _):
             let s = engine.get_stop(id)
-            return [CandidateStop(id, 0.0, 0, s.latitude, s.longitude, options.flags)]
+            return [CandidateStop(id, 0.0, 0, s.latitude, s.longitude, options.flags, 0.0, 0.0)]
         case .coordinate(let lat, let lon, _):
             let cxxCandidates = engine.find_candidate_stops(
-                Float(lat), Float(lon), Float(options.maxWalkDistanceMeters), options.flags, options.maxCandidateStops
+                Float(lat), Float(lon), Float(options.maxWalkDistanceMeters), options.flags, options.maxCandidateStops, microclimate
             )
             var candidates: [CandidateStop] = []
             candidates.reserveCapacity(cxxCandidates.size())
@@ -499,6 +562,13 @@ public actor RoutingEngineBridge {
             let origStopName = metadataProvider?.stopName(for: origStop.stop_id) ?? "Stop #\(origStop.stop_id)"
             let landmarkCue = metadataProvider?.landmarkCue(for: origStop.stop_id)
             
+            let comfortSummary: String?
+            if origStop.shade_percentage >= 60.0 {
+                comfortSummary = String(format: "Shaded Tree Canopy & Canyon (%.0f%% Shade, PET %.0f°C)", origStop.shade_percentage, origStop.pet_index_celsius)
+            } else {
+                comfortSummary = String(format: "Sunlit Direct Route (%.0f%% Shade, PET %.0f°C)", origStop.shade_percentage, origStop.pet_index_celsius)
+            }
+            
             legs.append(
                 JourneyLeg(
                     mode: .walk,
@@ -507,7 +577,10 @@ public actor RoutingEngineBridge {
                     departureTimeSec: nominalDepSec,
                     arrivalTimeSec: initialWalkArr,
                     distanceMeters: UInt32(origStop.distance_meters),
-                    landmarkCue: landmarkCue
+                    landmarkCue: landmarkCue,
+                    shadePercentage: origStop.shade_percentage,
+                    petIndexCelsius: origStop.pet_index_celsius,
+                    thermalComfortSummary: comfortSummary
                 )
             )
         }
@@ -564,6 +637,13 @@ public actor RoutingEngineBridge {
         
         if destStop.distance_meters > 5.0 {
             let exitCode = metadataProvider?.exitCode(for: destStop.stop_id)
+            let destComfortSummary: String?
+            if destStop.shade_percentage >= 60.0 {
+                destComfortSummary = String(format: "Shaded Tree Canopy & Canyon (%.0f%% Shade, PET %.0f°C)", destStop.shade_percentage, destStop.pet_index_celsius)
+            } else {
+                destComfortSummary = String(format: "Sunlit Direct Route (%.0f%% Shade, PET %.0f°C)", destStop.shade_percentage, destStop.pet_index_celsius)
+            }
+            
             legs.append(
                 JourneyLeg(
                     mode: .walk,
@@ -572,7 +652,10 @@ public actor RoutingEngineBridge {
                     departureTimeSec: lastTransitArr,
                     arrivalTimeSec: finalArr,
                     distanceMeters: UInt32(destStop.distance_meters),
-                    exitCode: exitCode
+                    exitCode: exitCode,
+                    shadePercentage: destStop.shade_percentage,
+                    petIndexCelsius: destStop.pet_index_celsius,
+                    thermalComfortSummary: destComfortSummary
                 )
             )
         }
@@ -582,6 +665,19 @@ public actor RoutingEngineBridge {
         let varianceDis = cost.variance_disutility
         let p10 = (p50 > 120 + varianceDis / 2) ? (p50 - min(120, varianceDis / 2)) : p50
         let p90 = p50 + max(60, varianceDis)
+        
+        var savingsText: String?
+        if profile == .summerShaded {
+            let walkShades = legs.compactMap { $0.shadePercentage }
+            if let first = walkShades.first, first >= 60.0 {
+                savingsText = String(format: "%.0f%% Shaded Cooling Path", first)
+            }
+        } else if profile == .winterSunlit {
+            let walkShades = legs.compactMap { $0.shadePercentage }
+            if let first = walkShades.first, first <= 40.0 {
+                savingsText = String(format: "%.0f%% Sunlit Warmth Path", 100.0 - first)
+            }
+        }
         
         return JourneyItinerary(
             profile: profile,
@@ -593,7 +689,8 @@ public actor RoutingEngineBridge {
             totalCost: 2.90,
             legs: legs,
             disruptions: disruptions,
-            confidenceTier: containsRealtime ? .verified : .staticSchedule
+            confidenceTier: containsRealtime ? .verified : .staticSchedule,
+            thermalComfortSavingsText: savingsText
         )
     }
     
@@ -711,6 +808,24 @@ public actor RoutingEngineBridge {
                 let bHasBike = b.bikingDistanceMeters > 0
                 if aHasBike != bHasBike {
                     return aHasBike && !bHasBike
+                }
+                return a.arrivalTimeSec < b.arrivalTimeSec
+            }
+        case .summerShaded:
+            return unique.sorted { a, b in
+                let aShade = a.averageShadePercentage ?? 0.0
+                let bShade = b.averageShadePercentage ?? 0.0
+                if abs(aShade - bShade) > 5.0 {
+                    return aShade > bShade // Higher shade first
+                }
+                return a.arrivalTimeSec < b.arrivalTimeSec
+            }
+        case .winterSunlit:
+            return unique.sorted { a, b in
+                let aShade = a.averageShadePercentage ?? 0.0
+                let bShade = b.averageShadePercentage ?? 0.0
+                if abs(aShade - bShade) > 5.0 {
+                    return aShade < bShade // Lower shade (more sun) first
                 }
                 return a.arrivalTimeSec < b.arrivalTimeSec
             }

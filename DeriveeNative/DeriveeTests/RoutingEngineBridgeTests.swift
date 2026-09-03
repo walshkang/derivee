@@ -317,4 +317,108 @@ final class RoutingEngineBridgeTests: XCTestCase {
         XCTAssertNotNil(directWalk)
         XCTAssertEqual(directWalk?.legs[0].landmarkCue, "Direct pedestrian path via street network")
     }
+
+    func testMicroClimateDirectWalkAndProfileRanking() async {
+        let bridge = RoutingEngineBridge()
+
+        // Build walk graph with Node 0 -> Node 1 (shaded with high canopy)
+        var n0 = observer.format.WalkNode()
+        n0.lat_quantized = Int32(40.7300 * 1e7)
+        n0.lon_quantized = Int32(-73.9925 * 1e7)
+        n0.first_edge_idx = 0
+        n0.edge_count = 1
+        n0.access_flags = UInt16(WALK_FLAG_WALKABLE | WALK_FLAG_TREE_CANOPY_HIGH)
+
+        var n1 = observer.format.WalkNode()
+        n1.lat_quantized = Int32(40.7320 * 1e7)
+        n1.lon_quantized = Int32(-73.9925 * 1e7)
+        n1.first_edge_idx = 1
+        n1.edge_count = 0
+        n1.access_flags = UInt16(WALK_FLAG_WALKABLE | WALK_FLAG_TREE_CANOPY_HIGH)
+
+        var e0 = observer.format.WalkEdge()
+        e0.target_node_idx = 1
+        e0.distance_cm = 22200 // 222m
+        e0.weight_ms = 17000
+
+        func align64(_ offset: Int) -> Int {
+            let rem = offset % 64
+            return rem == 0 ? offset : offset + (64 - rem)
+        }
+
+        let headerSize = 232
+        let lenS0 = 2 * MemoryLayout<observer.format.WalkNode>.size
+        let lenS1 = 1 * MemoryLayout<observer.format.WalkEdge>.size
+        let offS0 = align64(headerSize)
+        let offS1 = align64(offS0 + lenS0)
+        let totalSize = align64(offS1 + lenS1)
+
+        var data = Data(count: totalSize)
+        data.withUnsafeMutableBytes { rawBuf in
+            let ptr = rawBuf.baseAddress!
+            ptr.storeBytes(of: observer.format.MAGIC_WALK_GRAPH, toByteOffset: 0, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(1), toByteOffset: 4, as: UInt32.self)
+            ptr.storeBytes(of: observer.format.ENDIAN_MARKER, toByteOffset: 8, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(232), toByteOffset: 12, as: UInt32.self)
+            ptr.storeBytes(of: UInt64(totalSize), toByteOffset: 16, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(0), toByteOffset: 24, as: UInt64.self)
+            ptr.storeBytes(of: UInt32(2), toByteOffset: 32, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(0), toByteOffset: 36, as: UInt32.self)
+
+            ptr.storeBytes(of: UInt64(offS0), toByteOffset: 40, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(lenS0), toByteOffset: 48, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(2), toByteOffset: 56, as: UInt64.self)
+
+            ptr.storeBytes(of: UInt64(offS1), toByteOffset: 64, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(lenS1), toByteOffset: 72, as: UInt64.self)
+            ptr.storeBytes(of: UInt64(1), toByteOffset: 80, as: UInt64.self)
+
+            ptr.storeBytes(of: n0, toByteOffset: offS0, as: observer.format.WalkNode.self)
+            ptr.storeBytes(of: n1, toByteOffset: offS0 + MemoryLayout<observer.format.WalkNode>.size, as: observer.format.WalkNode.self)
+            ptr.storeBytes(of: e0, toByteOffset: offS1, as: observer.format.WalkEdge.self)
+        }
+
+        let ttBlob = buildSyntheticTimetable()
+        await bridge.loadTimetableBlob(ttBlob)
+        _ = await bridge.loadWalkGraphBlob(data)
+
+        let origin = RoutingLocation.coordinate(latitude: 40.7300, longitude: -73.9925, name: "Washington Sq")
+        let dest = RoutingLocation.coordinate(latitude: 40.7320, longitude: -73.9925, name: "Union Sq South")
+
+        // 1. Summer Shaded Journey
+        var summerOptions = RoutingOptions.summerShaded
+        summerOptions.microClimate = MicroClimateConditions(ambientTemperatureCelsius: 31.0, relativeHumidity: 0.60, windSpeedMps: 1.2, directIrradianceWm2: 850.0)
+        let summerItineraries = await bridge.computeJourneys(
+            origin: origin,
+            destination: dest,
+            profile: .summerShaded,
+            options: summerOptions
+        )
+        XCTAssertFalse(summerItineraries.isEmpty)
+        let summerWalk = summerItineraries.first(where: { $0.legs.count == 1 && $0.legs[0].mode == .walk })
+        XCTAssertNotNil(summerWalk)
+        XCTAssertNotNil(summerWalk?.averageShadePercentage)
+        XCTAssertGreaterThan(summerWalk?.averageShadePercentage ?? 0.0, 60.0)
+        XCTAssertNotNil(summerWalk?.legs[0].shadePercentage)
+        XCTAssertNotNil(summerWalk?.legs[0].petIndexCelsius)
+        XCTAssertNotNil(summerWalk?.legs[0].thermalComfortSummary)
+        XCTAssertNotNil(summerWalk?.thermalComfortSavingsText)
+        XCTAssertTrue(summerWalk?.thermalComfortSavingsText?.contains("Shaded Cooling Path") == true)
+
+        // 2. Winter Sunlit Journey
+        var winterOptions = RoutingOptions.winterSunlit
+        winterOptions.microClimate = MicroClimateConditions(ambientTemperatureCelsius: 3.0, relativeHumidity: 0.40, windSpeedMps: 2.0, directIrradianceWm2: 500.0)
+        let winterItineraries = await bridge.computeJourneys(
+            origin: origin,
+            destination: dest,
+            profile: .winterSunlit,
+            options: winterOptions
+        )
+        XCTAssertFalse(winterItineraries.isEmpty)
+        let winterWalk = winterItineraries.first(where: { $0.legs.count == 1 && $0.legs[0].mode == .walk })
+        XCTAssertNotNil(winterWalk)
+        XCTAssertNotNil(winterWalk?.legs[0].shadePercentage)
+        XCTAssertNotNil(winterWalk?.legs[0].petIndexCelsius)
+    }
 }
+

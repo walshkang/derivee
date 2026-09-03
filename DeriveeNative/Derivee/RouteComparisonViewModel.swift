@@ -161,6 +161,28 @@ public final class RouteComparisonViewModel {
                 }
                 return a.arrivalTimeSec < b.arrivalTimeSec
             }
+            
+        case .summerShaded:
+            // Prioritize higher shade percentage to minimize heat stress
+            filteredJourneys = allJourneys.sorted { a, b in
+                let aShade = a.averageShadePercentage ?? 0.0
+                let bShade = b.averageShadePercentage ?? 0.0
+                if abs(aShade - bShade) > 5.0 {
+                    return aShade > bShade
+                }
+                return a.arrivalTimeSec < b.arrivalTimeSec
+            }
+            
+        case .winterSunlit:
+            // Prioritize lower shade percentage to maximize direct solar warmth
+            filteredJourneys = allJourneys.sorted { a, b in
+                let aShade = a.averageShadePercentage ?? 0.0
+                let bShade = b.averageShadePercentage ?? 0.0
+                if abs(aShade - bShade) > 5.0 {
+                    return aShade < bShade
+                }
+                return a.arrivalTimeSec < b.arrivalTimeSec
+            }
         }
         
         // Preserve or auto-select top candidate

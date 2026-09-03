@@ -3,6 +3,7 @@
 #include "TimetableStructs.hpp"
 #include "ObserverFormat.hpp"
 #include "BinaryPayloadView.hpp"
+#include "MicroClimateEnergyEvaluator.hpp"
 #include <span>
 #include <vector>
 #include <cstdint>
@@ -13,7 +14,7 @@
 
 #pragma pack(push, 1)
 
-// CandidateStop: Represents a transit stop reachable via walking access from query coordinates (22 Bytes)
+// CandidateStop: Represents a transit stop reachable via walking access from query coordinates (30 Bytes)
 struct CandidateStop {
     uint32_t stop_id;
     float distance_meters;
@@ -21,40 +22,64 @@ struct CandidateStop {
     float latitude;
     float longitude;
     uint16_t flags;
+    float shade_percentage;
+    float pet_index_celsius;
 
     constexpr CandidateStop() noexcept
         : stop_id(0), distance_meters(0.0f), walk_duration_sec(0),
-          latitude(0.0f), longitude(0.0f), flags(0) {}
+          latitude(0.0f), longitude(0.0f), flags(0),
+          shade_percentage(0.0f), pet_index_celsius(0.0f) {}
 
     constexpr CandidateStop(uint32_t id, float dist, uint32_t duration,
-                            float lat, float lon, uint16_t f = 0) noexcept
+                            float lat, float lon, uint16_t f) noexcept
         : stop_id(id), distance_meters(dist), walk_duration_sec(duration),
-          latitude(lat), longitude(lon), flags(f) {}
-};
-static_assert(sizeof(CandidateStop) == 22, "CandidateStop layout must be exactly 22 bytes");
+          latitude(lat), longitude(lon), flags(f),
+          shade_percentage(0.0f), pet_index_celsius(0.0f) {}
 
-// DirectWalkResult: Point-to-point bounded pedestrian routing result (12 Bytes)
+    constexpr CandidateStop(uint32_t id, float dist, uint32_t duration,
+                            float lat, float lon, uint16_t f,
+                            float shade, float pet) noexcept
+        : stop_id(id), distance_meters(dist), walk_duration_sec(duration),
+          latitude(lat), longitude(lon), flags(f),
+          shade_percentage(shade), pet_index_celsius(pet) {}
+};
+static_assert(sizeof(CandidateStop) == 30, "CandidateStop layout must be exactly 30 bytes");
+
+// DirectWalkResult: Point-to-point bounded pedestrian routing result (20 Bytes)
 struct DirectWalkResult {
     float distance_meters;
     uint32_t walk_duration_sec;
     bool path_found;
+    float shade_percentage;
+    float pet_index_celsius;
     uint8_t _padding[3];
 
     constexpr DirectWalkResult() noexcept
-        : distance_meters(0.0f), walk_duration_sec(0), path_found(false), _padding{0, 0, 0} {}
+        : distance_meters(0.0f), walk_duration_sec(0), path_found(false),
+          shade_percentage(0.0f), pet_index_celsius(0.0f), _padding{0, 0, 0} {}
 
     constexpr DirectWalkResult(float dist, uint32_t dur, bool found) noexcept
-        : distance_meters(dist), walk_duration_sec(dur), path_found(found), _padding{0, 0, 0} {}
+        : distance_meters(dist), walk_duration_sec(dur), path_found(found),
+          shade_percentage(0.0f), pet_index_celsius(0.0f), _padding{0, 0, 0} {}
+
+    constexpr DirectWalkResult(float dist, uint32_t dur, bool found,
+                               float shade, float pet) noexcept
+        : distance_meters(dist), walk_duration_sec(dur), path_found(found),
+          shade_percentage(shade), pet_index_celsius(pet), _padding{0, 0, 0} {}
 };
-static_assert(sizeof(DirectWalkResult) == 12, "DirectWalkResult layout must be exactly 12 bytes");
+static_assert(sizeof(DirectWalkResult) == 20, "DirectWalkResult layout must be exactly 20 bytes");
 
 #pragma pack(pop)
 
 // Accessibility & Feature Flags for Pedestrian Edges/Nodes
-constexpr uint8_t WALK_FLAG_WALKABLE              = 1 << 0;
-constexpr uint8_t WALK_FLAG_WHEELCHAIR_ACCESSIBLE = 1 << 1;
-constexpr uint8_t WALK_FLAG_IS_STEPS              = 1 << 2;
-constexpr uint8_t WALK_FLAG_IS_ELEVATOR           = 1 << 3;
+constexpr uint16_t WALK_FLAG_WALKABLE              = 1 << 0;
+constexpr uint16_t WALK_FLAG_WHEELCHAIR_ACCESSIBLE = 1 << 1;
+constexpr uint16_t WALK_FLAG_IS_STEPS              = 1 << 2;
+constexpr uint16_t WALK_FLAG_IS_ELEVATOR           = 1 << 3;
+constexpr uint16_t WALK_FLAG_TREE_CANOPY_LOW       = 1 << 4; // ~30% tree canopy cover
+constexpr uint16_t WALK_FLAG_TREE_CANOPY_HIGH      = 1 << 5; // ~75% tree canopy cover (parks/greenways)
+constexpr uint16_t WALK_FLAG_CANYON_HIGH_RISE      = 1 << 6; // H/W ~ 2.5 (Midtown high-rise canyon)
+constexpr uint16_t WALK_FLAG_CANYON_MID_RISE       = 1 << 7; // H/W ~ 1.2 (Mid-rise brownstone avenue)
 
 /**
  * @brief Zero-copy reader and validator for binary pedestrian walk graph (walk_graph.bin).
@@ -151,6 +176,8 @@ public:
     struct NodeState {
         uint32_t dist_cm;
         uint32_t gen;
+        uint32_t actual_dist_cm;
+        uint32_t shaded_dist_cm;
     };
 
     struct HeapEntry {
@@ -204,6 +231,17 @@ private:
     inline void set_node_dist(uint32_t u, uint32_t d) const noexcept {
         if (u < node_states_.size()) {
             node_states_[u].dist_cm = d;
+            node_states_[u].actual_dist_cm = d;
+            node_states_[u].shaded_dist_cm = 0;
+            node_states_[u].gen = current_gen_;
+        }
+    }
+
+    inline void set_node_state(uint32_t u, uint32_t weighted_d, uint32_t actual_d, uint32_t shaded_d) const noexcept {
+        if (u < node_states_.size()) {
+            node_states_[u].dist_cm = weighted_d;
+            node_states_[u].actual_dist_cm = actual_d;
+            node_states_[u].shaded_dist_cm = shaded_d;
             node_states_[u].gen = current_gen_;
         }
     }
@@ -235,21 +273,42 @@ public:
     [[nodiscard]] size_t walk_edges_count() const noexcept { return walk_store_.edge_count(); }
 
     // Core Bounded One-to-Many SSSP search over quantized walk graph
+    [[nodiscard]] inline std::vector<CandidateStop> find_reachable_stops(
+        float query_lat,
+        float query_lon,
+        float max_radius_meters,
+        uint16_t required_flags,
+        size_t max_results) const noexcept {
+        return find_reachable_stops(query_lat, query_lon, max_radius_meters, required_flags, max_results, derivee::climate::MicroClimateConfig{});
+    }
+
     [[nodiscard]] std::vector<CandidateStop> find_reachable_stops(
         float query_lat,
         float query_lon,
-        float max_radius_meters = DEFAULT_MAX_RADIUS_METERS,
-        uint16_t required_flags = 0,
-        size_t max_results = 16) const noexcept;
+        float max_radius_meters,
+        uint16_t required_flags,
+        size_t max_results,
+        const derivee::climate::MicroClimateConfig& microclimate) const noexcept;
 
     // Direct walk leg evaluation via bounded A*
+    [[nodiscard]] inline DirectWalkResult compute_direct_walk(
+        float lat1,
+        float lon1,
+        float lat2,
+        float lon2,
+        float max_distance_meters,
+        uint16_t flags) const noexcept {
+        return compute_direct_walk(lat1, lon1, lat2, lon2, max_distance_meters, flags, derivee::climate::MicroClimateConfig{});
+    }
+
     [[nodiscard]] DirectWalkResult compute_direct_walk(
         float lat1,
         float lon1,
         float lat2,
         float lon2,
-        float max_distance_meters = 2000.0f,
-        uint16_t flags = 0) const noexcept;
+        float max_distance_meters,
+        uint16_t flags,
+        const derivee::climate::MicroClimateConfig& microclimate) const noexcept;
 
     // Flat-Earth geodesic distance approximation (meters)
     [[nodiscard]] static inline float calculate_distance_meters(

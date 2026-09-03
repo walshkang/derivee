@@ -134,12 +134,22 @@ public:
     // Stop and spatial accessors
     [[nodiscard]] std::span<const Stop> get_stops() const noexcept { return stops_; }
     [[nodiscard]] Stop get_stop(uint32_t stop_id) const noexcept;
+    [[nodiscard]] inline std::vector<CandidateStop> find_candidate_stops(
+        float lat,
+        float lon,
+        float max_radius_meters,
+        uint16_t required_flags,
+        size_t max_results) const noexcept {
+        return find_candidate_stops(lat, lon, max_radius_meters, required_flags, max_results, derivee::climate::MicroClimateConfig{});
+    }
+
     [[nodiscard]] std::vector<CandidateStop> find_candidate_stops(
         float lat,
         float lon,
-        float max_radius_meters = BoundedAStarRouter::DEFAULT_MAX_RADIUS_METERS,
-        uint16_t required_flags = 0,
-        size_t max_results = 16) const noexcept;
+        float max_radius_meters,
+        uint16_t required_flags,
+        size_t max_results,
+        const derivee::climate::MicroClimateConfig& microclimate) const noexcept;
 
     // State inspections
     [[nodiscard]] bool is_loaded() const noexcept { return is_loaded_; }
@@ -147,9 +157,17 @@ public:
     [[nodiscard]] bool is_walk_graph_loaded() const noexcept;
     [[nodiscard]] size_t walk_nodes_count() const noexcept;
     [[nodiscard]] size_t walk_edges_count() const noexcept;
+
+    [[nodiscard]] inline DirectWalkResult compute_direct_walk(
+        float lat1, float lon1, float lat2, float lon2,
+        float max_distance_meters, uint16_t flags) const noexcept {
+        return compute_direct_walk(lat1, lon1, lat2, lon2, max_distance_meters, flags, derivee::climate::MicroClimateConfig{});
+    }
+
     [[nodiscard]] DirectWalkResult compute_direct_walk(
         float lat1, float lon1, float lat2, float lon2,
-        float max_distance_meters = 2000.0f, uint16_t flags = 0) const noexcept;
+        float max_distance_meters, uint16_t flags,
+        const derivee::climate::MicroClimateConfig& microclimate) const noexcept;
     [[nodiscard]] size_t registered_delays_count() const noexcept { return realtime_delays_.size(); }
     [[nodiscard]] size_t stops_count() const noexcept { return stops_.size(); }
     [[nodiscard]] size_t routes_count() const noexcept { return routes_.size(); }

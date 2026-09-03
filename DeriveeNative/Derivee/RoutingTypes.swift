@@ -38,6 +38,57 @@ public enum RoutingLocation: Sendable, Equatable, Hashable {
 
 // MARK: - Routing Options
 
+// MARK: - Micro-Climate & Thermal Comfort
+
+/// Thermal comfort routing modes optimizing for biometeorological exposure (PET model).
+public enum ThermalComfortMode: String, Sendable, CaseIterable, Identifiable, Equatable, Hashable {
+    case neutral = "neutral"
+    case summerShaded = "summer_shaded"
+    case winterSunlit = "winter_sunlit"
+    
+    public var id: String { rawValue }
+    
+    public var title: String {
+        switch self {
+        case .neutral: return "Standard"
+        case .summerShaded: return "Summer Shaded"
+        case .winterSunlit: return "Winter Sunlit"
+        }
+    }
+}
+
+/// Ambient micro-climate parameters for thermal comfort and solar radiation calculations.
+public struct MicroClimateConditions: Sendable, Equatable, Hashable {
+    public var ambientTemperatureCelsius: Double
+    public var relativeHumidity: Double // 0.0 - 1.0
+    public var windSpeedMps: Double
+    public var directIrradianceWm2: Double
+    public var customSolarAltitudeRad: Double?
+    public var customSolarAzimuthRad: Double?
+    
+    public init(
+        ambientTemperatureCelsius: Double = 28.0,
+        relativeHumidity: Double = 0.55,
+        windSpeedMps: Double = 1.5,
+        directIrradianceWm2: Double = 750.0,
+        customSolarAltitudeRad: Double? = nil,
+        customSolarAzimuthRad: Double? = nil
+    ) {
+        self.ambientTemperatureCelsius = ambientTemperatureCelsius
+        self.relativeHumidity = relativeHumidity
+        self.windSpeedMps = windSpeedMps
+        self.directIrradianceWm2 = directIrradianceWm2
+        self.customSolarAltitudeRad = customSolarAltitudeRad
+        self.customSolarAzimuthRad = customSolarAzimuthRad
+    }
+    
+    public static let standard = MicroClimateConditions()
+    public static let summerAfternoon = MicroClimateConditions(ambientTemperatureCelsius: 31.0, relativeHumidity: 0.60, windSpeedMps: 1.2, directIrradianceWm2: 850.0)
+    public static let winterMorning = MicroClimateConditions(ambientTemperatureCelsius: 4.0, relativeHumidity: 0.45, windSpeedMps: 2.5, directIrradianceWm2: 500.0)
+}
+
+// MARK: - Routing Options
+
 /// Configuration parameters governing RAPTOR and Range-RAPTOR pathfinding execution.
 public struct RoutingOptions: Sendable, Equatable {
     public var maxTransfers: UInt16
@@ -49,6 +100,8 @@ public struct RoutingOptions: Sendable, Equatable {
     public var stochasticHorizonSeconds: UInt32
     public var samplingStepSeconds: UInt32
     public var maxCandidateStops: Int
+    public var thermalComfortMode: ThermalComfortMode
+    public var microClimate: MicroClimateConditions?
     
     public init(
         maxTransfers: UInt16 = 4,
@@ -59,7 +112,9 @@ public struct RoutingOptions: Sendable, Equatable {
         includeDirectWalk: Bool = true,
         stochasticHorizonSeconds: UInt32 = 2700, // 45 min
         samplingStepSeconds: UInt32 = 60,
-        maxCandidateStops: Int = 8
+        maxCandidateStops: Int = 8,
+        thermalComfortMode: ThermalComfortMode = .neutral,
+        microClimate: MicroClimateConditions? = nil
     ) {
         self.maxTransfers = maxTransfers
         self.departureWindowSeconds = departureWindowSeconds
@@ -70,6 +125,8 @@ public struct RoutingOptions: Sendable, Equatable {
         self.stochasticHorizonSeconds = stochasticHorizonSeconds
         self.samplingStepSeconds = samplingStepSeconds
         self.maxCandidateStops = maxCandidateStops
+        self.thermalComfortMode = thermalComfortMode
+        self.microClimate = microClimate
     }
     
     public static let `default` = RoutingOptions()
@@ -78,6 +135,16 @@ public struct RoutingOptions: Sendable, Equatable {
         maxWalkDistanceMeters: 800,
         walkingSpeedMps: 1.1,
         flags: 1 << 0 // ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE
+    )
+    
+    public static let summerShaded = RoutingOptions(
+        thermalComfortMode: .summerShaded,
+        microClimate: .summerAfternoon
+    )
+    
+    public static let winterSunlit = RoutingOptions(
+        thermalComfortMode: .winterSunlit,
+        microClimate: .winterMorning
     )
 }
 

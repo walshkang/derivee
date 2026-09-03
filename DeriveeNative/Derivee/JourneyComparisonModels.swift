@@ -10,6 +10,8 @@ public enum RoutingProfile: String, CaseIterable, Identifiable, Sendable, Equata
     case fewestTransfers = "fewest_transfers"
     case stepFree = "step_free"
     case multiModalBikeRail = "bike_rail"
+    case summerShaded = "summer_shaded"
+    case winterSunlit = "winter_sunlit"
     
     public var id: String { rawValue }
     
@@ -25,6 +27,10 @@ public enum RoutingProfile: String, CaseIterable, Identifiable, Sendable, Equata
             return "Step-Free"
         case .multiModalBikeRail:
             return "Bike + Rail"
+        case .summerShaded:
+            return "Shaded Walk"
+        case .winterSunlit:
+            return "Sunlit Walk"
         }
     }
     
@@ -40,6 +46,10 @@ public enum RoutingProfile: String, CaseIterable, Identifiable, Sendable, Equata
             return "ACCESSIBLE"
         case .multiModalBikeRail:
             return "BIKE+RAIL"
+        case .summerShaded:
+            return "SHADED"
+        case .winterSunlit:
+            return "SUNLIT"
         }
     }
     
@@ -55,6 +65,10 @@ public enum RoutingProfile: String, CaseIterable, Identifiable, Sendable, Equata
             return "figure.roll"
         case .multiModalBikeRail:
             return "bicycle"
+        case .summerShaded:
+            return "tree.fill"
+        case .winterSunlit:
+            return "sun.max.fill"
         }
     }
     
@@ -70,6 +84,10 @@ public enum RoutingProfile: String, CaseIterable, Identifiable, Sendable, Equata
             return "Elevators, ramps & accessible platforms"
         case .multiModalBikeRail:
             return "Combines Citi Bike/GBFS with rapid transit"
+        case .summerShaded:
+            return "Maximizes tree canopy & building shade to reduce heat stress"
+        case .winterSunlit:
+            return "Maximizes direct solar exposure in cold weather"
         }
     }
 }
@@ -293,6 +311,9 @@ public struct JourneyLeg: Identifiable, Sendable, Equatable, Hashable {
     public let landmarkCue: String?
     public let exitCode: String?
     public let recommendedCarPosition: String?
+    public let shadePercentage: Float?
+    public let petIndexCelsius: Float?
+    public let thermalComfortSummary: String?
     
     public init(
         id: UUID = UUID(),
@@ -313,7 +334,10 @@ public struct JourneyLeg: Identifiable, Sendable, Equatable, Hashable {
         isTransferWalk: Bool = false,
         landmarkCue: String? = nil,
         exitCode: String? = nil,
-        recommendedCarPosition: String? = nil
+        recommendedCarPosition: String? = nil,
+        shadePercentage: Float? = nil,
+        petIndexCelsius: Float? = nil,
+        thermalComfortSummary: String? = nil
     ) {
         self.id = id
         self.mode = mode
@@ -334,6 +358,9 @@ public struct JourneyLeg: Identifiable, Sendable, Equatable, Hashable {
         self.landmarkCue = landmarkCue
         self.exitCode = exitCode
         self.recommendedCarPosition = recommendedCarPosition
+        self.shadePercentage = shadePercentage
+        self.petIndexCelsius = petIndexCelsius
+        self.thermalComfortSummary = thermalComfortSummary
     }
     
     public var formattedDuration: String {
@@ -376,6 +403,9 @@ public struct JourneyItinerary: Identifiable, Sendable, Equatable, Hashable {
     public let legs: [JourneyLeg]
     public let disruptions: [JourneyDisruption]
     public let confidenceTier: GTFSRealtimeConfidenceTier
+    public let averageShadePercentage: Float?
+    public let averagePetIndexCelsius: Float?
+    public let thermalComfortSavingsText: String?
     
     public init(
         id: UUID = UUID(),
@@ -390,7 +420,10 @@ public struct JourneyItinerary: Identifiable, Sendable, Equatable, Hashable {
         disruptions: [JourneyDisruption] = [],
         confidenceTier: GTFSRealtimeConfidenceTier = .verified,
         caloriesBurned: Int? = nil,
-        elevationGainMeters: Int = 0
+        elevationGainMeters: Int = 0,
+        averageShadePercentage: Float? = nil,
+        averagePetIndexCelsius: Float? = nil,
+        thermalComfortSavingsText: String? = nil
     ) {
         self.id = id
         self.profile = profile
@@ -448,6 +481,44 @@ public struct JourneyItinerary: Identifiable, Sendable, Equatable, Hashable {
             let bikeKm = Double(bikeDist) / 1000.0
             self.caloriesBurned = Int(walkKm * 65.0 + bikeKm * 35.0)
         }
+        
+        if let avgShade = averageShadePercentage {
+            self.averageShadePercentage = avgShade
+        } else {
+            var totalShadedDist: Double = 0.0
+            var totalWalkingDist: Double = 0.0
+            for leg in legs where leg.mode == .walk {
+                if let shade = leg.shadePercentage {
+                    totalShadedDist += Double(leg.distanceMeters) * Double(shade) * 0.01
+                    totalWalkingDist += Double(leg.distanceMeters)
+                }
+            }
+            if totalWalkingDist > 0 {
+                self.averageShadePercentage = Float((totalShadedDist / totalWalkingDist) * 100.0)
+            } else {
+                self.averageShadePercentage = nil
+            }
+        }
+        
+        if let avgPet = averagePetIndexCelsius {
+            self.averagePetIndexCelsius = avgPet
+        } else {
+            var weightedPetSum: Double = 0.0
+            var totalWalkingDist: Double = 0.0
+            for leg in legs where leg.mode == .walk {
+                if let pet = leg.petIndexCelsius {
+                    weightedPetSum += Double(leg.distanceMeters) * Double(pet)
+                    totalWalkingDist += Double(leg.distanceMeters)
+                }
+            }
+            if totalWalkingDist > 0 {
+                self.averagePetIndexCelsius = Float(weightedPetSum / totalWalkingDist)
+            } else {
+                self.averagePetIndexCelsius = nil
+            }
+        }
+        
+        self.thermalComfortSavingsText = thermalComfortSavingsText
     }
     
     // MARK: - Formatting Helpers

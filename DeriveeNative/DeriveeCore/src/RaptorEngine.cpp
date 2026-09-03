@@ -159,8 +159,9 @@ size_t RaptorEngine::walk_edges_count() const noexcept {
 
 DirectWalkResult RaptorEngine::compute_direct_walk(
     float lat1, float lon1, float lat2, float lon2,
-    float max_distance_meters, uint16_t flags) const noexcept {
-    return walk_router_.compute_direct_walk(lat1, lon1, lat2, lon2, max_distance_meters, flags);
+    float max_distance_meters, uint16_t flags,
+    const derivee::climate::MicroClimateConfig& microclimate) const noexcept {
+    return walk_router_.compute_direct_walk(lat1, lon1, lat2, lon2, max_distance_meters, flags, microclimate);
 }
 
 void RaptorEngine::update_realtime_delay(uint32_t trip_id, int32_t delay_seconds) noexcept {
@@ -905,10 +906,11 @@ std::vector<CandidateStop> RaptorEngine::find_candidate_stops(
     float lon,
     float max_radius_meters,
     uint16_t required_flags,
-    size_t max_results) const noexcept {
+    size_t max_results,
+    const derivee::climate::MicroClimateConfig& microclimate) const noexcept {
     if (walk_router_.is_walk_graph_loaded()) {
         return walk_router_.find_reachable_stops(
-            lat, lon, max_radius_meters, required_flags, max_results);
+            lat, lon, max_radius_meters, required_flags, max_results, microclimate);
     }
     return BoundedAStarRouter::find_candidate_stops(
         stops_, lat, lon, max_radius_meters, required_flags, max_results);
