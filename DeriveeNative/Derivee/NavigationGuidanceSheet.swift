@@ -12,6 +12,7 @@ public struct NavigationGuidanceSheet: View {
     public var alternatives: [JourneyItinerary]
     public var navigationSession: ActiveWalkingNavigationSession?
     public var cyclingSession: ActiveCyclingNavigationSession?
+    public var navigationManager: MultimodalTripNavigationManager?
     
     @Binding public var selectedDetent: PresentationDetent
     @State public var currentLegIndex: Int
@@ -29,6 +30,7 @@ public struct NavigationGuidanceSheet: View {
         initialLegIndex: Int = 0,
         navigationSession: ActiveWalkingNavigationSession? = nil,
         cyclingSession: ActiveCyclingNavigationSession? = nil,
+        navigationManager: MultimodalTripNavigationManager? = nil,
         onSelectAlternative: ((JourneyItinerary) -> Void)? = nil,
         onFocusLeg: ((JourneyLeg) -> Void)? = nil,
         onUnlockBike: ((JourneyLeg) -> Void)? = nil,
@@ -41,6 +43,7 @@ public struct NavigationGuidanceSheet: View {
         self._currentLegIndex = State(initialValue: initialLegIndex)
         self.navigationSession = navigationSession
         self.cyclingSession = cyclingSession
+        self.navigationManager = navigationManager
         self.onSelectAlternative = onSelectAlternative
         self.onFocusLeg = onFocusLeg
         self.onUnlockBike = onUnlockBike
@@ -115,6 +118,7 @@ public struct NavigationGuidanceSheet: View {
                     totalDurationFormatted: itinerary.formattedDuration,
                     arrivalTimeFormatted: itinerary.formattedArrivalTime,
                     naturalCue: activeNaturalCue,
+                    recoveryPlan: navigationManager?.activeRecoveryPlan,
                     onExpandToHalf: {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                             selectedDetent = NavigationSheetDetent.half.presentationDetent
@@ -122,6 +126,9 @@ public struct NavigationGuidanceSheet: View {
                     },
                     onQuickAction: {
                         handlePrimaryAction()
+                    },
+                    onAcceptRecoveryOption: { option in
+                        navigationManager?.acceptRecoveryOption(option)
                     }
                 )
             }
@@ -148,9 +155,23 @@ public struct NavigationGuidanceSheet: View {
             
             // Scrollable Step Timeline
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(itinerary.legs.enumerated()), id: \.element.id) { index, leg in
-                        legTimelineRow(leg: leg, index: index, isLast: index == itinerary.legs.count - 1)
+                VStack(alignment: .leading, spacing: 12) {
+                    if let plan = navigationManager?.activeRecoveryPlan {
+                        DynamicRecoveryCardView(
+                            plan: plan,
+                            onAcceptOption: { option in
+                                navigationManager?.acceptRecoveryOption(option)
+                            },
+                            onDismiss: {
+                                navigationManager?.dismissRecoveryPlan()
+                            }
+                        )
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(itinerary.legs.enumerated()), id: \.element.id) { index, leg in
+                            legTimelineRow(leg: leg, index: index, isLast: index == itinerary.legs.count - 1)
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -215,6 +236,21 @@ public struct NavigationGuidanceSheet: View {
             // Alternatives List
             ScrollView {
                 VStack(spacing: 12) {
+                    if let plan = navigationManager?.activeRecoveryPlan {
+                        DynamicRecoveryCardView(
+                            plan: plan,
+                            onAcceptOption: { option in
+                                navigationManager?.acceptRecoveryOption(option)
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    selectedDetent = NavigationSheetDetent.half.presentationDetent
+                                }
+                            },
+                            onDismiss: {
+                                navigationManager?.dismissRecoveryPlan()
+                            }
+                        )
+                    }
+                    
                     if !alternatives.isEmpty {
                         ForEach(alternatives) { alt in
                             RouteComparisonCardView(

@@ -35,6 +35,7 @@ struct ContentView: View {
     @State private var activeNavigationItinerary: JourneyItinerary? = nil
     @State private var activeNavigationSession: ActiveWalkingNavigationSession? = nil
     @State private var activeCyclingSession: ActiveCyclingNavigationSession? = nil
+    @State private var navigationManager = MultimodalTripNavigationManager.shared
     @State private var showNavigationSheet: Bool = false
     @State private var navigationDetent: PresentationDetent = NavigationSheetDetent.half.presentationDetent
     
@@ -229,6 +230,7 @@ struct ContentView: View {
                         cityDetectionService.evaluateLocation(loc)
                         activeNavigationSession?.updateUserLocation(loc.coordinate, horizontalAccuracy: loc.horizontalAccuracy)
                         activeCyclingSession?.updateUserLocation(loc.coordinate, horizontalAccuracy: loc.horizontalAccuracy)
+                        navigationManager.updateUserLocation(loc)
                     }
                     if showNearbyBusesLens {
                         scanNearbyBuses()
@@ -288,23 +290,30 @@ struct ContentView: View {
                             .presentationContentInteraction(.scrolls)
                     }
                 }
+                .onChange(of: activeNavigationItinerary) { _, newItin in
+                    if let itin = newItin {
+                        navigationManager.startTripNavigation(itinerary: itin)
+                    }
+                }
                 .sheet(isPresented: Binding(
-                    get: { showNavigationSheet && activeNavigationItinerary != nil },
+                    get: { showNavigationSheet && (activeNavigationItinerary != nil || navigationManager.isNavigating) },
                     set: { newValue in
                         showNavigationSheet = newValue
                         if !newValue {
                             activeNavigationItinerary = nil
                             activeNavigationSession = nil
                             activeCyclingSession = nil
+                            navigationManager.endNavigation()
                         }
                     }
                 )) {
-                    if let itinerary = activeNavigationItinerary {
+                    if let itinerary = activeNavigationItinerary ?? navigationManager.itinerary {
                         NavigationGuidanceSheet(
                             itinerary: itinerary,
                             selectedDetent: $navigationDetent,
-                            navigationSession: activeNavigationSession,
-                            cyclingSession: activeCyclingSession,
+                            navigationSession: navigationManager.walkingSession ?? activeNavigationSession,
+                            cyclingSession: navigationManager.cyclingSession ?? activeCyclingSession,
+                            navigationManager: navigationManager,
                             onFocusLeg: { leg in
                                 isMapCentered = false
                             },
@@ -313,6 +322,7 @@ struct ContentView: View {
                                 activeNavigationItinerary = nil
                                 activeNavigationSession = nil
                                 activeCyclingSession = nil
+                                navigationManager.endNavigation()
                             }
                         )
                     }
@@ -349,17 +359,28 @@ struct ContentView: View {
                     .presentationContentInteraction(.scrolls)
                 }
                 .onOpenURL { url in
-                    guard url.scheme == "derivee" && url.host == "progress" else { return }
-                    showStatsView = false
-                    showTransitSheet = false
-                    isMapCentered = true
-                    recenterTrigger.toggle()
-                    
-                    glowScale = 1.0
-                    glowOpacity = 0.8
-                    withAnimation(.easeOut(duration: 1.5)) {
-                        glowScale = 4.0
-                        glowOpacity = 0.0
+                    guard url.scheme == "derivee" else { return }
+                    if url.host == "progress" {
+                        showStatsView = false
+                        showTransitSheet = false
+                        isMapCentered = true
+                        recenterTrigger.toggle()
+                        
+                        glowScale = 1.0
+                        glowOpacity = 0.8
+                        withAnimation(.easeOut(duration: 1.5)) {
+                            glowScale = 4.0
+                            glowOpacity = 0.0
+                        }
+                    } else if url.host == "navigation" {
+                        showStatsView = false
+                        showTransitSheet = false
+                        if activeNavigationItinerary != nil || navigationManager.isNavigating {
+                            showNavigationSheet = true
+                            navigationDetent = NavigationSheetDetent.half.presentationDetent
+                            isMapCentered = true
+                            recenterTrigger.toggle()
+                        }
                     }
                 }
             }

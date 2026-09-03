@@ -8,26 +8,110 @@ public struct NavigationCollapsedPeekView: View {
     public let totalDurationFormatted: String
     public let arrivalTimeFormatted: String
     public var naturalCue: NaturalGuidanceCue?
+    public var recoveryPlan: DynamicRecoveryPlan?
     public var onExpandToHalf: (() -> Void)?
     public var onQuickAction: (() -> Void)?
+    public var onAcceptRecoveryOption: ((DynamicRecoveryOption) -> Void)?
     
     public init(
         leg: JourneyLeg,
         totalDurationFormatted: String,
         arrivalTimeFormatted: String,
         naturalCue: NaturalGuidanceCue? = nil,
+        recoveryPlan: DynamicRecoveryPlan? = nil,
         onExpandToHalf: (() -> Void)? = nil,
-        onQuickAction: (() -> Void)? = nil
+        onQuickAction: (() -> Void)? = nil,
+        onAcceptRecoveryOption: ((DynamicRecoveryOption) -> Void)? = nil
     ) {
         self.leg = leg
         self.totalDurationFormatted = totalDurationFormatted
         self.arrivalTimeFormatted = arrivalTimeFormatted
         self.naturalCue = naturalCue
+        self.recoveryPlan = recoveryPlan
         self.onExpandToHalf = onExpandToHalf
         self.onQuickAction = onQuickAction
+        self.onAcceptRecoveryOption = onAcceptRecoveryOption
     }
     
     public var body: some View {
+        if let plan = recoveryPlan {
+            recoveryPeekView(plan)
+        } else {
+            standardPeekView
+        }
+    }
+    
+    // MARK: - Recovery Alert Peek View
+    
+    @ViewBuilder
+    private func recoveryPeekView(_ plan: DynamicRecoveryPlan) -> some View {
+        Button {
+            onExpandToHalf?()
+        } label: {
+            HStack(spacing: 12) {
+                // Amber Warning Icon
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: "#FFB300").opacity(0.2))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(Color(hex: "#B45309"))
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Missed Connection")
+                            .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                            .foregroundColor(Color(hex: "#0F172A"))
+                        
+                        Text(plan.primaryOption.formattedDelta)
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#B45309"))
+                    }
+                    
+                    Text(plan.primaryOption.title)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(Color(hex: "#64748B"))
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                // 1-Tap Reroute Button
+                Button {
+                    let generator = UIImpactFeedbackGenerator(style: .heavy)
+                    generator.prepare()
+                    generator.impactOccurred()
+                    onAcceptRecoveryOption?(plan.primaryOption)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Reroute")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(Color(hex: "#0F172A"))
+                    .padding(.horizontal, 12)
+                    .frame(minWidth: 80, minHeight: 44)
+                    .background(Color(hex: "#FFB300"))
+                    .clipShape(Capsule())
+                    .shadow(color: Color(hex: "#FFB300").opacity(0.3), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Standard Peek View
+    
+    @ViewBuilder
+    private var standardPeekView: some View {
         Button {
             onExpandToHalf?()
         } label: {

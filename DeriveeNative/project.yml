@@ -118,6 +118,7 @@ targets:
     sources:
       - path: DeriveeWidget
       - path: Derivee/TrackingAttributes.swift
+      - path: Derivee/MultimodalTripAttributes.swift
       - path: Derivee/MilestoneModels.swift
       - path: Derivee/CrystallineAperture.swift
 
