@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CoreLocation
 
 // MARK: - Routing Profiles
 
@@ -256,6 +257,118 @@ public enum GBFSDockGatingRisk: String, Sendable, Equatable, Hashable {
             return Color(hex: "#EF4444") // Red
         }
     }
+    
+    public static func risk(forAvailableDocks docks: Int) -> GBFSDockGatingRisk {
+        if docks > 3 {
+            return .low
+        } else if docks >= 1 {
+            return .moderate
+        } else {
+            return .high
+        }
+    }
+}
+
+/// Urban cycling infrastructure classification based on Level of Traffic Stress (LTS) per Doc 14 Section 3.
+public enum CyclingInfrastructureType: String, Sendable, Codable, Equatable, Hashable {
+    case protectedBikeTrack = "protected_track" // LTS 1: Physically separated by curbs/bollards/parked cars
+    case greenway = "greenway"                 // LTS 1: Off-street multi-use path
+    case paintedLane = "painted_lane"          // LTS 2: Dedicated lane on quiet street
+    case arterialLane = "arterial_lane"        // LTS 3: Painted lane on multi-lane arterial
+    case sharedRoad = "shared_road"            // LTS 4: Mixed traffic / sharrows
+    
+    public var displayName: String {
+        switch self {
+        case .protectedBikeTrack: return "Protected Bike Track"
+        case .greenway: return "Off-Street Greenway"
+        case .paintedLane: return "Dedicated Bike Lane"
+        case .arterialLane: return "Arterial Bike Lane"
+        case .sharedRoad: return "Shared Roadway"
+        }
+    }
+    
+    public var badgeTitle: String {
+        switch self {
+        case .protectedBikeTrack: return "PROTECTED TRACK"
+        case .greenway: return "GREENWAY"
+        case .paintedLane: return "BIKE LANE"
+        case .arterialLane: return "ARTERIAL"
+        case .sharedRoad: return "SHARED"
+        }
+    }
+    
+    public var iconName: String {
+        switch self {
+        case .protectedBikeTrack: return "shield.lefthalf.filled"
+        case .greenway: return "leaf.fill"
+        case .paintedLane: return "bicycle"
+        case .arterialLane: return "road.lanes"
+        case .sharedRoad: return "car.2.fill"
+        }
+    }
+    
+    public var levelOfTrafficStress: Int {
+        switch self {
+        case .protectedBikeTrack, .greenway: return 1
+        case .paintedLane: return 2
+        case .arterialLane: return 3
+        case .sharedRoad: return 4
+        }
+    }
+    
+    public var badgeColor: Color {
+        switch self {
+        case .protectedBikeTrack, .greenway:
+            return Color(hex: "#059669") // Emerald
+        case .paintedLane:
+            return Color(hex: "#0284C7") // Sky Blue
+        case .arterialLane:
+            return Color(hex: "#D97706") // Amber
+        case .sharedRoad:
+            return Color(hex: "#DC2626") // Red
+        }
+    }
+}
+
+/// Directional maneuver for active cycling guidance (0.5s glance window).
+public enum CyclingManeuver: String, Sendable, Codable, Equatable, Hashable {
+    case straight = "straight"
+    case turnLeft = "turn_left"
+    case turnRight = "turn_right"
+    case slightLeft = "slight_left"
+    case slightRight = "slight_right"
+    case sharpLeft = "sharp_left"
+    case sharpRight = "sharp_right"
+    case uTurn = "u_turn"
+    case arriveAtDock = "arrive_dock"
+    
+    public var systemIcon: String {
+        switch self {
+        case .straight: return "arrow.up"
+        case .turnLeft: return "arrow.turn.up.left"
+        case .turnRight: return "arrow.turn.up.right"
+        case .slightLeft: return "arrow.up.left"
+        case .slightRight: return "arrow.up.right"
+        case .sharpLeft: return "arrow.left.to.line"
+        case .sharpRight: return "arrow.right.to.line"
+        case .uTurn: return "arrow.uturn.down"
+        case .arriveAtDock: return "bicycle.circle.fill"
+        }
+    }
+    
+    public var conciseVoicePrompt: String {
+        switch self {
+        case .straight: return "Continue straight"
+        case .turnLeft: return "Turn left"
+        case .turnRight: return "Turn right"
+        case .slightLeft: return "Bear left"
+        case .slightRight: return "Bear right"
+        case .sharpLeft: return "Sharp left"
+        case .sharpRight: return "Sharp right"
+        case .uTurn: return "Make a U-turn"
+        case .arriveAtDock: return "Arrive at dock station"
+        }
+    }
 }
 
 public struct BikeLegMetadata: Sendable, Equatable, Hashable {
@@ -268,6 +381,23 @@ public struct BikeLegMetadata: Sendable, Equatable, Hashable {
     public let estimatedRangeMiles: Double?
     public let dockGatingRisk: GBFSDockGatingRisk
     
+    // Wave N-D.7 Ergonomics & Fallback Extensions
+    public let fallbackStationName: String?
+    public let fallbackStationLatitude: Double?
+    public let fallbackStationLongitude: Double?
+    public let fallbackExtraWalkDistanceMeters: UInt32?
+    public let fallbackExtraWalkDurationSec: UInt32?
+    public let usableRangeRadiusMeters: Double?
+    public let isRangeDeficit: Bool
+    public let cyclingInfrastructureType: CyclingInfrastructureType
+    public let nextManeuver: CyclingManeuver
+    public let nextManeuverDistanceMeters: UInt32
+    
+    public var fallbackStationCoordinate: CLLocationCoordinate2D? {
+        guard let lat = fallbackStationLatitude, let lon = fallbackStationLongitude else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
+    
     public init(
         originStationName: String? = nil,
         destinationStationName: String? = nil,
@@ -275,8 +405,17 @@ public struct BikeLegMetadata: Sendable, Equatable, Hashable {
         availableDocksAtDest: Int = 8,
         isEBike: Bool = true,
         batterySocPercent: Int? = 85,
-        estimatedRangeMiles: Double? = 16.5,
-        dockGatingRisk: GBFSDockGatingRisk = .low
+        estimatedRangeMiles: Double? = nil,
+        dockGatingRisk: GBFSDockGatingRisk = .low,
+        fallbackStationName: String? = nil,
+        fallbackStationCoordinate: CLLocationCoordinate2D? = nil,
+        fallbackExtraWalkDistanceMeters: UInt32? = nil,
+        fallbackExtraWalkDurationSec: UInt32? = nil,
+        usableRangeRadiusMeters: Double? = nil,
+        isRangeDeficit: Bool = false,
+        cyclingInfrastructureType: CyclingInfrastructureType = .protectedBikeTrack,
+        nextManeuver: CyclingManeuver = .straight,
+        nextManeuverDistanceMeters: UInt32 = 150
     ) {
         self.originStationName = originStationName
         self.destinationStationName = destinationStationName
@@ -284,8 +423,21 @@ public struct BikeLegMetadata: Sendable, Equatable, Hashable {
         self.availableDocksAtDest = availableDocksAtDest
         self.isEBike = isEBike
         self.batterySocPercent = batterySocPercent
-        self.estimatedRangeMiles = estimatedRangeMiles
+        
+        let calculatedRange = estimatedRangeMiles ?? (batterySocPercent.map { Double($0) * 0.20 }) ?? 16.5
+        self.estimatedRangeMiles = calculatedRange
         self.dockGatingRisk = dockGatingRisk
+        
+        self.fallbackStationName = fallbackStationName
+        self.fallbackStationLatitude = fallbackStationCoordinate?.latitude
+        self.fallbackStationLongitude = fallbackStationCoordinate?.longitude
+        self.fallbackExtraWalkDistanceMeters = fallbackExtraWalkDistanceMeters
+        self.fallbackExtraWalkDurationSec = fallbackExtraWalkDurationSec
+        self.usableRangeRadiusMeters = usableRangeRadiusMeters ?? (calculatedRange * 1609.34)
+        self.isRangeDeficit = isRangeDeficit
+        self.cyclingInfrastructureType = cyclingInfrastructureType
+        self.nextManeuver = nextManeuver
+        self.nextManeuverDistanceMeters = nextManeuverDistanceMeters
     }
 }
 

@@ -34,6 +34,7 @@ struct ContentView: View {
     @State private var isReadyForToasts: Bool = false
     @State private var activeNavigationItinerary: JourneyItinerary? = nil
     @State private var activeNavigationSession: ActiveWalkingNavigationSession? = nil
+    @State private var activeCyclingSession: ActiveCyclingNavigationSession? = nil
     @State private var showNavigationSheet: Bool = false
     @State private var navigationDetent: PresentationDetent = NavigationSheetDetent.half.presentationDetent
     
@@ -227,6 +228,7 @@ struct ContentView: View {
                     if let loc = newLoc {
                         cityDetectionService.evaluateLocation(loc)
                         activeNavigationSession?.updateUserLocation(loc.coordinate, horizontalAccuracy: loc.horizontalAccuracy)
+                        activeCyclingSession?.updateUserLocation(loc.coordinate, horizontalAccuracy: loc.horizontalAccuracy)
                     }
                     if showNearbyBusesLens {
                         scanNearbyBuses()
@@ -293,6 +295,7 @@ struct ContentView: View {
                         if !newValue {
                             activeNavigationItinerary = nil
                             activeNavigationSession = nil
+                            activeCyclingSession = nil
                         }
                     }
                 )) {
@@ -301,6 +304,7 @@ struct ContentView: View {
                             itinerary: itinerary,
                             selectedDetent: $navigationDetent,
                             navigationSession: activeNavigationSession,
+                            cyclingSession: activeCyclingSession,
                             onFocusLeg: { leg in
                                 isMapCentered = false
                             },
@@ -308,6 +312,7 @@ struct ContentView: View {
                                 showNavigationSheet = false
                                 activeNavigationItinerary = nil
                                 activeNavigationSession = nil
+                                activeCyclingSession = nil
                             }
                         )
                     }

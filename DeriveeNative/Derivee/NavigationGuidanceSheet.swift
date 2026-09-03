@@ -11,6 +11,7 @@ public struct NavigationGuidanceSheet: View {
     public let itinerary: JourneyItinerary
     public var alternatives: [JourneyItinerary]
     public var navigationSession: ActiveWalkingNavigationSession?
+    public var cyclingSession: ActiveCyclingNavigationSession?
     
     @Binding public var selectedDetent: PresentationDetent
     @State public var currentLegIndex: Int
@@ -27,6 +28,7 @@ public struct NavigationGuidanceSheet: View {
         selectedDetent: Binding<PresentationDetent>,
         initialLegIndex: Int = 0,
         navigationSession: ActiveWalkingNavigationSession? = nil,
+        cyclingSession: ActiveCyclingNavigationSession? = nil,
         onSelectAlternative: ((JourneyItinerary) -> Void)? = nil,
         onFocusLeg: ((JourneyLeg) -> Void)? = nil,
         onUnlockBike: ((JourneyLeg) -> Void)? = nil,
@@ -38,6 +40,7 @@ public struct NavigationGuidanceSheet: View {
         self._selectedDetent = selectedDetent
         self._currentLegIndex = State(initialValue: initialLegIndex)
         self.navigationSession = navigationSession
+        self.cyclingSession = cyclingSession
         self.onSelectAlternative = onSelectAlternative
         self.onFocusLeg = onFocusLeg
         self.onUnlockBike = onUnlockBike
@@ -138,6 +141,11 @@ public struct NavigationGuidanceSheet: View {
             
             Divider()
             
+            // Dedicated High-Contrast Cycling HUD when active step is a bike leg
+            if let leg = activeLeg, (leg.mode == .bikeShare || leg.mode == .personalBike) {
+                cyclingHUDSection(for: leg)
+            }
+            
             // Scrollable Step Timeline
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -154,6 +162,44 @@ public struct NavigationGuidanceSheet: View {
             currentThumbActionBar
         }
         .background(Color.white)
+    }
+    
+    @ViewBuilder
+    private func cyclingHUDSection(for leg: JourneyLeg) -> some View {
+        let meta = leg.bikeMetadata
+        let session = cyclingSession
+        
+        CyclingHUDView(
+            maneuver: session?.currentManeuver ?? meta?.nextManeuver ?? .turnLeft,
+            distanceMeters: session?.currentDistanceMeters ?? meta?.nextManeuverDistanceMeters ?? 140,
+            streetName: session?.currentStreetName ?? leg.destinationName,
+            infrastructureType: session?.infrastructureType ?? meta?.cyclingInfrastructureType ?? .protectedBikeTrack,
+            destinationDockName: session?.destinationDockName ?? meta?.destinationStationName ?? leg.destinationName,
+            availableDocksAtDest: session?.availableDocksAtDest ?? meta?.availableDocksAtDest ?? 8,
+            batterySocPercent: session?.batterySocPercent ?? meta?.batterySocPercent,
+            estimatedRangeMiles: session?.estimatedRangeMiles ?? meta?.estimatedRangeMiles,
+            fallbackStationName: session?.fallbackStationName ?? meta?.fallbackStationName,
+            fallbackExtraWalkMeters: session?.fallbackExtraWalkMeters ?? meta?.fallbackExtraWalkDistanceMeters,
+            isHighContrastDark: true, // WCAG AAA Carbon Theme
+            onUnlockBike: {
+                onUnlockBike?(leg)
+            },
+            onSwitchToFallback: {
+                session?.switchToFallbackStation()
+            },
+            onAcceptAutoReroute: {
+                session?.acceptAutoReroute()
+            },
+            onReroute: {
+                onReroute?()
+            },
+            onEndRide: {
+                session?.endCycling()
+                onEndJourney?()
+            }
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
     
     // MARK: - 90% Detent: Full-Screen Expanded Alternatives View
@@ -623,24 +669,20 @@ public struct NavigationGuidanceSheet: View {
                 
                 if let meta = leg.bikeMetadata {
                     HStack(spacing: 8) {
-                        if meta.isEBike, let soc = meta.batterySocPercent {
-                            HStack(spacing: 3) {
-                                Image(systemName: "bolt.fill")
-                                    .font(.system(size: 10, weight: .bold))
-                                Text("\(soc)% battery")
-                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            }
-                            .foregroundColor(Color(hex: "#0284C7"))
-                        }
+                        DockAvailabilityBadgeView(
+                            availableDocks: meta.availableDocksAtDest,
+                            fallbackStationName: meta.fallbackStationName,
+                            isCompact: true
+                        )
                         
-                        Text(meta.dockGatingRisk.title)
-                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                            .foregroundColor(meta.dockGatingRisk.badgeColor)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(meta.dockGatingRisk.badgeColor.opacity(0.12))
-                            .clipShape(Capsule())
+                        if meta.isEBike, let soc = meta.batterySocPercent {
+                            EBikeBatterySOCPill(
+                                batterySocPercent: soc,
+                                estimatedRangeMiles: meta.estimatedRangeMiles
+                            )
+                        }
                     }
+                    .padding(.top, 2)
                 }
             }
         }

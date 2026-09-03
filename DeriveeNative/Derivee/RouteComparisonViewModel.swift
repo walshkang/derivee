@@ -321,8 +321,14 @@ public final class RouteComparisonViewModel {
             availableDocksAtDest: 12,
             isEBike: true,
             batterySocPercent: 92,
-            estimatedRangeMiles: 18.0,
-            dockGatingRisk: .low
+            estimatedRangeMiles: 18.4,
+            dockGatingRisk: .low,
+            fallbackStationName: "E 14th St & 3rd Ave",
+            fallbackExtraWalkDistanceMeters: 140,
+            fallbackExtraWalkDurationSec: 75,
+            cyclingInfrastructureType: .protectedBikeTrack,
+            nextManeuver: .turnLeft,
+            nextManeuverDistanceMeters: 180
         )
         
         let bikeRailLegs = [

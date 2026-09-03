@@ -338,25 +338,44 @@ public struct RouteLegDetailView: View {
                 }
                 
                 if let meta = leg.bikeMetadata {
-                    HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        // 3-Tier Dock Availability Badge
+                        DockAvailabilityBadgeView(
+                            availableDocks: meta.availableDocksAtDest,
+                            fallbackStationName: meta.fallbackStationName,
+                            isCompact: false
+                        )
+                        
+                        // E-Bike Battery SOC & Range Radius Gauge
                         if meta.isEBike, let soc = meta.batterySocPercent {
-                            HStack(spacing: 3) {
-                                Image(systemName: "bolt.fill")
-                                    .font(.system(size: 10, weight: .bold))
-                                Text("\(soc)% battery (\(String(format: "%.1f", meta.estimatedRangeMiles ?? 0)) mi)")
-                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            }
-                            .foregroundColor(Color(hex: "#0284C7"))
+                            EBikeBatterySOCOverlay(
+                                batterySocPercent: soc,
+                                legDistanceMeters: leg.distanceMeters,
+                                isCompact: true
+                            )
                         }
                         
-                        Text(meta.dockGatingRisk.title)
-                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                            .foregroundColor(meta.dockGatingRisk.badgeColor)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(meta.dockGatingRisk.badgeColor.opacity(0.12))
-                            .clipShape(Capsule())
+                        // Fallback pre-armed card if moderate risk
+                        if meta.dockGatingRisk == .moderate, let fallback = meta.fallbackStationName {
+                            PreArmedFallbackCard(
+                                primaryStationName: meta.destinationStationName ?? leg.destinationName,
+                                fallbackStationName: fallback,
+                                availableDocksAtFallback: 10,
+                                extraWalkDistanceMeters: meta.fallbackExtraWalkDistanceMeters ?? 160,
+                                extraWalkDurationSec: meta.fallbackExtraWalkDurationSec ?? 90,
+                                onSwitchToFallback: {}
+                            )
+                        } else if meta.dockGatingRisk == .high, let fallback = meta.fallbackStationName {
+                            DockOverflowAutoRerouteBanner(
+                                failedStationName: meta.destinationStationName ?? leg.destinationName,
+                                reroutedStationName: fallback,
+                                availableDocksAtReroute: 12,
+                                extraWalkMeters: meta.fallbackExtraWalkDistanceMeters ?? 180,
+                                onAcceptReroute: {}
+                            )
+                        }
                     }
+                    .padding(.top, 2)
                 }
             }
         }

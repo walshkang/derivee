@@ -113,14 +113,19 @@ public struct NavigationCollapsedPeekView: View {
                                 .font(.system(size: 11.5, weight: .semibold, design: .rounded))
                                 .foregroundColor(Color(hex: "#1E40AF"))
                                 .lineLimit(1)
-                        } else if let meta = leg.bikeMetadata, meta.isEBike, let soc = meta.batterySocPercent {
-                            HStack(spacing: 2) {
-                                Image(systemName: "bolt.fill")
-                                    .font(.system(size: 9, weight: .bold))
-                                Text("\(soc)% battery")
-                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        } else if let meta = leg.bikeMetadata {
+                            HStack(spacing: 6) {
+                                DockAvailabilityBadgeView(
+                                    availableDocks: meta.availableDocksAtDest,
+                                    isCompact: true
+                                )
+                                if meta.isEBike, let soc = meta.batterySocPercent {
+                                    EBikeBatterySOCPill(
+                                        batterySocPercent: soc,
+                                        estimatedRangeMiles: meta.estimatedRangeMiles
+                                    )
+                                }
                             }
-                            .foregroundColor(Color(hex: "#0284C7"))
                         } else {
                             Text("\(leg.formattedDuration) • \(totalDurationFormatted) total")
                                 .font(.system(size: 11.5, weight: .medium, design: .rounded))
@@ -134,21 +139,26 @@ public struct NavigationCollapsedPeekView: View {
                 // Compact Right-Anchored Thumb Action / Expand Affordance
                 if leg.mode == .bikeShare {
                     Button {
+                        let generator = UIImpactFeedbackGenerator(style: .heavy)
+                        generator.prepare()
+                        generator.impactOccurred()
                         onQuickAction?()
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 5) {
                             Image(systemName: "bicycle.circle.fill")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 13, weight: .bold))
                             Text("Unlock")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
                         }
                         .foregroundColor(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, 12)
+                        .frame(minWidth: 76, minHeight: 44)
                         .background(Color(hex: "#0284C7"))
                         .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
+                    .frame(minWidth: 56, minHeight: 56) // 56×56pt touch target floor (Doc 14)
+                    .contentShape(Rectangle())
                 } else {
                     Image(systemName: "chevron.up")
                         .font(.system(size: 13, weight: .bold))
@@ -209,6 +219,16 @@ public struct NavigationCollapsedPeekView: View {
             }
         } else if let routeId = leg.routeId {
             TransitRouteBadge(routeId: routeId, lineInfo: leg.lineInfo, size: .regular)
+        } else if (leg.mode == .bikeShare || leg.mode == .personalBike), let maneuver = leg.bikeMetadata?.nextManeuver {
+            ZStack {
+                Circle()
+                    .fill(badgeBackgroundColor)
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: maneuver.systemIcon)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(badgeForegroundColor)
+            }
         } else {
             ZStack {
                 Circle()
