@@ -264,6 +264,53 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **N-D.7** | **WND7-GBFS-DOCK-GATING-UI** | **Dynamic GBFS Dock Gating, E-Bike Battery SOC Overlays & Cycling Ergonomics:** Real-time 3-tier dock availability gating badges (>3 low risk, 1–2 moderate fallback pre-armed, 0 auto-reroute to nearest dock within 3m walk). E-bike state-of-charge (SOC %) overlays and usable range radiuses. Expanded 56×56pt touch targets and high-contrast WCAG AAA cycling HUD (0.5s glance window). | **M** | ✅ Done |
 | **N-D.8** | **WND8-LIVE-DYNAMIC-RECOVERY** | **Live Dynamic Recovery & Multimodal Live Activity / Dynamic Island:** Automated missed-connection detection via live GPS vs platform departure timestamps. Instant 1-tap recovery card suggesting alternate bus/bike/walk legs. Native iOS Live Activity and Dynamic Island trip progress tracking with transfer countdowns, step transitions, and subterranean exit guidance. | **M** | ✅ Done |
 
+### 🎯 Wave P: Transit UI Precision & Defect Remediation Sprint (Bugs 1–8)
+
+> [!IMPORTANT]
+> **Defect Remediation Focus:** Addresses the 8 high-priority functional and visual defects discovered during hands-on field testing. Prioritizes immediate correctness in the core departure matrix, arrival feeds, and sheet presentation without risking broader system instability.
+
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **P.1** | **WP1-TIMETABLE-ANCHOR** | **Wall-Clock Matrix Anchoring & Temporal Invalidation (Bugs 1 & 2):** (1) Replace `ScrollViewReader` with iOS 17 `.scrollPosition(id: $scrollPositionID, anchor: .top)` on `ScrollView` + `.scrollTargetLayout()` on `LazyVStack`. (2) Enforce deterministic row heights (56pt row, 36pt header). (3) Headless initial state assignment with `transaction.disablesAnimations = true` to prevent collision with modal presentation animations. (4) Encapsulate temporal status badges in `TimelineView(.explicit(dates))` (Doc 18) to advance past departures and move "NEXT" badge without parent timetable tree invalidation. (5) Sync current-hour highlight strictly to wall clock. | **M** | Planned |
+| **P.2** | **WP2-MATRIX-DECLUTTER** | **Departure Matrix De-clutter & Single-Anchor Imminence (Bug 3):** Strip live arrival countdowns, duplicate pills, and pulsing dots from the static 24-hour reference matrix (`DepartureMatrixView`). Limit live countdown treatment exclusively to a single imminent departure anchor pill per route direction. Keep all high-cadence countdowns isolated to the top `LiveArrivalsCarousel` in `TransitRevealSheet`. | **S** | Planned |
+| **P.3** | **WP3-EXPRESS-DESTINATIONS** | **Express Destination Resolution & Terminal Endpoints (Bug 4):** Replace hardcoded route destination switches in `TransitRealtimeService.resolveDestination` with dynamic terminal inference (Doc 16): evaluate non-SKIPPED stops in GTFS-RT `StopTimeUpdate` in reverse sequence to resolve short-turns, inspect `NyctStopTimeUpdate.actual_track IN ('2', '3', 'M')` to detect physical express routing, and format disambiguated labels (e.g., `4 to Woodlawn EXP`). | **S** | Planned |
+| **P.4** | **WP4-PREFIX-PARSING** | **Bus Stop Name Prefix Parsing Hardening (Bug 5):** In Go Observer (`gtfs_static.go`), isolate directional bus stop tokens (`NB`, `SB`, `EB`, `WB`) using boundary-aware regex (`\b(NB|SB|EB|WB)\b`) so directional tokens are classified as routing qualifiers instead of binding into numbered street tokens (e.g. preventing `"Kent Av & NB 6 St"`). | **XS** | Planned |
+| **P.5** | **WP5-TERMINUS-DWELL** | **Terminus Dwell Suppression & Anti-Ghost Movement (Bug 7):** Enforce terminal origin dwell anchor (Doc 17): when `is_assigned: true`, `stop_sequence <= 1`, and `status == STOPPED_AT`, clamp progress $\lambda \equiv 0.0$ and render `"At Terminus"` / `"Boarding"` instead of active `"x stops away"`. Flag `HOLDING_STATION` if departure is delayed $>120\text{s}$. | **S** | Planned |
+| **P.6** | **WP6-GLASS-CONTRAST** | **High-Contrast 3-Tier Glassmorphic Stack & Gesture Disambiguation (Bug 8):** (1) Replace bare `.ultraThinMaterial` in `.presentationBackground` with 3-tier compositing stack (Doc 18): `Color(uiColor: .systemBackground).opacity(0.84)` optical low-pass filter base + `.thickMaterial` diffusion + 0.5pt specular gradient border (>7.2:1 WCAG AAA contrast). (2) Apply `.presentationContentInteraction(.scrolls)` and `.presentationDragIndicator(.visible)` across all transit sub-sheets to eliminate gesture swallowing. | **S** | Planned |
+
+### 🏛️ Wave Q: Multi-Modal Complex Clustering & 2D Floorplans (Epic D & Bug 6)
+
+> [!NOTE]
+> **Station Architecture & Cartography:** Implements Research Docs 15, 16, and 20 to resolve fragmented station dots, unify heavy-rail subway with commuter rail (Penn/Moynihan, Grand Central, Atlantic Ave), serve departures in sub-0.10ms, and render continuous cross-scale transitions from 0D bullets to 2D floorplans without GPU stalls.
+
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **Q.1** | **WQ1-COMPLEX-SCHEMA** | **Station Complex Resolution Schema & Regional Hub Anchors (Doc 15 & 16):** (1) Add `complexes` and `stop_resolution` tables (`WITHOUT ROWID`) to `transit.sqlite`. (2) Ingest MTA `Stations.csv` / `Complexes.csv` and Regional Hub Anchors (Penn Station `600001`, Grand Central `600002`, Atlantic Ave `600003`). (3) Composite key mapping `(feed_id, stop_id)`. (4) Conflate OSM pedestrian concourse footprints with GTFS complex centroids within 400m. | **M** | Planned |
+| **Q.2** | **WQ2-SUB-MILLISECOND-ENGINE** | **Sub-0.10ms Clustered Complex Departure Engine (Doc 16):** (1) Materialize `realtime_departures` table clustered on `(complex_id, departure_time, feed_id, child_stop_id, trip_id)` declared `WITHOUT ROWID`. (2) Eliminate `USE TEMP B-TREE FOR ORDER BY` via leading-edge clustered index scan (40–70µs latency). (3) GRDB `ComplexDepartureService` with `PRAGMA mmap_size = 2147483648`, `PRAGMA locking_mode = EXCLUSIVE`, cached statements, and positional row parsing (`row[0]`). | **M** | Planned |
+| **Q.3** | **WQ3-MULTISCALE-TRANSITIONS** | **MapLibre Multi-Scale Station Transition (Bug 6 & Doc 20):** Continuous paint-property cross-dissolve across $z \in [15.0, 16.5]$ with zero Earcut re-triangulation. Station bullets contract & fade ($z \in [15.0, 16.0]$), 2D station footprints emerge ($z \in [15.2, 16.2]$), platform lines fade in ($z \in [15.5, 16.5]$), and exit portals emerge ($z \in [16.0, 16.5]$). Strict 7-layer Z-stack placing footprints/platforms below Fog and bullets/exits above Fog. | **M** | Planned |
+| **Q.4** | **WQ4-2D-FLOORPLAN-VIEWER** | **Discrete 2D Multi-Level Floorplan Viewer (Doc 15 & 20):** Implement runtime floor filtering using type-safe predicate `CAST(level, 'NSString')` on `MLNVectorStyleLayer` to prune inactive vertical storeys from Metal command encoding. Discrete Layer Portal Model supporting stairs/elevators spanning multiple levels (`levels = "-1;-2"`). Interactive floor stepper pill in `TransitRevealSheet`. | **S** | Planned |
+
+### ⚡ Wave R: Corridor Pulse & Kinematic Telemetry Engine (Epic C)
+
+> [!NOTE]
+> **Real-Time Kinematics & Regularity:** Implements Research Docs 17 and 19 to provide smooth, physically accurate vehicle tracking along tracks, Osuna-Newell excess wait analytics, TCQSM bunching detection, and GPU-accelerated MapLibre vehicle layers.
+
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **R.1** | **WR1-KINEMATIC-INTERPOLATOR** | **Subsurface Subway Kinematic Interpolator Core (Doc 17):** Implement `Derivee::Transit::SubwayPositionInterpolator` in C++20: orthogonal polyline projection onto `shapes.txt` line strings in conformal coordinates, R160/R142 traction trapezoidal velocity solver ($a=1.15, d=1.25\text{ m/s}^2$), $C^2$-continuous Quintic Hermite smootherstep fallback for compressed schedules, mid-tunnel approach clamp at $\lambda = 0.85$ during signal holds, and stale feed freezing (>90s). | **M** | Planned |
+| **R.2** | **WR2-CORRIDOR-REGULARITY** | **Corridor Pulse Regularity Analytics (Doc 19):** Implement `AnalyzeCorridorRegularity` in Go Observer: single-pass Welford algorithm for mean $\mu_h$, standard deviation $\sigma_h$, and coefficient of variation $CV_h$. TCQSM bunching ($h_i < 0.25 H_{\text{sched}}$) and gap ($h_i > 1.75 H_{\text{sched}}$) detection. Composite score $S_{\text{corridor}} \in [0, 100]$ and tri-tier status (Good, Gaps, Delayed) with $<1.0\text{ms}$ latency budget. | **M** | Planned |
+| **R.3** | **WR3-CORRIDOR-MAP-LAYERS** | **MapLibre Real-Time Vehicle & Bunching Layers (Doc 19):** Implement `CorridorPulseMapController` in Swift: decoupled `MLNShapeSource` for transient vehicle markers and bunching segments. `MLNLineStyleLayer` casing + dashed line for platooning segments, `MLNCircleStyleLayer` for vehicle tokens with selection halos, and `MLNSymbolStyleLayer` with `transit-bearing-arrow` for heading tracking. Background Protobuf parsing keeping main thread at 60–120 FPS. | **M** | Planned |
+
+### 📱 Wave S: Out-of-Process Tracking Intent & System Extensions (Epic B)
+
+> [!NOTE]
+> **iOS 18 System Integration:** Exposes ambient CoreLocation tracking to iOS system surfaces (Control Center, Action Button, Lock Screen, Shortcuts) via App Intents executable out-of-process.
+
+| Wave | Task ID | Title | Size | Status |
+|:---:|:---:|:---|:---:|:---:|
+| **S.1** | **WS1-TRACKING-APP-INTENT** | **`ToggleAmbientTrackingIntent` & App Intent Suite:** Implement `ToggleAmbientTrackingIntent` conforming to `AppIntent` and `AudioRecordingIntent`. Direct Darwin notification or shared `UserDefaults(suiteName:)` IPC to command `AmbientTrackingEngine` without cold-launching the full MapLibre/GRDB hierarchy. | **S** | Planned |
+| **S.2** | **WS2-CONTROL-WIDGETS** | **Control Center & Lock Screen Widget Extension:** Implement iOS 18 `ControlWidgetToggle` for Control Center and Action Button. State synchronization reflecting active tracking status and hex exploration metrics in real time. | **S** | Planned |
+
 ### 🔮 Wave O: MetalFogEngine & GPU Spatial Rendering Pipeline
 
 > [!NOTE]
