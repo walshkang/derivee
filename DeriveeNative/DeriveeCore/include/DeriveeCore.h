@@ -9,4 +9,5 @@
 #include "BoundedAStarRouter.hpp"
 #include "MicroClimateEnergyEvaluator.hpp"
 #include "RaptorEngine.hpp"
+#include "H3SpatialStructures.hpp"
 #endif

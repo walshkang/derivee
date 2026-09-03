@@ -8,6 +8,7 @@ module DeriveeCore {
     header "BoundedAStarRouter.hpp"
     header "MicroClimateEnergyEvaluator.hpp"
     header "RaptorEngine.hpp"
+    header "H3SpatialStructures.hpp"
     export *
     requires cplusplus
 }
