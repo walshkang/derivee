@@ -51,6 +51,7 @@ targets:
         NSSupportsLiveActivities: YES
         UIFileSharingEnabled: YES
         LSSupportsOpeningDocumentsInPlace: YES
+        CADisableMinimumFrameDurationOnPhone: YES
     dependencies:
       - target: DeriveeCore
       - package: swift-h3

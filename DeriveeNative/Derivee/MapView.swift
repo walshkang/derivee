@@ -49,6 +49,8 @@ struct MapView: UIViewRepresentable {
         mapView.compassView.image = ApertureCompassNeedle.makeNeedleImage()
         
         context.coordinator.mapView = mapView
+        context.coordinator.cameraSynchronizer.attach(mapView: mapView)
+        context.coordinator.cameraBridge.write(MapCameraState(mapView: mapView))
         context.coordinator.setupCompass()
         
         // Resume tracking if enabled
@@ -170,6 +172,16 @@ struct MapView: UIViewRepresentable {
         var isLurePulsed: Bool = false
         var isRollingBack: Bool = false
         
+        // MARK: - Wave O.1: High-Precision Camera Bridge & VSync Synchronizer
+        let cameraBridge = LockFreeCameraBridge()
+        lazy var cameraSynchronizer: VSyncCameraSynchronizer = {
+            let sync = VSyncCameraSynchronizer(cameraBridge: cameraBridge)
+            if let mv = self.mapView {
+                sync.attach(mapView: mv)
+            }
+            return sync
+        }()
+        
         init(_ parent: MapView) {
             self.parent = parent
             self.lastAppliedCitySlug = parent.spatialStore.activeCitySlug
@@ -227,6 +239,7 @@ struct MapView: UIViewRepresentable {
             let center = targetCenter ?? config.center.coordinate
             let zoom = targetZoom ?? config.center.defaultZoom
             mapView.setCenter(center, zoomLevel: zoom, animated: animated)
+            cameraBridge.write(MapCameraState(mapView: mapView))
             
             // 6. Reset transient state & animations
             lastTransientHexShape = nil
@@ -334,6 +347,7 @@ struct MapView: UIViewRepresentable {
         
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             isMapStyleLoaded = true
+            cameraBridge.write(MapCameraState(mapView: mapView))
             let busDot = generateDotImage()
             let subwayDiamond = generateDiamondImage()
             style.setImage(busDot, forName: "poi-bus-3")
@@ -422,8 +436,14 @@ struct MapView: UIViewRepresentable {
             }
         }
         
+        func mapViewRegionIsChanging(_ mapView: MLNMapView) {
+            let state = MapCameraState(mapView: mapView)
+            cameraBridge.write(state)
+        }
+        
         func mapView(_ mapView: MLNMapView, regionDidChangeWith reason: MLNCameraChangeReason, animated: Bool) {
             let currentCoord = mapView.centerCoordinate
+            cameraBridge.write(MapCameraState(mapView: mapView))
             
             // If the camera came to rest outside the active bounding envelope, trigger a smooth easeOut rollback
             if !CameraBounds.isWithinBounds(currentCoord) && !isRollingBack {
