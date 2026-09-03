@@ -12,10 +12,15 @@ struct DepartureMatrixView: View {
     let isObservedReplay: Bool
     let scheduleValidity: ScheduleValidity?
     
+    static let defaultRowHeight: CGFloat = 56.0
+    static let defaultHeaderHeight: CGFloat = 36.0
+    
     @Binding var selectedDirection: Int
     @Binding var selectedDayOffset: Int
     @State private var selectedRouteFilter: String = "ALL"
     @State private var isPulsing: Bool = false
+    @State private var scrollPositionID: Int?
+    @State private var isInitialized: Bool = false
     
     init(
         records: [SpatialDatabaseManager.HourScheduleRecord],
@@ -44,6 +49,12 @@ struct DepartureMatrixView: View {
         self.referenceDate = referenceDate
         self._selectedDirection = selectedDirection
         self._selectedDayOffset = selectedDayOffset
+        
+        let targetHour = (selectedDayOffset.wrappedValue == 0)
+            ? Calendar.current.component(.hour, from: referenceDate ?? Date())
+            : 0
+        self._scrollPositionID = State(initialValue: targetHour)
+        self._isInitialized = State(initialValue: true)
         
         if !effectiveDirs.contains(selectedDirection.wrappedValue), let firstAvailable = effectiveDirs.sorted().first {
             DispatchQueue.main.async {
@@ -284,14 +295,48 @@ struct DepartureMatrixView: View {
         filteredRecords.reduce(0) { $0 + $1.departures.count }
     }
     
-    var body: some View {
-        if let fixedDate = referenceDate {
-            matrixContent(for: fixedDate)
-        } else {
-            TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
-                matrixContent(for: timeline.date)
+    func resolveInitialScrollTarget(relativeTo referenceTime: Date = Date()) -> Int {
+        if selectedDayOffset != 0 {
+            return 0
+        }
+        let currentHour = Calendar.current.component(.hour, from: referenceTime)
+        return max(0, min(23, currentHour))
+    }
+    
+    var allTransitionDates: [Date] {
+        let calendar = Calendar.current
+        let base = referenceDate ?? Date()
+        let today = calendar.startOfDay(for: base)
+        var dates: [Date] = []
+        
+        // Hour boundaries (00:00 to 23:00)
+        for h in 0..<24 {
+            if let d = calendar.date(bySettingHour: h, minute: 0, second: 0, of: today) {
+                dates.append(d)
             }
         }
+        
+        // Scheduled departures
+        for hourRec in filteredRecords {
+            let h = hourRec.hourOfDay
+            for dep in hourRec.departures {
+                if let d = calendar.date(bySettingHour: h, minute: dep.minute, second: 0, of: today) {
+                    dates.append(d)
+                }
+            }
+        }
+        
+        // Live arrivals
+        for arr in liveArrivals {
+            dates.append(arr.arrivalDate)
+        }
+        
+        return Array(Set(dates)).sorted()
+    }
+    
+    var body: some View {
+        let baseDate = referenceDate ?? Date()
+        matrixContent(for: baseDate)
     }
     
     @ViewBuilder
@@ -420,7 +465,7 @@ struct DepartureMatrixView: View {
                         Spacer()
                     }
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .frame(height: Self.defaultHeaderHeight)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color.primary.opacity(0.04))
@@ -436,7 +481,7 @@ struct DepartureMatrixView: View {
                         Spacer()
                     }
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .frame(height: Self.defaultHeaderHeight)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color(hex: "#34C759").opacity(0.12))
@@ -462,43 +507,39 @@ struct DepartureMatrixView: View {
                             .foregroundColor(.secondary)
                             .clipShape(Capsule())
                     }
+                    .frame(height: Self.defaultHeaderHeight)
                 }
             }
             
             // Full 24-Hour Scrollable Matrix
-            ScrollViewReader { scrollProxy in
-                ScrollView(.vertical, showsIndicators: true) {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        let showRouteBadge = (selectedRouteFilter == "ALL" && routeIds.count > 1)
-                        ForEach(reconciled) { hourRec in
-                            HourRowView(
-                                hourRecord: hourRec,
-                                routeId: routeId,
-                                showRouteBadge: showRouteBadge,
-                                isPulsing: isPulsing,
-                                currentHour: selectedDayOffset == 0 ? currentHour : -1
-                            )
-                            .id(hourRec.hourOfDay)
-                            
-                            if hourRec.hourOfDay != 23 {
-                                Divider()
-                                    .opacity(0.4)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .scrollBounceBehavior(.basedOnSize)
-                .frame(maxHeight: 380)
-                .onAppear {
-                    // Scroll to current hour if today
-                    if selectedDayOffset == 0 {
-                        withAnimation {
-                            scrollProxy.scrollTo(max(0, currentHour - 1), anchor: .top)
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    let showRouteBadge = (selectedRouteFilter == "ALL" && routeIds.count > 1)
+                    ForEach(reconciled) { hourRec in
+                        HourRowView(
+                            hourRecord: hourRec,
+                            routeId: routeId,
+                            showRouteBadge: showRouteBadge,
+                            isPulsing: isPulsing,
+                            currentHour: selectedDayOffset == 0 ? currentHour : -1,
+                            allScheduleDates: allTransitionDates,
+                            isStatic: referenceDate != nil
+                        )
+                        .frame(height: Self.defaultRowHeight, alignment: .top)
+                        .id(hourRec.hourOfDay)
+                        
+                        if hourRec.hourOfDay != 23 {
+                            Divider()
+                                .opacity(0.4)
                         }
                     }
                 }
+                .padding(.vertical, 4)
+                .scrollTargetLayout()
             }
+            .scrollPosition(id: $scrollPositionID, anchor: .top)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: 380)
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 14)
@@ -535,6 +576,24 @@ struct DepartureMatrixView: View {
             
             // Legend Footer
             LegendFooterView(routeId: routeId)
+        }
+        .task {
+            guard !isInitialized else { return }
+            let initialTarget = resolveInitialScrollTarget(relativeTo: referenceDate ?? currentDate)
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                scrollPositionID = initialTarget
+            }
+            isInitialized = true
+        }
+        .onChange(of: selectedDayOffset) { _, newOffset in
+            let target = (newOffset == 0)
+                ? resolveInitialScrollTarget(relativeTo: referenceDate ?? currentDate)
+                : 0
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                scrollPositionID = target
+            }
         }
         .onAppear {
             autoSelectValidDirectionIfNeeded()
@@ -620,20 +679,31 @@ private struct HourRowView: View {
     let showRouteBadge: Bool
     let isPulsing: Bool
     let currentHour: Int
-    
-    private var isCurrentHour: Bool {
-        currentHour == hourRecord.hourOfDay
-    }
+    let allScheduleDates: [Date]
+    let isStatic: Bool
     
     var body: some View {
+        if isStatic {
+            rowContent(activeHour: currentHour)
+        } else {
+            TimelineView(.explicit(allScheduleDates)) { context in
+                let wallHour = Calendar.current.component(.hour, from: context.date)
+                rowContent(activeHour: wallHour)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func rowContent(activeHour: Int) -> some View {
+        let isCurrent = (activeHour == hourRecord.hourOfDay)
         HStack(alignment: .top, spacing: 12) {
             // Hour Label
             HStack(spacing: 2) {
                 Text(String(format: "%02d:00", hourRecord.hourOfDay))
-                    .font(.system(size: 13, weight: isCurrentHour ? .heavy : .medium, design: .monospaced))
-                    .foregroundColor(isCurrentHour ? Color(hex: "#FFB300") : .secondary)
+                    .font(.system(size: 13, weight: isCurrent ? .heavy : .medium, design: .monospaced))
+                    .foregroundColor(isCurrent ? Color(hex: "#FFB300") : .secondary)
                 
-                if isCurrentHour {
+                if isCurrent {
                     Circle()
                         .fill(Color(hex: "#FFB300"))
                         .frame(width: 4, height: 4)
@@ -656,7 +726,9 @@ private struct HourRowView: View {
                             hour: hourRecord.hourOfDay,
                             routeId: routeId,
                             showRouteBadge: showRouteBadge,
-                            isPulsing: isPulsing
+                            isPulsing: isPulsing,
+                            allScheduleDates: allScheduleDates,
+                            isStatic: isStatic
                         )
                     }
                 }
@@ -675,6 +747,8 @@ private struct DeparturePillView: View {
     let routeId: String
     let showRouteBadge: Bool
     let isPulsing: Bool
+    let allScheduleDates: [Date]
+    let isStatic: Bool
     
     private var routeInfo: TransitRouteData.LineInfo {
         TransitRouteData.lineInfo(for: pill.routeId)
@@ -692,40 +766,71 @@ private struct DeparturePillView: View {
         pill.scheduleRelationship == .duplicated
     }
     
-    private var effectiveOpacity: Double {
-        if isCanceled {
-            return 0.4
-        }
-        return pill.isPast ? 0.35 : 1.0
-    }
-    
-    private var strokeColor: Color {
-        if isCanceled {
-            return Color(hex: "#FF453A").opacity(0.4)
-        }
-        if pill.isHistoricalEvent {
-            let delay = pill.historicalDelaySeconds ?? 0
-            if delay <= 120 {
-                return Color(hex: "#34C759").opacity(0.8)
-            } else if delay <= 300 {
-                return Color(hex: "#FFB300").opacity(0.8)
-            } else {
-                return Color(hex: "#FF453A").opacity(0.8)
+    var body: some View {
+        if isStatic {
+            pillContent(isPast: pill.isPast, isNext: pill.isNextDeparture)
+        } else {
+            TimelineView(.explicit(allScheduleDates)) { context in
+                let (isPast, isNext) = evaluateStatus(at: context.date)
+                pillContent(isPast: isPast, isNext: isNext)
             }
         }
-        if pill.isNextDeparture {
-            return Color(hex: "#FFB300")
-        }
-        if pill.isFirstDeparture || pill.isLastDeparture {
-            return Color(hex: "#FFB300").opacity(pill.isPast ? 0.35 : 1.0)
-        }
-        if pill.isLive || isAdded {
-            return Color(hex: "#FFB300").opacity(pill.isPast ? 0.3 : 0.8)
-        }
-        return Color.primary.opacity(pill.isPast ? 0.04 : 0.08)
     }
     
-    var body: some View {
+    private func evaluateStatus(at refDate: Date) -> (isPast: Bool, isNext: Bool) {
+        if isCanceled {
+            return (false, false)
+        }
+        
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: refDate)
+        guard let scheduledDate = cal.date(bySettingHour: hour, minute: pill.minute, second: 0, of: today) else {
+            return (pill.isPast, pill.isNextDeparture)
+        }
+        
+        let effectiveDate: Date
+        if pill.isLive {
+            effectiveDate = scheduledDate.addingTimeInterval(Double(pill.delaySeconds ?? 0))
+        } else {
+            effectiveDate = scheduledDate
+        }
+        
+        let isPast = effectiveDate.timeIntervalSince(refDate) < -30.0
+        let futureDates = allScheduleDates.filter { $0.timeIntervalSince(refDate) >= -30.0 }
+        let isNext = !isPast && (futureDates.min() == effectiveDate)
+        
+        return (isPast, isNext)
+    }
+    
+    @ViewBuilder
+    private func pillContent(isPast: Bool, isNext: Bool) -> some View {
+        let effectiveOpacity: Double = isCanceled ? 0.4 : (isPast ? 0.35 : 1.0)
+        let strokeColor: Color = {
+            if isCanceled {
+                return Color(hex: "#FF453A").opacity(0.4)
+            }
+            if pill.isHistoricalEvent {
+                let delay = pill.historicalDelaySeconds ?? 0
+                if delay <= 120 {
+                    return Color(hex: "#34C759").opacity(0.8)
+                } else if delay <= 300 {
+                    return Color(hex: "#FFB300").opacity(0.8)
+                } else {
+                    return Color(hex: "#FF453A").opacity(0.8)
+                }
+            }
+            if isNext {
+                return Color(hex: "#FFB300")
+            }
+            if pill.isFirstDeparture || pill.isLastDeparture {
+                return Color(hex: "#FFB300").opacity(isPast ? 0.35 : 1.0)
+            }
+            if pill.isLive || isAdded {
+                return Color(hex: "#FFB300").opacity(isPast ? 0.3 : 0.8)
+            }
+            return Color.primary.opacity(isPast ? 0.04 : 0.08)
+        }()
+        
         HStack(spacing: 3) {
             // Route identifier bullet when multiple routes present
             if showRouteBadge {
@@ -757,18 +862,18 @@ private struct DeparturePillView: View {
             
             // Monospace Full Time (HH:mm)
             Text(String(format: "%02d:%02d", hour, pill.minute))
-                .font(.system(size: 11, weight: (isAdded || pill.isNextDeparture) ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
+                .font(.system(size: 11, weight: (isAdded || isNext) ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
                 .strikethrough(isCanceled, color: Color(hex: "#FF453A"))
                 .foregroundColor(
                     isCanceled ? Color(hex: "#FF453A") :
-                    (pill.isPast ? .secondary : (pill.isExpress ? Color(hex: routeInfo.textColorHex) : .primary))
+                    (isPast ? .secondary : (pill.isExpress ? Color(hex: routeInfo.textColorHex) : .primary))
                 )
             
             // Express Tag
             if pill.isExpress && !isCanceled {
                 Text("EXP")
                     .font(.system(size: 8, weight: .bold, design: .rounded))
-                    .foregroundColor(Color(hex: routeInfo.textColorHex).opacity(pill.isPast ? 0.5 : 0.9))
+                    .foregroundColor(Color(hex: routeInfo.textColorHex).opacity(isPast ? 0.5 : 0.9))
             }
         }
         .padding(.horizontal, pill.isExpress ? 7 : 6)
@@ -777,12 +882,12 @@ private struct DeparturePillView: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(
                     isCanceled ? Color(hex: "#FF453A").opacity(0.08) :
-                    (pill.isExpress ? (pill.isPast ? routeInfo.color.opacity(0.4) : routeInfo.color) : Color.primary.opacity(pill.isPast ? 0.03 : 0.06))
+                    (pill.isExpress ? (isPast ? routeInfo.color.opacity(0.4) : routeInfo.color) : Color.primary.opacity(isPast ? 0.03 : 0.06))
                 )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(strokeColor, lineWidth: (pill.isNextDeparture || pill.isFirstDeparture || pill.isLastDeparture || pill.isHistoricalEvent) ? 1.5 : 1)
+                .stroke(strokeColor, lineWidth: (isNext || pill.isFirstDeparture || pill.isLastDeparture || pill.isHistoricalEvent) ? 1.5 : 1)
         )
         .opacity(effectiveOpacity)
         .overlay(alignment: .topTrailing) {
@@ -795,7 +900,7 @@ private struct DeparturePillView: View {
                     .foregroundColor(.white)
                     .clipShape(Capsule())
                     .offset(x: 6, y: -6)
-            } else if pill.isNextDeparture {
+            } else if isNext {
                 Text("NEXT")
                     .font(.system(size: 7, weight: .bold, design: .rounded))
                     .padding(.horizontal, 3)

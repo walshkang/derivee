@@ -1591,5 +1591,90 @@ final class TransitRevealSheetTests: XCTestCase {
         vc.overrideUserInterfaceStyle = .light
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 375, height: 280)), precision: 0.98))
     }
+    
+    // MARK: - Wave P.1 Wall-Clock Matrix Anchoring & Temporal Invalidation Tests
+    
+    func testDepartureMatrixDeterministicDimensions() {
+        XCTAssertEqual(DepartureMatrixView.defaultRowHeight, 56.0, "Hour row height must be deterministically 56pt (Doc 18)")
+        XCTAssertEqual(DepartureMatrixView.defaultHeaderHeight, 36.0, "Timetable header height must be deterministically 36pt (Doc 18)")
+    }
+    
+    func testInitialScrollTargetResolutionHeadless() {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 9; comps.day = 3
+        comps.hour = 14; comps.minute = 44; comps.second = 0
+        let date1444 = calendar.date(from: comps)!
+        
+        let sampleHours = (0..<24).map { h in
+            SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+        
+        // Today (dayOffset = 0)
+        let viewToday = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_bedford",
+            selectedDayOffset: .constant(0),
+            referenceDate: date1444
+        )
+        let targetToday = viewToday.resolveInitialScrollTarget(relativeTo: date1444)
+        XCTAssertEqual(targetToday, 14, "Initial target for today must resolve to current wall-clock hour (14)")
+        
+        // Yesterday / Tomorrow (dayOffset != 0)
+        let viewOtherDay = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_bedford",
+            selectedDayOffset: .constant(1),
+            referenceDate: date1444
+        )
+        let targetOtherDay = viewOtherDay.resolveInitialScrollTarget(relativeTo: date1444)
+        XCTAssertEqual(targetOtherDay, 0, "Initial target for non-today must resolve to 00:00 (start of service day)")
+    }
+    
+    func testAllTransitionDatesExtraction() {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 9; comps.day = 3
+        comps.hour = 10; comps.minute = 0; comps.second = 0
+        let date1000 = calendar.date(from: comps)!
+        
+        let deps = [
+            SpatialDatabaseManager.DeparturePillRecord(id: "D1", tripId: "T1", routeId: "L", destination: "8th Ave", minute: 14),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D2", tripId: "T2", routeId: "L", destination: "8th Ave", minute: 31)
+        ]
+        let sampleHours = (0..<24).map { h in
+            if h == 10 { return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 10, departures: deps) }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+        
+        let liveArr = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8th Ave",
+            minutes: 5,
+            arrivalDate: date1000.addingTimeInterval(300)
+        )
+        
+        let view = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_bedford",
+            liveArrivals: [liveArr],
+            referenceDate: date1000
+        )
+        
+        let transitionDates = view.allTransitionDates
+        XCTAssertTrue(transitionDates.count >= 26, "Must contain all 24 hour boundaries plus scheduled departures and live arrivals")
+        
+        // Verify sorted ordering
+        for i in 0..<(transitionDates.count - 1) {
+            XCTAssertLessThanOrEqual(transitionDates[i], transitionDates[i + 1], "Transition dates must be strictly sorted")
+        }
+        
+        // Verify specific departure date is included
+        let expectedDep1 = calendar.date(bySettingHour: 10, minute: 14, second: 0, of: calendar.startOfDay(for: date1000))!
+        XCTAssertTrue(transitionDates.contains(expectedDep1), "Must include 10:14 scheduled departure timestamp")
+    }
 }
 
