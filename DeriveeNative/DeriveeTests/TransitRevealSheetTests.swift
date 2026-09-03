@@ -1676,5 +1676,117 @@ final class TransitRevealSheetTests: XCTestCase {
         let expectedDep1 = calendar.date(bySettingHour: 10, minute: 14, second: 0, of: calendar.startOfDay(for: date1000))!
         XCTAssertTrue(transitionDates.contains(expectedDep1), "Must include 10:14 scheduled departure timestamp")
     }
+    
+    // MARK: - Wave P.2 Declutter & Single Imminent Anchor Tests
+    
+    func testDepartureMatrixDeclutterSingleImminentAnchor() {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 9; comps.day = 3
+        comps.hour = 12; comps.minute = 10; comps.second = 0
+        let date1210 = calendar.date(from: comps)!
+        
+        let deps = [
+            SpatialDatabaseManager.DeparturePillRecord(id: "D1", tripId: "T1", routeId: "L", destination: "8th Ave", minute: 5),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D2", tripId: "T2", routeId: "L", destination: "8th Ave", minute: 15),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D3", tripId: "T3", routeId: "L", destination: "8th Ave", minute: 25),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D4", tripId: "T4", routeId: "L", destination: "8th Ave", minute: 35)
+        ]
+        let sampleHours = (0..<24).map { h in
+            if h == 12 { return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 12, departures: deps) }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+        
+        // Live arrivals for both D2 and D3
+        let live1 = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8th Ave",
+            minutes: 5,
+            arrivalDate: date1210.addingTimeInterval(300),
+            tripId: "T2"
+        )
+        let live2 = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8th Ave",
+            minutes: 15,
+            arrivalDate: date1210.addingTimeInterval(900),
+            tripId: "T3"
+        )
+        
+        let view = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_bedford",
+            liveArrivals: [live1, live2],
+            referenceDate: date1210
+        )
+        
+        let reconciled = view.reconciledRecords(at: date1210)
+        let hour12 = reconciled.first(where: { $0.hourOfDay == 12 })!
+        
+        // D1 should be marked as past
+        let d1 = hour12.departures.first(where: { $0.id == "D1" })!
+        XCTAssertTrue(d1.isPast)
+        XCTAssertFalse(d1.isNextDeparture)
+        
+        // D2 should be the SINGLE imminent anchor
+        let d2 = hour12.departures.first(where: { $0.id == "D2" })!
+        XCTAssertFalse(d2.isPast)
+        XCTAssertTrue(d2.isNextDeparture, "D2 at 12:15 must be flagged as the single imminent anchor")
+        XCTAssertTrue(d2.isImminentLive, "D2 must be flagged as imminent live anchor")
+        
+        // D3 is a future live departure but MUST NOT be marked as next or imminent live anchor in the 24-hr matrix
+        let d3 = hour12.departures.first(where: { $0.id == "D3" })!
+        XCTAssertFalse(d3.isPast)
+        XCTAssertTrue(d3.isLive, "D3 retains its live association")
+        XCTAssertFalse(d3.isNextDeparture, "D3 must NOT be flagged as next departure")
+        XCTAssertFalse(d3.isImminentLive, "D3 must NOT be flagged as imminent anchor pill")
+        
+        // Count total next departures across all 24 hours — must be exactly 1
+        let allNext = reconciled.flatMap { $0.departures }.filter { $0.isNextDeparture }
+        XCTAssertEqual(allNext.count, 1, "There must be exactly one imminent next departure anchor across the 24-hour matrix")
+    }
+    
+    func testDepartureMatrixDeduplication() {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 9; comps.day = 3
+        comps.hour = 14; comps.minute = 0; comps.second = 0
+        let date1400 = calendar.date(from: comps)!
+        
+        // Create duplicate departures at minute 15 for route L
+        let deps = [
+            SpatialDatabaseManager.DeparturePillRecord(id: "D_sched", tripId: "T_sched", routeId: "L", destination: "Canarsie", minute: 15),
+            SpatialDatabaseManager.DeparturePillRecord(id: "D_live", tripId: "T_live", routeId: "L", destination: "Canarsie", minute: 15)
+        ]
+        let sampleHours = (0..<24).map { h in
+            if h == 14 { return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 14, departures: deps) }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+        
+        let liveArr = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "Canarsie",
+            minutes: 15,
+            arrivalDate: date1400.addingTimeInterval(900),
+            tripId: "T_live"
+        )
+        
+        let view = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "L",
+            stopId: "stop_bedford",
+            liveArrivals: [liveArr],
+            referenceDate: date1400
+        )
+        
+        let reconciled = view.reconciledRecords(at: date1400)
+        let hour14 = reconciled.first(where: { $0.hourOfDay == 14 })!
+        
+        XCTAssertEqual(hour14.departures.count, 1, "Duplicate departures at (L, 15) must be deduplicated to 1 pill")
+        let merged = hour14.departures.first!
+        XCTAssertEqual(merged.minute, 15)
+        XCTAssertTrue(merged.isLive, "Merged pill should inherit live status from the matching departure")
+    }
 }
 

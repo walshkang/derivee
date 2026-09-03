@@ -18,7 +18,6 @@ struct DepartureMatrixView: View {
     @Binding var selectedDirection: Int
     @Binding var selectedDayOffset: Int
     @State private var selectedRouteFilter: String = "ALL"
-    @State private var isPulsing: Bool = false
     @State private var scrollPositionID: Int?
     @State private var isInitialized: Bool = false
     
@@ -143,11 +142,71 @@ struct DepartureMatrixView: View {
         return abs(signedMinuteDiff(from: t1, to: t2))
     }
     
+    /// Deduplicates departures in an hour row by (routeId, minute), merging attributes
+    private func deduplicateDepartures(_ departures: [SpatialDatabaseManager.DeparturePillRecord]) -> [SpatialDatabaseManager.DeparturePillRecord] {
+        var seen = [String: SpatialDatabaseManager.DeparturePillRecord]()
+        var orderedKeys: [String] = []
+        
+        for dep in departures {
+            let key = "\(dep.routeId.uppercased())_\(dep.minute)"
+            if let existing = seen[key] {
+                // Merge: prefer live matching, express, valid delay
+                var merged = existing
+                if dep.isLive && !existing.isLive {
+                    merged.isLive = true
+                    merged.liveDeltaMinutes = dep.liveDeltaMinutes
+                    merged.delaySeconds = dep.delaySeconds
+                    merged.isPast = dep.isPast
+                }
+                if dep.isExpress {
+                    merged = SpatialDatabaseManager.DeparturePillRecord(
+                        id: merged.id,
+                        tripId: merged.tripId,
+                        routeId: merged.routeId,
+                        destination: merged.destination,
+                        directionId: merged.directionId,
+                        minute: merged.minute,
+                        isExpress: true,
+                        isFirstDeparture: merged.isFirstDeparture || dep.isFirstDeparture,
+                        isLastDeparture: merged.isLastDeparture || dep.isLastDeparture,
+                        liveDeltaMinutes: merged.liveDeltaMinutes ?? dep.liveDeltaMinutes,
+                        delaySeconds: merged.delaySeconds ?? dep.delaySeconds,
+                        isLive: merged.isLive || dep.isLive,
+                        isPast: merged.isPast,
+                        isUnscheduled: merged.isUnscheduled || dep.isUnscheduled,
+                        isBoarding: merged.isBoarding || dep.isBoarding,
+                        isImminentLive: merged.isImminentLive || dep.isImminentLive,
+                        isNextDeparture: merged.isNextDeparture || dep.isNextDeparture,
+                        scheduleRelationship: merged.scheduleRelationship != .scheduled ? merged.scheduleRelationship : dep.scheduleRelationship,
+                        isHistoricalEvent: merged.isHistoricalEvent || dep.isHistoricalEvent,
+                        historicalDelaySeconds: merged.historicalDelaySeconds ?? dep.historicalDelaySeconds
+                    )
+                }
+                seen[key] = merged
+            } else {
+                seen[key] = dep
+                orderedKeys.append(key)
+            }
+        }
+        
+        return orderedKeys.compactMap { seen[$0] }.sorted { p1, p2 in
+            if p1.minute != p2.minute {
+                return p1.minute < p2.minute
+            }
+            return p1.id < p2.id
+        }
+    }
+    
     /// Reconciles static scheduled departures with active GTFS-RT arrivals at a given reference timestamp
     func reconciledRecords(at currentDate: Date) -> [SpatialDatabaseManager.HourScheduleRecord] {
-        // If not today (e.g. historical day or future day), return static/observed records directly
+        // If not today (e.g. historical day or future day), return static/observed records with deduplication
         if selectedDayOffset != 0 {
-            return filteredRecords
+            return filteredRecords.map { hourRec in
+                SpatialDatabaseManager.HourScheduleRecord(
+                    hourOfDay: hourRec.hourOfDay,
+                    departures: deduplicateDepartures(hourRec.departures)
+                )
+            }
         }
         
         let calendar = Calendar.current
@@ -158,10 +217,6 @@ struct DepartureMatrixView: View {
         let filteredLiveArrivals = (selectedRouteFilter == "ALL")
             ? liveArrivals
             : liveArrivals.filter { $0.line.uppercased() == selectedRouteFilter.uppercased() }
-        
-        let sortedLiveArrivals = filteredLiveArrivals.sorted { $0.minutes < $1.minutes }
-        let top2LiveIds = Set(sortedLiveArrivals.prefix(2).map { $0.id })
-        let imminentLiveIds = Set(sortedLiveArrivals.filter { $0.minutes <= 20 }.map { $0.id }).union(top2LiveIds)
         
         var matchedArrivalIds = Set<UUID>()
         var pillMatchMap: [String: SpatialDatabaseManager.ArrivalInfo] = [:]
@@ -242,7 +297,6 @@ struct DepartureMatrixView: View {
                         modPill.isLive = true
                         modPill.liveDeltaMinutes = matchedArrival.minutes
                         modPill.isBoarding = (matchedArrival.minutes == 0)
-                        modPill.isImminentLive = imminentLiveIds.contains(matchedArrival.id)
                         
                         let delayMin = signedMinuteDiff(from: tSched, to: tEst)
                         if delayMin >= 3 {
@@ -263,7 +317,12 @@ struct DepartureMatrixView: View {
             }
         }
         
-        // Find the single immediate upcoming departure across all 24 hours to tag with `isNextDeparture`
+        // Deduplicate departures within each hour row
+        for h in 0..<24 {
+            resultMap[h] = deduplicateDepartures(resultMap[h] ?? [])
+        }
+        
+        // Find the single immediate upcoming departure across all 24 hours to tag with `isNextDeparture` (single anchor)
         var foundNext = false
         for hOffset in 0..<24 {
             let h = (currentHour + hOffset) % 24
@@ -271,6 +330,7 @@ struct DepartureMatrixView: View {
                 for idx in deps.indices {
                     if !deps[idx].isPast && deps[idx].scheduleRelationship != .canceled {
                         resultMap[h]?[idx].isNextDeparture = true
+                        resultMap[h]?[idx].isImminentLive = deps[idx].isLive
                         foundNext = true
                         break
                     }
@@ -520,7 +580,6 @@ struct DepartureMatrixView: View {
                             hourRecord: hourRec,
                             routeId: routeId,
                             showRouteBadge: showRouteBadge,
-                            isPulsing: isPulsing,
                             currentHour: selectedDayOffset == 0 ? currentHour : -1,
                             allScheduleDates: allTransitionDates,
                             isStatic: referenceDate != nil
@@ -597,9 +656,6 @@ struct DepartureMatrixView: View {
         }
         .onAppear {
             autoSelectValidDirectionIfNeeded()
-            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                isPulsing = true
-            }
         }
         .onChange(of: availableDirections) { _, _ in
             autoSelectValidDirectionIfNeeded()
@@ -677,7 +733,6 @@ private struct HourRowView: View {
     let hourRecord: SpatialDatabaseManager.HourScheduleRecord
     let routeId: String
     let showRouteBadge: Bool
-    let isPulsing: Bool
     let currentHour: Int
     let allScheduleDates: [Date]
     let isStatic: Bool
@@ -726,7 +781,6 @@ private struct HourRowView: View {
                             hour: hourRecord.hourOfDay,
                             routeId: routeId,
                             showRouteBadge: showRouteBadge,
-                            isPulsing: isPulsing,
                             allScheduleDates: allScheduleDates,
                             isStatic: isStatic
                         )
@@ -746,7 +800,6 @@ private struct DeparturePillView: View {
     let hour: Int
     let routeId: String
     let showRouteBadge: Bool
-    let isPulsing: Bool
     let allScheduleDates: [Date]
     let isStatic: Bool
     
@@ -825,9 +878,6 @@ private struct DeparturePillView: View {
             if pill.isFirstDeparture || pill.isLastDeparture {
                 return Color(hex: "#FFB300").opacity(isPast ? 0.35 : 1.0)
             }
-            if pill.isLive || isAdded {
-                return Color(hex: "#FFB300").opacity(isPast ? 0.3 : 0.8)
-            }
             return Color.primary.opacity(isPast ? 0.04 : 0.08)
         }()
         
@@ -843,15 +893,6 @@ private struct DeparturePillView: View {
                     .clipShape(Capsule())
             }
             
-            // Live Pulsing Indicator Dot
-            if pill.isLive || isAdded {
-                Circle()
-                    .fill(isCanceled ? Color(hex: "#FF453A") : Color(hex: "#FFB300"))
-                    .frame(width: 5, height: 5)
-                    .opacity(isPulsing ? 1.0 : 0.25)
-                    .shadow(color: Color(hex: "#FFB300").opacity(0.8), radius: 2)
-            }
-            
             // Historical Status Dot
             if pill.isHistoricalEvent {
                 let delay = pill.historicalDelaySeconds ?? 0
@@ -862,7 +903,7 @@ private struct DeparturePillView: View {
             
             // Monospace Full Time (HH:mm)
             Text(String(format: "%02d:%02d", hour, pill.minute))
-                .font(.system(size: 11, weight: (isAdded || isNext) ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
+                .font(.system(size: 11, weight: isNext ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
                 .strikethrough(isCanceled, color: Color(hex: "#FF453A"))
                 .foregroundColor(
                     isCanceled ? Color(hex: "#FF453A") :
@@ -909,33 +950,6 @@ private struct DeparturePillView: View {
                     .foregroundColor(.black)
                     .clipShape(Capsule())
                     .offset(x: 4, y: -6)
-            } else if let delay = pill.delaySeconds, delay >= 180 {
-                Text("+\(delay / 60)m")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 1)
-                    .background(Color(hex: "#FF453A"))
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-                    .offset(x: 4, y: -6)
-            } else if isAdded {
-                Text("ADDED")
-                    .font(.system(size: 7, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 1)
-                    .background(Color(hex: "#FFB300"))
-                    .foregroundColor(.black)
-                    .clipShape(Capsule())
-                    .offset(x: 4, y: -6)
-            } else if isDuplicated {
-                Text("DUPLICATE")
-                    .font(.system(size: 7, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 1)
-                    .background(Color.secondary)
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-                    .offset(x: 6, y: -6)
             }
         }
     }
@@ -969,16 +983,6 @@ private struct LegendFooterView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // Live GTFS-RT
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color(hex: "#FFB300"))
-                        .frame(width: 6, height: 6)
-                    Text("Live •")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-                
                 // Next Indicator
                 HStack(spacing: 4) {
                     Text("NEXT")
@@ -989,19 +993,6 @@ private struct LegendFooterView: View {
                         .foregroundColor(.black)
                         .clipShape(Capsule())
                     Text("Next Departure")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-                
-                // Delay Badge
-                HStack(spacing: 4) {
-                    Text("+4m")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .padding(.horizontal, 3)
-                        .background(Color(hex: "#FF453A"))
-                        .foregroundColor(.white)
-                        .clipShape(Capsule())
-                    Text("Delay ≥3m")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
                 }
