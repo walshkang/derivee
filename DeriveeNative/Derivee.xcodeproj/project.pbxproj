@@ -52,6 +52,7 @@
 		2F00088B70FBEE9C97CC246D /* testDynamicRecoveryCardViewSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 25451BB9D752CF3F313D42EB /* testDynamicRecoveryCardViewSnapshot.1.png */; };
 		2F31058E6F4DEA3D3F19DC4F /* testMultiProfileSelectorBarSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 106F4D5BCA05F21F2EB63614 /* testMultiProfileSelectorBarSnapshot.1.png */; };
 		316309C1D7069CE90AB06ECC /* MultimodalTripAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D89EE5A7DAD4D46ED08472A6 /* MultimodalTripAttributes.swift */; };
+		31B31198007570D6D61FFEB8 /* MetalFogParityKernels.metal in Sources */ = {isa = PBXBuildFile; fileRef = C923F397D11F9F1F75F4BA1E /* MetalFogParityKernels.metal */; };
 		327375399AC87B0C9BBC32BA /* PhilosophyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A37CA71EE44E8BDD205124 /* PhilosophyView.swift */; };
 		32CF9FB47BBB967DF9716A0E /* AllMetrosSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E337CB7D265A18A879F950D7 /* AllMetrosSummaryTests.swift */; };
 		32D365721F5F07D5B1D87760 /* MultiCityStatsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CDC2268C92BB790DF209019 /* MultiCityStatsTests.swift */; };
@@ -87,6 +88,7 @@
 		525A3BC27582B37100FDA3F1 /* testRouteComparisonListViewSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = D8F4E8D656594B6F80422A02 /* testRouteComparisonListViewSnapshot.1.png */; };
 		52EC0C672587EF15590B6085 /* H3SpatialStructures.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 8C931E99318F1E0E15BA6BEB /* H3SpatialStructures.hpp */; settings = {ATTRIBUTES = (Public, ); }; };
 		537A0EEDC7F5E3E89A5052A7 /* AllMetrosModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A818AC294C5ADD0DAEF5D2 /* AllMetrosModels.swift */; };
+		537A4C23D85B4E63288AE72D /* MetalFogVisualParity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB22CB93A564F4C56034EA80 /* MetalFogVisualParity.swift */; };
 		53823255581031434CADF367 /* TimetableStructs.hpp in Headers */ = {isa = PBXBuildFile; fileRef = EC4FF27CBDA648976E2A66B8 /* TimetableStructs.hpp */; settings = {ATTRIBUTES = (Public, ); }; };
 		54781BE2738F848EF4AE1650 /* MultimodalTripNavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E88431DF1FC9075FDB42F7 /* MultimodalTripNavigationManager.swift */; };
 		54944FFAC6F68030C0915E70 /* NavigationDetentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5DF2255C339AE144F887C87 /* NavigationDetentTests.swift */; };
@@ -185,6 +187,7 @@
 		A6469CC3CDE5A3558B090348 /* TrackingLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C14A94454A0845801D4442 /* TrackingLiveActivity.swift */; };
 		A64B7ADC6D740C113EB25D78 /* DepartureMatrixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F6A53E84867BAE6EE1B6ACC /* DepartureMatrixView.swift */; };
 		A742900C5EBFB21344A45F66 /* NavigationCollapsedPeekView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13E90D2D7744C2A51BB9C5F /* NavigationCollapsedPeekView.swift */; };
+		A74653E07A0AECD4B937DE47 /* MetalFogTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A7E16E5F8650BB642578EC /* MetalFogTelemetry.swift */; };
 		A825909AB76BEA7ABCC21986 /* H3 in Frameworks */ = {isa = PBXBuildFile; productRef = 9406C642B57B83517386E129 /* H3 */; };
 		A85F93D50988DFBEBFA63E04 /* ConfidenceBandCanvasTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21288BAF48D59BC9981D3C23 /* ConfidenceBandCanvasTests.swift */; };
 		A86DBEE237C8A92E6EBEBF29 /* ULTRADataStore.hpp in Headers */ = {isa = PBXBuildFile; fileRef = D2D74FCE2FD2A3CF62EA38A6 /* ULTRADataStore.hpp */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -263,6 +266,7 @@
 		EC99202B32B67D833CB29CE7 /* SettingsDeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAC4FDF126FEEE06EED9D7A /* SettingsDeepLinkTests.swift */; };
 		ED7B5DDCDF7988DCA80CDD92 /* MicroClimateEvaluatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C98008ECBE517AE425D0BF /* MicroClimateEvaluatorTests.swift */; };
 		EFAA78991CC5DEBA8AB16540 /* ThumbZoneActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D03B0D1C9B13EE0D4C25FBC6 /* ThumbZoneActionBar.swift */; };
+		F0CE76CAC495C55E189137C0 /* MetalFogTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2262243D30C0ADBFEEEA713C /* MetalFogTelemetryTests.swift */; };
 		F0F021435753467EB07CC8CB /* GBFSDatabaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9102C934349C056069D6F70D /* GBFSDatabaseTests.swift */; };
 		F196DF354943AB224043F4A4 /* testCitiesStorageManagerViewSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = E25B891FDA6964A00B81BEB5 /* testCitiesStorageManagerViewSnapshot.1.png */; };
 		F3633419632F6C089A1E8C71 /* testNavigationCollapsedPeekViewNaturalWalkingForesightSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = BCDC8CF1AF3A38C5FF20DEEA /* testNavigationCollapsedPeekViewNaturalWalkingForesightSnapshot.1.png */; };
@@ -404,6 +408,7 @@
 		1FFA5B837A866E45F5FCCA95 /* testRouteLegDetailViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testRouteLegDetailViewSnapshot.1.png; sourceTree = "<group>"; };
 		21288BAF48D59BC9981D3C23 /* ConfidenceBandCanvasTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfidenceBandCanvasTests.swift; sourceTree = "<group>"; };
 		21AD6FB3518E383909502845 /* TransitRevealSheetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRevealSheetTests.swift; sourceTree = "<group>"; };
+		2262243D30C0ADBFEEEA713C /* MetalFogTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalFogTelemetryTests.swift; sourceTree = "<group>"; };
 		22985E8C3BC5CF4435B93C29 /* NearbyBusLensTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyBusLensTests.swift; sourceTree = "<group>"; };
 		250C5799146FC7DD7F64B3D1 /* city-nyc.pack.zst */ = {isa = PBXFileReference; path = "city-nyc.pack.zst"; sourceTree = "<group>"; };
 		250E5AFF32C461A41CFF71AD /* MetalFogShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = MetalFogShader.metal; sourceTree = "<group>"; };
@@ -568,6 +573,8 @@
 		C6083EE5B62BC24A46D675DC /* ApertureBrandingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApertureBrandingTests.swift; sourceTree = "<group>"; };
 		C6E88431DF1FC9075FDB42F7 /* MultimodalTripNavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultimodalTripNavigationManager.swift; sourceTree = "<group>"; };
 		C7CB2C7863F3D4EA63AA9BFB /* testNavigationCollapsedPeekViewNaturalWalkingImminentSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testNavigationCollapsedPeekViewNaturalWalkingImminentSnapshot.1.png; sourceTree = "<group>"; };
+		C8A7E16E5F8650BB642578EC /* MetalFogTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalFogTelemetry.swift; sourceTree = "<group>"; };
+		C923F397D11F9F1F75F4BA1E /* MetalFogParityKernels.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = MetalFogParityKernels.metal; sourceTree = "<group>"; };
 		C96A801190410A4B8F45E9EB /* DepartureMatrixCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepartureMatrixCanvas.swift; sourceTree = "<group>"; };
 		C99A430676D6B46B80F89732 /* GPXParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXParser.swift; sourceTree = "<group>"; };
 		CA2D627BBE06E07B53F15CDF /* EBikeBatterySOCOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EBikeBatterySOCOverlay.swift; sourceTree = "<group>"; };
@@ -611,6 +618,7 @@
 		EAA5953E182A617B33F3EFAB /* TransitHitTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitHitTest.swift; sourceTree = "<group>"; };
 		EAAD73184255F7D51334034E /* RaptorEngineInteropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaptorEngineInteropTests.swift; sourceTree = "<group>"; };
 		EAE35419F71B049E82AE2FB2 /* DockAvailabilityBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockAvailabilityBadgeView.swift; sourceTree = "<group>"; };
+		EB22CB93A564F4C56034EA80 /* MetalFogVisualParity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalFogVisualParity.swift; sourceTree = "<group>"; };
 		EBF1DFE311EB00D95E1C8769 /* JourneyPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JourneyPlanner.swift; sourceTree = "<group>"; };
 		EC4FF27CBDA648976E2A66B8 /* TimetableStructs.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = TimetableStructs.hpp; sourceTree = "<group>"; };
 		ED874B76ED1AD8AFFAF293F7 /* TimetableStructTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableStructTests.swift; sourceTree = "<group>"; };
@@ -703,6 +711,7 @@
 			isa = PBXGroup;
 			children = (
 				0CA00CF82ED52478A300D33C /* H3SpatialKernels.metal */,
+				C923F397D11F9F1F75F4BA1E /* MetalFogParityKernels.metal */,
 			);
 			path = Shaders;
 			sourceTree = "<group>";
@@ -827,7 +836,9 @@
 				C1269ACE7C6346A1302459B0 /* MapView.swift */,
 				250E5AFF32C461A41CFF71AD /* MetalFogShader.metal */,
 				85250A713673C2E6E965F15B /* MetalFogStyleLayer.swift */,
+				C8A7E16E5F8650BB642578EC /* MetalFogTelemetry.swift */,
 				CC7A4F12AC9A4EA25653403C /* MetalFogUniforms.swift */,
+				EB22CB93A564F4C56034EA80 /* MetalFogVisualParity.swift */,
 				A24558ABB620FC3D2824A803 /* MilestoneModels.swift */,
 				D9BB8C028C1F65B7EB331BF9 /* MissedConnectionDetector.swift */,
 				D89EE5A7DAD4D46ED08472A6 /* MultimodalTripAttributes.swift */,
@@ -989,6 +1000,7 @@
 				1C9C2947D6DA588D5432DB24 /* MapProjectionMathTests.swift */,
 				B38B19A81D071A0B31E9A147 /* MetalFogLayerTests.swift */,
 				CC912B84177DFD98D9C207D5 /* MetalFogQuadShaderTests.swift */,
+				2262243D30C0ADBFEEEA713C /* MetalFogTelemetryTests.swift */,
 				1554703CD635FF7503A31210 /* MissedConnectionDetectionTests.swift */,
 				263E5C695DD8B6540A1EEDB8 /* MultiCityGPXImportTests.swift */,
 				4CDC2268C92BB790DF209019 /* MultiCityStatsTests.swift */,
@@ -1440,9 +1452,12 @@
 				9E18AE610A3DB924C58DD4DF /* MapFAB.swift in Sources */,
 				556ECBA8C09A7135034A033E /* MapProjectionMath.swift in Sources */,
 				094712DE5F55C5A2F994A612 /* MapView.swift in Sources */,
+				31B31198007570D6D61FFEB8 /* MetalFogParityKernels.metal in Sources */,
 				DCE8FC6B47CE9B680CCD41CB /* MetalFogShader.metal in Sources */,
 				F90ADB592B6CCFA959A92E4F /* MetalFogStyleLayer.swift in Sources */,
+				A74653E07A0AECD4B937DE47 /* MetalFogTelemetry.swift in Sources */,
 				BEF0194071798538125E482A /* MetalFogUniforms.swift in Sources */,
+				537A4C23D85B4E63288AE72D /* MetalFogVisualParity.swift in Sources */,
 				9B00A61BD18221D079F107AE /* MilestoneModels.swift in Sources */,
 				282FA54DD6F1D26704BC320C /* MissedConnectionDetector.swift in Sources */,
 				5DEC0940406F506A7219D913 /* MultiProfileSelectorBar.swift in Sources */,
@@ -1555,6 +1570,7 @@
 				38957C8F871F4CA45533E748 /* MapProjectionMathTests.swift in Sources */,
 				5E1A7F7B487A5DB8F75AD8F2 /* MetalFogLayerTests.swift in Sources */,
 				FFC1B66369A94191F433467B /* MetalFogQuadShaderTests.swift in Sources */,
+				F0CE76CAC495C55E189137C0 /* MetalFogTelemetryTests.swift in Sources */,
 				64D079D041BB6A0D60ADC665 /* MissedConnectionDetectionTests.swift in Sources */,
 				14E45215E852C9D24631AD58 /* MultiCityGPXImportTests.swift in Sources */,
 				32D365721F5F07D5B1D87760 /* MultiCityStatsTests.swift in Sources */,

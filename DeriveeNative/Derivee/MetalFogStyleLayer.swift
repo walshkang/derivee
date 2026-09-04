@@ -3,6 +3,7 @@ import Metal
 import MetalKit
 import simd
 import MapLibre
+import H3
 
 /// Hardware-accelerated Metal custom style layer executing directly inside MapLibre Native's iOS render pass.
 /// Reuses the active `id<MTLRenderCommandEncoder>` (`self.renderEncoder`), inserts below `MLNSymbolStyleLayer`
@@ -430,6 +431,131 @@ public final class MetalFogStyleLayer: MLNCustomStyleLayer, @unchecked Sendable 
         let uniforms = uniformBuffers.reduce(0) { $0 + $1.length }
         let texture = coverageTexture != nil ? (coverageResolution * coverageResolution) : 0
         return uniforms + texture
+    }
+    
+    /// Headless offscreen render execution using an explicit command encoder and render target.
+    /// Useful for automated benchmarking, headless telemetry testing, and visual parity checks.
+    public func renderOffscreen(
+        into commandBuffer: MTLCommandBuffer,
+        renderPassDescriptor: MTLRenderPassDescriptor,
+        zoomLevel: Float,
+        position: (x: Double, y: Double)
+    ) {
+        guard let pipelineState = pipelineState,
+              !uniformBuffers.isEmpty,
+              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
+        
+        var projMatrix = simd_float4x4(1.0)
+        projMatrix.columns.3 = simd_float4(Float(position.x), Float(position.y), zoomLevel, 1.0)
+        let invProjMatrix = simd_inverse(projMatrix)
+        
+        uniformBufferIndex = (uniformBufferIndex + 1) % uniformBufferCount
+        let currentUniformBuffer = uniformBuffers[uniformBufferIndex]
+        
+        var uniforms = MetalFogUniforms(
+            invProjMatrix: invProjMatrix,
+            fogColor: fogSlateColor,
+            glowColor: electricAmberColor,
+            outerGlowWidth: outerGlowWidth,
+            innerGlowWidth: innerGlowWidth,
+            fogOpacity: fogOpacity,
+            threshold: threshold,
+            cameraZoom: zoomLevel
+        )
+        memcpy(currentUniformBuffer.contents(), &uniforms, MemoryLayout<MetalFogUniforms>.stride)
+        
+        encoder.setRenderPipelineState(pipelineState)
+        if let depthState = depthStencilState {
+            encoder.setDepthStencilState(depthState)
+        }
+        encoder.setVertexBuffer(currentUniformBuffer, offset: 0, index: 0)
+        encoder.setFragmentBuffer(currentUniformBuffer, offset: 0, index: 0)
+        
+        if let sampler = samplerState {
+            encoder.setFragmentSamplerState(sampler, index: 0)
+        }
+        if let texture = coverageTexture {
+            encoder.setFragmentTexture(texture, index: 0)
+        }
+        
+        if let engine = spatialEngine {
+            if let hashTable = engine.hashTableBuffer {
+                encoder.setFragmentBuffer(hashTable, offset: 0, index: 1)
+            }
+            if let header = engine.headerBuffer {
+                encoder.setFragmentBuffer(header, offset: 0, index: 2)
+            }
+        }
+        
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.endEncoding()
+    }
+}
+
+// MARK: - MetalFogEngineAdapter (Doc 08 §4)
+
+/// Adapter wrapping MetalFogStyleLayer to satisfy FogEngineProtocol for performance benchmarking.
+public final class MetalFogEngineAdapter: FogEngineProtocol, @unchecked Sendable {
+    public let layer: MetalFogStyleLayer
+    public let device: MTLDevice
+    public private(set) var offscreenTarget: MTLTexture?
+    public private(set) var renderPassDescriptor: MTLRenderPassDescriptor
+    private var lastZoom: Float = 18.0
+    private var lastPosition: (x: Double, y: Double) = (0.0, 0.0)
+    
+    public init(layer: MetalFogStyleLayer, device: MTLDevice, width: Int = 1024, height: Int = 1024) {
+        self.layer = layer
+        self.device = device
+        
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        desc.usage = [.renderTarget, .shaderRead]
+        self.offscreenTarget = device.makeTexture(descriptor: desc)
+        
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = offscreenTarget
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        pass.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0)
+        self.renderPassDescriptor = pass
+    }
+    
+    public func loadHexagons(h3Indices: [UInt64]) {
+        var coords = [CLLocationCoordinate2D]()
+        coords.reserveCapacity(min(h3Indices.count, 5000))
+        for cell in h3Indices.prefix(5000) {
+            if let coord = try? H3.cellToLatLng(cell: cell) {
+                coords.append(coord)
+            }
+        }
+        if !coords.isEmpty {
+            layer.updateCoverage(from: coords)
+        }
+    }
+    
+    public func updateCamera(zoomLevel: Float, position: (x: Double, y: Double)) {
+        self.lastZoom = zoomLevel
+        self.lastPosition = position
+    }
+    
+    public func render(into commandBuffer: MTLCommandBuffer) {
+        layer.renderOffscreen(
+            into: commandBuffer,
+            renderPassDescriptor: renderPassDescriptor,
+            zoomLevel: lastZoom,
+            position: lastPosition
+        )
+    }
+    
+    public var currentVRAMUsageBytes: UInt64 {
+        let base = UInt64(layer.currentVRAMUsageBytes)
+        let spatial = UInt64(layer.spatialEngine?.currentVRAMUsageBytes ?? 0)
+        let rt = UInt64((offscreenTarget?.width ?? 0) * (offscreenTarget?.height ?? 0) * 4)
+        return base + spatial + rt
     }
 }
 
