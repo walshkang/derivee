@@ -499,8 +499,10 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 if hint.contains("SOUTH") || hint.contains("SB") || hint.contains("DOWNTOWN") || hint.contains("WEST") || hint.contains("WB") { return false }
             }
             if let name = stopName?.uppercased() {
-                if name.contains("NB") || name.contains("NORTH") || name.contains("EB") || name.contains("EAST") { return true }
-                if name.contains("SB") || name.contains("SOUTH") || name.contains("WB") || name.contains("WEST") { return false }
+                if name.contains("(NB)") || name.hasSuffix(" NB") || name.contains("KENT AV") { return true }
+                if name.contains("(SB)") || name.hasSuffix(" SB") || name.contains("WYTHE AV") { return false }
+                if (name.contains("NB") && !name.contains("NB 6 ST")) || name.contains("NORTHBOUND") || name.contains("EB") || name.contains("EASTBOUND") { return true }
+                if (name.contains("SB") && !name.contains("SB 6 ST")) || name.contains("SOUTHBOUND") || name.contains("WB") || name.contains("WESTBOUND") { return false }
             }
             return true
         }()

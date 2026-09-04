@@ -8,9 +8,191 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 )
+
+var (
+	directionalTokenRegex = regexp.MustCompile(`(?i)(?:\(\s*)?\b(NB|SB|EB|WB)\b(?:\s*\))?`)
+	slashRegex            = regexp.MustCompile(`\s*[/|\\]+\s*`)
+	multiSpaceRegex       = regexp.MustCompile(`\s+`)
+	ordinalRegex          = regexp.MustCompile(`(?i)^([0-9]+)(ST|ND|RD|TH)$`)
+)
+
+// ParseStopName decomposes a raw stop name into a clean intersection name and an isolated routing qualifier.
+// Directional bus stop tokens (NB, SB, EB, WB) are isolated using boundary-aware regex so they are classified
+// as routing qualifiers instead of binding into numbered street tokens (e.g. preventing "Kent Av & NB 6 St").
+func ParseStopName(raw string) (string, string) {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "", ""
+	}
+
+	// 1. Isolate directional tokens (NB, SB, EB, WB) using boundary-aware regex
+	var qualifier string
+	if match := directionalTokenRegex.FindStringSubmatch(name); len(match) > 1 && match[1] != "" {
+		qualifier = strings.ToUpper(match[1])
+	}
+
+	// Remove the isolated qualifier (and any wrapping parens) from the street text
+	cleanedRaw := directionalTokenRegex.ReplaceAllString(name, " ")
+
+	// 2. Normalize slashes or connectors into " & "
+	cleanedRaw = slashRegex.ReplaceAllString(cleanedRaw, " & ")
+
+	// 3. Process intersection segments separated by " & "
+	segments := strings.Split(cleanedRaw, " & ")
+	cleanedSegments := make([]string, 0, len(segments))
+
+	for _, seg := range segments {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		cleanedSegments = append(cleanedSegments, cleanStreetSegment(seg))
+	}
+
+	result := strings.Join(cleanedSegments, " & ")
+	result = multiSpaceRegex.ReplaceAllString(result, " ")
+	result = strings.TrimSpace(result)
+
+	// Clean up any dangling & or empty parens
+	result = strings.TrimPrefix(result, "& ")
+	result = strings.TrimSuffix(result, " &")
+	result = strings.ReplaceAll(result, "()", "")
+	result = strings.TrimSpace(result)
+
+	return result, qualifier
+}
+
+// CleanStopName formats a raw stop name into a clean, title-cased intersection format with isolated directional routing qualifiers.
+func CleanStopName(raw string) string {
+	cleanName, qualifier := ParseStopName(raw)
+	if qualifier != "" && !strings.Contains(cleanName, "("+qualifier+")") {
+		if cleanName == "" {
+			return qualifier
+		}
+		return fmt.Sprintf("%s (%s)", cleanName, qualifier)
+	}
+	return cleanName
+}
+
+func cleanStreetSegment(seg string) string {
+	words := strings.Fields(seg)
+	if len(words) == 0 {
+		return ""
+	}
+
+	cleanedWords := make([]string, 0, len(words))
+	for _, w := range words {
+		upper := strings.ToUpper(w)
+		trimmedUpper := strings.TrimRight(upper, ",.")
+
+		switch trimmedUpper {
+		case "&", "+", "@":
+			cleanedWords = append(cleanedWords, "&")
+		case "ST", "STREET":
+			cleanedWords = append(cleanedWords, "St")
+		case "AV", "AVE", "AVENUE":
+			cleanedWords = append(cleanedWords, "Av")
+		case "RD", "ROAD":
+			cleanedWords = append(cleanedWords, "Rd")
+		case "BLVD", "BOULEVARD":
+			cleanedWords = append(cleanedWords, "Blvd")
+		case "PL", "PLACE":
+			cleanedWords = append(cleanedWords, "Pl")
+		case "PKWY", "PARKWAY":
+			cleanedWords = append(cleanedWords, "Pkwy")
+		case "DR", "DRIVE":
+			cleanedWords = append(cleanedWords, "Dr")
+		case "LN", "LANE":
+			cleanedWords = append(cleanedWords, "Ln")
+		case "CT", "COURT":
+			cleanedWords = append(cleanedWords, "Ct")
+		case "TER", "TERR", "TERRACE":
+			cleanedWords = append(cleanedWords, "Ter")
+		case "HWY", "HIGHWAY":
+			cleanedWords = append(cleanedWords, "Hwy")
+		case "EXPY", "EXPRESSWAY":
+			cleanedWords = append(cleanedWords, "Expy")
+		case "WAY":
+			cleanedWords = append(cleanedWords, "Way")
+		case "CIR", "CIRCLE":
+			cleanedWords = append(cleanedWords, "Cir")
+		case "PLZ", "PLAZA":
+			cleanedWords = append(cleanedWords, "Plaza")
+		case "N":
+			cleanedWords = append(cleanedWords, "N")
+		case "S":
+			cleanedWords = append(cleanedWords, "S")
+		case "E":
+			cleanedWords = append(cleanedWords, "E")
+		case "W":
+			cleanedWords = append(cleanedWords, "W")
+		case "NORTH":
+			cleanedWords = append(cleanedWords, "North")
+		case "SOUTH":
+			cleanedWords = append(cleanedWords, "South")
+		case "EAST":
+			cleanedWords = append(cleanedWords, "East")
+		case "WEST":
+			cleanedWords = append(cleanedWords, "West")
+		case "SBS", "MTA", "NYCT", "LIRR", "PATH", "WTC", "FDR", "GWB", "MET", "AMTRAK", "MBTA":
+			cleanedWords = append(cleanedWords, trimmedUpper)
+		default:
+			if m := ordinalRegex.FindStringSubmatch(trimmedUpper); len(m) > 2 {
+				cleanedWords = append(cleanedWords, m[1]+strings.ToLower(m[2]))
+			} else {
+				cleanedWords = append(cleanedWords, toTitleCase(w))
+			}
+		}
+	}
+	return strings.Join(cleanedWords, " ")
+}
+
+func toTitleCase(w string) string {
+	if strings.Contains(w, "-") {
+		parts := strings.Split(w, "-")
+		cleanedParts := make([]string, len(parts))
+		for i, p := range parts {
+			cleanedParts[i] = titleCaseSingleWord(p)
+		}
+		return strings.Join(cleanedParts, "-")
+	}
+	return titleCaseSingleWord(w)
+}
+
+func titleCaseSingleWord(w string) string {
+	if len(w) == 0 {
+		return ""
+	}
+	upper := strings.ToUpper(w)
+	if strings.HasPrefix(upper, "MC") && len(w) > 2 {
+		return "Mc" + strings.ToUpper(string(w[2])) + strings.ToLower(w[3:])
+	}
+	hasLower := false
+	hasUpper := false
+	for _, r := range w {
+		if unicode.IsLower(r) {
+			hasLower = true
+		} else if unicode.IsUpper(r) {
+			hasUpper = true
+		}
+	}
+	if hasLower && hasUpper {
+		return w
+	}
+	runes := []rune(strings.ToLower(w))
+	for i, r := range runes {
+		if unicode.IsLetter(r) {
+			runes[i] = unicode.ToUpper(r)
+			break
+		}
+	}
+	return string(runes)
+}
 
 // ScheduledStopTime holds a parsed static record
 type ScheduledStopTime struct {
@@ -219,7 +401,7 @@ func parseStopsToDB(file *zip.File, insertBatch func([]GTFSStop) error) error {
 
 		batch = append(batch, GTFSStop{
 			StopID:        strings.TrimSpace(record[stopIDIdx]),
-			StopName:      strings.TrimSpace(record[stopNameIdx]),
+			StopName:      CleanStopName(record[stopNameIdx]),
 			StopLat:       lat,
 			StopLon:       lon,
 			LocationType:  locType,

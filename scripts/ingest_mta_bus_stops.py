@@ -25,55 +25,97 @@ FEEDS = [
 ]
 
 def clean_stop_name(raw_name: str) -> str:
-    """Format raw GTFS stop name into clean, title-cased intersection format."""
+    """Format raw GTFS stop name into clean, title-cased intersection format with isolated routing qualifiers."""
     name = raw_name.strip()
-    # Replace slashes with &
-    name = re.sub(r'\s*/\s*', ' & ', name)
-    # Common abbreviations
-    words = name.split()
-    cleaned_words = []
-    for w in words:
-        upper = w.upper()
-        if upper in ["&", "+", "@"]:
-            cleaned_words.append("&")
-        elif upper in ["ST", "ST.", "STREET"]:
-            cleaned_words.append("St")
-        elif upper in ["AV", "AVE", "AVE.", "AVENUE"]:
-            cleaned_words.append("Av")
-        elif upper in ["RD", "RD.", "ROAD"]:
-            cleaned_words.append("Rd")
-        elif upper in ["BLVD", "BLVD.", "BOULEVARD"]:
-            cleaned_words.append("Blvd")
-        elif upper in ["PL", "PL.", "PLACE"]:
-            cleaned_words.append("Pl")
-        elif upper in ["PKWY", "PKWY.", "PARKWAY"]:
-            cleaned_words.append("Pkwy")
-        elif upper in ["DR", "DR.", "DRIVE"]:
-            cleaned_words.append("Dr")
-        elif upper in ["LN", "LN.", "LANE"]:
-            cleaned_words.append("Ln")
-        elif upper in ["CT", "CT.", "COURT"]:
-            cleaned_words.append("Ct")
-        elif upper in ["TER", "TERR", "TERRACE"]:
-            cleaned_words.append("Ter")
-        elif upper in ["N", "NB", "NORTH", "NORTHBOUND"]:
-            cleaned_words.append("NB")
-        elif upper in ["S", "SB", "SOUTH", "SOUTHBOUND"]:
-            cleaned_words.append("SB")
-        elif upper in ["E", "EB", "EAST", "EASTBOUND"]:
-            cleaned_words.append("EB")
-        elif upper in ["W", "WB", "WEST", "WESTBOUND"]:
-            cleaned_words.append("WB")
-        elif re.match(r'^\d+(ST|ND|RD|TH)$', upper):
-            # E.g. "14TH" -> "14 St" or "14th"
-            cleaned_words.append(upper)
-        elif upper in ["SBS", "SELECT", "BUS", "SERVICE"]:
-            cleaned_words.append(upper)
-        elif upper in ["MTA", "NYCT", "LIRR", "MET", "WTC", "FDR", "GWB"]:
-            cleaned_words.append(upper)
-        else:
-            cleaned_words.append(w.capitalize())
-    return " ".join(cleaned_words)
+    if not name:
+        return ""
+
+    # 1. Isolate directional tokens (NB, SB, EB, WB) using boundary-aware regex
+    qual_match = re.search(r'(?i)(?:\(\s*)?\b(NB|SB|EB|WB)\b(?:\s*\))?', name)
+    qualifier = qual_match.group(1).upper() if qual_match else ""
+
+    # Remove isolated qualifier from the street text
+    if qual_match:
+        name = re.sub(r'(?i)(?:\(\s*)?\b(NB|SB|EB|WB)\b(?:\s*\))?', ' ', name)
+
+    # 2. Replace slashes with &
+    name = re.sub(r'\s*[/|\\]+\s*', ' & ', name)
+
+    # 3. Process intersection segments
+    segments = name.split('&')
+    cleaned_segments = []
+
+    for seg in segments:
+        words = seg.strip().split()
+        if not words:
+            continue
+        cleaned_words = []
+        for w in words:
+            upper = w.upper().rstrip(',.')
+            if upper in ["&", "+", "@"]:
+                cleaned_words.append("&")
+            elif upper in ["ST", "ST.", "STREET"]:
+                cleaned_words.append("St")
+            elif upper in ["AV", "AVE", "AVE.", "AVENUE"]:
+                cleaned_words.append("Av")
+            elif upper in ["RD", "RD.", "ROAD"]:
+                cleaned_words.append("Rd")
+            elif upper in ["BLVD", "BLVD.", "BOULEVARD"]:
+                cleaned_words.append("Blvd")
+            elif upper in ["PL", "PL.", "PLACE"]:
+                cleaned_words.append("Pl")
+            elif upper in ["PKWY", "PKWY.", "PARKWAY"]:
+                cleaned_words.append("Pkwy")
+            elif upper in ["DR", "DR.", "DRIVE"]:
+                cleaned_words.append("Dr")
+            elif upper in ["LN", "LN.", "LANE"]:
+                cleaned_words.append("Ln")
+            elif upper in ["CT", "CT.", "COURT"]:
+                cleaned_words.append("Ct")
+            elif upper in ["TER", "TERR", "TERRACE"]:
+                cleaned_words.append("Ter")
+            elif upper in ["HWY", "HIGHWAY"]:
+                cleaned_words.append("Hwy")
+            elif upper in ["EXPY", "EXPRESSWAY"]:
+                cleaned_words.append("Expy")
+            elif upper == "WAY":
+                cleaned_words.append("Way")
+            elif upper in ["CIR", "CIRCLE"]:
+                cleaned_words.append("Cir")
+            elif upper in ["PLZ", "PLAZA"]:
+                cleaned_words.append("Plaza")
+            elif upper in ["N", "N."]:
+                cleaned_words.append("N")
+            elif upper in ["S", "S."]:
+                cleaned_words.append("S")
+            elif upper in ["E", "E."]:
+                cleaned_words.append("E")
+            elif upper in ["W", "W."]:
+                cleaned_words.append("W")
+            elif upper in ["NORTH", "NORTHBOUND"]:
+                cleaned_words.append("North")
+            elif upper in ["SOUTH", "SOUTHBOUND"]:
+                cleaned_words.append("South")
+            elif upper in ["EAST", "EASTBOUND"]:
+                cleaned_words.append("East")
+            elif upper in ["WEST", "WESTBOUND"]:
+                cleaned_words.append("West")
+            elif re.match(r'^\d+(ST|ND|RD|TH)$', upper):
+                cleaned_words.append(upper.lower())
+            elif upper in ["SBS", "SELECT", "BUS", "SERVICE"]:
+                cleaned_words.append(upper)
+            elif upper in ["MTA", "NYCT", "LIRR", "PATH", "MET", "WTC", "FDR", "GWB", "AMTRAK", "MBTA"]:
+                cleaned_words.append(upper)
+            else:
+                cleaned_words.append(w.capitalize())
+        cleaned_segments.append(" ".join(cleaned_words))
+
+    clean_intersection = " & ".join(cleaned_segments)
+    clean_intersection = re.sub(r'\s+', ' ', clean_intersection).strip()
+
+    if qualifier and f"({qualifier})" not in clean_intersection:
+        return f"{clean_intersection} ({qualifier})" if clean_intersection else qualifier
+    return clean_intersection
 
 def process_feed(feed_name: str, feed_url: str, all_stops: dict):
     print(f"📥 Fetching {feed_name} from {feed_url}...")

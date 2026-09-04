@@ -285,7 +285,8 @@ public final class CityPackManager: Sendable {
         let targetTransitURL = targetDir.appendingPathComponent("transit.sqlite")
         let targetNbhdURL = targetDir.appendingPathComponent("neighborhood.sqlite")
         let validTargetNbhdURL = fileManager.fileExists(atPath: targetNbhdURL.path) ? targetNbhdURL : nil
-        if SpatialDatabaseManager.shared.currentTransitDBURL?.path == targetTransitURL.path {
+        if SpatialDatabaseManager.isSharedInitialized,
+           SpatialDatabaseManager.shared.currentTransitDBURL?.path == targetTransitURL.path {
             Task {
                 try? await SpatialDatabaseManager.shared.hotSwapCityDatabase(transitURL: targetTransitURL, neighborhoodURL: validTargetNbhdURL)
             }

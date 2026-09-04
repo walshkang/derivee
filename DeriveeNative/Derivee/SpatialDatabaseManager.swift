@@ -4,6 +4,7 @@ import CoreLocation
 import H3
 
 public final class SpatialDatabaseManager: @unchecked Sendable {
+    public private(set) static var isSharedInitialized: Bool = false
     public static let shared = SpatialDatabaseManager()
     
     public let dbWriter: any DatabaseWriter
@@ -97,33 +98,20 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 try db.execute(sql: "PRAGMA synchronous = NORMAL;")
                 try db.execute(sql: "PRAGMA busy_timeout = 5000;")
                 
-                if CityPackManager.isValidDatabase(at: transitDBURL) {
-                    do {
-                        try db.execute(sql: "ATTACH DATABASE '\(transitDBURL.path)' AS transit")
-                        print("Successfully attached transit database at \(transitDBURL.path)")
-                    } catch {
-                        print("⚠️ Failed to attach transit DB: \(error)")
+                // Only attach on reader connections during pool operation; writer is attached post-init to protect transit.sqlite from GRDB's WAL pragma
+                if db.configuration.readonly {
+                    if CityPackManager.isValidDatabase(at: transitDBURL) {
+                        let escaped = transitDBURL.path.replacingOccurrences(of: "'", with: "''")
+                        try? db.execute(sql: "ATTACH DATABASE '\(escaped)' AS transit;")
+                    } else if CityPackManager.isValidDatabase(at: fallbackTransitURL) {
+                        let escaped = fallbackTransitURL.path.replacingOccurrences(of: "'", with: "''")
+                        try? db.execute(sql: "ATTACH DATABASE '\(escaped)' AS transit;")
                     }
-                } else if CityPackManager.isValidDatabase(at: fallbackTransitURL) {
-                    do {
-                        try db.execute(sql: "ATTACH DATABASE '\(fallbackTransitURL.path)' AS transit")
-                        print("Successfully attached fallback transit DB at \(fallbackTransitURL.path)")
-                    } catch {
-                        print("⚠️ Failed to attach fallback transit DB: \(error)")
+                    
+                    if CityPackManager.isValidDatabase(at: neighborhoodDBURL) || fileManager.fileExists(atPath: neighborhoodDBURL.path) {
+                        let escaped = neighborhoodDBURL.path.replacingOccurrences(of: "'", with: "''")
+                        try? db.execute(sql: "ATTACH DATABASE '\(escaped)' AS neighborhood;")
                     }
-                } else {
-                    print("⚠️ No valid transit DB file to attach at \(transitDBURL) or \(fallbackTransitURL)")
-                }
-                
-                if CityPackManager.isValidDatabase(at: neighborhoodDBURL) || fileManager.fileExists(atPath: neighborhoodDBURL.path) {
-                    do {
-                        try db.execute(sql: "ATTACH DATABASE '\(neighborhoodDBURL.path)' AS neighborhood")
-                        print("Successfully attached neighborhood database at \(neighborhoodDBURL.path)")
-                    } catch {
-                        print("⚠️ Failed to attach neighborhood DB: \(error)")
-                    }
-                } else {
-                    print("⚠️ No neighborhood DB file to attach at \(neighborhoodDBURL)")
                 }
             }
             
@@ -134,6 +122,14 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 dbWriter = try DatabasePool(path: databaseURL.path, configuration: configuration)
             }
             try migrator.migrate(dbWriter)
+            
+            // Attach transit and neighborhood on writer connection
+            try? dbWriter.writeWithoutTransaction { db in
+                try self.ensureTransitAttached(in: db, force: true)
+                try self.ensureNeighborhoodAttached(in: db, force: true)
+            }
+            
+            Self.isSharedInitialized = true
             print("🏦 [SpatialDatabaseManager] init complete for pool: \(ObjectIdentifier(dbWriter as AnyObject))")
         } catch {
             fatalError("Failed to initialize database: \(error)")
@@ -2408,7 +2404,12 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 throw error
             }
             
-            return self.generateFallbackAvailableDirections(for: stopId, routeId: routeId ?? "L")
+            // 3. Fallback: Lookup stop_name from database if available to disambiguate one-way corridors and qualifiers
+            var stopName = ""
+            if let row = try? Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
+                stopName = row["stop_name"] ?? ""
+            }
+            return self.generateFallbackAvailableDirections(for: stopId, stopName: stopName, routeId: routeId ?? "L")
         }
     }
     
@@ -2615,10 +2616,16 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     
     private func inferBusDirection(from stopName: String) -> String {
         let upper = stopName.uppercased()
-        if upper.contains("NB") || upper.contains("NORTH") { return "Northbound" }
-        if upper.contains("SB") || upper.contains("SOUTH") { return "Southbound" }
-        if upper.contains("EB") || upper.contains("EAST") { return "Eastbound" }
-        if upper.contains("WB") || upper.contains("WEST") { return "Westbound" }
+        if upper.contains("(NB)") || upper.hasSuffix(" NB") { return "Northbound" }
+        if upper.contains("(SB)") || upper.hasSuffix(" SB") { return "Southbound" }
+        if upper.contains("(EB)") || upper.hasSuffix(" EB") { return "Eastbound" }
+        if upper.contains("(WB)") || upper.hasSuffix(" WB") { return "Westbound" }
+        if upper.contains("KENT AV") { return "Northbound" }
+        if upper.contains("WYTHE AV") { return "Southbound" }
+        if upper.contains("NB") && !upper.contains("NB 6 ST") && !upper.contains("NB 9 ST") { return "Northbound" }
+        if upper.contains("SB") && !upper.contains("SB 6 ST") { return "Southbound" }
+        if upper.contains("NORTH") && !upper.contains("CENTRAL PARK NORTH") && !upper.contains("NORTH END") && !upper.contains("NORTH MOORE") { return "Northbound" }
+        if upper.contains("SOUTH") && !upper.contains("CENTRAL PARK SOUTH") { return "Southbound" }
         return "North / Southbound"
     }
     
@@ -2842,26 +2849,45 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         ]
     }
     
-    private func generateFallbackAvailableDirections(for stopId: String, routeId: String) -> Set<Int> {
-        let lower = stopId.lowercased()
-        // Single-direction terminal patterns or one-way stops
-        if lower.contains("8th_ave") || lower.contains("eighth_ave") || lower.contains("van_cortlandt") || lower.contains("wakefield") || lower.contains("inwood") || lower.contains("flushing") || lower.contains("pelham") || lower.contains("norwood") || lower.contains("dir1_only") {
-            return [1] // Southbound / Brooklyn / Outbound only
-        }
-        if lower.contains("canarsie") || lower.contains("rockaway") || lower.contains("south_ferry") || lower.contains("flatbush") || lower.contains("coney_island") || lower.contains("church_ave") || lower.contains("hudson_yards") || lower.contains("world_trade") || lower.contains("broad_st") || lower.contains("tottenville") || lower.contains("dir0_only") {
-            return [0] // Northbound / Manhattan / Inbound only
-        }
-        if lower.contains("1way_sb") || lower.contains("1way_south") {
-            return [1]
-        }
-        if lower.contains("1way_nb") || lower.contains("1way_north") {
+    private func generateFallbackAvailableDirections(for stopId: String, stopName: String = "", routeId: String) -> Set<Int> {
+        let lowerId = stopId.lowercased()
+        let lowerName = stopName.lowercased()
+        let upperName = stopName.uppercased()
+
+        // Explicit directional routing qualifiers in stop name (e.g. (NB), (SB), (EB), (WB))
+        if upperName.contains("(NB)") || upperName.hasSuffix(" NB") {
             return [0]
         }
-        // Known one-way bus corridors & stop IDs
-        if stopId == "308666" || (lower.contains("kent") && (routeId == "B32" || lower.contains("b32"))) {
+        if upperName.contains("(SB)") || upperName.hasSuffix(" SB") {
+            return [1]
+        }
+        if upperName.contains("(EB)") || upperName.hasSuffix(" EB") {
+            return [0]
+        }
+        if upperName.contains("(WB)") || upperName.hasSuffix(" WB") {
+            return [1]
+        }
+
+        // Single-direction terminal patterns or one-way stops
+        if lowerId.contains("8th_ave") || lowerId.contains("eighth_ave") || lowerId.contains("van_cortlandt") || lowerId.contains("wakefield") || lowerId.contains("inwood") || lowerId.contains("flushing") || lowerId.contains("pelham") || lowerId.contains("norwood") || lowerId.contains("dir1_only") {
+            return [1] // Southbound / Brooklyn / Outbound only
+        }
+        if lowerId.contains("canarsie") || lowerId.contains("rockaway") || lowerId.contains("south_ferry") || lowerId.contains("flatbush") || lowerId.contains("coney_island") || lowerId.contains("church_ave") || lowerId.contains("hudson_yards") || lowerId.contains("world_trade") || lowerId.contains("broad_st") || lowerId.contains("tottenville") || lowerId.contains("dir0_only") {
+            return [0] // Northbound / Manhattan / Inbound only
+        }
+        if lowerId.contains("1way_sb") || lowerId.contains("1way_south") {
+            return [1]
+        }
+        if lowerId.contains("1way_nb") || lowerId.contains("1way_north") {
+            return [0]
+        }
+        // Known one-way bus corridors & stop IDs (Kent Av is NB only, Wythe Av is SB only)
+        if stopId == "308666" || stopId == "308667" || stopId == "308668" ||
+           ((lowerId.contains("kent") || lowerName.contains("kent av")) && (routeId == "B32" || lowerId.contains("b32") || routeId.isEmpty)) {
             return [0] // Northbound only on Kent Av
         }
-        if stopId == "308683" || (lower.contains("wythe") && (routeId == "B32" || lower.contains("b32"))) {
+        if stopId == "308683" ||
+           ((lowerId.contains("wythe") || lowerName.contains("wythe av")) && (routeId == "B32" || lowerId.contains("b32") || routeId.isEmpty)) {
             return [1] // Southbound only on Wythe Av
         }
         return [0, 1]

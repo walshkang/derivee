@@ -46,7 +46,7 @@ public struct TarExtractor: Sendable {
             }
             
             fullName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if fullName.isEmpty {
+            if fullName.isEmpty || fullName.hasPrefix("._") || fullName.contains("/._") || fullName.hasPrefix("PaxHeader/") || fullName.contains("/PaxHeader/") {
                 offset += blockSize
                 continue
             }
