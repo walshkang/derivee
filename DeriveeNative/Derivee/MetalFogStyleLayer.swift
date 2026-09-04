@@ -21,6 +21,10 @@ public final class MetalFogStyleLayer: MLNCustomStyleLayer, @unchecked Sendable 
     
     public private(set) var pipelineState: MTLRenderPipelineState?
     public private(set) var depthStencilState: MTLDepthStencilState?
+    public private(set) var coverageTexture: MTLTexture?
+    public private(set) var samplerState: MTLSamplerState?
+    public let coverageResolution: Int = 1024
+    private var coverageData: [UInt8] = []
     
     /// Triple-buffered uniform ring buffers (3 in-flight frames) to prevent CPU/GPU execution stalls at 120 FPS.
     public private(set) var uniformBuffers: [MTLBuffer] = []
@@ -65,6 +69,8 @@ public final class MetalFogStyleLayer: MLNCustomStyleLayer, @unchecked Sendable 
                 depthStencilPixelFormat: depthStencilPixelFormat
             )
             setupUniformBuffers(device: device)
+            try setupSampler(device: device)
+            try setupCoverageTexture(device: device, width: coverageResolution, height: coverageResolution)
         } catch {
             print("[MetalFogStyleLayer] Failed to initialize Metal pipeline: \(error)")
         }
@@ -107,6 +113,13 @@ public final class MetalFogStyleLayer: MLNCustomStyleLayer, @unchecked Sendable 
         encoder.setVertexBuffer(currentUniformBuffer, offset: 0, index: 0)
         encoder.setFragmentBuffer(currentUniformBuffer, offset: 0, index: 0)
         
+        if let sampler = samplerState {
+            encoder.setFragmentSamplerState(sampler, index: 0)
+        }
+        if let texture = coverageTexture {
+            encoder.setFragmentTexture(texture, index: 0)
+        }
+        
         if let engine = spatialEngine {
             if let hashTable = engine.hashTableBuffer {
                 encoder.setFragmentBuffer(hashTable, offset: 0, index: 1)
@@ -124,6 +137,9 @@ public final class MetalFogStyleLayer: MLNCustomStyleLayer, @unchecked Sendable 
         super.willMove(from: mapView)
         pipelineState = nil
         depthStencilState = nil
+        samplerState = nil
+        coverageTexture = nil
+        coverageData.removeAll()
         uniformBuffers.removeAll()
     }
     
@@ -205,10 +221,215 @@ public final class MetalFogStyleLayer: MLNCustomStyleLayer, @unchecked Sendable 
         }
     }
     
+    public func setupSampler(device: MTLDevice) throws {
+        let descriptor = MTLSamplerDescriptor()
+        descriptor.minFilter = .linear
+        descriptor.magFilter = .linear
+        descriptor.mipFilter = .notMipmapped
+        descriptor.sAddressMode = .clampToEdge
+        descriptor.tAddressMode = .clampToEdge
+        guard let state = device.makeSamplerState(descriptor: descriptor) else {
+            throw NSError(
+                domain: "MetalFogStyleLayerError",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to create MTLSamplerState"]
+            )
+        }
+        self.samplerState = state
+    }
+    
+    public func setupCoverageTexture(device: MTLDevice, width: Int = 1024, height: Int = 1024) throws {
+        let textureDesc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        textureDesc.usage = [.shaderRead, .shaderWrite]
+        textureDesc.storageMode = .shared
+        guard let texture = device.makeTexture(descriptor: textureDesc) else {
+            throw NSError(
+                domain: "MetalFogStyleLayerError",
+                code: -4,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to allocate coverageTexture (.r8Unorm)"]
+            )
+        }
+        self.coverageTexture = texture
+        self.coverageData = [UInt8](repeating: 255, count: width * height)
+        resetCoverageTexture()
+    }
+    
+    public func resetCoverageTexture() {
+        guard let texture = coverageTexture else { return }
+        let width = texture.width
+        let height = texture.height
+        if coverageData.count != width * height {
+            coverageData = [UInt8](repeating: 255, count: width * height)
+        } else {
+            coverageData.withUnsafeMutableBufferPointer { ptr in
+                if let base = ptr.baseAddress {
+                    memset(base, 255, width * height)
+                }
+            }
+        }
+        texture.replace(
+            region: MTLRegionMake2D(0, 0, width, height),
+            mipmapLevel: 0,
+            withBytes: coverageData,
+            bytesPerRow: width
+        )
+    }
+    
+    /// Carves a single circular aperture into the coverage texture at the given geodetic coordinate.
+    public func carveAperture(center: CLLocationCoordinate2D, radiusMeters: Double = 35.0) {
+        guard let texture = coverageTexture else { return }
+        let width = texture.width
+        let height = texture.height
+        let mercator = MapProjectionMath.geodeticToMercator(center)
+        
+        let cosLat = max(cos(center.latitude * .pi / 180.0), 0.01)
+        let mercatorRadius = radiusMeters / (40_075_016.6856 * cosLat)
+        
+        let cx = mercator.x * Double(width)
+        let cy = mercator.y * Double(height)
+        let rx = max(mercatorRadius * Double(width), 2.0)
+        let ry = rx
+        
+        let minX = max(0, Int(floor(cx - rx)))
+        let maxX = min(width - 1, Int(ceil(cx + rx)))
+        let minY = max(0, Int(floor(cy - ry)))
+        let maxY = min(height - 1, Int(ceil(cy + ry)))
+        
+        guard maxX >= minX && maxY >= minY else { return }
+        
+        var modified = false
+        for y in minY...maxY {
+            let dy = Double(y) - cy
+            let dy2 = dy * dy
+            let rowOffset = y * width
+            for x in minX...maxX {
+                let dx = Double(x) - cx
+                let dist = sqrt(dx * dx + dy2)
+                if dist < rx {
+                    let val: UInt8
+                    if dist <= 0.5 {
+                        val = 0
+                    } else {
+                        let factor = (dist - 0.5) / max(rx - 0.5, 0.001)
+                        val = UInt8(Swift.min(Swift.max(factor * 255.0, 0.0), 255.0))
+                    }
+                    let idx = rowOffset + x
+                    if val < coverageData[idx] {
+                        coverageData[idx] = val
+                        modified = true
+                    }
+                }
+            }
+        }
+        
+        if modified {
+            let regionWidth = maxX - minX + 1
+            let regionHeight = maxY - minY + 1
+            var subData = [UInt8](repeating: 0, count: regionWidth * regionHeight)
+            for y in 0..<regionHeight {
+                let srcStart = (minY + y) * width + minX
+                let dstStart = y * regionWidth
+                for x in 0..<regionWidth {
+                    subData[dstStart + x] = coverageData[srcStart + x]
+                }
+            }
+            texture.replace(
+                region: MTLRegionMake2D(minX, minY, regionWidth, regionHeight),
+                mipmapLevel: 0,
+                withBytes: subData,
+                bytesPerRow: regionWidth
+            )
+        }
+    }
+    
+    /// Batch-carves multiple aperture centers into the coverage texture with a single subregion texture update.
+    public func updateCoverage(from coordinates: [CLLocationCoordinate2D], radiusMeters: Double = 35.0) {
+        guard let texture = coverageTexture, !coordinates.isEmpty else { return }
+        let width = texture.width
+        let height = texture.height
+        
+        var globalMinX = width
+        var globalMaxX = -1
+        var globalMinY = height
+        var globalMaxY = -1
+        
+        for center in coordinates {
+            let mercator = MapProjectionMath.geodeticToMercator(center)
+            let cosLat = max(cos(center.latitude * .pi / 180.0), 0.01)
+            let mercatorRadius = radiusMeters / (40_075_016.6856 * cosLat)
+            
+            let cx = mercator.x * Double(width)
+            let cy = mercator.y * Double(height)
+            let rx = max(mercatorRadius * Double(width), 2.0)
+            
+            let minX = max(0, Int(floor(cx - rx)))
+            let maxX = min(width - 1, Int(ceil(cx + rx)))
+            let minY = max(0, Int(floor(cy - rx)))
+            let maxY = min(height - 1, Int(ceil(cy + rx)))
+            
+            guard maxX >= minX && maxY >= minY else { continue }
+            
+            globalMinX = min(globalMinX, minX)
+            globalMaxX = max(globalMaxX, maxX)
+            globalMinY = min(globalMinY, minY)
+            globalMaxY = max(globalMaxY, maxY)
+            
+            for y in minY...maxY {
+                let dy = Double(y) - cy
+                let dy2 = dy * dy
+                let rowOffset = y * width
+                for x in minX...maxX {
+                    let dx = Double(x) - cx
+                    let dist = sqrt(dx * dx + dy2)
+                    if dist < rx {
+                        let val: UInt8
+                        if dist <= 0.5 {
+                            val = 0
+                        } else {
+                            let factor = (dist - 0.5) / max(rx - 0.5, 0.001)
+                            val = UInt8(Swift.min(Swift.max(factor * 255.0, 0.0), 255.0))
+                        }
+                        let idx = rowOffset + x
+                        if val < coverageData[idx] {
+                            coverageData[idx] = val
+                        }
+                    }
+                }
+            }
+        }
+        
+        if globalMaxX >= globalMinX && globalMaxY >= globalMinY {
+            let regionWidth = globalMaxX - globalMinX + 1
+            let regionHeight = globalMaxY - globalMinY + 1
+            var subData = [UInt8](repeating: 0, count: regionWidth * regionHeight)
+            for y in 0..<regionHeight {
+                let srcStart = (globalMinY + y) * width + globalMinX
+                let dstStart = y * regionWidth
+                for x in 0..<regionWidth {
+                    subData[dstStart + x] = coverageData[srcStart + x]
+                }
+            }
+            texture.replace(
+                region: MTLRegionMake2D(globalMinX, globalMinY, regionWidth, regionHeight),
+                mipmapLevel: 0,
+                withBytes: subData,
+                bytesPerRow: regionWidth
+            )
+        }
+    }
+    
     /// Total VRAM allocated by this custom layer in bytes.
-    /// Strictly guarantees <= 1,024 bytes (3 x 256-byte uniform buffers), preserving the < 10 MB budget.
+    /// Strictly guarantees <= 1.05 MB (1.0 MB coverage texture + 768 bytes uniform buffers),
+    /// keeping the combined engine footprint under 5.30 MB (< 10 MB Jetsam budget).
     public var currentVRAMUsageBytes: Int {
-        return uniformBuffers.reduce(0) { $0 + $1.length }
+        let uniforms = uniformBuffers.reduce(0) { $0 + $1.length }
+        let texture = coverageTexture != nil ? (coverageResolution * coverageResolution) : 0
+        return uniforms + texture
     }
 }
 
@@ -251,34 +472,36 @@ vertex RasterizerData vertexFogQuad(uint vertexID [[vertex_id]]) {
     return out;
 }
 
-fragment float4 fragmentFogAperture(
-    RasterizerData             in       [[stage_in]],
-    constant MetalFogUniforms& uniforms [[buffer(0)]]
+fragment half4 fragmentFogAperture(
+    RasterizerData             in            [[stage_in]],
+    texture2d<float>           coverageTex   [[texture(0)]],
+    sampler                    linearSampler [[sampler(0)]],
+    constant MetalFogUniforms& uniforms      [[buffer(0)]]
 ) {
     float4 clipPos = float4(in.ndcCoord, 0.0f, 1.0f);
     float4 worldSpacePos = uniforms.invProjMatrix * clipPos;
-    if (abs(worldSpacePos.w) < 1e-6f) {
-        return float4(0.0f);
-    }
-    float2 mercatorUV = worldSpacePos.xy / worldSpacePos.w;
-    if (mercatorUV.x < 0.0f || mercatorUV.x > 1.0f || mercatorUV.y < 0.0f || mercatorUV.y > 1.0f) {
-        return float4(0.0f);
-    }
-    float coverage = 1.0f;
-    float2 grad = float2(dfdx(coverage), dfdy(coverage));
-    float gradMag = length(grad);
-    float aaWidth = max(0.7071f * gradMag, 0.0001f);
-    float T = uniforms.threshold;
-    float fogAlphaMask = smoothstep(T - aaWidth, T + aaWidth, coverage);
-    float effectiveFogAlpha = fogAlphaMask * uniforms.fogOpacity;
-    float glowOuter = smoothstep(T - uniforms.outerGlowWidth, T, coverage);
-    float glowInner = smoothstep(T + uniforms.innerGlowWidth, T, coverage);
-    float glowFactor = glowOuter * glowInner;
-    float3 slateRGB = uniforms.fogColor.rgb;
-    float3 amberRGB = uniforms.glowColor.rgb;
-    float glowIntensity = glowFactor * uniforms.glowColor.a;
-    float totalAlpha = clamp(effectiveFogAlpha + glowIntensity, 0.0f, 1.0f);
-    float3 blendedRGB = mix(slateRGB, amberRGB, glowIntensity / max(totalAlpha, 0.0001f));
-    return float4(blendedRGB * totalAlpha, totalAlpha);
+    float invW = (abs(worldSpacePos.w) > 1e-6f) ? (1.0f / worldSpacePos.w) : 0.0f;
+    float2 mercatorUV = worldSpacePos.xy * invW;
+    half inBounds = (mercatorUV.x >= 0.0f && mercatorUV.x <= 1.0f && 
+                     mercatorUV.y >= 0.0f && mercatorUV.y <= 1.0f) ? half(1.0) : half(0.0);
+    float rawCoverage = coverageTex.sample(linearSampler, mercatorUV).r;
+    half coverage = half(rawCoverage);
+    half2 grad = half2(dfdx(coverage), dfdy(coverage));
+    half gradMag = length(grad);
+    half aaWidth = max(half(0.7071) * gradMag, half(0.0001));
+    half T = half(uniforms.threshold);
+    half fogAlphaMask = smoothstep(T - aaWidth, T + aaWidth, coverage);
+    half effectiveFogAlpha = fogAlphaMask * half(uniforms.fogOpacity);
+    half glowOuter = smoothstep(T - half(uniforms.outerGlowWidth), T, coverage);
+    half glowInner = smoothstep(T + half(uniforms.innerGlowWidth), T, coverage);
+    half glowFactor = glowOuter * glowInner;
+    half glowIntensity = glowFactor * half(uniforms.glowColor.a);
+    half3 slateRGB = half3(uniforms.fogColor.rgb);
+    half3 amberRGB = half3(uniforms.glowColor.rgb);
+    half totalAlpha = clamp(effectiveFogAlpha + glowIntensity, half(0.0), half(1.0)) * inBounds;
+    half denom = max(totalAlpha, half(0.0001));
+    half3 blendedRGB = mix(slateRGB, amberRGB, glowIntensity / denom);
+    return half4(blendedRGB * totalAlpha, totalAlpha);
 }
 """
+

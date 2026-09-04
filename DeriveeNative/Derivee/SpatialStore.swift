@@ -237,6 +237,18 @@ final class SpatialStore: @unchecked Sendable {
         }
     }
     
+    public func getExploredCoordinates() -> [CLLocationCoordinate2D] {
+        var coords: [CLLocationCoordinate2D] = []
+        coords.reserveCapacity(exploredHexes.count)
+        for hex in exploredHexes {
+            if let cell = UInt64(hex, radix: 16),
+               let coord = try? H3.cellToLatLng(cell: cell) {
+                coords.append(CLLocationCoordinate2D(latitude: coord.latitude, longitude: coord.longitude))
+            }
+        }
+        return coords
+    }
+    
     @MainActor
     func clearData() {
         exploredHexes.removeAll()

@@ -42,54 +42,60 @@ vertex RasterizerData vertexFogQuad(uint vertexID [[vertex_id]]) {
 }
 
 // Fragment Shader: Evaluates coverage, analytical AA SDF, and synthetic amber glow
-// Strictly follows docs/research/07_metal_layer_injection_compositing_maplibre.md and
-// docs/research/09_metal_shading_pipeline_sdf_edge_glow.md
-fragment float4 fragmentFogAperture(
-    RasterizerData             in       [[stage_in]],
-    constant MetalFogUniforms& uniforms [[buffer(0)]]
+// Strictly follows docs/research/07_metal_layer_injection_compositing_maplibre.md,
+// docs/research/09_metal_shading_pipeline_sdf_edge_glow.md, and Apple Silicon TBDR invariants:
+// - Zero discard_fragment() to preserve TBDR Hidden Surface Removal (HSR) and tile write-back.
+// - Strict 16-bit half precision ALU throughput on A12+ dual-issue floating point units.
+// - Unconditional dfdx/dfdy evaluation to prevent quad helper divergence and compiler homogenization.
+fragment half4 fragmentFogAperture(
+    RasterizerData             in            [[stage_in]],
+    texture2d<float>           coverageTex   [[texture(0)]],
+    sampler                    linearSampler [[sampler(0)]],
+    constant MetalFogUniforms& uniforms      [[buffer(0)]]
 ) {
-    // 1. Transform Clip-Space NDC (-1 to 1) to Normalized Mercator space (0 to 1)
+    // 1. High-precision coordinate unprojection in float32 to prevent jitter at z >= 18
     float4 clipPos = float4(in.ndcCoord, 0.0f, 1.0f);
     float4 worldSpacePos = uniforms.invProjMatrix * clipPos;
     
-    if (abs(worldSpacePos.w) < 1e-6f) {
-        return float4(0.0f);
-    }
+    float invW = (abs(worldSpacePos.w) > 1e-6f) ? (1.0f / worldSpacePos.w) : 0.0f;
+    float2 mercatorUV = worldSpacePos.xy * invW;
     
-    float2 mercatorUV = worldSpacePos.xy / worldSpacePos.w;
+    // Mathematical world bounds validity mask (0.0 outside [0, 1]^2, 1.0 inside)
+    // Avoids branch divergence and preserves 2x2 SIMD quad lane execution.
+    half inBounds = (mercatorUV.x >= 0.0f && mercatorUV.x <= 1.0f && 
+                     mercatorUV.y >= 0.0f && mercatorUV.y <= 1.0f) ? half(1.0) : half(0.0);
     
-    // Discard fragments outside valid world map boundaries
-    if (mercatorUV.x < 0.0f || mercatorUV.x > 1.0f || mercatorUV.y < 0.0f || mercatorUV.y > 1.0f) {
-        return float4(0.0f);
-    }
+    // 2. Hardware bilinear sample from single-channel coverage texture (.r8Unorm)
+    float rawCoverage = coverageTex.sample(linearSampler, mercatorUV).r;
+    half coverage = half(rawCoverage);
     
-    // Baseline coverage evaluation (1.0 = unexplored solid fog, 0.0 = explored hole)
-    // In Wave O.4, this samples the H3 spatial texture / coverage buffer.
-    float coverage = 1.0f;
+    // 3. Unconditional screen-space derivatives for zoom-invariant anti-aliasing (1.0-1.5px)
+    half2 grad = half2(dfdx(coverage), dfdy(coverage));
+    half gradMag = length(grad);
+    half aaWidth = max(half(0.7071) * gradMag, half(0.0001));
     
-    // 2. Compute screen-space partial derivatives for zoom-invariant anti-aliasing
-    float2 grad = float2(dfdx(coverage), dfdy(coverage));
-    float gradMag = length(grad);
-    float aaWidth = max(0.7071f * gradMag, 0.0001f);
+    // 4. Analytical anti-aliased aperture mask (Smoothstep Hermite filter in half precision)
+    half T = half(uniforms.threshold);
+    half fogAlphaMask = smoothstep(T - aaWidth, T + aaWidth, coverage);
+    half effectiveFogAlpha = fogAlphaMask * half(uniforms.fogOpacity);
     
-    // 3. Analytical anti-aliased aperture mask (Smoothstep Hermite filter)
-    float T = uniforms.threshold;
-    float fogAlphaMask = smoothstep(T - aaWidth, T + aaWidth, coverage);
-    float effectiveFogAlpha = fogAlphaMask * uniforms.fogOpacity;
+    // 5. Analytical single-pass Electric Amber border glow calculation (#FFB300)
+    half glowOuter = smoothstep(T - half(uniforms.outerGlowWidth), T, coverage);
+    half glowInner = smoothstep(T + half(uniforms.innerGlowWidth), T, coverage);
+    half glowFactor = glowOuter * glowInner; // Peaks strictly at boundary threshold T
+    half glowIntensity = glowFactor * half(uniforms.glowColor.a);
     
-    // 4. Analytical single-pass Electric Amber border glow calculation
-    float glowOuter = smoothstep(T - uniforms.outerGlowWidth, T, coverage);
-    float glowInner = smoothstep(T + uniforms.innerGlowWidth, T, coverage);
-    float glowFactor = glowOuter * glowInner; // Peaks at boundary threshold T
+    // 6. Color Compositing (Slate Fog + Electric Amber Glow)
+    half3 slateRGB = half3(uniforms.fogColor.rgb);
+    half3 amberRGB = half3(uniforms.glowColor.rgb);
     
-    // 5. Color Compositing (Slate Fog + Electric Amber Glow)
-    float3 slateRGB = uniforms.fogColor.rgb;
-    float3 amberRGB = uniforms.glowColor.rgb;
-    float glowIntensity = glowFactor * uniforms.glowColor.a;
+    // Total alpha modulated by inBounds mask
+    half totalAlpha = clamp(effectiveFogAlpha + glowIntensity, half(0.0), half(1.0)) * inBounds;
+    half denom = max(totalAlpha, half(0.0001));
+    half3 blendedRGB = mix(slateRGB, amberRGB, glowIntensity / denom);
     
-    float totalAlpha = clamp(effectiveFogAlpha + glowIntensity, 0.0f, 1.0f);
-    float3 blendedRGB = mix(slateRGB, amberRGB, glowIntensity / max(totalAlpha, 0.0001f));
-    
-    // 6. Output Premultiplied Alpha for Hardware Blending Unit
-    return float4(blendedRGB * totalAlpha, totalAlpha);
+    // 7. Output Premultiplied Alpha for Hardware Blending Unit (.one, .oneMinusSourceAlpha)
+    // Zero discard_fragment() preserves Apple TBDR tile write-back efficiency.
+    return half4(blendedRGB * totalAlpha, totalAlpha);
 }
+

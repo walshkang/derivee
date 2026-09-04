@@ -237,6 +237,11 @@ struct MapView: UIViewRepresentable {
                 loadPOIs(for: config.slug)
             }
             
+            if parent.enableMetalFogEngine {
+                metalFogLayer?.resetCoverageTexture()
+                metalFogLayer?.setNeedsDisplay()
+            }
+            
             // 5. Synchronously coordinate camera center to destination city center
             let center = targetCenter ?? config.center.coordinate
             let zoom = targetZoom ?? config.center.defaultZoom
@@ -807,9 +812,15 @@ struct MapView: UIViewRepresentable {
         }
         
         func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {
-            // Wave O.3: Invalidate Metal fog style layer to trigger redraw
-            if parent.enableMetalFogEngine {
-                metalFogLayer?.setNeedsDisplay()
+            // Wave O.3 & O.4: Update coverage texture and invalidate Metal fog style layer
+            if parent.enableMetalFogEngine, let metalLayer = metalFogLayer {
+                let coords = parent.spatialStore.getExploredCoordinates()
+                if !coords.isEmpty {
+                    metalLayer.updateCoverage(from: coords)
+                } else {
+                    metalLayer.resetCoverageTexture()
+                }
+                metalLayer.setNeedsDisplay()
             }
             
             let interiorCount: Int
