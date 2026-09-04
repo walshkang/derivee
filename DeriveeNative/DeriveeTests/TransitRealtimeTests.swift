@@ -13,16 +13,15 @@ final class TransitRealtimeTests: XCTestCase {
         header.timestamp = 1700000000
         feedMessage.header = header
         
+        let now = Date(timeIntervalSince1970: 1700000000)
+        
         var entity1 = TransitRealtime_FeedEntity()
         entity1.id = "trip_1"
-        
         var tripUpdate1 = TransitRealtime_TripUpdate()
         var trip1 = TransitRealtime_TripDescriptor()
         trip1.tripID = "trip_L_001"
         trip1.routeID = "L"
         tripUpdate1.trip = trip1
-        
-        let now = Date(timeIntervalSince1970: 1700000000)
         
         var stopUpdate1 = TransitRealtime_TripUpdate.StopTimeUpdate()
         stopUpdate1.stopID = "L08N"
@@ -30,16 +29,37 @@ final class TransitRealtimeTests: XCTestCase {
         arrival1.time = 1700000000 + 180 // 3 min later
         stopUpdate1.arrival = arrival1
         
+        var stopUpdate1Term = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stopUpdate1Term.stopID = "L01N" // 8 Av
+        var arrival1Term = TransitRealtime_TripUpdate.StopTimeEvent()
+        arrival1Term.time = 1700000000 + 600
+        stopUpdate1Term.arrival = arrival1Term
+        tripUpdate1.stopTimeUpdate = [stopUpdate1, stopUpdate1Term]
+        entity1.tripUpdate = tripUpdate1
+        
+        var entity2 = TransitRealtime_FeedEntity()
+        entity2.id = "trip_2"
+        var tripUpdate2 = TransitRealtime_TripUpdate()
+        var trip2 = TransitRealtime_TripDescriptor()
+        trip2.tripID = "trip_L_002"
+        trip2.routeID = "L"
+        tripUpdate2.trip = trip2
+        
         var stopUpdate2 = TransitRealtime_TripUpdate.StopTimeUpdate()
         stopUpdate2.stopID = "L08S"
         var arrival2 = TransitRealtime_TripUpdate.StopTimeEvent()
         arrival2.time = 1700000000 + 480 // 8 min later
         stopUpdate2.arrival = arrival2
         
-        tripUpdate1.stopTimeUpdate = [stopUpdate1, stopUpdate2]
-        entity1.tripUpdate = tripUpdate1
+        var stopUpdate2Term = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stopUpdate2Term.stopID = "L29S" // Canarsie-Rockaway Pkwy
+        var arrival2Term = TransitRealtime_TripUpdate.StopTimeEvent()
+        arrival2Term.time = 1700000000 + 1200
+        stopUpdate2Term.arrival = arrival2Term
+        tripUpdate2.stopTimeUpdate = [stopUpdate2, stopUpdate2Term]
+        entity2.tripUpdate = tripUpdate2
         
-        feedMessage.entity = [entity1]
+        feedMessage.entity = [entity1, entity2]
         
         let serializedData = try feedMessage.serializedData()
         XCTAssertFalse(serializedData.isEmpty, "Serialized protobuf payload should not be empty.")
@@ -54,11 +74,174 @@ final class TransitRealtimeTests: XCTestCase {
         XCTAssertEqual(arrivals.count, 2)
         XCTAssertEqual(arrivals[0].line, "L")
         XCTAssertEqual(arrivals[0].minutes, 3)
-        XCTAssertEqual(arrivals[0].destination, "Manhattan - 8th Ave")
+        XCTAssertEqual(arrivals[0].destination, "L to 8 Av")
         
         XCTAssertEqual(arrivals[1].line, "L")
         XCTAssertEqual(arrivals[1].minutes, 8)
-        XCTAssertEqual(arrivals[1].destination, "Brooklyn - Canarsie / Rockaway Pkwy")
+        XCTAssertEqual(arrivals[1].destination, "L to Canarsie-Rockaway Pkwy")
+    }
+
+    func testDynamicTerminalResolutionStandardExpress() throws {
+        var tripUpdate = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.routeID = "4"
+        tripUpdate.trip = trip
+        
+        var u1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u1.stopID = "414N" // 161 St-Yankee Stadium
+        var u2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u2.stopID = "401N" // Woodlawn
+        tripUpdate.stopTimeUpdate = [u1, u2]
+        
+        let destination = TransitRealtimeService.shared.resolveDestination(
+            tripUpdate: tripUpdate,
+            line: "4",
+            stopId: "414N",
+            matchingUpdate: u1
+        )
+        XCTAssertEqual(destination, "4 to Woodlawn EXP")
+    }
+    
+    func testPhysicalExpressTrackDetection() throws {
+        var tripUpdate = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.routeID = "6"
+        tripUpdate.trip = trip
+        
+        var u1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u1.stopID = "631N" // Grand Central
+        var nyctStop = TransitRealtime_NyctStopTimeUpdate()
+        nyctStop.actualTrack = "3" // Northbound Express track
+        u1.TransitRealtime_nyctStopTimeUpdate = nyctStop
+        
+        var u2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u2.stopID = "601N" // Pelham Bay Park
+        tripUpdate.stopTimeUpdate = [u1, u2]
+        
+        let destination = TransitRealtimeService.shared.resolveDestination(
+            tripUpdate: tripUpdate,
+            line: "6",
+            stopId: "631N",
+            matchingUpdate: u1
+        )
+        XCTAssertEqual(destination, "6 to Pelham Bay Park EXP")
+    }
+    
+    func testLocalTrackOverrideOnExpressRoute() throws {
+        var tripUpdate = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.routeID = "4"
+        tripUpdate.trip = trip
+        
+        var u1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u1.stopID = "414N"
+        var nyctStop = TransitRealtime_NyctStopTimeUpdate()
+        nyctStop.actualTrack = "4" // Northbound Local track override!
+        u1.TransitRealtime_nyctStopTimeUpdate = nyctStop
+        
+        var u2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u2.stopID = "401N" // Woodlawn
+        tripUpdate.stopTimeUpdate = [u1, u2]
+        
+        let destination = TransitRealtimeService.shared.resolveDestination(
+            tripUpdate: tripUpdate,
+            line: "4",
+            stopId: "414N",
+            matchingUpdate: u1
+        )
+        XCTAssertEqual(destination, "4 to Woodlawn Local")
+    }
+    
+    func testDynamicTerminalResolutionShortTurn() throws {
+        var tripUpdate = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.routeID = "5"
+        tripUpdate.trip = trip
+        
+        var u1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u1.stopID = "631S" // Grand Central-42 St
+        var u2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u2.stopID = "420S" // Bowling Green (Short turn for Line 5)
+        tripUpdate.stopTimeUpdate = [u1, u2]
+        
+        let destination = TransitRealtimeService.shared.resolveDestination(
+            tripUpdate: tripUpdate,
+            line: "5",
+            stopId: "631S",
+            matchingUpdate: u1
+        )
+        XCTAssertEqual(destination, "5 to Bowling Green (Short Turn) EXP")
+    }
+    
+    func testTrainIDPrefixShortTurnAndExpress() throws {
+        // Test train_id prefix $ triggers short-turn
+        var tripUpdate1 = TransitRealtime_TripUpdate()
+        var trip1 = TransitRealtime_TripDescriptor()
+        trip1.routeID = "6"
+        var nyctTrip1 = TransitRealtime_NyctTripDescriptor()
+        nyctTrip1.trainID = "$6_001"
+        trip1.TransitRealtime_nyctTripDescriptor = nyctTrip1
+        tripUpdate1.trip = trip1
+        
+        var u1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u1.stopID = "601N" // Standard terminal, but $ trainID marks dispatch turn
+        tripUpdate1.stopTimeUpdate = [u1]
+        
+        let dest1 = TransitRealtimeService.shared.resolveDestination(
+            tripUpdate: tripUpdate1,
+            line: "6",
+            stopId: "631N",
+            matchingUpdate: u1
+        )
+        XCTAssertEqual(dest1, "6 to Pelham Bay Park (Short Turn)")
+        
+        // Test train_id prefix / triggers express
+        var tripUpdate2 = TransitRealtime_TripUpdate()
+        var trip2 = TransitRealtime_TripDescriptor()
+        trip2.routeID = "1"
+        var nyctTrip2 = TransitRealtime_NyctTripDescriptor()
+        nyctTrip2.trainID = "/1_002"
+        trip2.TransitRealtime_nyctTripDescriptor = nyctTrip2
+        tripUpdate2.trip = trip2
+        
+        var u2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u2.stopID = "101N"
+        tripUpdate2.stopTimeUpdate = [u2]
+        
+        let dest2 = TransitRealtimeService.shared.resolveDestination(
+            tripUpdate: tripUpdate2,
+            line: "1",
+            stopId: "125N",
+            matchingUpdate: u2
+        )
+        XCTAssertEqual(dest2, "1 to Van Cortlandt Park-242 St EXP")
+    }
+    
+    func testSkippedStopsTerminalInference() throws {
+        var tripUpdate = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.routeID = "L"
+        tripUpdate.trip = trip
+        
+        var u1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u1.stopID = "L08S" // Bedford Av
+        
+        var u2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u2.stopID = "L17S" // Myrtle-Wyckoff Avs (Active short-turn terminus)
+        
+        var u3 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        u3.stopID = "L29S" // Canarsie-Rockaway Pkwy (Cancelled / Skipped)
+        u3.scheduleRelationship = .skipped
+        
+        tripUpdate.stopTimeUpdate = [u1, u2, u3]
+        
+        let destination = TransitRealtimeService.shared.resolveDestination(
+            tripUpdate: tripUpdate,
+            line: "L",
+            stopId: "L08S",
+            matchingUpdate: u1
+        )
+        XCTAssertEqual(destination, "L to Myrtle-Wyckoff Avs (Short Turn)")
     }
 
     func testSubwayFeedUrlResolution() {

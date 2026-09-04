@@ -122,7 +122,10 @@ public final class TransitRealtimeService: @unchecked Sendable {
         targetRouteIds: [String] = [],
         referenceDate: Date = Date()
     ) throws -> [SpatialDatabaseManager.ArrivalInfo] {
-        let feedMessage = try TransitRealtime_FeedMessage(serializedBytes: data)
+        let feedMessage = try TransitRealtime_FeedMessage(
+            serializedBytes: data,
+            extensions: TransitRealtime_Gtfs_u45Realtime_u45Nyct_Extensions
+        )
         let nowEpoch = Int64(referenceDate.timeIntervalSince1970)
         
         let allowedRoutes: Set<String> = {
@@ -286,7 +289,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         guard diffSec <= 2700 else { continue }
                     }
                     
-                    let destination = resolveDestination(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
+                    let destination = resolveDestination(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId, matchingUpdate: stopUpdate)
                     let direction = resolveDirection(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
                     
                     // Compute distance / stop status description
@@ -673,63 +676,130 @@ public final class TransitRealtimeService: @unchecked Sendable {
         }
     }
     
-    private func resolveDestination(tripUpdate: TransitRealtime_TripUpdate, line: String, stopId: String) -> String {
-        let isNorthbound = stopId.hasSuffix("N")
-        let isSouthbound = stopId.hasSuffix("S")
+    func resolveDestination(
+        tripUpdate: TransitRealtime_TripUpdate,
+        line: String,
+        stopId: String,
+        matchingUpdate: TransitRealtime_TripUpdate.StopTimeUpdate? = nil
+    ) -> String {
+        let cleanStop = stopId.uppercased()
+        let isNorthbound = cleanStop.hasSuffix("N")
+        let isSouthbound = cleanStop.hasSuffix("S")
+        let isEastbound = cleanStop.hasSuffix("E")
+        let isWestbound = cleanStop.hasSuffix("W")
+        
+        let directionId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
+        let effectiveNorthbound: Bool = {
+            if isNorthbound { return true }
+            if isSouthbound { return false }
+            if let d = directionId { return d == 0 }
+            return true
+        }()
         
         if SubwayFeed.isBusRoute(line) {
-            let dirId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
-            let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : nil)
-            return Self.resolveBusDestination(routeId: line, directionId: dirId, directionHint: hint).destination
+            let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : (isEastbound ? "Eastbound" : (isWestbound ? "Westbound" : nil)))
+            return Self.resolveBusDestination(routeId: line, directionId: directionId, directionHint: hint).destination
         }
         
-        switch line.uppercased() {
-        case "L":
-            if isNorthbound { return "Manhattan - 8th Ave" }
-            if isSouthbound { return "Brooklyn - Canarsie / Rockaway Pkwy" }
-            return "8th Ave / Canarsie"
-        case "G":
-            if isNorthbound { return "Queens - Court Sq" }
-            if isSouthbound { return "Brooklyn - Church Ave" }
-            return "Court Sq / Church Ave"
-        case "1":
-            if isNorthbound { return "Uptown - Van Cortlandt Park" }
-            return "Downtown - South Ferry"
-        case "2":
-            if isNorthbound { return "Uptown - Wakefield 241 St" }
-            return "Brooklyn - Flatbush Ave"
-        case "3":
-            if isNorthbound { return "Uptown - Harlem 148 St" }
-            return "Brooklyn - New Lots Ave"
-        case "4", "5", "6", "6X":
-            if isNorthbound { return "Uptown / Bronx - Woodlawn / Pelham" }
-            return "Downtown / Brooklyn - Crown Hts / Utica"
-        case "7", "7X":
-            if isNorthbound { return "Queens - Flushing Main St" }
-            return "Manhattan - 34 St Hudson Yards"
-        case "A":
-            if isNorthbound { return "Uptown - Inwood 207 St" }
-            return "Far Rockaway / Lefferts Blvd"
-        case "C":
-            if isNorthbound { return "Uptown - 168 St" }
-            return "Brooklyn - Euclid Ave"
-        case "E":
-            if isNorthbound { return "Queens - Jamaica Center" }
-            return "Manhattan - World Trade Center"
-        case "N", "Q", "R", "W":
-            if isNorthbound { return "Uptown / Queens - Astoria / 96 St" }
-            return "Brooklyn - Coney Island / Bay Ridge"
-        case "B", "D":
-            if isNorthbound { return "Uptown / Bronx - Bedford Pk / Norwood" }
-            return "Brooklyn - Brighton Beach / Coney Island"
-        case "F", "FX", "M":
-            if isNorthbound { return "Queens - Jamaica / Forest Hills" }
-            return "Brooklyn - Coney Island / Middle Village"
-        case "J", "Z":
-            if isNorthbound { return "Queens - Jamaica Center" }
-            return "Manhattan - Broad St"
-        default:
-            return isNorthbound ? "Uptown / Terminal" : "Downtown / Terminal"
+        let cleanLine = line.uppercased().trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "_").last ?? line.uppercased()
+        
+        // 1. Dynamic Terminal Inference: Reverse scan for final non-skipped stop update
+        let nonSkippedUpdates = tripUpdate.stopTimeUpdate.filter { update in
+            if update.hasScheduleRelationship && update.scheduleRelationship == .skipped {
+                return false
+            }
+            return true
         }
+        
+        let terminalUpdate = nonSkippedUpdates.last
+        let terminalStopId = terminalUpdate?.stopID ?? ""
+        let cleanTerminalId = SubwayStationRegistry.cleanStopId(terminalStopId)
+        
+        let terminalName: String = {
+            if !terminalStopId.isEmpty, let name = SubwayStationRegistry.resolveStationName(for: terminalStopId) {
+                return name
+            }
+            let fallback = SubwayStationRegistry.defaultTerminal(route: cleanLine, isNorthbound: effectiveNorthbound)
+            if !fallback.name.isEmpty && fallback.name != "Uptown / Northbound" && fallback.name != "Downtown / Southbound" {
+                return fallback.name
+            }
+            return !cleanTerminalId.isEmpty ? cleanTerminalId : fallback.name
+        }()
+        
+        // 2. Short-Turn Detection (Doc 16 §4)
+        var isShortTurn = false
+        let trainId: String = {
+            if tripUpdate.trip.hasTransitRealtime_nyctTripDescriptor {
+                return tripUpdate.trip.TransitRealtime_nyctTripDescriptor.trainID
+            }
+            return ""
+        }()
+        
+        if trainId.hasPrefix("$") {
+            isShortTurn = true
+        } else if let stdTerminals = SubwayStationRegistry.standardTerminals[cleanLine] {
+            let allowedEndpoints = effectiveNorthbound ? stdTerminals.north : stdTerminals.south
+            if !allowedEndpoints.isEmpty && !cleanTerminalId.isEmpty && !allowedEndpoints.contains(cleanTerminalId) {
+                isShortTurn = true
+            }
+        }
+        
+        // 3. Physical Track Occupancy & Express Inference (Doc 16 §4)
+        let observedTrack: String = {
+            // A. Check current station's stop update
+            if let matched = matchingUpdate, matched.hasTransitRealtime_nyctStopTimeUpdate {
+                let actual = matched.TransitRealtime_nyctStopTimeUpdate.actualTrack.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !actual.isEmpty { return actual }
+                let scheduled = matched.TransitRealtime_nyctStopTimeUpdate.scheduledTrack.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !scheduled.isEmpty { return scheduled }
+            }
+            // B. Check initial non-skipped station (where NYCT feed anchors actualTrack)
+            if let firstNonSkipped = nonSkippedUpdates.first, firstNonSkipped.hasTransitRealtime_nyctStopTimeUpdate {
+                let actual = firstNonSkipped.TransitRealtime_nyctStopTimeUpdate.actualTrack.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !actual.isEmpty { return actual }
+                let scheduled = firstNonSkipped.TransitRealtime_nyctStopTimeUpdate.scheduledTrack.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !scheduled.isEmpty { return scheduled }
+            }
+            // C. Check any non-skipped stop update for actualTrack
+            for update in nonSkippedUpdates where update.hasTransitRealtime_nyctStopTimeUpdate {
+                let actual = update.TransitRealtime_nyctStopTimeUpdate.actualTrack.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !actual.isEmpty { return actual }
+            }
+            return ""
+        }().uppercased()
+        
+        var isExpress = false
+        var isPhysicalLocalOverride = false
+        
+        if observedTrack == "2" || observedTrack == "3" || observedTrack == "M" {
+            isExpress = true
+        } else if observedTrack == "1" || observedTrack == "4" {
+            if SubwayStationRegistry.defaultExpressRoutes.contains(cleanLine) {
+                isPhysicalLocalOverride = true
+            }
+            isExpress = false
+        } else {
+            // Track unpopulated: fallback to dispatch train ID prefix or route default
+            if trainId.hasPrefix("/") {
+                isExpress = true
+            } else if SubwayStationRegistry.defaultExpressRoutes.contains(cleanLine) {
+                isExpress = true
+            } else {
+                isExpress = false
+            }
+        }
+        
+        // 4. Disambiguated Output Formatting
+        var label = "\(cleanLine) to \(terminalName)"
+        if isShortTurn {
+            label += " (Short Turn)"
+        }
+        if isExpress {
+            label += " EXP"
+        } else if isPhysicalLocalOverride {
+            label += " Local"
+        }
+        
+        return label
     }
 }

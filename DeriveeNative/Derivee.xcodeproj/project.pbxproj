@@ -247,6 +247,7 @@
 		DEE383866D1C229789FC5E28 /* RoutingEngineBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02E3592BCFC7AFB5E5EABF5A /* RoutingEngineBridgeTests.swift */; };
 		E13E7DEA2CAD562FF8BC041A /* MultimodalTripAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D89EE5A7DAD4D46ED08472A6 /* MultimodalTripAttributes.swift */; };
 		E3078940A363E6D4FB910728 /* CustomizationSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71BEB9554F5F1D158F380826 /* CustomizationSettingsTests.swift */; };
+		E3BBB98FA62A254FF971DF7E /* SubwayStationRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 657333C2C6776034E2B15B9A /* SubwayStationRegistry.swift */; };
 		E3FCEAF1FCFAEFBBB20EFF25 /* CityDownloadPromptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6811DF6335651611CAE97B7A /* CityDownloadPromptSheet.swift */; };
 		E4819244971E15DADD9D4AE2 /* SubterraneanEgressEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BBB3FE265B6408A645B8D28 /* SubterraneanEgressEngine.swift */; };
 		E5AC07B09045A40A8F83388F /* derivee_transit.sqlite in Resources */ = {isa = PBXBuildFile; fileRef = 86B2FFDED57A84490398B9F8 /* derivee_transit.sqlite */; };
@@ -458,6 +459,7 @@
 		62E9C99DC7F5A34F0F0E9F20 /* testNavigationCollapsedPeekRecoveryAlertSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testNavigationCollapsedPeekRecoveryAlertSnapshot.1.png; sourceTree = "<group>"; };
 		62ED06D39875FEC2E5065687 /* DeriveeCoreTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DeriveeCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		645F1EEDEA7E098541109468 /* CityPackManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPackManagerTests.swift; sourceTree = "<group>"; };
+		657333C2C6776034E2B15B9A /* SubwayStationRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubwayStationRegistry.swift; sourceTree = "<group>"; };
 		664E7A8F40E896A173CD4006 /* BoundedAStarRouter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = BoundedAStarRouter.cpp; sourceTree = "<group>"; };
 		67F4EF897802B9246EA2ABDE /* RouteComparisonListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteComparisonListView.swift; sourceTree = "<group>"; };
 		6811DF6335651611CAE97B7A /* CityDownloadPromptSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityDownloadPromptSheet.swift; sourceTree = "<group>"; };
@@ -856,6 +858,7 @@
 				3B214904FA41349F5C65F7A9 /* StatsView.swift */,
 				8BBB3FE265B6408A645B8D28 /* SubterraneanEgressEngine.swift */,
 				445AD172FC50D843E3DEA9E7 /* subway-lines.geojson */,
+				657333C2C6776034E2B15B9A /* SubwayStationRegistry.swift */,
 				8CB6441E329AB503A0902905 /* TarExtractor.swift */,
 				D03B0D1C9B13EE0D4C25FBC6 /* ThumbZoneActionBar.swift */,
 				D7D9DCD362FB2ADD8F63B6B2 /* TrackingAttributes.swift */,
@@ -1464,6 +1467,7 @@
 				57D75F9BB5C60BB4F1F72570 /* StationBulletRenderer.swift in Sources */,
 				B20170553147346CCAB314B5 /* StatsView.swift in Sources */,
 				E4819244971E15DADD9D4AE2 /* SubterraneanEgressEngine.swift in Sources */,
+				E3BBB98FA62A254FF971DF7E /* SubwayStationRegistry.swift in Sources */,
 				E68315879251CC0BA705BBFE /* TarExtractor.swift in Sources */,
 				EFAA78991CC5DEBA8AB16540 /* ThumbZoneActionBar.swift in Sources */,
 				1A9952103EC3EF00C9D7C943 /* TrackThermometerModels.swift in Sources */,
