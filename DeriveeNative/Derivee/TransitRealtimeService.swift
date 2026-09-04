@@ -137,7 +137,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
             return set
         }()
         
-        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship)] = []
+        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship, isHoldingStation: Bool, progressLambda: Double, isAssigned: Bool)] = []
         let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         
         // 1. Index VehiclePositions from the feed by tripId and vehicleId
@@ -213,30 +213,28 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 return 0
             }()
             
-            // Check vehicle status and origin dwell
-            let isDwellingAtOrigin: Bool = {
-                // Origin dwell applies ONLY when the first stop is sequence 1 (the start of the entire trip)
-                guard firstStopSequence <= 1 else { return false }
-                
+            // Extract is_assigned ground truth from NYCT TripDescriptor extension
+            let isAssigned: Bool = {
+                if tripUpdate.trip.hasTransitRealtime_nyctTripDescriptor {
+                    return tripUpdate.trip.TransitRealtime_nyctTripDescriptor.isAssigned
+                }
+                if let vp = matchedVehicle, vp.trip.hasTransitRealtime_nyctTripDescriptor {
+                    return vp.trip.TransitRealtime_nyctTripDescriptor.isAssigned
+                }
+                return false
+            }()
+            
+            let isVehicleStoppedAt: Bool = {
                 if let vp = matchedVehicle {
-                    let isStopped: Bool = {
-                        if vp.hasCurrentStatus {
-                            return vp.currentStatus == .stoppedAt
-                        }
-                        return true
-                    }()
-                    guard isStopped else { return false }
-                    
+                    if vp.hasCurrentStatus {
+                        return vp.currentStatus == .stoppedAt
+                    }
                     if vp.hasCurrentStopSequence {
                         return vp.currentStopSequence <= 1
                     }
                     if vp.hasStopID && !vp.stopID.isEmpty {
                         return self.isStopMatch(currentStopId: vp.stopID, targetStopId: firstStopId)
                     }
-                    return true
-                }
-                // If no vehicle position telemetry, check if origin departure time is still in the future
-                if firstStopDepartureEpoch > nowEpoch {
                     return true
                 }
                 return false
@@ -249,6 +247,18 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 }
                 return false
             }()
+            
+            // Enforce Terminal Origin Dwell Anchor per Doc 17 (§3 & §4)
+            let dwellState = TerminusDwellAnchor.evaluateDwell(
+                isAssigned: isAssigned,
+                firstStopSequence: firstStopSequence,
+                isVehicleStoppedAt: isVehicleStoppedAt,
+                isVehicleInTransit: isVehicleInTransit,
+                hasVehicleTelemetry: matchedVehicle != nil,
+                departureEpoch: firstStopDepartureEpoch,
+                nowEpoch: nowEpoch
+            )
+            let isDwellingAtOrigin = dwellState.isDwellingAtOrigin
             
             // Match stop updates
             for (idx, stopUpdate) in tripUpdate.stopTimeUpdate.enumerated() {
@@ -281,8 +291,13 @@ public final class TransitRealtimeService: @unchecked Sendable {
                     
                     let diffSec = arrivalEpoch - nowEpoch
                     if effectiveRelationship != .canceled {
-                        // Filter out arrivals departed more than 30 seconds ago (30s boarding grace window)
-                        guard diffSec >= -30 else { continue }
+                        // Filter out arrivals departed more than 30 seconds ago (30s boarding grace window),
+                        // but preserve consists actively dwelling or held at origin terminal (Doc 17 terminal origin dwell anchor)
+                        if isDwellingAtOrigin && isVehicleStoppedAt {
+                            guard diffSec >= -1800 else { continue }
+                        } else {
+                            guard diffSec >= -30 else { continue }
+                        }
                         
                         // Clamping: In real-time arrival feeds, filter out far-future scheduled predictions (> 45 min)
                         // to prevent ghost/off-shift block schedules showing as immediate arrivals
@@ -292,14 +307,21 @@ public final class TransitRealtimeService: @unchecked Sendable {
                     let destination = resolveDestination(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId, matchingUpdate: stopUpdate)
                     let direction = resolveDirection(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
                     
-                    // Compute distance / stop status description
+                    // Compute distance / stop status description with terminal dwell & hold clamping
                     let distance: String
-                    if diffSec <= 0 {
+                    if dwellState.isHolding {
+                        // Bug 7: Flag HOLDING_STATION when departure delayed > 120s
+                        distance = (idx == 0) ? "Holding at Station" : "Held at Terminus"
+                    } else if diffSec <= 0 && (idx == 0 || !isDwellingAtOrigin) {
                         distance = "Boarding"
                     } else if idx == 0 {
                         // Target stop is the initial / current stop in this update
                         if isDwellingAtOrigin && !isVehicleInTransit {
-                            distance = (matchedVehicle != nil) ? "At Terminus" : "Scheduled"
+                            if dwellState.visualState == .boardingTerminal || diffSec <= 0 {
+                                distance = "Boarding"
+                            } else {
+                                distance = (isAssigned || matchedVehicle != nil) ? "At Terminus" : "Scheduled"
+                            }
                         } else if let vp = matchedVehicle {
                             if vp.hasCurrentStatus && (vp.currentStatus == .incomingAt || vp.currentStatus == .inTransitTo) {
                                 distance = "Approaching"
@@ -314,7 +336,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
                     } else {
                         // Target stop is downstream (idx > 0)
                         if isDwellingAtOrigin && !isVehicleInTransit {
-                            distance = (matchedVehicle != nil) ? "At Terminus" : "Scheduled"
+                            // Suppress phantom downstream movements ("x stops away") while consist is dwelling at origin
+                            distance = (isAssigned || matchedVehicle != nil) ? "At Terminus" : "Scheduled"
                         } else {
                             // Vehicle has departed origin or is in transit
                             let effectiveStopsAway: Int
@@ -332,7 +355,18 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         }
                     }
                     
-                    rawArrivals.append((line: tripRouteId, destination: destination, arrivalEpoch: arrivalEpoch, direction: direction, distance: distance, tripId: rawTripId, scheduleRelationship: effectiveRelationship))
+                    rawArrivals.append((
+                        line: tripRouteId,
+                        destination: destination,
+                        arrivalEpoch: arrivalEpoch,
+                        direction: direction,
+                        distance: distance,
+                        tripId: rawTripId,
+                        scheduleRelationship: effectiveRelationship,
+                        isHoldingStation: dwellState.isHolding,
+                        progressLambda: dwellState.linearProgress,
+                        isAssigned: isAssigned
+                    ))
                 }
             }
         }
@@ -345,7 +379,10 @@ public final class TransitRealtimeService: @unchecked Sendable {
             let diffSec = item.arrivalEpoch - nowEpoch
             let minutes: Int
             let distance: String?
-            if diffSec <= 0 {
+            if item.isHoldingStation {
+                minutes = max(0, Int(ceil(Double(max(0, diffSec)) / 60.0)))
+                distance = item.distance
+            } else if diffSec <= 0 {
                 minutes = 0
                 distance = "Boarding"
             } else {
@@ -361,7 +398,10 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 distanceDescription: distance,
                 arrivalDate: Date(timeIntervalSince1970: TimeInterval(item.arrivalEpoch)),
                 tripId: item.tripId,
-                scheduleRelationship: item.scheduleRelationship
+                scheduleRelationship: item.scheduleRelationship,
+                isHoldingStation: item.isHoldingStation,
+                progressLambda: item.progressLambda,
+                isAssigned: item.isAssigned
             )
         }
         

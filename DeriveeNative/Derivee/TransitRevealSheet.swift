@@ -754,7 +754,20 @@ struct LiveArrivalsCarousel: View {
                                         
                                         Spacer()
                                         
-                                        if arrival.minutes == 0 {
+                                        if arrival.isHoldingStation {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "exclamationmark.triangle.fill")
+                                                    .font(.system(size: 9, weight: .bold))
+                                                    .foregroundColor(Color(hex: "#D97706"))
+                                                Text("HELD")
+                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(Color(hex: "#D97706"))
+                                            }
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(Color(hex: "#FFB300").opacity(0.18))
+                                            .clipShape(Capsule())
+                                        } else if arrival.minutes == 0 {
                                             HStack(spacing: 4) {
                                                 Circle()
                                                     .fill(Color(hex: "#FFB300"))

@@ -1308,6 +1308,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let arrivalDate: Date
         public let tripId: String?
         public let scheduleRelationship: ScheduleRelationship
+        public let isHoldingStation: Bool
+        public let progressLambda: Double
+        public let isAssigned: Bool
         
         public init(
             id: UUID = UUID(),
@@ -1318,7 +1321,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             distanceDescription: String? = nil,
             arrivalDate: Date = Date(),
             tripId: String? = nil,
-            scheduleRelationship: ScheduleRelationship = .scheduled
+            scheduleRelationship: ScheduleRelationship = .scheduled,
+            isHoldingStation: Bool = false,
+            progressLambda: Double = 0.0,
+            isAssigned: Bool = false
         ) {
             self.id = id
             self.line = line
@@ -1329,6 +1335,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.arrivalDate = arrivalDate
             self.tripId = tripId
             self.scheduleRelationship = scheduleRelationship
+            self.isHoldingStation = isHoldingStation
+            self.progressLambda = progressLambda
+            self.isAssigned = isAssigned
         }
     }
     

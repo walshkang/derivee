@@ -684,4 +684,235 @@ final class TransitRealtimeTests: XCTestCase {
         )
         XCTAssertEqual(arrivals[0].distanceDescription, "Approaching")
     }
+
+    // MARK: - Wave P.5: WP5-TERMINUS-DWELL Tests
+
+    func testTerminusDwellAnchorProgressClamping() throws {
+        let nowEpoch: Int64 = 1700000000
+        let refDate = Date(timeIntervalSince1970: TimeInterval(nowEpoch))
+        
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(nowEpoch)
+        feedMessage.header = header
+        
+        var ent1 = TransitRealtime_FeedEntity()
+        ent1.id = "TU_4_DWELL_001"
+        var tu = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "TRIP_4_DWELL_001"
+        trip.routeID = "4"
+        
+        var nyctTrip = TransitRealtime_NyctTripDescriptor()
+        nyctTrip.isAssigned = true
+        trip.TransitRealtime_nyctTripDescriptor = nyctTrip
+        tu.trip = trip
+        
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "401N" // Woodlawn terminal
+        stu1.stopSequence = 1
+        var arr1 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr1.time = nowEpoch + 120 // 2m in future
+        stu1.arrival = arr1
+        stu1.departure = arr1
+        
+        var stu2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2.stopID = "402N" // Mosholu Pkwy (1 stop downstream)
+        stu2.stopSequence = 2
+        var arr2 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr2.time = nowEpoch + 240
+        stu2.arrival = arr2
+        stu2.departure = arr2
+        
+        var stu3 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu3.stopID = "405N" // Bedford Pk Blvd (3 stops downstream)
+        stu3.stopSequence = 3
+        var arr3 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr3.time = nowEpoch + 420
+        stu3.arrival = arr3
+        stu3.departure = arr3
+        
+        tu.stopTimeUpdate = [stu1, stu2, stu3]
+        ent1.tripUpdate = tu
+        
+        var ent2 = TransitRealtime_FeedEntity()
+        ent2.id = "VP_4_DWELL_001"
+        var vp = TransitRealtime_VehiclePosition()
+        vp.trip = trip
+        vp.currentStatus = .stoppedAt
+        vp.currentStopSequence = 1
+        vp.stopID = "401N"
+        ent2.vehicle = vp
+        
+        feedMessage.entity = [ent1, ent2]
+        let data = try feedMessage.serializedData()
+        
+        // 1. Query origin terminal (401)
+        let originArrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "401",
+            targetRouteId: "4",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(originArrivals.count, 1)
+        XCTAssertEqual(originArrivals[0].progressLambda, 0.0, "Progress lambda must be clamped strictly to 0.0 at origin terminal.")
+        XCTAssertTrue(originArrivals[0].isAssigned, "isAssigned must be true from NyctTripDescriptor.")
+        XCTAssertFalse(originArrivals[0].isHoldingStation, "Departure is within schedule window, not holding station.")
+        XCTAssertEqual(originArrivals[0].distanceDescription, "At Terminus")
+        
+        // 2. Query downstream station (405)
+        let downstreamArrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "405",
+            targetRouteId: "4",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(downstreamArrivals.count, 1)
+        XCTAssertEqual(downstreamArrivals[0].progressLambda, 0.0, "Downstream query must preserve clamped lambda ≡ 0.0.")
+        XCTAssertEqual(downstreamArrivals[0].distanceDescription, "At Terminus", "Downstream stops must render 'At Terminus' instead of active stops away while dwelling.")
+    }
+
+    func testHoldingStationFlagAfter120Seconds() throws {
+        let nowEpoch: Int64 = 1700000000
+        let refDate = Date(timeIntervalSince1970: TimeInterval(nowEpoch))
+        
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(nowEpoch)
+        feedMessage.header = header
+        
+        var ent1 = TransitRealtime_FeedEntity()
+        ent1.id = "TU_4_HELD_001"
+        var tu = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "TRIP_4_HELD_001"
+        trip.routeID = "4"
+        
+        var nyctTrip = TransitRealtime_NyctTripDescriptor()
+        nyctTrip.isAssigned = true
+        trip.TransitRealtime_nyctTripDescriptor = nyctTrip
+        tu.trip = trip
+        
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "401N" // Woodlawn terminal
+        stu1.stopSequence = 1
+        var arr1 = TransitRealtime_TripUpdate.StopTimeEvent()
+        // Departure was scheduled 150 seconds ago (over 120s threshold)
+        arr1.time = nowEpoch - 150
+        stu1.arrival = arr1
+        stu1.departure = arr1
+        
+        var stu2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2.stopID = "405N" // Downstream stop
+        stu2.stopSequence = 2
+        var arr2 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr2.time = nowEpoch + 180
+        stu2.arrival = arr2
+        stu2.departure = arr2
+        
+        tu.stopTimeUpdate = [stu1, stu2]
+        ent1.tripUpdate = tu
+        
+        var ent2 = TransitRealtime_FeedEntity()
+        ent2.id = "VP_4_HELD_001"
+        var vp = TransitRealtime_VehiclePosition()
+        vp.trip = trip
+        vp.currentStatus = .stoppedAt
+        vp.currentStopSequence = 1
+        vp.stopID = "401N"
+        ent2.vehicle = vp
+        
+        feedMessage.entity = [ent1, ent2]
+        let data = try feedMessage.serializedData()
+        
+        // 1. Query origin terminal (401)
+        let originArrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "401",
+            targetRouteId: "4",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(originArrivals.count, 1)
+        XCTAssertTrue(originArrivals[0].isHoldingStation, "Delayed departure past 120s while STOPPED_AT must flag HOLDING_STATION.")
+        XCTAssertEqual(originArrivals[0].distanceDescription, "Holding at Station")
+        XCTAssertEqual(originArrivals[0].progressLambda, 0.0)
+        
+        // 2. Query downstream station (405)
+        let downstreamArrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "405",
+            targetRouteId: "4",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(downstreamArrivals.count, 1)
+        XCTAssertTrue(downstreamArrivals[0].isHoldingStation)
+        XCTAssertEqual(downstreamArrivals[0].distanceDescription, "Held at Terminus", "Downstream stops must render 'Held at Terminus' when train is held.")
+        XCTAssertEqual(downstreamArrivals[0].progressLambda, 0.0)
+    }
+
+    func testUnassignedTripRendersScheduled() throws {
+        let nowEpoch: Int64 = 1700000000
+        let refDate = Date(timeIntervalSince1970: TimeInterval(nowEpoch))
+        
+        var feedMessage = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(nowEpoch)
+        feedMessage.header = header
+        
+        var ent1 = TransitRealtime_FeedEntity()
+        ent1.id = "TU_4_UNASSIGNED"
+        var tu = TransitRealtime_TripUpdate()
+        var trip = TransitRealtime_TripDescriptor()
+        trip.tripID = "TRIP_4_UNASSIGNED"
+        trip.routeID = "4"
+        
+        var nyctTrip = TransitRealtime_NyctTripDescriptor()
+        nyctTrip.isAssigned = false // Unassigned timetable prediction
+        trip.TransitRealtime_nyctTripDescriptor = nyctTrip
+        tu.trip = trip
+        
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "401N"
+        stu1.stopSequence = 1
+        var arr1 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr1.time = nowEpoch + 300 // 5m in future
+        stu1.arrival = arr1
+        stu1.departure = arr1
+        
+        var stu2 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2.stopID = "405N"
+        stu2.stopSequence = 2
+        var arr2 = TransitRealtime_TripUpdate.StopTimeEvent()
+        arr2.time = nowEpoch + 500
+        stu2.arrival = arr2
+        stu2.departure = arr2
+        
+        tu.stopTimeUpdate = [stu1, stu2]
+        ent1.tripUpdate = tu
+        
+        feedMessage.entity = [ent1]
+        let data = try feedMessage.serializedData()
+        
+        let originArrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "401",
+            targetRouteId: "4",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(originArrivals.count, 1)
+        XCTAssertFalse(originArrivals[0].isAssigned)
+        XCTAssertEqual(originArrivals[0].distanceDescription, "Scheduled")
+        
+        let downstreamArrivals = try TransitRealtimeService.shared.parseFeedMessage(
+            data: data,
+            stopId: "405",
+            targetRouteId: "4",
+            referenceDate: refDate
+        )
+        XCTAssertEqual(downstreamArrivals.count, 1)
+        XCTAssertEqual(downstreamArrivals[0].distanceDescription, "Scheduled")
+    }
 }

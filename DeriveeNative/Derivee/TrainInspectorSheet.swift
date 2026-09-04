@@ -160,18 +160,33 @@ struct TrainInspectorSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 }
                 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color(hex: "#10B981"))
-                        .frame(width: 5, height: 5)
-                    Text("REALTIME AVL")
-                        .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(hex: "#059669"))
+                if arrival.isHoldingStation {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(Color(hex: "#D97706"))
+                        Text("STATION HOLD")
+                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#D97706"))
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color(hex: "#FFB300").opacity(0.18))
+                    .clipShape(Capsule())
+                } else {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(hex: "#10B981"))
+                            .frame(width: 5, height: 5)
+                        Text("REALTIME AVL")
+                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#059669"))
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color(hex: "#10B981").opacity(0.12))
+                    .clipShape(Capsule())
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color(hex: "#10B981").opacity(0.12))
-                .clipShape(Capsule())
                 
                 Spacer()
                 
@@ -616,6 +631,14 @@ struct TrainInspectorSheet: View {
                                     .padding(.vertical, 1.5)
                                     .background(Color(hex: "#FFB300"))
                                     .foregroundColor(.black)
+                                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                            } else if isFirst && arrival.isHoldingStation {
+                                Text("HELD AT TERMINUS")
+                                    .font(.system(size: 8.5, weight: .black, design: .monospaced))
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1.5)
+                                    .background(Color(hex: "#FFB300").opacity(0.2))
+                                    .foregroundColor(Color(hex: "#D97706"))
                                     .clipShape(RoundedRectangle(cornerRadius: 3))
                             }
                         }
