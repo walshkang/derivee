@@ -28,6 +28,9 @@ final class SpatialStore: @unchecked Sendable {
     @ObservationIgnored private let liveUpdatePriority: TaskPriority
     @ObservationIgnored private let observationScheduler: ValueObservationScheduler
     
+    /// Metal spatial memory engine managing the open-addressing GPU hash table (Wave O.2 & O.3)
+    public private(set) var spatialEngine: H3SpatialMemoryEngine?
+    
     init(
         dbManager: SpatialDatabaseManager = .shared,
         cityConfig: CityConfig = .nycDefault,
@@ -39,6 +42,7 @@ final class SpatialStore: @unchecked Sendable {
         self.activeCitySlug = cityConfig.slug
         self.liveUpdatePriority = liveUpdatePriority
         self.observationScheduler = observationScheduler
+        self.spatialEngine = try? H3SpatialMemoryEngine()
         CameraBounds.setActiveConfig(cityConfig)
         startObservation(for: cityConfig.slug)
         
@@ -71,6 +75,12 @@ final class SpatialStore: @unchecked Sendable {
         self.currentFogShape = nil
         self.transientHexShape = nil
         self.newlyUnlockedHexLocation = nil
+        
+        Task { [weak self, dbWriter = dbManager.dbWriter, slug = config.slug] in
+            guard let self = self, let engine = self.spatialEngine else { return }
+            try? await engine.reset()
+            try? await engine.hydrateFromDatabase(dbWriter: dbWriter, citySlug: slug)
+        }
         
         startObservation(for: config.slug)
     }
@@ -117,6 +127,19 @@ final class SpatialStore: @unchecked Sendable {
                 self.exploredHexes = newSet
                 self.previousCount = newCount
                 self.previousHexes = newSet
+                
+                if oldCount == 0 {
+                    Task { [weak self, dbWriter = self.dbManager.dbWriter, slug = citySlug] in
+                        guard let self = self, let engine = self.spatialEngine else { return }
+                        try? await engine.hydrateFromDatabase(dbWriter: dbWriter, citySlug: slug)
+                    }
+                } else if let cell = newlyUnlockedCell {
+                    Task { [weak self] in
+                        guard let self = self, let engine = self.spatialEngine else { return }
+                        let timestamp = UInt32(Date().timeIntervalSince1970)
+                        try? await engine.ingestHexIndices([(h3Index: cell, timestamp: timestamp)])
+                    }
+                }
                 
                 self.recomputeFogShape(hexes: newSet, newlyUnlockedCell: newlyUnlockedCell, isInitial: oldCount == 0)
             }

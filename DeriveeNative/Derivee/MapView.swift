@@ -22,6 +22,7 @@ struct MapView: UIViewRepresentable {
     var showBoundaryBorders: Bool = MapCustomizationDefaults.defaultShowBoundaryBorders
     var showSubwayThoroughfares: Bool = MapCustomizationDefaults.defaultShowSubwayThoroughfares
     var subwayStationMarkerStyle: SubwayStationMarkerStyle = MapCustomizationDefaults.defaultSubwayStationMarkerStyle
+    var enableMetalFogEngine: Bool = MapCustomizationDefaults.defaultEnableMetalFogEngine
     var nearbyBusStops: [SpatialDatabaseManager.NearbyBusStop] = []
     var activeSignalCoordinate: CLLocationCoordinate2D? = nil
     var onAmbientMapTap: (() -> Void)? = nil
@@ -171,6 +172,7 @@ struct MapView: UIViewRepresentable {
         var lureTimer: Timer?
         var isLurePulsed: Bool = false
         var isRollingBack: Bool = false
+        var metalFogLayer: MetalFogStyleLayer?
         
         // MARK: - Wave O.1: High-Precision Camera Bridge & VSync Synchronizer
         let cameraBridge = LockFreeCameraBridge()
@@ -566,6 +568,29 @@ struct MapView: UIViewRepresentable {
             fogLayer.fillOpacity = NSExpression(forConstantValue: parent.fogOpacity)
             style.insertLayer(fogLayer, above: bulletsLayer)
             
+            // Wave O.3: Hardware-accelerated Metal Custom Style Layer
+            if parent.enableMetalFogEngine {
+                let metalFog = MetalFogStyleLayer(
+                    identifier: MapCustomizationDefaults.metalFogLayerId,
+                    spatialEngine: parent.spatialStore.spatialEngine
+                )
+                metalFog.fogOpacity = Float(parent.fogOpacity)
+                self.metalFogLayer = metalFog
+                
+                // Research Doc 07 §3 Pattern A & Doc 20 §2:
+                // Precise Z-Index Placement: Insert fog directly below MLNSymbolStyleLayer
+                // (station bullets, basemap street/place labels, active POI symbols)
+                // and strictly above sub-fog transit networks (bulletsLayer)
+                if let firstSymbolLayer = style.layers.first(where: { $0 is MLNSymbolStyleLayer }) {
+                    style.insertLayer(metalFog, below: firstSymbolLayer)
+                } else {
+                    style.insertLayer(metalFog, above: bulletsLayer)
+                }
+                
+                // Suppress legacy CPU polygon fill when hardware Metal engine is active
+                fogLayer.fillOpacity = NSExpression(forConstantValue: 0.0)
+            }
+            
             let borderLayer = MLNLineStyleLayer(identifier: fogBorderLayerId, source: fogSource)
             borderLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: MapCustomizationDefaults.boundaryBorderColorHex))
             borderLayer.lineWidth = NSExpression(forConstantValue: MapCustomizationDefaults.boundaryBorderWidth)
@@ -764,7 +789,10 @@ struct MapView: UIViewRepresentable {
         
         func updateFogOpacity(_ opacity: Double, in style: MLNStyle) {
             guard isMapStyleLoaded else { return }
-            if let fogLayer = style.layer(withIdentifier: fogLayerId) as? MLNFillStyleLayer {
+            if parent.enableMetalFogEngine {
+                metalFogLayer?.fogOpacity = Float(opacity)
+                metalFogLayer?.setNeedsDisplay()
+            } else if let fogLayer = style.layer(withIdentifier: fogLayerId) as? MLNFillStyleLayer {
                 fogLayer.fillOpacityTransition = MLNTransition(duration: 0, delay: 0)
                 fogLayer.fillOpacity = NSExpression(forConstantValue: opacity)
             }
@@ -779,6 +807,11 @@ struct MapView: UIViewRepresentable {
         }
         
         func updateExploredHexes(in mapView: MLNMapView, with shape: MLNShape?) {
+            // Wave O.3: Invalidate Metal fog style layer to trigger redraw
+            if parent.enableMetalFogEngine {
+                metalFogLayer?.setNeedsDisplay()
+            }
+            
             let interiorCount: Int
             if let poly = shape as? MLNPolygon {
                 interiorCount = poly.interiorPolygons?.count ?? 0
