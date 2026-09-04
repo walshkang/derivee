@@ -183,6 +183,7 @@ struct StatsView: View {
                 }
                 .presentationDragIndicator(.visible)
                 .presentationContentInteraction(.scrolls)
+                .transitSheetGlassBackground()
             }
             .navigationDestination(isPresented: $showCitiesStorage) {
                 CitiesStorageManagerView(cityDetectionService: cityDetectionService)

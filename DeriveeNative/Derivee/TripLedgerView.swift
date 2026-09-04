@@ -142,6 +142,7 @@ struct TripLedgerView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .scrollBounceBehavior(.basedOnSize)
                 }
             }

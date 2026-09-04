@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0078B3425107FBB2623C3804 /* BasemapTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D018BBDA1F928EA07A82D14 /* BasemapTheme.swift */; };
 		007BBC6E9424EBAE40FAEB9B /* TransitCartographyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EFCFC3014D9FE6A95028C42 /* TransitCartographyTests.swift */; };
+		043456A0B80A02559E7E5F5D /* TransitSheetGlassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7461DC44C0809629C17C0B16 /* TransitSheetGlassTests.swift */; };
 		04721C321EF5345FCFCD6948 /* gtfs-realtime.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = B997BDB8B2136E13891AB724 /* gtfs-realtime.pb.swift */; };
 		04BED662544405D094E4CBB8 /* SpatialDatabaseStopMetadataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1320AE4DCCF6608E5D80A194 /* SpatialDatabaseStopMetadataProvider.swift */; };
 		0572BB0F67A97585C2A4BC5E /* BasemapStyleLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 506C0DF82966A6FB7304C38D /* BasemapStyleLoader.swift */; };
@@ -150,6 +151,7 @@
 		804F4D404A6CCB6991B7C55F /* DynamicRecoveryCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9637BEC808598CECBE6F9C5 /* DynamicRecoveryCardView.swift */; };
 		81F14E6F9DBC8CB351D23FCB /* testNavigationCollapsedPeekViewBikeSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 87BE25C980F027E7AD156C36 /* testNavigationCollapsedPeekViewBikeSnapshot.1.png */; };
 		84E004CF69EA32AB21E22EE6 /* TransitCartographyLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10DFDA8752056A7E5B048A07 /* TransitCartographyLoader.swift */; };
+		8635B4FD24DED28DD4063628 /* TransitSheetGlassBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF0421686FDEE1A5EBF6A97 /* TransitSheetGlassBackground.swift */; };
 		89B639707B14C4708FFCF35F /* CrystallineAperture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 506645539A60ED5C91F84D82 /* CrystallineAperture.swift */; };
 		89D59E37CFBC9031673E0995 /* FogCacheHandshakeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D1316A233DA1D98239A28BC /* FogCacheHandshakeTests.swift */; };
 		8BE08985845BB5107F48ECE4 /* ExplorationResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAC15B31EFF91C40E2E93EB /* ExplorationResetTests.swift */; };
@@ -483,6 +485,7 @@
 		6FE9FC12116C32B644578448 /* TrainInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainInspectorTests.swift; sourceTree = "<group>"; };
 		71BEB9554F5F1D158F380826 /* CustomizationSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomizationSettingsTests.swift; sourceTree = "<group>"; };
 		72EF2D6062137DC7FAC47C52 /* GBFSDockGatingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GBFSDockGatingUITests.swift; sourceTree = "<group>"; };
+		7461DC44C0809629C17C0B16 /* TransitSheetGlassTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitSheetGlassTests.swift; sourceTree = "<group>"; };
 		75E67A5974FEC2D53CEF935D /* SpatialDatabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialDatabaseManager.swift; sourceTree = "<group>"; };
 		769592D64F1678EB59A70440 /* TransitRouteBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRouteBadge.swift; sourceTree = "<group>"; };
 		76D0DDBB46844D2C6E6D99E7 /* GBFSSyncServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GBFSSyncServiceTests.swift; sourceTree = "<group>"; };
@@ -605,6 +608,7 @@
 		D9BB8C028C1F65B7EB331BF9 /* MissedConnectionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissedConnectionDetector.swift; sourceTree = "<group>"; };
 		D9D98AB0B55983D69483A051 /* gtfs-realtime-NYCT.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "gtfs-realtime-NYCT.pb.swift"; sourceTree = "<group>"; };
 		DA46EB2F62050B718EF25B29 /* NavigationGuidanceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationGuidanceSheet.swift; sourceTree = "<group>"; };
+		DAF0421686FDEE1A5EBF6A97 /* TransitSheetGlassBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitSheetGlassBackground.swift; sourceTree = "<group>"; };
 		DB19CA497A7B9ED252BFE955 /* CircularProgressRing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CircularProgressRing.swift; sourceTree = "<group>"; };
 		DBFA51B2FA5E04F7479B0416 /* TransitHeatmapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitHeatmapTests.swift; sourceTree = "<group>"; };
 		E0B9E3D9CD960149F1B21F9B /* testRouteComparisonCardSubwaySnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testRouteComparisonCardSubwaySnapshot.1.png; sourceTree = "<group>"; };
@@ -893,6 +897,7 @@
 				859087AC5C30D2C163F4039B /* TransitRevealSheet.swift */,
 				769592D64F1678EB59A70440 /* TransitRouteBadge.swift */,
 				94F77B8E3EE24B3260000B62 /* TransitRouteData.swift */,
+				DAF0421686FDEE1A5EBF6A97 /* TransitSheetGlassBackground.swift */,
 				7F9718A0C6F19BF050A52A38 /* TransitSparklineView.swift */,
 				1A7952B48BF1397A2D6F1C5B /* TripLedgerView.swift */,
 				398461CE1ED385C0DF134798 /* VSyncCameraSynchronizer.swift */,
@@ -1030,6 +1035,7 @@
 				488C4F7958297C18652435E6 /* TransitRealtimeTests.swift */,
 				FF9CAA8CE060F1178AB60345 /* TransitReliabilityEngineTests.swift */,
 				21AD6FB3518E383909502845 /* TransitRevealSheetTests.swift */,
+				7461DC44C0809629C17C0B16 /* TransitSheetGlassTests.swift */,
 				EEFDED606F221A5FBA4018C4 /* __Snapshots__ */,
 			);
 			path = DeriveeTests;
@@ -1509,6 +1515,7 @@
 				CDDCAE3518655AB14CA92272 /* TransitRevealSheet.swift in Sources */,
 				6F8F1E60DAA690CB2A8C06AA /* TransitRouteBadge.swift in Sources */,
 				1885A68AA306E0E442B71BBA /* TransitRouteData.swift in Sources */,
+				8635B4FD24DED28DD4063628 /* TransitSheetGlassBackground.swift in Sources */,
 				42FD08C669B75AB9B3559199 /* TransitSparklineView.swift in Sources */,
 				26749174C3E9C58C916CFA5D /* TripLedgerView.swift in Sources */,
 				AC34B6505CB6157C531FF536 /* VSyncCameraSynchronizer.swift in Sources */,
@@ -1601,6 +1608,7 @@
 				CFD68966CCF9295382827C39 /* TransitRealtimeTests.swift in Sources */,
 				AFE6FA2FA454A7DD8F64C4A2 /* TransitReliabilityEngineTests.swift in Sources */,
 				4D5F43EF102E37A074561599 /* TransitRevealSheetTests.swift in Sources */,
+				043456A0B80A02559E7E5F5D /* TransitSheetGlassTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

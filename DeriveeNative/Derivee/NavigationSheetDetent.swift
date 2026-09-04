@@ -39,17 +39,20 @@ public enum NavigationSheetDetent: CGFloat, CaseIterable, Sendable {
 }
 
 /// View modifier applying the standardized 3-tier navigation detents, background interaction,
-/// drag indicator, and frosted glass material.
+/// drag indicator, and high-contrast 3-tier glassmorphic material (Doc 18).
 public struct StandardNavigationSheetModifier: ViewModifier {
     @Binding public var selectedDetent: PresentationDetent
     public var interactiveUpThrough: PresentationDetent
+    public var cornerRadius: CGFloat
     
     public init(
         selectedDetent: Binding<PresentationDetent>,
-        interactiveUpThrough: PresentationDetent = NavigationSheetDetent.half.presentationDetent
+        interactiveUpThrough: PresentationDetent = NavigationSheetDetent.half.presentationDetent,
+        cornerRadius: CGFloat = 28
     ) {
         self._selectedDetent = selectedDetent
         self.interactiveUpThrough = interactiveUpThrough
+        self.cornerRadius = cornerRadius
     }
     
     public func body(content: Content) -> some View {
@@ -57,16 +60,21 @@ public struct StandardNavigationSheetModifier: ViewModifier {
             .presentationDetents(NavigationSheetDetent.standardSet, selection: $selectedDetent)
             .presentationDragIndicator(.visible)
             .presentationBackgroundInteraction(.enabled(upThrough: interactiveUpThrough))
-            .presentationBackground(.ultraThinMaterial)
             .presentationContentInteraction(.scrolls)
+            .transitSheetGlassBackground(cornerRadius: cornerRadius)
     }
 }
 
 public struct StandardNavigationSheetStaticModifier: ViewModifier {
     public var interactiveUpThrough: PresentationDetent
+    public var cornerRadius: CGFloat
     
-    public init(interactiveUpThrough: PresentationDetent = NavigationSheetDetent.half.presentationDetent) {
+    public init(
+        interactiveUpThrough: PresentationDetent = NavigationSheetDetent.half.presentationDetent,
+        cornerRadius: CGFloat = 28
+    ) {
         self.interactiveUpThrough = interactiveUpThrough
+        self.cornerRadius = cornerRadius
     }
     
     public func body(content: Content) -> some View {
@@ -74,25 +82,40 @@ public struct StandardNavigationSheetStaticModifier: ViewModifier {
             .presentationDetents(NavigationSheetDetent.standardSet)
             .presentationDragIndicator(.visible)
             .presentationBackgroundInteraction(.enabled(upThrough: interactiveUpThrough))
-            .presentationBackground(.ultraThinMaterial)
             .presentationContentInteraction(.scrolls)
+            .transitSheetGlassBackground(cornerRadius: cornerRadius)
     }
 }
 
 public extension View {
     /// Applies standardized 3-tier navigation sheet detents (15%, 50%, 90%),
-    /// preserving floating hero map interactivity up through the half detent (50%).
+    /// preserving floating hero map interactivity up through the half detent (50%),
+    /// with the high-contrast 3-tier glassmorphic backdrop.
     func standardNavigationDetents(
         selectedDetent: Binding<PresentationDetent>,
-        interactiveUpThrough: PresentationDetent = NavigationSheetDetent.half.presentationDetent
+        interactiveUpThrough: PresentationDetent = NavigationSheetDetent.half.presentationDetent,
+        cornerRadius: CGFloat = 28
     ) -> some View {
-        modifier(StandardNavigationSheetModifier(selectedDetent: selectedDetent, interactiveUpThrough: interactiveUpThrough))
+        modifier(
+            StandardNavigationSheetModifier(
+                selectedDetent: selectedDetent,
+                interactiveUpThrough: interactiveUpThrough,
+                cornerRadius: cornerRadius
+            )
+        )
     }
     
-    /// Applies standardized 3-tier navigation sheet detents without explicit binding tracking.
+    /// Applies standardized 3-tier navigation sheet detents without explicit binding tracking,
+    /// with the high-contrast 3-tier glassmorphic backdrop.
     func standardNavigationDetents(
-        interactiveUpThrough: PresentationDetent = NavigationSheetDetent.half.presentationDetent
+        interactiveUpThrough: PresentationDetent = NavigationSheetDetent.half.presentationDetent,
+        cornerRadius: CGFloat = 28
     ) -> some View {
-        modifier(StandardNavigationSheetStaticModifier(interactiveUpThrough: interactiveUpThrough))
+        modifier(
+            StandardNavigationSheetStaticModifier(
+                interactiveUpThrough: interactiveUpThrough,
+                cornerRadius: cornerRadius
+            )
+        )
     }
 }

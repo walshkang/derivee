@@ -58,7 +58,6 @@ struct TrainInspectorSheet: View {
                 .padding(.top, 16)
                 .padding(.bottom, 36)
             }
-            .background(Color(hex: "#F9F9F6").ignoresSafeArea())
             .navigationTitle("Train Inspector")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

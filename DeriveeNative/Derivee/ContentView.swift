@@ -269,7 +269,8 @@ struct ContentView: View {
                     )
                     .presentationDetents([.fraction(0.38), .medium])
                     .presentationDragIndicator(.visible)
-                    .presentationBackground(.ultraThinMaterial)
+                    .presentationContentInteraction(.scrolls)
+                    .transitSheetGlassBackground()
                 }
                 .sheet(isPresented: Binding(
                     get: { showTransitSheet && selectedTransitStop != nil },
@@ -288,6 +289,7 @@ struct ContentView: View {
                             .presentationDetents([.medium, .large])
                             .presentationDragIndicator(.visible)
                             .presentationContentInteraction(.scrolls)
+                            .transitSheetGlassBackground()
                     }
                 }
                 .onChange(of: activeNavigationItinerary) { _, newItin in
@@ -357,6 +359,7 @@ struct ContentView: View {
                     )
                     .presentationDragIndicator(.visible)
                     .presentationContentInteraction(.scrolls)
+                    .transitSheetGlassBackground()
                 }
                 .onOpenURL { url in
                     guard url.scheme == "derivee" else { return }

@@ -327,11 +327,13 @@ struct TransitRevealSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationContentInteraction(.scrolls)
+        .transitSheetGlassBackground()
         .sheet(item: $selectedRecord) { rec in
             TransitMatrixInspectorView(record: rec)
                 .presentationDetents([.fraction(0.5), .large])
                 .presentationDragIndicator(.visible)
                 .presentationContentInteraction(.scrolls)
+                .transitSheetGlassBackground()
         }
         .sheet(item: $inspectingArrival) { arr in
             TrainInspectorSheet(
@@ -342,6 +344,8 @@ struct TransitRevealSheet: View {
             )
             .presentationDetents([.fraction(0.48), .fraction(0.88), .large])
             .presentationDragIndicator(.visible)
+            .presentationContentInteraction(.scrolls)
+            .transitSheetGlassBackground()
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {

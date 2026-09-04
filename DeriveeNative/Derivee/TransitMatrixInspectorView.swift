@@ -197,6 +197,7 @@ struct TransitMatrixInspectorView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationContentInteraction(.scrolls)
+                .transitSheetGlassBackground()
             }
         }
     }
