@@ -57,7 +57,8 @@ fragment half4 fragmentFogAperture(
     float4 clipPos = float4(in.ndcCoord, 0.0f, 1.0f);
     float4 worldSpacePos = uniforms.invProjMatrix * clipPos;
     
-    float invW = (abs(worldSpacePos.w) > 1e-6f) ? (1.0f / worldSpacePos.w) : 0.0f;
+    float worldScale = (uniforms.cameraZoom > 0.0f) ? (512.0f * exp2(uniforms.cameraZoom)) : 1.0f;
+    float invW = (abs(worldSpacePos.w) > 1e-6f) ? (1.0f / (worldSpacePos.w * worldScale)) : 0.0f;
     float2 mercatorUV = worldSpacePos.xy * invW;
     
     // Mathematical world bounds validity mask (0.0 outside [0, 1]^2, 1.0 inside)

@@ -206,9 +206,9 @@ public final class MetalFogStyleLayer: MLNCustomStyleLayer, @unchecked Sendable 
         
         self.pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         
-        // Depth-Stencil state: depth write disabled to preserve depth buffer for subsequent symbol layers
+        // Depth-Stencil state: depth write disabled, always pass to avoid depth-buffer clipping
         let depthDescriptor = MTLDepthStencilDescriptor()
-        depthDescriptor.depthCompareFunction = .lessEqual
+        depthDescriptor.depthCompareFunction = .always
         depthDescriptor.isDepthWriteEnabled = false
         self.depthStencilState = device.makeDepthStencilState(descriptor: depthDescriptor)
     }
@@ -606,7 +606,8 @@ fragment half4 fragmentFogAperture(
 ) {
     float4 clipPos = float4(in.ndcCoord, 0.0f, 1.0f);
     float4 worldSpacePos = uniforms.invProjMatrix * clipPos;
-    float invW = (abs(worldSpacePos.w) > 1e-6f) ? (1.0f / worldSpacePos.w) : 0.0f;
+    float worldScale = (uniforms.cameraZoom > 0.0f) ? (512.0f * exp2(uniforms.cameraZoom)) : 1.0f;
+    float invW = (abs(worldSpacePos.w) > 1e-6f) ? (1.0f / (worldSpacePos.w * worldScale)) : 0.0f;
     float2 mercatorUV = worldSpacePos.xy * invW;
     half inBounds = (mercatorUV.x >= 0.0f && mercatorUV.x <= 1.0f && 
                      mercatorUV.y >= 0.0f && mercatorUV.y <= 1.0f) ? half(1.0) : half(0.0);

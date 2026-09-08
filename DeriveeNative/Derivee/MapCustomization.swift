@@ -65,6 +65,6 @@ public enum MapCustomizationDefaults {
     public static let nearbyBusStopsLayerId = "nearby-bus-stops-layer"
     
     // Metal Fog Engine (Wave O.3)
-    public static let defaultEnableMetalFogEngine: Bool = true
+    public static let defaultEnableMetalFogEngine: Bool = false
     public static let metalFogLayerId = "metal-fog-layer"
 }
