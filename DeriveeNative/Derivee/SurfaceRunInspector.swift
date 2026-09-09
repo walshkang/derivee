@@ -106,11 +106,7 @@ public struct SurfaceRunInspector: View {
     }
     
     private var directionId: Int {
-        let dir = (arrival.direction ?? "").uppercased()
-        if dir.contains("DOWNTOWN") || dir.contains("SOUTH") || dir.contains("BROOKLYN") || dir.contains("OUTBOUND") || dir.contains("WEST") {
-            return 1
-        }
-        return 0
+        arrival.resolvedDirectionId
     }
     
     private var isFerry: Bool {

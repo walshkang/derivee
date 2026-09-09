@@ -46,11 +46,7 @@ public struct GuidewayRunInspector: View {
     }
     
     private var directionId: Int {
-        let dir = (arrival.direction ?? "").uppercased()
-        if dir.contains("DOWNTOWN") || dir.contains("SOUTH") || dir.contains("BROOKLYN") || dir.contains("OUTBOUND") {
-            return 1
-        }
-        return 0
+        arrival.resolvedDirectionId
     }
     
     public var body: some View {

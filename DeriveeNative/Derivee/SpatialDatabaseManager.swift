@@ -1127,6 +1127,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let headwayStdDevSec: Int
         public let ewtSeconds: Double
         public let onTimePct: Double // 0..100
+        public var otpPct: Double { onTimePct }
         public let sampleCount: Int
         
         public init(
@@ -1338,6 +1339,17 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.isHoldingStation = isHoldingStation
             self.progressLambda = progressLambda
             self.isAssigned = isAssigned
+        }
+        
+        /// Direction ID (0 or 1) inferred from the direction label.
+        /// Direction 1 corresponds to Downtown / South / Brooklyn / Outbound / West;
+        /// Direction 0 corresponds to Uptown / North / Manhattan / Queens / Bronx / Inbound / East.
+        public var resolvedDirectionId: Int {
+            let dir = (direction ?? "").uppercased()
+            if dir.contains("DOWNTOWN") || dir.contains("SOUTH") || dir.contains("BROOKLYN") || dir.contains("OUTBOUND") || dir.contains("WEST") {
+                return 1
+            }
+            return 0
         }
     }
     
@@ -2023,6 +2035,68 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             slotIndex: slotIndex,
             dayType: dayType
         )
+    }
+    
+    public func fetchSlotProfilesForStop(
+        stopId: String,
+        routeId: String? = nil,
+        dayType: Int? = nil
+    ) async throws -> [TripSlotProfileRecord] {
+        return try await transitEngine.fetchSlotProfilesForStop(
+            stopId: stopId,
+            routeId: routeId,
+            dayType: dayType
+        )
+    }
+    
+    /// Resolves the reliability tier for a route at a stop and given date.
+    /// Checks 15-minute origin dispatch slot profile (`trip_slot_profiles`), platform child stops if any,
+    /// and falls back to hourly reliability (`stop_reliability_hourly`).
+    public func fetchReliabilityTier(
+        routeId: String,
+        directionId: Int,
+        stopId: String,
+        date: Date = Date()
+    ) async -> LineReliabilityTier? {
+        let slotIdx = TripSlotProfileRecord.slotIndex(for: date)
+        let dayType = TripSlotProfileRecord.dayType(for: date)
+        
+        // 1. Direct point query for stopId
+        if let direct = try? await fetchTripSlotProfile(
+            routeId: routeId,
+            directionId: directionId,
+            stopId: stopId,
+            slotIndex: slotIdx,
+            dayType: dayType
+        ) {
+            return LineReliabilityTier(score: direct.regularityPct)
+        }
+        
+        // 2. Check resolved platform child stops (e.g. parent station vs platform IDs)
+        let resolvedIds: [String] = (try? await dbWriter.read { db in
+            self.resolvePlatformStopIds(for: stopId, in: db)
+        }) ?? [stopId]
+        
+        for platformId in resolvedIds where platformId != stopId {
+            if let childProfile = try? await fetchTripSlotProfile(
+                routeId: routeId,
+                directionId: directionId,
+                stopId: platformId,
+                slotIndex: slotIdx,
+                dayType: dayType
+            ) {
+                return LineReliabilityTier(score: childProfile.regularityPct)
+            }
+        }
+        
+        // 3. Fallback: Hourly reliability record for line & stop
+        let hour = Calendar.current.component(.hour, from: date)
+        let hourly = (try? await fetchHourlyReliability(for: stopId, routeId: routeId, routeIds: [routeId])) ?? []
+        if let match = hourly.first(where: { $0.routeId == routeId && $0.directionId == directionId && $0.hourOfDay == hour }) {
+            return LineReliabilityTier(score: match.otpPct)
+        }
+        
+        return nil
     }
     
     public func fetchStopEvents(for stopId: String, hourOfDay: Int, dayOfWeek: Int) async throws -> [StopEventRecord] {

@@ -16,6 +16,7 @@
 		08AD633168DAF3FB4770807D /* testApertureMicroGlyphSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = F2EEED6CC29A4643A5793493 /* testApertureMicroGlyphSnapshot.1.png */; };
 		094712DE5F55C5A2F994A612 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1269ACE7C6346A1302459B0 /* MapView.swift */; };
 		09CDCC94B4DD8E0721584480 /* NeighborhoodTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966E6957AA78D74369F921CC /* NeighborhoodTests.swift */; };
+		0AA54D4A7521029C17772177 /* LineReliabilityBadgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43088431184A49FCB01E259 /* LineReliabilityBadgeTests.swift */; };
 		0C34B57F8C639F60FFBA0027 /* TransitModalClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = E501FC4D0007B47BB43AD5D0 /* TransitModalClass.swift */; };
 		0C732CD401E7A9DA11E72762 /* CameraBounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = AECB22D323FB4F1FADD6D8B8 /* CameraBounds.swift */; };
 		0CB1127FC4F2FB295D940A7E /* testNavigationCollapsedPeekRecoveryAlertSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 62E9C99DC7F5A34F0F0E9F20 /* testNavigationCollapsedPeekRecoveryAlertSnapshot.1.png */; };
@@ -82,6 +83,7 @@
 		4D5F43EF102E37A074561599 /* TransitRevealSheetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21AD6FB3518E383909502845 /* TransitRevealSheetTests.swift */; };
 		4F168C94171CB488D9A50D4E /* neighborhood.sqlite-wal in Resources */ = {isa = PBXBuildFile; fileRef = AA1D089BD418F79AE29C57FC /* neighborhood.sqlite-wal */; };
 		4F5BE15D7A5E09E8E2C27647 /* TransitHitTestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62FBA7B0CF27AE86B662199 /* TransitHitTestTests.swift */; };
+		50BE7DEA610B08FFB303B1CB /* RouteReliabilityBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB48FD15C30990F87D5297FE /* RouteReliabilityBadge.swift */; };
 		50C2B7A9DED03EB642F494D0 /* testStatsViewJournalSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 591F9E805016DF32C53AA95D /* testStatsViewJournalSnapshot.1.png */; };
 		522EC0F2491E63DDEE44165A /* testRouteLegDetailViewSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 1FFA5B837A866E45F5FCCA95 /* testRouteLegDetailViewSnapshot.1.png */; };
 		525289DB581CF5B491812314 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6E4036A02894A6298AED934A /* Assets.xcassets */; };
@@ -601,6 +603,7 @@
 		D17F5390E1A53502E8FE8B88 /* ConfidenceBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfidenceBadgeView.swift; sourceTree = "<group>"; };
 		D29252B85CFB08407EC3D8D8 /* GTFSRealtimeStreamProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GTFSRealtimeStreamProcessor.swift; sourceTree = "<group>"; };
 		D2D74FCE2FD2A3CF62EA38A6 /* ULTRADataStore.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ULTRADataStore.hpp; sourceTree = "<group>"; };
+		D43088431184A49FCB01E259 /* LineReliabilityBadgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineReliabilityBadgeTests.swift; sourceTree = "<group>"; };
 		D57475A8A4F4C5BEE61E44D0 /* TransitReliabilityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitReliabilityModels.swift; sourceTree = "<group>"; };
 		D71C1EF9BB8CB7783240BD04 /* testCitySelectorPillSnapshots.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testCitySelectorPillSnapshots.1.png; sourceTree = "<group>"; };
 		D7565F6B0E0AE526D3E3AA4D /* DiscoveryToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryToast.swift; sourceTree = "<group>"; };
@@ -647,6 +650,7 @@
 		F85968E07BB90EBA8E2B9F0D /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
 		FA0ACEC324341D9796E2B2AE /* HistoricLandmarkData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoricLandmarkData.swift; sourceTree = "<group>"; };
 		FAC2E933B287656A73A1AC9E /* CitiesStorageManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CitiesStorageManagerView.swift; sourceTree = "<group>"; };
+		FB48FD15C30990F87D5297FE /* RouteReliabilityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteReliabilityBadge.swift; sourceTree = "<group>"; };
 		FB8F42E7B0455FDFC0B9745D /* SurfaceRunInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfaceRunInspector.swift; sourceTree = "<group>"; };
 		FBAA43496DCBE35AF42838F8 /* H3SpatialMemoryEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H3SpatialMemoryEngineTests.swift; sourceTree = "<group>"; };
 		FBF85C7DCA213FE482D174EC /* H3SpatialStructures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H3SpatialStructures.swift; sourceTree = "<group>"; };
@@ -874,6 +878,7 @@
 				67F4EF897802B9246EA2ABDE /* RouteComparisonListView.swift */,
 				BC94074498EE273BE3F26E43 /* RouteComparisonViewModel.swift */,
 				280F8A50BDB4A9989992E900 /* RouteLegDetailView.swift */,
+				FB48FD15C30990F87D5297FE /* RouteReliabilityBadge.swift */,
 				2D0BA67D9E9C5A4089F22BD9 /* RoutingEngineBridge.swift */,
 				95BDDF2EDBC81B90DC8BF68C /* RoutingTypes.swift */,
 				EE0B9BF48594E24E1BB8D851 /* SalientCommercialAnchorCatalog.swift */,
@@ -1012,6 +1017,7 @@
 				FBAA43496DCBE35AF42838F8 /* H3SpatialMemoryEngineTests.swift */,
 				7841AB7BC7F4C6B1257C63E2 /* JourneyPlannerTests.swift */,
 				B419E3FB460F995DAE744EF2 /* LandmarkWalkingGuidanceTests.swift */,
+				D43088431184A49FCB01E259 /* LineReliabilityBadgeTests.swift */,
 				1C9C2947D6DA588D5432DB24 /* MapProjectionMathTests.swift */,
 				B38B19A81D071A0B31E9A147 /* MetalFogLayerTests.swift */,
 				CC912B84177DFD98D9C207D5 /* MetalFogQuadShaderTests.swift */,
@@ -1505,6 +1511,7 @@
 				6A702732FA853C81F4BBA933 /* RouteComparisonListView.swift in Sources */,
 				9A8E3D5CEE93BEAC1895EFFB /* RouteComparisonViewModel.swift in Sources */,
 				78F383F78377828AE395E940 /* RouteLegDetailView.swift in Sources */,
+				50BE7DEA610B08FFB303B1CB /* RouteReliabilityBadge.swift in Sources */,
 				74D930AD002EA7926BAB8411 /* RoutingEngineBridge.swift in Sources */,
 				1AAC93AFDA5C7B1668FFA750 /* RoutingTypes.swift in Sources */,
 				7A995644FC88F169B49906AB /* SalientCommercialAnchorCatalog.swift in Sources */,
@@ -1597,6 +1604,7 @@
 				7BCA4822B13280610AA4E56E /* H3SpatialMemoryEngineTests.swift in Sources */,
 				E616CE5D00A481AFF8F6A7DA /* JourneyPlannerTests.swift in Sources */,
 				6F23DDADC25CE6A74B9A9F31 /* LandmarkWalkingGuidanceTests.swift in Sources */,
+				0AA54D4A7521029C17772177 /* LineReliabilityBadgeTests.swift in Sources */,
 				38957C8F871F4CA45533E748 /* MapProjectionMathTests.swift in Sources */,
 				5E1A7F7B487A5DB8F75AD8F2 /* MetalFogLayerTests.swift in Sources */,
 				FFC1B66369A94191F433467B /* MetalFogQuadShaderTests.swift in Sources */,

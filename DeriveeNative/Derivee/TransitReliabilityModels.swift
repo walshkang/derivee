@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Disruption Models
 
@@ -223,6 +224,90 @@ public struct TripSlotProfileRecord: Identifiable, Sendable, Codable, Equatable,
             return 2
         default: // Monday to Friday (2..6)
             return 0
+        }
+    }
+}
+
+// MARK: - Line Reliability Tier
+
+/// Per-route reliability tier derived from 15-minute origin dispatch slot regularity (`trip_slot_profiles`)
+/// or fallback hourly regularity (`stop_reliability_hourly`).
+/// Visual encoding:
+/// - `● High` (Emerald green, OTP >= 90%)
+/// - `◐ Moderate` (Electric Amber, 70% <= OTP < 90%)
+/// - `○ Variable` (Crimson red, OTP < 70%)
+public enum LineReliabilityTier: String, Sendable, Codable, CaseIterable {
+    case high = "HIGH"
+    case moderate = "MODERATE"
+    case variable = "VARIABLE"
+    
+    public init(score: Double) {
+        if score >= 90.0 {
+            self = .high
+        } else if score >= 70.0 {
+            self = .moderate
+        } else {
+            self = .variable
+        }
+    }
+    
+    public var label: String {
+        switch self {
+        case .high: return "High"
+        case .moderate: return "Moderate"
+        case .variable: return "Variable"
+        }
+    }
+    
+    public var glyph: String {
+        switch self {
+        case .high: return "●"
+        case .moderate: return "◐"
+        case .variable: return "○"
+        }
+    }
+    
+    public var displayText: String {
+        "\(glyph) \(label)"
+    }
+    
+    public var iconName: String {
+        switch self {
+        case .high: return "circle.fill"
+        case .moderate: return "circle.lefthalf.filled"
+        case .variable: return "circle"
+        }
+    }
+    
+    public var tintColor: Color {
+        switch self {
+        case .high: return Color(hex: "#10B981")
+        case .moderate: return Color(hex: "#F59E0B")
+        case .variable: return Color(hex: "#EF4444")
+        }
+    }
+    
+    public var textColor: Color {
+        switch self {
+        case .high: return Color(hex: "#065F46")
+        case .moderate: return Color(hex: "#92400E")
+        case .variable: return Color(hex: "#991B1B")
+        }
+    }
+    
+    public var backgroundColor: Color {
+        switch self {
+        case .high: return Color(hex: "#D1FAE5")
+        case .moderate: return Color(hex: "#FEF3C7")
+        case .variable: return Color(hex: "#FEE2E2")
+        }
+    }
+    
+    public var accessibilityText: String {
+        switch self {
+        case .high: return "High reliability"
+        case .moderate: return "Moderate reliability"
+        case .variable: return "Variable reliability"
         }
     }
 }

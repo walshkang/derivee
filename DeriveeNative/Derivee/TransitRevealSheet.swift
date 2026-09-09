@@ -41,6 +41,7 @@ struct TransitRevealSheet: View {
     @State private var pollProgress: Double = 0.0
     @State private var pollGeneration: Int = 0
     @State private var inspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil
+    @State private var reliabilityTiers: [String: LineReliabilityTier] = [:]
     
     init(
         stopId: String,
@@ -48,6 +49,7 @@ struct TransitRevealSheet: View {
         initialLiveArrivals: [SpatialDatabaseManager.ArrivalInfo] = [],
         initialAlerts: [TransitAlert] = [],
         initialAvailableDirections: Set<Int> = [0, 1],
+        initialReliabilityTiers: [String: LineReliabilityTier] = [:],
         referenceDate: Date? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
     ) {
@@ -56,6 +58,7 @@ struct TransitRevealSheet: View {
         self._liveArrivals = State(initialValue: initialLiveArrivals)
         self._serviceAlerts = State(initialValue: initialAlerts)
         self._availableDirections = State(initialValue: initialAvailableDirections)
+        self._reliabilityTiers = State(initialValue: initialReliabilityTiers)
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
         self.referenceDate = referenceDate
         self.onFocusMap = onFocusMap
@@ -286,6 +289,7 @@ struct TransitRevealSheet: View {
                                 isLivePulsing: isLivePulsing,
                                 isRefreshing: isRefreshing,
                                 pollProgress: pollProgress,
+                                reliabilityResolver: { arrival in reliabilityTier(for: arrival) },
                                 onRefresh: { triggerManualRefresh() },
                                 onInspectArrival: { arrival in inspectingArrival = arrival }
                             )
@@ -433,6 +437,7 @@ struct TransitRevealSheet: View {
             if !Task.isCancelled {
                 if !live.isEmpty {
                     self.liveArrivals = live
+                    await updateReliabilityTiers(for: live)
                 }
                 self.isLiveActive = true
                 self.lastUpdated = Date()
@@ -508,11 +513,74 @@ struct TransitRevealSheet: View {
         let alerts = await TransitRealtimeService.shared.fetchServiceAlerts(for: details.routeIds)
         self.serviceAlerts = alerts
         
-        // 2. Fetch initial live arrivals & start generational polling loop
+        // 2. Fetch initial reliability tiers for displayed arrivals
+        await updateReliabilityTiers(for: displayedArrivals)
+        
+        // 3. Fetch initial live arrivals & start generational polling loop
         pollGeneration += 1
         let currentGen = pollGeneration
         await performLiveFetch(routeIds: details.routeIds)
         await runPollingLoop(routeIds: details.routeIds, currentGen: currentGen)
+    }
+    
+    // MARK: - Reliability Tier Resolution
+    
+    internal func reliabilityTier(for arrival: SpatialDatabaseManager.ArrivalInfo) -> LineReliabilityTier? {
+        let slot = TripSlotProfileRecord.slotIndex(for: arrival.arrivalDate)
+        let day = TripSlotProfileRecord.dayType(for: arrival.arrivalDate)
+        let key = "\(arrival.line)_\(arrival.resolvedDirectionId)_\(slot)_\(day)"
+        if let direct = reliabilityTiers[key] {
+            return direct
+        }
+        let routeKey = "\(arrival.line)_\(arrival.resolvedDirectionId)"
+        if let routeDirect = reliabilityTiers[routeKey] {
+            return routeDirect
+        }
+        
+        // Instantaneous fallback: check hourlyReliability loaded for this sheet
+        let hour = Calendar.current.component(.hour, from: arrival.arrivalDate)
+        if let match = hourlyReliability.first(where: { $0.routeId == arrival.line && $0.directionId == arrival.resolvedDirectionId && $0.hourOfDay == hour }) {
+            return LineReliabilityTier(score: match.onTimePct)
+        }
+        
+        return nil
+    }
+    
+    @MainActor
+    private func updateReliabilityTiers(for arrivals: [SpatialDatabaseManager.ArrivalInfo]) async {
+        guard !arrivals.isEmpty else { return }
+        
+        var neededKeys: Set<String> = []
+        var candidates: [SpatialDatabaseManager.ArrivalInfo] = []
+        
+        for arr in arrivals {
+            let slot = TripSlotProfileRecord.slotIndex(for: arr.arrivalDate)
+            let day = TripSlotProfileRecord.dayType(for: arr.arrivalDate)
+            let key = "\(arr.line)_\(arr.resolvedDirectionId)_\(slot)_\(day)"
+            if reliabilityTiers[key] == nil && !neededKeys.contains(key) {
+                neededKeys.insert(key)
+                candidates.append(arr)
+            }
+        }
+        
+        guard !candidates.isEmpty else { return }
+        
+        for candidate in candidates {
+            let slot = TripSlotProfileRecord.slotIndex(for: candidate.arrivalDate)
+            let day = TripSlotProfileRecord.dayType(for: candidate.arrivalDate)
+            let key = "\(candidate.line)_\(candidate.resolvedDirectionId)_\(slot)_\(day)"
+            let routeKey = "\(candidate.line)_\(candidate.resolvedDirectionId)"
+            
+            if let tier = await SpatialDatabaseManager.shared.fetchReliabilityTier(
+                routeId: candidate.line,
+                directionId: candidate.resolvedDirectionId,
+                stopId: stopId,
+                date: candidate.arrivalDate
+            ) {
+                self.reliabilityTiers[key] = tier
+                self.reliabilityTiers[routeKey] = tier
+            }
+        }
     }
 }
 
@@ -679,6 +747,7 @@ struct LiveArrivalsCarousel: View {
     let isLivePulsing: Bool
     let isRefreshing: Bool
     let pollProgress: Double
+    var reliabilityResolver: ((SpatialDatabaseManager.ArrivalInfo) -> LineReliabilityTier?)? = nil
     let onRefresh: () -> Void
     let onInspectArrival: (SpatialDatabaseManager.ArrivalInfo) -> Void
     
@@ -777,10 +846,17 @@ struct LiveArrivalsCarousel: View {
                                                 }
                                             }
                                             
-                                            if let dist = arrival.distanceDescription {
-                                                Text(dist)
-                                                    .font(.caption2)
-                                                    .foregroundColor(.secondary)
+                                            HStack(alignment: .center, spacing: 6) {
+                                                if let dist = arrival.distanceDescription {
+                                                    Text(dist)
+                                                        .font(.caption2)
+                                                        .foregroundColor(.secondary)
+                                                        .lineLimit(1)
+                                                }
+                                                
+                                                if let tier = reliabilityResolver?(arrival) {
+                                                    RouteReliabilityBadge(tier: tier)
+                                                }
                                             }
                                         }
                                         
