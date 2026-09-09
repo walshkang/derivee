@@ -336,16 +336,30 @@ struct TransitRevealSheet: View {
                 .transitSheetGlassBackground()
         }
         .sheet(item: $inspectingArrival) { arr in
-            TrainInspectorSheet(
-                arrival: arr,
-                currentStopId: stopId,
-                currentStopName: stopDetails?.name ?? "Current Station",
-                onFocusMap: onFocusMap
-            )
-            .presentationDetents([.fraction(0.48), .fraction(0.88), .large])
-            .presentationDragIndicator(.visible)
-            .presentationContentInteraction(.scrolls)
-            .transitSheetGlassBackground()
+            let lineInfo = TransitRouteData.lineInfo(for: arr.line)
+            let modalClass = (stopDetails?.modalClass == .bus || stopDetails?.modalClass == .ferry)
+                ? stopDetails!.modalClass
+                : lineInfo.modalClass
+            let followOn = resolveFollowOnArrival(for: arr)
+            
+            if modalClass == .subway || modalClass == .lightRail {
+                GuidewayRunInspector(
+                    arrival: arr,
+                    currentStopId: stopId,
+                    currentStopName: stopDetails?.name ?? "Current Station",
+                    followOnArrival: followOn,
+                    onFocusMap: onFocusMap
+                )
+            } else {
+                SurfaceRunInspector(
+                    arrival: arr,
+                    currentStopId: stopId,
+                    currentStopName: stopDetails?.name ?? "Current Stop",
+                    modalClass: modalClass,
+                    followOnArrival: followOn,
+                    onFocusMap: onFocusMap
+                )
+            }
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
@@ -365,6 +379,13 @@ struct TransitRevealSheet: View {
                 await reloadTimetable(direction: selectedDirection, dayOffset: newOffset)
             }
         }
+    }
+    
+    private func resolveFollowOnArrival(for arr: SpatialDatabaseManager.ArrivalInfo) -> SpatialDatabaseManager.ArrivalInfo? {
+        liveArrivals
+            .filter { $0.line == arr.line && $0.direction == arr.direction && $0.id != arr.id && $0.minutes >= arr.minutes }
+            .sorted { $0.minutes < $1.minutes }
+            .first
     }
     
     @MainActor
