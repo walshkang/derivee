@@ -483,15 +483,13 @@ stateDiagram-v2
         MainSheet --> SurfaceInspector: tap Bus/Trolley arrival row
 
         state GuidewayInspector {
-            [*] --> TrackThermometer
-            TrackThermometer --> CrowdingDetail: view car telemetry
-            CrowdingDetail --> TrackThermometer: back
+            [*] --> StopProgressionLadder
+            StopProgressionLadder --> [*]
         }
 
         state SurfaceInspector {
             [*] --> StopLadder
-            StopLadder --> CorridorMetrics: view bunching/gap pulse
-            CorridorMetrics --> StopLadder: back
+            StopLadder --> [*]
         }
 
         GuidewayInspector --> MainSheet: tap Back
@@ -695,15 +693,11 @@ stateDiagram-v2
             AmbientArrivalsStream --> SurfaceRunInspector: Tap bus/trolley arrival row
 
             state GuidewayRunInspector {
-                [*] --> ThermometerActive: Downstream stops & live kinematic dot
-                ThermometerActive --> CarCrowdingDetail: View car occupancy telemetry
-                CarCrowdingDetail --> ThermometerActive: Dismiss detail
+                [*] --> LadderActive: Downstream stops, live dot & crowding badge
             }
 
             state SurfaceRunInspector {
-                [*] --> StopLadderActive: Chronological stops & vehicle position
-                StopLadderActive --> CorridorPulseView: View bunching/gap pulse metrics
-                CorridorPulseView --> StopLadderActive: Dismiss detail
+                [*] --> StopLadderActive: Chronological stops, headway & mode tokens
             }
 
             GuidewayRunInspector --> AmbientArrivalsStream: Tap Back button
@@ -756,19 +750,24 @@ classDiagram
     class GuidewayRunInspector {
         <<SwiftUI View / Sub-Sheet>>
         +arrival: ArrivalInfo
-        +trackOccupancy: [TrackSegment]
-        +carTelemetry: [CarCrowdingStatus]
-        +downstreamStops: [StopDetail]
-        +onDismiss: Action
+        +currentStopId: String
+        +currentStopName: String
+        +followOnArrival: ArrivalInfo?
+        +stopLadder: [TrackStop]
+        +crowdEstimate: CrowdDensityEstimate
+        +activeDisruption: String?
+        +onFocusMap: Action
     }
 
     class SurfaceRunInspector {
         <<SwiftUI View / Sub-Sheet>>
         +arrival: ArrivalInfo
-        +stopLadder: [StopSequenceItem]
-        +headwayDeltaSec: Int
-        +corridorMetrics: CorridorPulseMetrics
-        +onDismiss: Action
+        +currentStopId: String
+        +currentStopName: String
+        +followOnArrival: ArrivalInfo?
+        +stopLadder: [TrackStop]
+        +activeDisruption: String?
+        +onFocusMap: Action
     }
 
     class CorridorPulseMetrics {
@@ -837,7 +836,6 @@ classDiagram
     TransitRevealSheet --> DepartureMatrixView : embeds (Timetable Tab)
     TransitRevealSheet --> GuidewayRunInspector : pushes on guideway tap
     TransitRevealSheet --> SurfaceRunInspector : pushes on surface tap
-    SurfaceRunInspector --> CorridorPulseMetrics : consumes
     ReliabilityHeatmapCanvas ..> TransitMatrixInspectorView : triggers on tap
     TransitMatrixInspectorView --> TripLedgerView : expands on tap
     TransitMatrixInspectorView ..> SpatialDatabaseManager : queries metrics

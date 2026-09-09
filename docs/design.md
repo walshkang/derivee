@@ -266,7 +266,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 │    └─► Sub-sheet 2B: Surface Run Inspector               │
 │                                                          │
 │  Screen 4: Search & Multimodal Navigation  (§12)         │
-│    └─► 4A: Place & Station Search  [Not Yet Implemented] │
+│    └─► 4A: Place & Station Search  [Implemented - Wave PA.4] │
 │    └─► 4B: Multimodal Route Comparison                   │
 │    └─► 4C: Active Step-by-Step Navigation                │
 └──────────────────────────────────────────────────────────┘
@@ -315,7 +315,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
   * **Bottom-Right Orientation Cluster:**
     * **Recenter FAB (Bottom-Right):** Anchored at trailing = 20pt, bottom = 40pt. Smooth camera animation to user location (enforcing `pitch: 0.0`). Transitions between outlined and filled states based on centering.
     * **Native MapLibre Compass Needle:** Configured at `.bottomRight`, floating directly above the Recenter FAB (`x: 20pt`, `y: 102pt + safeAreaInsets.bottom`). Styled via `ApertureCompassNeedle`. MapLibre natively manages 120Hz rotation, touch reorient (tap-to-North), and auto-fading (hidden in North-Up, visible when rotated).
-* **Search Capsule (Top-Center) `[Not Yet Implemented]`:** A frosted-glass `.ultraThinMaterial` capsule floating below the top safe area, displaying placeholder text (`Search stations, lines, places...`). Tapping transitions to Screen 4A (Place & Station Search, §12.1). The capsule collapses automatically when a transit sheet or navigation flow is active.
+* **Search Capsule (Top-Center) `[Implemented - Wave PA.4]`:** A frosted-glass `.ultraThinMaterial` capsule floating below the top safe area, displaying placeholder text (`Search stations, lines, places...`). Tapping transitions to Screen 4A (Place & Station Search, §12.2). The capsule collapses automatically when a transit sheet or navigation flow is active.
 * **Subway Thoroughfares (Ambient Sub-Context):** Complete NYC subway lines rendered beneath the fog layer with day/night adaptive casings. Explored sections glow vibrantly in true MTA line colors, while unexplored sections act as orienting sub-context under the fog.
 * **Nearby Buses Quick Lens (`NearbyBusesCapsule`):** A floating frosted-glass capsule in the bottom-left of the HUD providing on-demand transit discovery within 400m:
   * **Dynamic Badge Counter:** Displays the number of nearby bus stops; refreshes automatically when walking drift exceeds 150m.
@@ -334,7 +334,7 @@ The app has exactly **five** screens. If a screen is not enumerated below, the a
 * **Tap Compass Needle:** Smoothly animates bearing back to $0^\circ$ North-Up and auto-fades needle.
 * **Ambient Tap / Map Pan:** Tapping empty map space collapses expanded capsules and dismisses transient banners. Panning/dragging also collapses expanded capsules.
 * **Pan & Zoom:** Smooth 2D panning and pinch-to-zoom bounded by the active city envelope with elastic rubber-band margin and automatic `.easeOut` rollback.
-* **Tap Search Capsule `[Not Yet Implemented]`:** Opens Screen 4A (Place & Station Search, §12.1).
+* **Tap Search Capsule `[Implemented - Wave PA.4]`:** Opens Screen 4A (Place & Station Search, §12.2).
 * **Tap Profile FAB:** Navigate to Screen 3.
 * **Long-press map:** Reserved for future use. No action.
 
@@ -545,7 +545,7 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 | G7 | **Thread Yielding for Lists:** Complex lists (Neighborhood Stats, Session History) must process data in background tasks before binding to `@Observable` UI. | Prevents frame drops during screen transitions. |
 | G8 | **No Serif Fonts:** Strictly modern geometric sans-serif (SF Pro / Inter). | Design system consistency. |
 | G9 | **Pure Light Mode & Dual Daytime Modes:** Interface is locked to `.preferredColorScheme(.light)` with two curated daytime themes: Standard Exploration (Parchment white, graphite fog) and Transit Navigation (Porcelain white, high-contrast transit, 40% fog). **Electric Amber (`#FFB300`)** is the universal accent color across both modes. | Brand identity & clarity: Eliminates dark-mode visual confusion while optimizing for exploration and effortless transit navigation. |
-| G10 | **Screen Enumeration is Exhaustive:** Screens 0–4 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. Multi-city UI surfaces (City Selector, `CityDownloadPromptSheet`, `Settings > Cities & Storage`) are sub-views within existing Screens 1 and 3 per §11 — they do not constitute new top-level screens. Run Inspectors (§10.5, §10.6) are sub-sheets within Screen 2. | Prevents scope creep and hallucinated features. |
+| G10 | **Screen Enumeration is Exhaustive:** Screens 0–4 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. Screen 4 encompasses Search (4A), Route Comparison (4B), and Active Navigation (4C) per §12. Multi-city UI surfaces (City Selector, `CityDownloadPromptSheet`, `Settings > Cities & Storage`) are sub-views within existing Screens 1 and 3 per §11 — they do not constitute new top-level screens. Run Inspectors (§10.5, §10.6) are sub-sheets within Screen 2. | Prevents scope creep and hallucinated features. |
 
 ---
 
@@ -589,7 +589,7 @@ This is entirely local state driven by SwiftUI `@Observable`:
 
 ## 9. Exploration Polish, Customization & Gamification (Wave J)
 
-This section defines visual and interaction standards for upcoming Wave J features. Sub-waves execute in **strict sequential order** (J.2 → J.7):
+This section defines visual and interaction standards for Wave J features (completed across sub-waves J.1 → J.10):
 
 ### 9.1 Camera Viewport Clamping & Rubber-Band Damping (`WJ1-CAMERA-BOUNDS`)
 * **Camera Bounds:** The map camera must not be allowed to pan infinitely past the active fog bounding box. The viewport is constrained to the bounding envelope of the fog canvas.
@@ -703,7 +703,7 @@ The Hour × Minute Departure Matrix provides full Naver Maps-style schedule insp
   * **Departure Pills:** 2-digit monospace integer in high-contrast neutral pill container (`#1C1C1E` / `#FFFFFF`).
   * **Service Variants (Express / Branch):** Highlighted with filled background badges using official route line colors (e.g. Red for 1/2/3/NWK-WTC, Green for 4/5/6/HOB-WTC).
   * **Boundary Markers:** First and last departures of the operating day styled with distinct amber border rings.
-  * **Live Real-Time Delta Overlays:** When GTFS-RT telemetry is active, live countdowns ($\Delta t = T_{\text{actual}} - T_{\text{current}}$) inject directly into departure pills with a pulsing Electric Amber (`#FFB300`) dot.
+  * **Live Real-Time Imminent Anchor (Wave P.2 De-clutter):** In accordance with Wave P.2 (`WP2-MATRIX-DECLUTTER`), live arrival countdowns, duplicate pills, and pulsing dots are stripped from the static 24-hour reference matrix (`DepartureMatrixView`). Live countdown treatment ($\Delta t = T_{\text{actual}} - T_{\text{current}}$) with Electric Amber (`#FFB300`) badging is restricted strictly to a single imminent departure anchor pill per route direction. High-cadence real-time countdowns remain isolated to the top `LiveArrivalsCarousel` on Screen 2.
   * **Delay Badging:** Vehicles deviating $\ge 3\text{ min}$ from scheduled timetable append a high-visibility delta tag (e.g. Alert Red `+5m` or Amber `+3m` pill) in the upper-right quadrant.
 
 ---
@@ -765,7 +765,7 @@ The following elements from the legacy "Deep Train Inspector" are permanently ex
 | Removed Element | Reason | New Home |
 |:---|:---|:---|
 | `"PLATFORM EGRESS & SUBTERRANEAN ALIGNMENT"` header | Verbose category header adding zero rider value | Deleted |
-| `"Where to Board"` / platform car positioning | Meaningless without a destination | Screen 4C Active Navigation (§12.3) |
+| `"Where to Board"` / platform car positioning | Meaningless without a destination | Screen 4C Active Navigation (§12.4) |
 | `"CARRIAGE OCCUPANCY"` multi-car diagram | Over-detailed for quick inspection | Reduced to single micro-badge (above) |
 | `"15-MIN ORIGIN SLOT REGULARITY"` card | Analytical noise during "where's my train?" | Screen 2 per-line reliability badge |
 | `"TRACK THERMOMETER"` verbose header | The ladder stays; the verbose header dies | Retained as "Stop Progression Ladder" |

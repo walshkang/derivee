@@ -625,7 +625,7 @@ When an uninstalled city is detected, a non-blocking bottom sheet appears over S
 - **Zero-Download NYC First Launch:** The base app bundle includes `city-nyc.pack.zst`, decompressed locally on first launch in $<200\text{ms}$ with zero network dependency.
 
 ### 6.2 Screen 3: Multi-City Stats & City Selector
-Screen 3 (`StatsView`) gains a top-level **City Selector** enabling per-city exploration browsing without leaving the 4-screen hierarchy:
+Screen 3 (`StatsView`) gains a top-level **City Selector** enabling per-city exploration browsing without leaving the 5-screen hierarchy (Screens 0–4):
 - **City Selector Pill:** Frosted-glass menu at the top of Screen 3 (`[ 🟢 New York City ▾ ]`). Tapping opens a native `Menu` listing installed cities plus an *"All Metros Summary"* option.
 - **Per-City View:** Macro header shows that city's unlocked hexes, exploration percentage, and total land area ($km^2$). Neighborhoods tab loads that city's leaderboard. Journal & Milestones tab loads that city's curated transit hubs and landmarks.
 - **"All Metros Summary" Mode:** Displays lifetime totals (global hexes unlocked, total drift distance in $km$) and overview cards per city with individual completion rings.

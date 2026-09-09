@@ -55,8 +55,8 @@
   - **Screen 4 (`NavigationSheet`):** Multimodal search and navigation with three sub-screens: Search (4A), Route Comparison (4B), and Active Guidance (4C).
   *Rule:* No ad-hoc top-level screens, floating bottom tab bars, or disconnected navigation stacks are permitted outside this 5-screen hierarchy.
 - **Run Inspector Separation Invariant:** Tapping an arrival row in Screen 2 transitions into a modal-specific run inspector. The visual and technical mental models are strictly bifurcated:
-  - **`GuidewayRunInspector` (`.subway`, `.lightRail`, Commuter Rail):** Fixed guideway tracking. Renders vertical track thermometers, GTFS-RT vehicle position / trip updates, terminal dwell suppression, and car crowding telemetry. (Subterranean exit codes and car positioning are displayed during Screen 4C Active Guidance).
-  - **`SurfaceRunInspector` (`.bus`, Trolley):** Shared surface road corridor tracking. Renders chronological stop ladders, dynamic headway countdowns, and corridor regularity / bunching / gap metrics.
+  - **`GuidewayRunInspector` (`.subway`, `.lightRail`, Commuter Rail):** Fixed guideway tracking. Renders Stop Progression Ladder (continuous vertical route line, completed stops, current station, downstream ETAs), GTFS-RT vehicle position / trip updates, terminal dwell suppression, follow-on departures, active disruption banner, and glanceable crowding micro-badge. (Subterranean exit codes and car positioning are displayed during Screen 4C Active Guidance).
+  - **`SurfaceRunInspector` (`.bus`, Trolley):** Shared surface road corridor tracking. Renders chronological stop ladders, dynamic headway countdowns, follow-on departures, and mode-specific semantic tokens via `SurfaceInspectableRoute`. (Regularity metrics are surfaced as per-line reliability badges on Screen 2 arrival rows, not inside the inspector).
   *Rule:* Never conflate surface and guideway inspectors. Never place train car exit positioning, subterranean transfer codes, or block signaling metaphors onto bus/surface inspectors.
 
 ## 3. Testing Mandates
