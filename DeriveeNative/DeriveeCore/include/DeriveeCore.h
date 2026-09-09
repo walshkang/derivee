@@ -10,4 +10,5 @@
 #include "MicroClimateEnergyEvaluator.hpp"
 #include "RaptorEngine.hpp"
 #include "H3SpatialStructures.hpp"
+#include "SubwayPositionInterpolator.hpp"
 #endif

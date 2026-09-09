@@ -9,6 +9,7 @@ module DeriveeCore {
     header "MicroClimateEnergyEvaluator.hpp"
     header "RaptorEngine.hpp"
     header "H3SpatialStructures.hpp"
+    header "SubwayPositionInterpolator.hpp"
     export *
     requires cplusplus
 }
