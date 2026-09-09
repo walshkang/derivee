@@ -1987,6 +1987,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         return try await transitEngine.fetchActiveDisruptions(at: epoch)
     }
     
+    public func fetchDisruptions(for routeId: String, directionId: Int? = nil, at epoch: Int64? = nil) async throws -> [ServiceDisruptionRecord] {
+        return try await transitEngine.fetchDisruptions(for: routeId, directionId: directionId, at: epoch)
+    }
+    
     public func fetchDisruptionBitmask(at epoch: Int64 = Int64(Date().timeIntervalSince1970)) async throws -> TransitDisruptionBitmask {
         return try await transitEngine.fetchDisruptionBitmask(at: epoch)
     }

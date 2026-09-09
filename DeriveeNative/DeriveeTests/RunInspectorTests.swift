@@ -154,4 +154,176 @@ final class RunInspectorTests: XCTestCase {
         let hosting = UIHostingController(rootView: inspector)
         XCTAssertNotNil(hosting.view)
     }
+    
+    // MARK: - 4. Disruption Models & Summary Formatting
+    
+    func testDisruptionTypeDisplayNamesAndFormatting() {
+        XCTAssertEqual(DisruptionType.delays.displayName, "Delays")
+        XCTAssertEqual(DisruptionType.suspended.displayName, "Suspended")
+        XCTAssertEqual(DisruptionType.rerouted.displayName, "Rerouted")
+        XCTAssertEqual(DisruptionType.bypassLocal.displayName, "Station Bypass")
+        XCTAssertEqual(DisruptionType.maintenance.displayName, "Track Work")
+        XCTAssertEqual(DisruptionType.unknown.displayName, "Alert")
+        
+        let d1 = ServiceDisruptionRecord(
+            routeId: "6",
+            startEpoch: 1000,
+            endEpoch: 2000,
+            disruptionType: .delays,
+            summaryText: "Signal problems at 68th St"
+        )
+        XCTAssertEqual(d1.formattedAlertSummary, "Delays: Signal problems at 68th St")
+        
+        let d2 = ServiceDisruptionRecord(
+            routeId: "L",
+            startEpoch: 1000,
+            endEpoch: 2000,
+            disruptionType: .suspended,
+            summaryText: nil
+        )
+        XCTAssertEqual(d2.formattedAlertSummary, "Suspended: Service disruption on line")
+        
+        let d3 = ServiceDisruptionRecord(
+            routeId: "M15",
+            startEpoch: 1000,
+            endEpoch: 2000,
+            disruptionType: .maintenance,
+            summaryText: "Track Work: Overnight utility repairs"
+        )
+        XCTAssertEqual(d3.formattedAlertSummary, "Track Work: Overnight utility repairs")
+    }
+    
+    // MARK: - 5. Disruption Fetch from Engine
+    
+    func testDisruptionFetchFromEngine() async throws {
+        let engine = TransitDatabaseEngine.makeForTesting(inMemory: true)
+        let baseEpoch: Int64 = 1710000000
+        
+        let dSubway = ServiceDisruptionRecord(
+            id: "disr_6_downtown",
+            routeId: "6",
+            stopId: nil,
+            directionId: 1,
+            startEpoch: baseEpoch,
+            endEpoch: baseEpoch + 3600,
+            disruptionType: .delays,
+            summaryText: "Delays: Signal problems at 68th St"
+        )
+        
+        let dBus = ServiceDisruptionRecord(
+            id: "disr_m15_detour",
+            routeId: "M15-SBS",
+            stopId: nil,
+            directionId: nil,
+            startEpoch: baseEpoch,
+            endEpoch: baseEpoch + 7200,
+            disruptionType: .rerouted,
+            summaryText: "Street closure detour on 2nd Ave"
+        )
+        
+        try await engine.insertServiceDisruptions([dSubway, dBus])
+        
+        // 1. Fetch 6 train downtown disruption
+        let res6 = try await engine.fetchDisruptions(for: "6", directionId: 1, at: baseEpoch + 500)
+        XCTAssertEqual(res6.count, 1)
+        XCTAssertEqual(res6.first?.id, "disr_6_downtown")
+        XCTAssertEqual(res6.first?.formattedAlertSummary, "Delays: Signal problems at 68th St")
+        
+        // 2. Fetch M15 bus disruption (directionId nil applies to all)
+        let resBus = try await engine.fetchDisruptions(for: "M15-SBS", directionId: 0, at: baseEpoch + 1000)
+        XCTAssertEqual(resBus.count, 1)
+        XCTAssertEqual(resBus.first?.id, "disr_m15_detour")
+        
+        // 3. Out-of-window query returns empty
+        let resPast = try await engine.fetchDisruptions(for: "6", directionId: 1, at: baseEpoch - 100)
+        XCTAssertTrue(resPast.isEmpty)
+        
+        // 4. Unrelated route returns empty
+        let res7 = try await engine.fetchDisruptions(for: "7", directionId: 1, at: baseEpoch + 500)
+        XCTAssertTrue(res7.isEmpty)
+    }
+    
+    // MARK: - 6. Follow-On Departure Resolution
+    
+    func testFollowOnArrivalResolution() {
+        let arrTarget = SpatialDatabaseManager.ArrivalInfo(
+            line: "6",
+            destination: "Pelham Bay Park",
+            minutes: 3,
+            direction: "Downtown"
+        )
+        let arrFollowOn = SpatialDatabaseManager.ArrivalInfo(
+            line: "6",
+            destination: "Pelham Bay Park",
+            minutes: 9,
+            direction: "Downtown"
+        )
+        let arrLater = SpatialDatabaseManager.ArrivalInfo(
+            line: "6",
+            destination: "Pelham Bay Park",
+            minutes: 18,
+            direction: "Downtown"
+        )
+        let arrOtherDir = SpatialDatabaseManager.ArrivalInfo(
+            line: "6",
+            destination: "Brooklyn Bridge",
+            minutes: 5,
+            direction: "Uptown"
+        )
+        let arrOtherLine = SpatialDatabaseManager.ArrivalInfo(
+            line: "4",
+            destination: "Crown Hts",
+            minutes: 4,
+            direction: "Downtown"
+        )
+        
+        let candidates = [arrTarget, arrFollowOn, arrLater, arrOtherDir, arrOtherLine]
+        
+        // Resolving for arrTarget should select arrFollowOn (9 min, same line, same direction)
+        let resolved = TransitRevealSheet.resolveFollowOnArrival(for: arrTarget, from: candidates)
+        XCTAssertNotNil(resolved)
+        XCTAssertEqual(resolved?.id, arrFollowOn.id)
+        XCTAssertEqual(resolved?.minutes, 9)
+        
+        // Resolving for arrLater (which has no subsequent departures) should return nil
+        let resolvedLast = TransitRevealSheet.resolveFollowOnArrival(for: arrLater, from: candidates)
+        XCTAssertNil(resolvedLast)
+    }
+    
+    // MARK: - 7. Inspector Construction with Follow-On & Disruption Data
+    
+    @MainActor
+    func testInspectorsWithDisruptionAndFollowOn() {
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "6",
+            destination: "Pelham Bay Park",
+            minutes: 2,
+            direction: "Downtown"
+        )
+        let followOn = SpatialDatabaseManager.ArrivalInfo(
+            line: "6",
+            destination: "Pelham Bay Park",
+            minutes: 10,
+            direction: "Downtown"
+        )
+        
+        let guideway = GuidewayRunInspector(
+            arrival: arrival,
+            currentStopId: "631",
+            currentStopName: "Grand Central-42 St",
+            followOnArrival: followOn
+        )
+        let guidewayHosting = UIHostingController(rootView: guideway)
+        XCTAssertNotNil(guidewayHosting.view)
+        
+        let surface = SurfaceRunInspector(
+            arrival: arrival,
+            currentStopId: "stop_1",
+            currentStopName: "23rd St",
+            modalClass: .bus,
+            followOnArrival: followOn
+        )
+        let surfaceHosting = UIHostingController(rootView: surface)
+        XCTAssertNotNil(surfaceHosting.view)
+    }
 }

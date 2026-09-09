@@ -444,17 +444,26 @@ public struct GuidewayRunInspector: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.secondary)
             
-            Text("Next \(arrival.line) in \(nextArrival.minutes) min")
-                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                .foregroundColor(.primary)
-            
-            Text("•")
-                .foregroundColor(.secondary)
-            
-            let timeStr = DateFormatter.localizedString(from: nextArrival.arrivalDate, dateStyle: .none, timeStyle: .short)
-            Text(timeStr)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundColor(.secondary)
+            HStack(alignment: .center, spacing: 6) {
+                Text("Next")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(.secondary)
+                
+                TransitRouteBadge(routeId: arrival.line, lineInfo: lineInfo, size: .compact)
+                
+                let minText = nextArrival.minutes == 0 ? "due now" : "in \(nextArrival.minutes) min"
+                Text(minText)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+                
+                Text("•")
+                    .foregroundColor(.secondary)
+                
+                let timeStr = DateFormatter.localizedString(from: nextArrival.arrivalDate, dateStyle: .none, timeStyle: .short)
+                Text(timeStr)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
             
             Spacer()
         }
@@ -502,14 +511,18 @@ public struct GuidewayRunInspector: View {
         )
         
         // 2. Fetch Active Disruptions if available
-        if let disruptions = try? await TransitDatabaseEngine.shared.fetchDisruptions(for: arrival.line, directionId: directionId),
-           let first = disruptions.first {
+        let epoch = Int64(arrival.arrivalDate.timeIntervalSince1970)
+        var disruptions = (try? await SpatialDatabaseManager.shared.fetchDisruptions(for: arrival.line, directionId: directionId, at: epoch)) ?? []
+        if disruptions.isEmpty {
+            disruptions = (try? await SpatialDatabaseManager.shared.fetchDisruptions(for: arrival.line, directionId: nil, at: epoch)) ?? []
+        }
+        if disruptions.isEmpty {
+            disruptions = (try? await SpatialDatabaseManager.shared.fetchDisruptions(for: arrival.line, directionId: nil, at: nil)) ?? []
+        }
+        
+        if let first = disruptions.first {
             await MainActor.run {
-                if let summary = first.summaryText, !summary.isEmpty {
-                    self.activeDisruption = summary
-                } else {
-                    self.activeDisruption = "\(first.disruptionType): Delays reported on line"
-                }
+                self.activeDisruption = first.formattedAlertSummary
             }
         }
         

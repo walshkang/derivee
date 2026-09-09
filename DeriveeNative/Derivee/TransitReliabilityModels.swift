@@ -14,6 +14,16 @@ public enum DisruptionType: String, Sendable, Codable, CaseIterable {
     public init(rawValueOrUnknown rawValue: String) {
         self = DisruptionType(rawValue: rawValue.uppercased()) ?? .unknown
     }
+    public var displayName: String {
+        switch self {
+        case .delays: return "Delays"
+        case .suspended: return "Suspended"
+        case .rerouted: return "Rerouted"
+        case .bypassLocal: return "Station Bypass"
+        case .maintenance: return "Track Work"
+        case .unknown: return "Alert"
+        }
+    }
 }
 
 /// A time-bounded transit service disruption record (planned calendar work or dynamic alert).
@@ -66,6 +76,23 @@ public struct ServiceDisruptionRecord: Identifiable, Sendable, Codable, Equatabl
             return false
         }
         return true
+    }
+    
+    /// Formats the disruption for display in run inspector alert pills (e.g. "Delays: Signal problems at 68th St").
+    public var formattedAlertSummary: String {
+        guard let summary = summaryText, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "\(disruptionType.displayName): Service disruption on line"
+        }
+        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+        if lower.starts(with: disruptionType.displayName.lowercased()) ||
+           lower.starts(with: "delays") ||
+           lower.starts(with: "suspended") ||
+           lower.starts(with: "service alert") ||
+           lower.starts(with: "planned work") {
+            return trimmed
+        }
+        return "\(disruptionType.displayName): \(trimmed)"
     }
 }
 

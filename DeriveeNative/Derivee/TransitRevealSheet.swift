@@ -381,8 +381,15 @@ struct TransitRevealSheet: View {
         }
     }
     
-    private func resolveFollowOnArrival(for arr: SpatialDatabaseManager.ArrivalInfo) -> SpatialDatabaseManager.ArrivalInfo? {
-        liveArrivals
+    internal func resolveFollowOnArrival(for arr: SpatialDatabaseManager.ArrivalInfo) -> SpatialDatabaseManager.ArrivalInfo? {
+        Self.resolveFollowOnArrival(for: arr, from: displayedArrivals)
+    }
+    
+    static func resolveFollowOnArrival(
+        for arr: SpatialDatabaseManager.ArrivalInfo,
+        from candidates: [SpatialDatabaseManager.ArrivalInfo]
+    ) -> SpatialDatabaseManager.ArrivalInfo? {
+        candidates
             .filter { $0.line == arr.line && $0.direction == arr.direction && $0.id != arr.id && $0.minutes >= arr.minutes }
             .sorted { $0.minutes < $1.minutes }
             .first
