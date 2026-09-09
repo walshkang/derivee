@@ -419,6 +419,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
 
     
     /// Resolves platform stop IDs for a given parent or platform stop ID via stop_resolution or stops hierarchy.
+    /// Backward-compatible with both Wave Q schema (parent_station_id) and Wave L schema (parent_stop_id).
     public func resolvePlatformStopIds(for stopId: String, in db: Database) -> [String] {
         var stopIds = [stopId]
         
@@ -426,7 +427,21 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         do {
             let resColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stop_resolution)")
             if !resColumns.isEmpty {
-                let children = try String.fetchAll(db, sql: "SELECT child_stop_id FROM transit.stop_resolution WHERE parent_stop_id = ?", arguments: [stopId])
+                let columnNames = Set(resColumns.compactMap { $0["name"] as? String })
+                let children: [String]
+                if columnNames.contains("parent_station_id") {
+                    children = try String.fetchAll(db, sql: """
+                        SELECT child_stop_id FROM transit.stop_resolution 
+                        WHERE parent_station_id = ? OR child_stop_id = ?
+                    """, arguments: [stopId, stopId])
+                } else if columnNames.contains("parent_stop_id") {
+                    children = try String.fetchAll(db, sql: """
+                        SELECT child_stop_id FROM transit.stop_resolution 
+                        WHERE parent_stop_id = ?
+                    """, arguments: [stopId])
+                } else {
+                    children = []
+                }
                 for child in children {
                     if !stopIds.contains(child) {
                         stopIds.append(child)
@@ -462,6 +477,113 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
         
         return stopIds
+    }
+    
+    // MARK: - Station Complex & Topological Resolution Queries (Doc 15 & 16)
+    
+    /// Fetches the physical station complex by its complex ID.
+    public func fetchComplex(for complexId: Int64) async throws -> StationComplex? {
+        try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            guard let row = try Row.fetchOne(db, sql: """
+                SELECT complex_id, complex_name, borough, latitude, longitude, is_hub
+                FROM transit.complexes
+                WHERE complex_id = ?
+                LIMIT 1
+            """, arguments: [complexId]) else {
+                return nil
+            }
+            return StationComplex(
+                id: row["complex_id"],
+                name: row["complex_name"],
+                borough: row["borough"],
+                coordinate: CLLocationCoordinate2D(latitude: row["latitude"], longitude: row["longitude"]),
+                isHub: (row["is_hub"] as Int? ?? 0) != 0
+            )
+        }
+    }
+    
+    /// Fetches the station complex that contains a given stop ID (child platform or parent station).
+    /// Uses the high-speed inverted index `idx_stop_resolution_reverse` for sub-0.10ms seek.
+    public func fetchComplex(forStopId stopId: String, feedId: String = "subway") async throws -> StationComplex? {
+        try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            // Check stop_resolution via reverse index first
+            let complexIdRow = try Row.fetchOne(db, sql: """
+                SELECT complex_id 
+                FROM transit.stop_resolution 
+                WHERE feed_id = ? AND (child_stop_id = ? OR parent_station_id = ?)
+                LIMIT 1
+            """, arguments: [feedId, stopId, stopId])
+            
+            guard let cid: Int64 = complexIdRow?["complex_id"] else {
+                return nil
+            }
+            
+            guard let row = try Row.fetchOne(db, sql: """
+                SELECT complex_id, complex_name, borough, latitude, longitude, is_hub
+                FROM transit.complexes
+                WHERE complex_id = ?
+                LIMIT 1
+            """, arguments: [cid]) else {
+                return nil
+            }
+            
+            return StationComplex(
+                id: row["complex_id"],
+                name: row["complex_name"],
+                borough: row["borough"],
+                coordinate: CLLocationCoordinate2D(latitude: row["latitude"], longitude: row["longitude"]),
+                isHub: (row["is_hub"] as Int? ?? 0) != 0
+            )
+        }
+    }
+    
+    /// Fetches all resolved child platforms and parent stations mapped to a given complex ID.
+    public func fetchResolvedStops(forComplexId complexId: Int64) async throws -> [ResolvedStop] {
+        try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT complex_id, feed_id, parent_station_id, child_stop_id, platform_code, direction_id, wheelchair_boarding
+                FROM transit.stop_resolution
+                WHERE complex_id = ?
+                ORDER BY parent_station_id ASC, child_stop_id ASC
+            """, arguments: [complexId])
+            
+            return rows.map { row in
+                ResolvedStop(
+                    complexId: row["complex_id"],
+                    feedId: row["feed_id"],
+                    parentStationId: row["parent_station_id"],
+                    childStopId: row["child_stop_id"],
+                    platformCode: row["platform_code"],
+                    directionId: row["direction_id"],
+                    wheelchairBoarding: row["wheelchair_boarding"] ?? 0
+                )
+            }
+        }
+    }
+    
+    /// Fetches all known station complexes in the active transit database.
+    public func fetchAllComplexes() async throws -> [StationComplex] {
+        try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT complex_id, complex_name, borough, latitude, longitude, is_hub
+                FROM transit.complexes
+                ORDER BY is_hub DESC, complex_name ASC
+            """)
+            
+            return rows.map { row in
+                StationComplex(
+                    id: row["complex_id"],
+                    name: row["complex_name"],
+                    borough: row["borough"],
+                    coordinate: CLLocationCoordinate2D(latitude: row["latitude"], longitude: row["longitude"]),
+                    isHub: (row["is_hub"] as Int? ?? 0) != 0
+                )
+            }
+        }
     }
     
     /// Checks if the `transit` database schema is currently attached.

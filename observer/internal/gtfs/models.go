@@ -142,13 +142,70 @@ type ScheduledHourlyPattern struct {
 	Headsign           string
 }
 
-// StopResolution represents an entry in the pre-compiled reflexive transitive closure
+// Complex represents a top-level physical station complex (e.g., Penn Station, Grand Central, Union Square)
+type Complex struct {
+	ComplexID   int64
+	ComplexName string
+	Borough     string
+	Latitude    float64
+	Longitude   float64
+	IsHub       int // 0 or 1
+}
+
+// HubAnchor represents a pre-compiled regional mega-hub anchor definition (Doc 16 §1 & §5)
+type HubAnchor struct {
+	ComplexID   int64
+	ComplexName string
+	Borough     string
+	Keywords    []string
+	CenterLat   float64
+	CenterLon   float64
+	RadiusM     float64
+}
+
+var RegionalHubAnchors = []HubAnchor{
+	{
+		ComplexID:   600001,
+		ComplexName: "Penn Station - Moynihan Train Hall Complex",
+		Borough:     "Manhattan",
+		Keywords:    []string{"PENN", "MOYNIHAN", "34 ST-PENN"},
+		CenterLat:   40.750568,
+		CenterLon:   -73.993519,
+		RadiusM:     500.0,
+	},
+	{
+		ComplexID:   600002,
+		ComplexName: "Grand Central Terminal Complex",
+		Borough:     "Manhattan",
+		Keywords:    []string{"GRAND CENTRAL", "GCM", "METRO-NORTH"},
+		CenterLat:   40.752726,
+		CenterLon:   -73.977229,
+		RadiusM:     450.0,
+	},
+	{
+		ComplexID:   600003,
+		ComplexName: "Atlantic Avenue - Barclays Center Complex",
+		Borough:     "Brooklyn",
+		Keywords:    []string{"ATLANTIC", "BARCLAYS", "FLATBUSH"},
+		CenterLat:   40.684411,
+		CenterLon:   -73.977821,
+		RadiusM:     350.0,
+	},
+}
+
+// StopResolution represents an entry in the clustered multi-tier topological hierarchy (Doc 16 §2)
 type StopResolution struct {
-	ParentStopID       string
+	ComplexID          int64
+	FeedID             string
+	ParentStationID    string
 	ChildStopID        string
-	IsParent           int // 0 or 1
 	PlatformCode       string
+	DirectionID        *int // nil, 0, or 1
 	WheelchairBoarding int
+
+	// Legacy aliases (Wave L)
+	ParentStopID string
+	IsParent     int // 0 or 1
 }
 
 // Dataset represents a parsed in-memory GTFS dataset

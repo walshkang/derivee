@@ -45,12 +45,6 @@ public struct TarExtractor: Sendable {
                 fullName = "\(rawPrefix)/\(rawName)"
             }
             
-            fullName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if fullName.isEmpty || fullName.hasPrefix("._") || fullName.contains("/._") || fullName.hasPrefix("PaxHeader/") || fullName.contains("/PaxHeader/") {
-                offset += blockSize
-                continue
-            }
-            
             // 2. Parse Size (124..<136) in octal
             let sizeData = headerBlock.subdata(in: 124..<136)
             guard let size = parseOctal(from: sizeData) else {
@@ -60,8 +54,20 @@ public struct TarExtractor: Sendable {
             // 3. Parse Type Flag (156)
             let typeFlag = headerBlock[156]
             let isDirectory = (typeFlag == 0x35) || fullName.hasSuffix("/") // '5' is directory
+            let isPaxOrMetadata = (typeFlag == 0x78 || typeFlag == 0x67) || // 'x' (PAX header) or 'g' (global PAX header)
+                                  fullName.isEmpty ||
+                                  fullName.hasPrefix("._") || fullName.contains("/._") ||
+                                  fullName.hasPrefix("PaxHeader/") || fullName.contains("/PaxHeader/")
             
             offset += blockSize
+            
+            if isPaxOrMetadata {
+                if size > 0 {
+                    let paddedBlocks = (size + blockSize - 1) / blockSize
+                    offset += paddedBlocks * blockSize
+                }
+                continue
+            }
             
             // 4. Extract Payload
             if isDirectory || size == 0 {

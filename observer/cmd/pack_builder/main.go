@@ -44,6 +44,7 @@ func main() {
 	deltaStatePath := flag.String("delta-state", ".feed_state.json", "Path to delta checker state file")
 	uploadR2 := flag.Bool("upload-r2", false, "Upload built pack and manifest to Cloudflare R2")
 	forceBuild := flag.Bool("force", false, "Force compilation even if delta check indicates no change")
+	mtaStationsPath := flag.String("mta-stations", "", "Optional path or URL to MTA Stations.csv for complex mapping")
 	flag.Parse()
 
 	if *configPath == "" || *gtfsSources == "" || *outputPath == "" {
@@ -177,10 +178,28 @@ func main() {
 		stopRoutesList[stopID] = rList
 	}
 
-	// 5. Pre-compile Stop Resolution Closure (Rules 1-4)
-	log.Println("Pre-compiling reflexive transitive closure for stop resolution...")
-	resolutions := gtfs.BuildStopResolutionClosure(mergedDataset.Stops)
-	log.Printf("Generated %d stop_resolution rows (WITHOUT ROWID)", len(resolutions))
+	// 5. Pre-compile Station Complex Hierarchy & Stop Resolution (Doc 15 & 16)
+	log.Println("Pre-compiling station complex hierarchy and stop resolution...")
+	var mtaLookup map[string]int64
+	if *mtaStationsPath != "" {
+		if strings.HasPrefix(*mtaStationsPath, "http://") || strings.HasPrefix(*mtaStationsPath, "https://") {
+			if lk, err := fetcher.FetchMTAStations(*mtaStationsPath); err == nil {
+				mtaLookup = lk.StopToComplexID
+				log.Printf("Fetched %d MTA station complex mappings from %s", len(mtaLookup), *mtaStationsPath)
+			} else {
+				log.Printf("Warning: Failed to fetch MTA stations from %s: %v", *mtaStationsPath, err)
+			}
+		} else {
+			if lk, err := fetcher.LoadMTAStationsFromFile(*mtaStationsPath); err == nil {
+				mtaLookup = lk.StopToComplexID
+				log.Printf("Loaded %d MTA station complex mappings from %s", len(mtaLookup), *mtaStationsPath)
+			} else {
+				log.Printf("Warning: Failed to load MTA stations file %s: %v", *mtaStationsPath, err)
+			}
+		}
+	}
+	complexes, resolutions := gtfs.BuildComplexResolutionHierarchy(mergedDataset.Stops, mtaLookup, "subway", gtfs.RegionalHubAnchors)
+	log.Printf("Generated %d complexes and %d stop_resolution rows (WITHOUT ROWID)", len(complexes), len(resolutions))
 
 	// 6. Compact Timetable into Scheduled Hourly Patterns
 	log.Println("Compacting schedule into scheduled_hourly_patterns (14-day calendar unrolling)...")
@@ -206,6 +225,9 @@ func main() {
 	}
 	if err := builder.BulkInsertStops(db, mergedDataset.Stops, stopRoutesList); err != nil {
 		log.Fatalf("BulkInsertStops failed: %v", err)
+	}
+	if err := builder.BulkInsertComplexes(db, complexes); err != nil {
+		log.Fatalf("BulkInsertComplexes failed: %v", err)
 	}
 	if err := builder.BulkInsertStopResolution(db, resolutions); err != nil {
 		log.Fatalf("BulkInsertStopResolution failed: %v", err)

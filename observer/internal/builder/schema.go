@@ -41,15 +41,30 @@ func InitTransitDB(dbPath string) (*sql.DB, error) {
 		route_text_color TEXT
 	);
 
-	CREATE TABLE stop_resolution (
-		parent_stop_id TEXT NOT NULL,
-		child_stop_id TEXT NOT NULL,
-		is_parent INTEGER NOT NULL CHECK (is_parent IN (0, 1)),
-		platform_code TEXT,
-		wheelchair_boarding INTEGER NOT NULL DEFAULT 0,
-		PRIMARY KEY (parent_stop_id, child_stop_id)
+	CREATE TABLE complexes (
+		complex_id          INTEGER NOT NULL,
+		complex_name        TEXT    NOT NULL,
+		borough             TEXT,
+		latitude            REAL    NOT NULL,
+		longitude           REAL    NOT NULL,
+		is_hub              INTEGER NOT NULL DEFAULT 0 CHECK(is_hub IN (0, 1)),
+		PRIMARY KEY (complex_id)
 	) WITHOUT ROWID;
-	CREATE INDEX idx_stop_resolution_child ON stop_resolution (child_stop_id, parent_stop_id);
+
+	CREATE TABLE stop_resolution (
+		complex_id          INTEGER NOT NULL,
+		feed_id             TEXT    NOT NULL,
+		parent_station_id   TEXT    NOT NULL,
+		child_stop_id       TEXT    NOT NULL,
+		platform_code       TEXT,
+		direction_id        INTEGER CHECK(direction_id IN (0, 1, NULL)),
+		wheelchair_boarding INTEGER NOT NULL DEFAULT 0 CHECK(wheelchair_boarding IN (0, 1, 2)),
+		PRIMARY KEY (complex_id, feed_id, parent_station_id, child_stop_id)
+	) WITHOUT ROWID;
+	CREATE UNIQUE INDEX idx_stop_resolution_reverse 
+	ON stop_resolution (feed_id, child_stop_id, complex_id, parent_station_id);
+	CREATE INDEX idx_stop_resolution_parent
+	ON stop_resolution (feed_id, parent_station_id, complex_id);
 
 	CREATE TABLE scheduled_hourly_patterns (
 		stop_id TEXT NOT NULL,
@@ -171,6 +186,42 @@ func BulkInsertRoutes(db *sql.DB, routes map[string]gtfs.Route) error {
 	return tx.Commit()
 }
 
+// BulkInsertComplexes populates the complexes table
+func BulkInsertComplexes(db *sql.DB, complexes []gtfs.Complex) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO complexes (complex_id, complex_name, borough, latitude, longitude, is_hub)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(complex_id) DO UPDATE SET
+			complex_name = excluded.complex_name,
+			borough = COALESCE(excluded.borough, complexes.borough),
+			latitude = (complexes.latitude + excluded.latitude) / 2.0,
+			longitude = (complexes.longitude + excluded.longitude) / 2.0,
+			is_hub = max(complexes.is_hub, excluded.is_hub);
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, c := range complexes {
+		var borough interface{} = nil
+		if c.Borough != "" {
+			borough = c.Borough
+		}
+		if _, err := stmt.Exec(c.ComplexID, c.ComplexName, borough, c.Latitude, c.Longitude, c.IsHub); err != nil {
+			return fmt.Errorf("failed to insert complex %d: %w", c.ComplexID, err)
+		}
+	}
+
+	return tx.Commit()
+}
+
 // BulkInsertStopResolution populates the stop_resolution table
 func BulkInsertStopResolution(db *sql.DB, resolutions []gtfs.StopResolution) error {
 	tx, err := db.Begin()
@@ -180,8 +231,11 @@ func BulkInsertStopResolution(db *sql.DB, resolutions []gtfs.StopResolution) err
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT OR REPLACE INTO stop_resolution (parent_stop_id, child_stop_id, is_parent, platform_code, wheelchair_boarding)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT OR REPLACE INTO stop_resolution (
+			complex_id, feed_id, parent_station_id, child_stop_id,
+			platform_code, direction_id, wheelchair_boarding
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -194,8 +248,22 @@ func BulkInsertStopResolution(db *sql.DB, resolutions []gtfs.StopResolution) err
 			platform = r.PlatformCode
 		}
 
-		if _, err := stmt.Exec(r.ParentStopID, r.ChildStopID, r.IsParent, platform, r.WheelchairBoarding); err != nil {
-			return fmt.Errorf("failed to insert stop_resolution (%s, %s): %w", r.ParentStopID, r.ChildStopID, err)
+		parentStation := r.ParentStationID
+		if parentStation == "" {
+			parentStation = r.ParentStopID
+		}
+		feedID := r.FeedID
+		if feedID == "" {
+			feedID = "subway"
+		}
+
+		var direction interface{} = nil
+		if r.DirectionID != nil {
+			direction = *r.DirectionID
+		}
+
+		if _, err := stmt.Exec(r.ComplexID, feedID, parentStation, r.ChildStopID, platform, direction, r.WheelchairBoarding); err != nil {
+			return fmt.Errorf("failed to insert stop_resolution (%d, %s, %s, %s): %w", r.ComplexID, feedID, parentStation, r.ChildStopID, err)
 		}
 	}
 

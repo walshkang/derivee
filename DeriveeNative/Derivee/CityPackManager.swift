@@ -50,6 +50,10 @@ public final class CityPackManager: Sendable {
         packDirectoryURL(for: slug).appendingPathComponent("transit-lines.geojson")
     }
     
+    public func stationShapesGeoJSONURL(for slug: String) -> URL {
+        packDirectoryURL(for: slug).appendingPathComponent("station_shapes.geojson")
+    }
+    
     public func timetableURL(for slug: String) -> URL {
         let filename = (try? loadConfig(for: slug))?.routing?.timetableBinFile ?? "timetable.bin"
         return packDirectoryURL(for: slug).appendingPathComponent(filename)
@@ -139,10 +143,12 @@ public final class CityPackManager: Sendable {
             if Self.isValidDatabase(at: nycTransitURL) {
                 do {
                     let config = try loadConfig(for: "nyc")
-                    if let attrs = try? fileManager.attributesOfItem(atPath: nycTransitURL.path),
+                    if config.version >= 2,
+                       let attrs = try? fileManager.attributesOfItem(atPath: nycTransitURL.path),
                        let size = attrs[.size] as? Int64, size > 2_000_000 {
                         return config
                     }
+                    print("⚠️ Outdated NYC pack (v\(config.version)) detected on disk, re-extracting v2...")
                 } catch {
                     print("⚠️ Corrupted or outdated NYC pack detected, re-extracting: \(error)")
                 }
