@@ -18,6 +18,10 @@ public enum AppStorageKeys {
     public static let activeCitySlug = "activeCitySlug"
     public static let cityPromptSnoozeTimestamps = "cityPromptSnoozeTimestamps"
     public static let installedCityPacks = "installedCityPacks"
+    
+    // Search & Navigation (Wave PA.4)
+    public static let recentSearchDestinations = "recentSearchDestinations"
+    public static let savedSearchDestinations = "savedSearchDestinations"
 }
 
 /// Subway station bullet presentation styles

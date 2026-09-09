@@ -38,6 +38,9 @@ struct ContentView: View {
     @State private var navigationManager = MultimodalTripNavigationManager.shared
     @State private var showNavigationSheet: Bool = false
     @State private var navigationDetent: PresentationDetent = NavigationSheetDetent.half.presentationDetent
+    @State private var showSearchSheet: Bool = false
+    @State private var showRouteComparisonSheet: Bool = false
+    @State private var routeComparisonVM: RouteComparisonViewModel? = nil
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
@@ -118,14 +121,17 @@ struct ContentView: View {
                     .allowsHitTesting(false)
                     
                     VStack {
-                        HStack {
-                            Spacer()
+                        HStack(alignment: .center, spacing: 12) {
+                            SearchCapsuleOverlay {
+                                showSearchSheet = true
+                            }
+                            
                             ProfileFAB {
                                 showStatsView = true
                             }
-                            .padding(.top, 50)
-                            .padding(.trailing, 20)
                         }
+                        .padding(.top, 50)
+                        .padding(.horizontal, 20)
                         
                         Spacer()
                         
@@ -292,6 +298,64 @@ struct ContentView: View {
                             .transitSheetGlassBackground()
                     }
                 }
+                .sheet(isPresented: $showSearchSheet) {
+                    PlaceSearchView(
+                        viewModel: SearchViewModel(
+                            spatialDbManager: .shared,
+                            initialLocation: currentUserLocation ?? trackingEngine.lastKnownLocation?.coordinate
+                        ),
+                        onSelectStation: { stopId, coord in
+                            showSearchSheet = false
+                            selectedTransitStop = stopId
+                            showTransitSheet = true
+                            if let c = coord {
+                                targetCoordinate = c
+                                isMapCentered = false
+                            }
+                        },
+                        onSelectDestination: { routingLoc in
+                            showSearchSheet = false
+                            startRouteComparison(to: routingLoc)
+                        },
+                        onClose: {
+                            showSearchSheet = false
+                        }
+                    )
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .presentationContentInteraction(.scrolls)
+                    .transitSheetGlassBackground()
+                }
+                .sheet(isPresented: Binding(
+                    get: { showRouteComparisonSheet && routeComparisonVM != nil },
+                    set: { newValue in
+                        showRouteComparisonSheet = newValue
+                        if !newValue {
+                            routeComparisonVM = nil
+                        }
+                    }
+                )) {
+                    if let vm = routeComparisonVM {
+                        RouteComparisonListView(
+                            viewModel: vm,
+                            onStartNavigation: { itinerary in
+                                showRouteComparisonSheet = false
+                                routeComparisonVM = nil
+                                activeNavigationItinerary = itinerary
+                                showNavigationSheet = true
+                                navigationDetent = NavigationSheetDetent.half.presentationDetent
+                            },
+                            onClose: {
+                                showRouteComparisonSheet = false
+                                routeComparisonVM = nil
+                            }
+                        )
+                        .presentationDetents([.fraction(0.50), .large])
+                        .presentationDragIndicator(.visible)
+                        .presentationContentInteraction(.scrolls)
+                        .transitSheetGlassBackground()
+                    }
+                }
                 .onChange(of: activeNavigationItinerary) { _, newItin in
                     if let itin = newItin {
                         navigationManager.startTripNavigation(itinerary: itin)
@@ -441,6 +505,21 @@ struct ContentView: View {
                     self.isScanningBuses = false
                 }
             }
+        }
+    }
+    
+    // MARK: - Multimodal Route Comparison Navigation (Wave PA.4)
+    
+    private func startRouteComparison(to destination: RoutingLocation) {
+        let originCoord = currentUserLocation ?? trackingEngine.lastKnownLocation?.coordinate ?? spatialStore.activeCityConfig.center.coordinate
+        let origin = RoutingLocation.coordinate(latitude: originCoord.latitude, longitude: originCoord.longitude, name: "Current Location")
+        
+        let vm = RouteComparisonViewModel(planner: JourneyPlanner.shared)
+        self.routeComparisonVM = vm
+        self.showRouteComparisonSheet = true
+        
+        Task {
+            await vm.searchJourneys(origin: origin, destination: destination)
         }
     }
     

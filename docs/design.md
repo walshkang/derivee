@@ -895,9 +895,9 @@ The existing `ReliabilityHeatmapCanvas` (§10.1) renders a 24×7 grid. Wave N ad
 - **Selection:** Tap highlights cell with 1.5pt white stroke border. `selectedCellIndex` drives detail overlay.
 - **Performance:** 0.8ms–1.9ms per frame (vs. 18–42ms for declarative `LazyVGrid`), sustaining 120Hz ProMotion.
 
-### 12.2 Screen 4A: Place & Station Search `[Not Yet Implemented]`
+### 12.2 Screen 4A: Place & Station Search `[Implemented - Wave PA.4]`
 
-> **Implementation:** `PlaceSearchView.swift` (new)
+> **Implementation:** `PlaceSearchView.swift` (Screen 4A), `SearchCapsuleOverlay.swift` (Screen 1), `SearchViewModel.swift`, `SearchModels.swift`
 > **Trigger:** Tapping the Search Capsule on Screen 1.
 > **Presentation:** Full-screen modal or navigation push from the Search Capsule.
 

@@ -3123,5 +3123,220 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
         return result
     }
+    
+    // MARK: - Offline Prefix Search (Wave PA.4 / Screen 4A)
+    
+    /// Queries transit stops matching the given prefix/contains search query against `transit.stops`.
+    /// Aggregates parent stations and platform routes into structured `SearchResultItem` records.
+    public func searchTransitStops(
+        query: String,
+        filter: SearchModeFilter = .all,
+        limit: Int = 20
+    ) async throws -> [SearchResultItem] {
+        let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanQuery.isEmpty else { return [] }
+        
+        let prefixPattern = "\(cleanQuery)%"
+        let containsPattern = "%\(cleanQuery)%"
+        
+        return try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stops);")
+            guard !columns.isEmpty else { return [] }
+            
+            let hasRoutes = columns.contains { ($0["name"] as? String) == "routes" }
+            let hasParentStation = columns.contains { ($0["name"] as? String) == "parent_station" }
+            let hasLocationType = columns.contains { ($0["name"] as? String) == "location_type" }
+            
+            let routesSelect = hasRoutes ? "s.routes" : "'' AS routes"
+            let locTypeSelect = hasLocationType ? "s.location_type" : "0 AS location_type"
+            let parentSelect = hasParentStation ? "s.parent_station" : "NULL AS parent_station"
+            let childRoutesSelect = hasParentStation && hasRoutes ? "GROUP_CONCAT(DISTINCT c.routes) AS child_routes" : "'' AS child_routes"
+            let joinClause = hasParentStation ? "LEFT JOIN transit.stops c ON c.parent_station = s.stop_id" : ""
+            let filterClause = hasLocationType && hasParentStation ? "AND (s.location_type = 1 OR s.parent_station IS NULL OR s.parent_station = '')" : ""
+            
+            let sql = """
+                SELECT 
+                    s.stop_id, 
+                    s.stop_name, 
+                    s.stop_lat, 
+                    s.stop_lon, 
+                    \(locTypeSelect), 
+                    \(routesSelect), 
+                    \(parentSelect),
+                    \(childRoutesSelect)
+                FROM transit.stops s
+                \(joinClause)
+                WHERE (s.stop_name LIKE ? COLLATE NOCASE OR s.stop_name LIKE ? COLLATE NOCASE OR s.stop_id LIKE ? COLLATE NOCASE)
+                \(filterClause)
+                GROUP BY s.stop_id
+                ORDER BY 
+                  CASE 
+                    WHEN s.stop_name LIKE ? COLLATE NOCASE THEN 1
+                    WHEN s.stop_id LIKE ? COLLATE NOCASE THEN 2
+                    ELSE 3
+                  END,
+                  \(hasLocationType ? "s.location_type DESC," : "")
+                  s.stop_name ASC
+                LIMIT ?
+            """
+            
+            let rows = try Row.fetchAll(db, sql: sql, arguments: [
+                prefixPattern, containsPattern, prefixPattern,
+                prefixPattern, prefixPattern,
+                limit * 2
+            ])
+            
+            var results: [SearchResultItem] = []
+            for row in rows {
+                let stopId: String = row["stop_id"]
+                let stopName: String = row["stop_name"]
+                let lat: Double = row["stop_lat"]
+                let lon: Double = row["stop_lon"]
+                let locationType: Int = row["location_type"] ?? 0
+                let primaryRoutesStr: String = (row["routes"] as? String) ?? ""
+                let childRoutesStr: String = (row["child_routes"] as? String) ?? ""
+                
+                // Aggregate route strings
+                var routeSet = Set<String>()
+                for r in primaryRoutesStr.components(separatedBy: ",") where !r.trimmingCharacters(in: .whitespaces).isEmpty {
+                    routeSet.insert(r.trimmingCharacters(in: .whitespaces))
+                }
+                for r in childRoutesStr.components(separatedBy: ",") where !r.trimmingCharacters(in: .whitespaces).isEmpty {
+                    routeSet.insert(r.trimmingCharacters(in: .whitespaces))
+                }
+                
+                var resolvedRoutes = Array(routeSet).sorted()
+                
+                let isSubway = self.isSubwayPlatformId(stopId) || locationType == 1 || resolvedRoutes.contains { r in
+                    ["1", "2", "3", "4", "5", "6", "7", "A", "B", "C", "D", "E", "F", "G", "J", "L", "M", "N", "Q", "R", "W", "Z", "SI", "SIR", "FS", "GS"].contains(r)
+                }
+                
+                let modalClass: TransitModalClass = isSubway ? .subway : .bus
+                if !filter.matches(modalClass: modalClass) {
+                    continue
+                }
+                
+                if !isSubway && resolvedRoutes.isEmpty {
+                    resolvedRoutes = self.inferBusRoutes(from: stopName, stopId: stopId)
+                }
+                
+                let subtitle: String
+                if isSubway {
+                    if resolvedRoutes.isEmpty {
+                        subtitle = "Subway Station"
+                    } else {
+                        subtitle = "Subway • \(resolvedRoutes.joined(separator: ", "))"
+                    }
+                } else {
+                    if resolvedRoutes.isEmpty {
+                        subtitle = "Bus Stop"
+                    } else {
+                        subtitle = "Bus • \(resolvedRoutes.joined(separator: ", "))"
+                    }
+                }
+                
+                let item = SearchResultItem(
+                    id: stopId,
+                    title: stopName,
+                    subtitle: subtitle,
+                    category: .station(stopId: stopId, modalClass: modalClass),
+                    coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                    modalClass: modalClass,
+                    routes: resolvedRoutes,
+                    badgeColorHex: isSubway ? "#009952" : "#00A1DE"
+                )
+                results.append(item)
+                if results.count >= limit {
+                    break
+                }
+            }
+            return results
+        }
+    }
+    
+    /// Queries transit routes matching the query against `transit.routes`.
+    public func searchTransitRoutes(
+        query: String,
+        filter: SearchModeFilter = .all,
+        limit: Int = 10
+    ) async throws -> [SearchResultItem] {
+        let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanQuery.isEmpty else { return [] }
+        
+        let prefixPattern = "\(cleanQuery)%"
+        let containsPattern = "%\(cleanQuery)%"
+        
+        return try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(routes);")
+            guard !columns.isEmpty else { return [] }
+            
+            let sql = """
+                SELECT route_id, route_short_name, route_long_name, route_type, route_color, route_text_color
+                FROM transit.routes
+                WHERE route_short_name LIKE ? COLLATE NOCASE 
+                   OR route_short_name LIKE ? COLLATE NOCASE 
+                   OR route_long_name LIKE ? COLLATE NOCASE
+                ORDER BY 
+                  CASE 
+                    WHEN route_short_name = ? COLLATE NOCASE THEN 1
+                    WHEN route_short_name LIKE ? COLLATE NOCASE THEN 2
+                    ELSE 3
+                  END,
+                  LENGTH(route_short_name) ASC
+                LIMIT ?
+            """
+            
+            let rows = try Row.fetchAll(db, sql: sql, arguments: [
+                prefixPattern, containsPattern, containsPattern,
+                cleanQuery, prefixPattern,
+                limit * 2
+            ])
+            
+            var results: [SearchResultItem] = []
+            for row in rows {
+                let routeId: String = row["route_id"]
+                let shortName: String = row["route_short_name"]
+                let longName: String = (row["route_long_name"] as? String) ?? ""
+                let rawRouteType: Int = row["route_type"] ?? 1
+                let colorHex: String? = row["route_color"]
+                
+                let modalClass = TransitModalClass.from(routeType: rawRouteType)
+                if !filter.matches(modalClass: modalClass) {
+                    continue
+                }
+                
+                let title = shortName.isEmpty ? routeId : shortName
+                let subtitle: String
+                if !longName.isEmpty {
+                    subtitle = "\(modalClass.displayName) • \(longName)"
+                } else {
+                    subtitle = "\(modalClass.displayName) Line"
+                }
+                
+                var formattedColor = colorHex
+                if let c = colorHex, !c.hasPrefix("#") {
+                    formattedColor = "#\(c)"
+                }
+                
+                let item = SearchResultItem(
+                    id: "route_\(routeId)",
+                    title: title,
+                    subtitle: subtitle,
+                    category: .route(routeId: routeId, modalClass: modalClass, colorHex: formattedColor),
+                    coordinate: nil,
+                    modalClass: modalClass,
+                    routes: [title],
+                    badgeColorHex: formattedColor
+                )
+                results.append(item)
+                if results.count >= limit {
+                    break
+                }
+            }
+            return results
+        }
+    }
 }
 
