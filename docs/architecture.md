@@ -490,7 +490,7 @@ CREATE TABLE trip_slot_profiles (
 ) WITHOUT ROWID;
 ```
 - **GTFS Immunity:** Bypasses fragile `trip_id` hash changes during monthly schedule updates.
-- **On-Device Point Reads:** Sub-millisecond $\mathcal{O}(1)$ queries feeding the Train Inspector and P10/P50/P90 confidence intervals.
+- **On-Device Point Reads:** Sub-millisecond $\mathcal{O}(1)$ queries feeding the Guideway and Surface Run Inspectors and P10/P50/P90 confidence intervals.
 
 ### 9.6 Combined On-Device Memory Budget
 
@@ -503,3 +503,36 @@ CREATE TABLE trip_slot_profiles (
 | **Combined routing engine** | **~26 MB** | |
 
 Headroom under the 30 MB Jetsam ceiling: **~4 MB**.
+
+### 9.7 Screen 4 Multimodal Navigation Runtime & State Lifecycle
+
+Screen 4 (`NavigationSheet`) coordinates multimodal destination search, Pareto route evaluation, and active navigation guidance under Guardrail G10.
+
+- **Presentation Hierarchy:**
+  - **Screen 4A (`SearchSheetView`):** Origin/destination search triggered via the persistent `SearchCapsuleOverlay` on Screen 1. Dispatches geocoded queries to `SearchViewModel`.
+  - **Screen 4B (`RouteComparisonView`):** Renders the multi-criteria Pareto frontier returned by the C++ rRAPTOR engine. Users inspect alternative trip balances (quickest vs minimum transfers vs scenic/shaded walk).
+  - **Screen 4C (`ActiveGuidanceView`):** Turn-by-turn guidance, transfer notifications, subterranean station car positioning, and arrival celebration.
+- **`NavigationSessionManager` Lifecycle:**
+  - Initialized as an `@Observable` actor-bound controller when the user confirms a route from Screen 4B.
+  - **Leg Progression Engine:** Sequences through `[JourneyLeg]` elements (`.walk`, `.guideway`, `.surface`, `.transfer`). Advances leg index when user passes within a 20m radius of leg destination waypoint.
+  - **Kinematic Coordinate Projection & Off-Route Detection:** Incoming GPS fixes (`CLLocation`) are projected orthogonally onto the active polyline segment. If perpendicular deviation $d_{\perp} > 50\text{ m}$ persists for $>15$ consecutive seconds, `NavigationSessionManager` flags an off-route condition and triggers an asynchronous rRAPTOR re-route query at `.userInitiated` priority to calculate a replacement itinerary from the current location to the target.
+  - **Subterranean Portal Clamping:** Upon approaching within 25m of a station entrance node (`portal_type = entrance`), the engine transitions into subterranean mode, suppresses dead-reckoning GPS noise, displays indoor station schematics and platform car recommendations, and locks coordinates until egress.
+  - **MapLibre Layer Cleanup:** On session deallocation or cancellation, dynamically injected MapLibre itinerary sources (`MLNGeoJSONSource`) and casing layers (`MLNLineStyleLayer`) are explicitly stripped, preserving VRAM and eliminating OpenGL/Metal memory leaks.
+
+### 9.8 Run Inspector Telemetry Subsystems (Guideway vs. Surface)
+
+To prevent visual and conceptual conflation, live transit run tracking in Screen 2 splits into two distinct operational telemetry subsystems based on physical transport medium:
+
+#### 1. Guideway Telemetry Subsystem (`GuidewayRunInspector`)
+- **Modal Scope:** Dedicated right-of-way transit: Heavy Rail (Subway), Light Rail, and Commuter Rail.
+- **Subsurface Kinematics:** Operates using `SubwayPositionInterpolator` (C++20, Research Doc 17). Between GTFS-RT `TripUpdate` arrival timestamps, the interpolator projects vehicle position along track geometry using quintic Hermite spline curves with physical acceleration ($a = 1.15\text{ m/s}^2$) and deceleration ($d = 1.25\text{ m/s}^2$).
+- **Express / Local Track Occupancy:** Cross-references live vehicle positions against the station complex cluster schema (Research Doc 16) to determine track occupancy and detect express bypass maneuvers in real-time.
+- **Car-by-Car Crowding:** Pulls live `occupancy_status` telemetry to render a segmented train car density bar, helping riders choose the emptiest car before boarding.
+- **Terminal Dwell Suppression:** Automatically suppresses ETA jitter and freezes departure countdowns while a train is dwelling at an origin terminal prior to signal dispatch.
+
+#### 2. Surface Telemetry Subsystem (`SurfaceRunInspector`)
+- **Modal Scope:** Shared road infrastructure transit: City buses, Select Bus Service (SBS), and streetcars.
+- **Corridor Pulse & Regularity Telemetry:** Rather than fixed track signals, surface transit reliability depends on headway regularity. The engine calculates Osuna-Newell expected wait times:
+  $$E[W] = \frac{\mu_h}{2}\left(1 + \frac{\sigma_h^2}{\mu_h^2}\right) = \frac{\mu_h}{2}(1 + \text{CV}_h^2)$$
+  and tags runs according to TCQSM bunching ($\alpha = 0.25$) and gap ($\beta = 1.75$) thresholds (Research Doc 19).
+- **Chronological Stop Ladder:** Renders downstream stops with live bus-to-stop ETA countdowns and relative spacing to the preceding/following vehicle on the corridor, enabling riders to make informed trade-offs between an approaching crowded bus and an empty trailing follower.

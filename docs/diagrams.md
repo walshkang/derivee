@@ -460,6 +460,7 @@ stateDiagram-v2
         MapIdle --> ExpandBuses: tap Nearby Buses Capsule
         ExpandBuses --> MapIdle: ambient map tap / gesture pan
         MapIdle --> OpenStats: tap Profile FAB
+        MapIdle --> OpenSearch: tap Search Capsule
         MapIdle --> DeepLink: derivee://progress
         Recenter --> MapIdle: camera animates (300ms)
         ResetNorth --> MapIdle: bearing animates to North (needle fades)
@@ -467,16 +468,35 @@ stateDiagram-v2
 
     Screen1_AmbientMap --> Screen2_TransitReveal: TransitTap
     Screen1_AmbientMap --> Screen3_StatsProfile: OpenStats or DeepLink (foreground)
+    Screen1_AmbientMap --> Screen4_Navigation: OpenSearch
 
     state Screen2_TransitReveal {
-        [*] --> SheetOpen
-        note right of SheetOpen
+        [*] --> MainSheet
+        note right of MainSheet
             Bottom sheet (.sheet)
             Real-time arrivals
-            Headway sparkline
+            Headway sparkline / heatmap
             Ephemeral route LineLayer
         end note
-        SheetOpen --> [*]: swipe down / tap map
+
+        MainSheet --> GuidewayInspector: tap Subway/Rail arrival row
+        MainSheet --> SurfaceInspector: tap Bus/Trolley arrival row
+
+        state GuidewayInspector {
+            [*] --> TrackThermometer
+            TrackThermometer --> CrowdingDetail: view car telemetry
+            CrowdingDetail --> TrackThermometer: back
+        }
+
+        state SurfaceInspector {
+            [*] --> StopLadder
+            StopLadder --> CorridorMetrics: view bunching/gap pulse
+            CorridorMetrics --> StopLadder: back
+        }
+
+        GuidewayInspector --> MainSheet: tap Back
+        SurfaceInspector --> MainSheet: tap Back
+        MainSheet --> [*]: swipe down / tap map
     }
     Screen2_TransitReveal --> Screen1_AmbientMap: dismiss (200ms fade route)
 
@@ -494,6 +514,19 @@ stateDiagram-v2
         StatsLeaderboard --> [*]: tap Done
     }
     Screen3_StatsProfile --> Screen1_AmbientMap: dismiss sheet
+
+    state Screen4_Navigation {
+        [*] --> Search4A: Sheet opens (.medium detent)
+        Search4A --> RouteComparison4B: select destination (rRAPTOR query)
+        RouteComparison4B --> Search4A: edit query / tap back
+        RouteComparison4B --> ActiveGuidance4C: select route & tap "Go"
+        ActiveGuidance4C --> RouteComparison4B: exit guidance / review routes
+        ActiveGuidance4C --> TripCompleted: arrive at destination
+        TripCompleted --> [*]: dismiss
+        Search4A --> [*]: swipe down / cancel
+        RouteComparison4B --> [*]: swipe down / cancel
+    }
+    Screen4_Navigation --> Screen1_AmbientMap: dismiss (fade itinerary layers)
 ```
 
 ---
@@ -656,8 +689,25 @@ stateDiagram-v2
         [*] --> LiveArrivalsTab
         
         state LiveArrivalsTab {
-            [*] --> Tier1AmbientHeatmap: Render Cividis Canvas (48pt)
-            Tier1AmbientHeatmap --> ExpandedHeatmap: Pull Sheet to .large Detent
+            [*] --> AmbientArrivalsStream: Render arrivals + per-line reliability badges
+            AmbientArrivalsStream --> ExpandedHeatmap: Pull Sheet to .large Detent
+            AmbientArrivalsStream --> GuidewayRunInspector: Tap subway/rail arrival row
+            AmbientArrivalsStream --> SurfaceRunInspector: Tap bus/trolley arrival row
+
+            state GuidewayRunInspector {
+                [*] --> ThermometerActive: Downstream stops & live kinematic dot
+                ThermometerActive --> CarCrowdingDetail: View car occupancy telemetry
+                CarCrowdingDetail --> ThermometerActive: Dismiss detail
+            }
+
+            state SurfaceRunInspector {
+                [*] --> StopLadderActive: Chronological stops & vehicle position
+                StopLadderActive --> CorridorPulseView: View bunching/gap pulse metrics
+                CorridorPulseView --> StopLadderActive: Dismiss detail
+            }
+
+            GuidewayRunInspector --> AmbientArrivalsStream: Tap Back button
+            SurfaceRunInspector --> AmbientArrivalsStream: Tap Back button
             
             state ExpandedHeatmap {
                 [*] --> IdleGrid: 24x7 Matrix (168 Cells)
@@ -700,6 +750,33 @@ classDiagram
         -selectedTab: TransitTabMode
         -stopDetails: StopDetails?
         -liveArrivals: [ArrivalInfo]
+        -reliabilityBadges: [String: LineReliability]
+    }
+
+    class GuidewayRunInspector {
+        <<SwiftUI View / Sub-Sheet>>
+        +arrival: ArrivalInfo
+        +trackOccupancy: [TrackSegment]
+        +carTelemetry: [CarCrowdingStatus]
+        +downstreamStops: [StopDetail]
+        +onDismiss: Action
+    }
+
+    class SurfaceRunInspector {
+        <<SwiftUI View / Sub-Sheet>>
+        +arrival: ArrivalInfo
+        +stopLadder: [StopSequenceItem]
+        +headwayDeltaSec: Int
+        +corridorMetrics: CorridorPulseMetrics
+        +onDismiss: Action
+    }
+
+    class CorridorPulseMetrics {
+        <<Swift Struct / Sendable>>
+        +regularityRatio: Float
+        +isBunched: Bool
+        +isGapped: Bool
+        +expectedWaitSec: Int
     }
 
     class ReliabilityHeatmapCanvas {
@@ -752,16 +829,23 @@ classDiagram
         +fetchStopEvents(stopId, hour, dow) async throws
         +fetchTimetable(stopId) async throws
         +resolveStopHierarchy(stopId) async throws
+        +fetchTripStopTimes(tripId) async throws
+        +fetchCorridorHeadways(routeId) async throws
     }
 
     TransitRevealSheet --> ReliabilityHeatmapCanvas : embeds (Live Tab)
     TransitRevealSheet --> DepartureMatrixView : embeds (Timetable Tab)
+    TransitRevealSheet --> GuidewayRunInspector : pushes on guideway tap
+    TransitRevealSheet --> SurfaceRunInspector : pushes on surface tap
+    SurfaceRunInspector --> CorridorPulseMetrics : consumes
     ReliabilityHeatmapCanvas ..> TransitMatrixInspectorView : triggers on tap
     TransitMatrixInspectorView --> TripLedgerView : expands on tap
     TransitMatrixInspectorView ..> SpatialDatabaseManager : queries metrics
     TripLedgerView ..> SpatialDatabaseManager : queries raw events
     DepartureMatrixView ..> SpatialDatabaseManager : queries scheduled timetable
     DepartureMatrixView --> TransitScheduleState : renders per-trip state
+    GuidewayRunInspector ..> SpatialDatabaseManager : queries trip stop times
+    SurfaceRunInspector ..> SpatialDatabaseManager : queries corridor headways
 ```
 
 ---
@@ -772,18 +856,21 @@ classDiagram
 
 ```mermaid
 sequenceDiagram
-    participant User as User (Screen 2)
-    participant VM as RouteViewModel<br/>(@Observable)
+    participant User as User (Screen 4A Search)
+    participant SearchVM as SearchViewModel<br/>(@Observable)
+    participant RouteVM as RouteComparisonViewModel<br/>(@Observable)
     participant Bridge as RoutingEngineBridge<br/>(Swift Actor)
     participant RAPTOR as C++ rRAPTOR<br/>(Task.detached .userInitiated)
     participant ULTRA as ULTRADataStore<br/>(CSR Arrays)
     participant GBFS as GBFSSyncService<br/>(DatabaseQueue)
-    participant UI as DepartureMatrixCanvas<br/>(120Hz Canvas)
+    participant NavManager as NavigationSessionManager<br/>(@Observable)
+    participant MapView as MapView.Coordinator<br/>(MapLibre Itinerary Layers)
 
-    User->>VM: searchRoutes(from, to)
-    VM->>VM: isSearching = true
+    User->>SearchVM: submitDestination(targetQuery)
+    SearchVM->>RouteVM: computeRoutes(origin, target)
+    RouteVM->>RouteVM: isComputing = true
 
-    VM->>Bridge: computeJourneys(source, target, depTime, window)
+    RouteVM->>Bridge: computeJourneys(source, target, depTime, window)
     Bridge->>RAPTOR: Task.detached(.userInitiated)
 
     loop Backward Sweep (T_max → T_0, 60s steps)
@@ -803,10 +890,14 @@ sequenceDiagram
     GBFS-->>Bridge: [GBFSStationStatus] (< 0.8ms)
     Bridge->>Bridge: Filter micro-mobility transfers
 
-    Bridge-->>VM: [JourneyItinerary] @MainActor
-    VM->>VM: journeys = results, isSearching = false
-    VM->>UI: matrixBuffer [Float] 4320 elements
-    UI->>UI: Canvas draw loop (0.8–1.9ms/frame)
+    Bridge-->>RouteVM: [JourneyItinerary] @MainActor
+    RouteVM->>RouteVM: itineraries = results, isComputing = false
+    RouteVM-->>User: Display Screen 4B Route Cards
+
+    User->>RouteVM: selectItinerary(itinerary) & tap "Go"
+    RouteVM->>NavManager: startNavigation(itinerary)
+    NavManager->>MapView: addItineraryLayers(routeGeoJSON)
+    NavManager-->>User: Transition to Screen 4C Active Guidance
 ```
 
 ### 8.2 Routing Engine Class Diagram
@@ -814,6 +905,35 @@ sequenceDiagram
 ```mermaid
 classDiagram
     direction TB
+
+    class SearchViewModel {
+        <<Swift UI Model / Screen 4A>>
+        +searchQuery: String
+        +searchResults: [GeocodedPlace]
+        +isSearching: Bool
+        +selectDestination(place)
+    }
+
+    class RouteComparisonViewModel {
+        <<Swift UI Model / Screen 4B>>
+        +origin: Coordinate
+        +destination: Coordinate
+        +itineraries: [JourneyItinerary]
+        +selectedItinerary: JourneyItinerary?
+        +isComputing: Bool
+        +computeRoutes() async
+        +startNavigation()
+    }
+
+    class NavigationSessionManager {
+        <<Swift Observable / Screen 4C>>
+        +activeItinerary: JourneyItinerary
+        +currentLegIndex: Int
+        +distanceToNextManeuverMeters: Double
+        +isOffRoute: Bool
+        +processLocationUpdate(location)
+        +stopNavigation()
+    }
 
     class RoutingEngineBridge {
         <<Swift Actor>>
@@ -857,6 +977,7 @@ classDiagram
         +transferCount: Int
         +totalWalkingEffortSec: UInt32
         +layoverPenalty: Double
+        +legs: [JourneyLeg]
     }
 
     class GBFSSyncService {
@@ -875,12 +996,16 @@ classDiagram
     }
 
     class DepartureMatrixCanvas {
-        <<SwiftUI View / Immediate-Mode>>
+        <<SwiftUI View / Screen 2 Timetable>>
         +matrixBuffer: [Float] 4320
         +maxWaitThreshold: Float
         +selectedCellIndex: Int?
     }
 
+    SearchViewModel --> RouteComparisonViewModel : forwards target
+    RouteComparisonViewModel --> RoutingEngineBridge : queries routes
+    RouteComparisonViewModel --> NavigationSessionManager : starts active guidance
+    NavigationSessionManager --> JourneyItinerary : tracks active legs
     RoutingEngineBridge --> Timetable : owns (mmap'd)
     RoutingEngineBridge --> ULTRADataStore : owns (CSR loaded)
     RoutingEngineBridge --> ParetoSet : produces per query

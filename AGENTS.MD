@@ -47,6 +47,17 @@
 - **Map Focus:** The map is the UI. Avoid heavy persistent HUDs, tab bars, or manual "Start/Stop Tracking" buttons.
 - **Aesthetics:** Follow the pure Light Mode guidelines (`.preferredColorScheme(.light)`) with Standard Exploration (`#F9F9F6`) and Transit Navigation (`#FFFFFF`) themes, Electric Amber (`#FFB300`) universal accent, and native frosted glass materials (`.ultraThinMaterial`).
 - **2D Top-Down Only (Wave J.1):** 3D terrain tilting and satellite raster layers are prohibited (removed in Wave J.1). The map renders strictly in 2D top-down (`pitch = 0`) with MapTiler Streets v2 vector tiles and flat 2D building footprints via the bundled `composite_style.json`. This ensures 1:1 geographic alignment between the H3 Fog of War polygon mask and the underlying cartography.
+- **Guardrail G10 (5-Screen Architecture):** The app UI strictly adheres to a 5-screen taxonomy (Screens 0–4):
+  - **Screen 0 (`OnboardingView`):** Cold-start hydration & database unpacking.
+  - **Screen 1 (`MapView` + Floating Overlays):** The primary exploration canvas, ambient fog of war, Ghost POIs, Search Capsule (`SearchCapsuleOverlay`), and profile/recenter FABs.
+  - **Screen 2 (`TransitRevealSheet`):** Sub-surface transit intelligence, live dispatch stream, per-line reliability badges, 24×7 reliability heatmap, and departure matrix.
+  - **Screen 3 (`StatsView` / `SettingsView`):** Exploration Journal, neighborhood completion stats, philosophy, and settings.
+  - **Screen 4 (`NavigationSheet`):** Multimodal search and navigation with three sub-screens: Search (4A), Route Comparison (4B), and Active Guidance (4C).
+  *Rule:* No ad-hoc top-level screens, floating bottom tab bars, or disconnected navigation stacks are permitted outside this 5-screen hierarchy.
+- **Run Inspector Separation Invariant:** Tapping an arrival row in Screen 2 transitions into a modal-specific run inspector. The visual and technical mental models are strictly bifurcated:
+  - **`GuidewayRunInspector` (`.subway`, `.lightRail`, Commuter Rail):** Fixed guideway tracking. Renders vertical track thermometers, GTFS-RT vehicle position / trip updates, terminal dwell suppression, and car crowding telemetry. (Subterranean exit codes and car positioning are displayed during Screen 4C Active Guidance).
+  - **`SurfaceRunInspector` (`.bus`, Trolley):** Shared surface road corridor tracking. Renders chronological stop ladders, dynamic headway countdowns, and corridor regularity / bunching / gap metrics.
+  *Rule:* Never conflate surface and guideway inspectors. Never place train car exit positioning, subterranean transfer codes, or block signaling metaphors onto bus/surface inspectors.
 
 ## 3. Testing Mandates
 - **Split-Target Architecture:**
@@ -76,6 +87,7 @@
 - **Circular Time Math:** All GTFS-RT timestamp comparisons crossing midnight MUST use Euclidean modulo arithmetic: `euclideanModulo(a, n) = (a % n + n) % n`. **Never** use raw linear subtraction (`live - scheduled`) for departure delays — this produces 24-hour phantom delays at midnight boundaries. Signed delays are constrained to $[-720, +720]$ minutes.
 - **Observer OSM Pipeline (Go):** The Go Observer uses `github.com/qedus/osmpbf` for two-pass PBF extraction. Coordinates are quantized to 32-bit fixed-point (×1e7). All OSM metadata (`Info` struct fields) is stripped. `EdgeFlags uint8` bitmask: bit 0 = Walkable, bit 1 = WheelchairAccessible, bit 2 = IsSteps, bit 3 = IsElevator.
 - **View Model Pattern:** All **new** Wave N+ view models MUST use `@Observable` (Swift Observation framework, iOS 17+). **Never** use `@ObservableObject` + `@Published` for new code. Legacy pre-Wave N classes (`AmbientTrackingEngine`) still use `ObservableObject`; migration is tracked separately and must not be mixed into feature work.
+- **Screen 4 Navigation State & Concurrency:** All Screen 4 navigation state (`SearchViewModel`, `RouteComparisonViewModel`, `NavigationSessionManager`) MUST use `@Observable`. `NavigationSessionManager` coordinates GPS leg progression, off-route threshold detection (>50m off-corridor for >15s), and automatic recalculation at `.userInitiated` priority without blocking UI rendering or map frame pacing. Active guidance state teardown must cleanly release MapLibre itinerary route layers upon session termination.
 
 ## 6. Diagnostic Capabilities
 - **Debugging Context:** When diagnosing bugs in this repo, `/diagnosing-bugs` loads Derivee-specific pipeline context from `.agents/skills/diagnosing-bugs/DERIVEE_CONTEXT.md` — the 6-stage reactive pipeline map, 5 invariant pre-flight checks, test harness cheat sheet, and known band-aid rejection patterns. This context enriches hypothesis generation (Phase 3) and fix validation (Phase 5).
