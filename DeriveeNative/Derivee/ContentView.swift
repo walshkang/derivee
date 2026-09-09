@@ -41,6 +41,7 @@ struct ContentView: View {
     @State private var showSearchSheet: Bool = false
     @State private var showRouteComparisonSheet: Bool = false
     @State private var routeComparisonVM: RouteComparisonViewModel? = nil
+    @State private var activeRouteInspection: RouteInspectionCommand? = nil
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
@@ -92,6 +93,7 @@ struct ContentView: View {
                             subwayStationMarkerStyle: stationMarkerStyle,
                             nearbyBusStops: nearbyBusStops,
                             activeSignalCoordinate: activeNavigationSession?.activeSignalCoordinate,
+                            activeInspectionCommand: activeRouteInspection,
                             onAmbientMapTap: {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                     isNearbyBusesExpanded = false
@@ -284,14 +286,24 @@ struct ContentView: View {
                         showTransitSheet = newValue
                         if !newValue {
                             selectedTransitStop = nil
+                            activeRouteInspection = nil
                         }
                     }
                 )) {
                     if let stopId = selectedTransitStop {
-                        TransitRevealSheet(stopId: stopId, onFocusMap: { coord in
-                            targetCoordinate = coord
-                            isMapCentered = false
-                        })
+                        TransitRevealSheet(
+                            stopId: stopId,
+                            onFocusMap: { coord in
+                                targetCoordinate = coord
+                                isMapCentered = false
+                            },
+                            onInspectRoute: { command in
+                                activeRouteInspection = command
+                            },
+                            onClearRouteInspection: {
+                                activeRouteInspection = nil
+                            }
+                        )
                             .presentationDetents([.medium, .large])
                             .presentationDragIndicator(.visible)
                             .presentationContentInteraction(.scrolls)

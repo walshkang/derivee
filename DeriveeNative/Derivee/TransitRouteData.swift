@@ -145,31 +145,57 @@ public struct TransitRouteData {
     static func loadRouteCoordinates(for stopOrRouteId: String) async -> [CLLocationCoordinate2D] {
         return await Task.detached(priority: .userInitiated) {
             let cleanId = stopOrRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            // If it's a bus stop ID or bus route, do not render a subway polyline
-            if isBusRoute(cleanId) {
-                return []
-            }
-            
             let routeId = inferRouteId(from: cleanId)
             
-            // 1. Attempt to fetch real physical track geometry from local SQLite database
+            // 1. Attempt to fetch real physical track/street geometry from local SQLite database
             if let dbCoords = try? await SpatialDatabaseManager.shared.fetchRouteCoordinates(for: routeId), !dbCoords.isEmpty {
                 return dbCoords
             }
             
-            // 2. Attempt to load from bundled GeoJSON shapes
+            // If it's a bus stop ID, bus route, or ferry and no database coordinates were found, avoid subway fallback
+            if isBusRoute(cleanId) || isFerryRoute(cleanId) {
+                return []
+            }
+            
+            // 2. Attempt to load from bundled or City Pack GeoJSON shapes
             if let geoCoords = loadCoordinatesFromGeoJSON(for: routeId), !geoCoords.isEmpty {
                 return geoCoords
             }
             
-            // 3. Fallback polylines across all NYC transit lines
+            // 3. Fallback polylines across NYC subway lines
             return fallbackCoordinates(for: routeId)
         }.value
     }
     
+    /// Resolves an active polyline for inspector map synchronization.
+    /// Prefers high-resolution physical track/corridor geometry, falling back to ordered stop ladder coordinates.
+    public static func resolveInspectionPolyline(
+        routeId: String,
+        modalClass: TransitModalClass,
+        fallbackStops: [CLLocationCoordinate2D] = []
+    ) async -> [CLLocationCoordinate2D] {
+        // For bus and ferry corridors, never fall back to hardcoded NYC subway lines
+        if modalClass == .bus || modalClass == .ferry {
+            if let dbCoords = try? await SpatialDatabaseManager.shared.fetchRouteCoordinates(for: routeId), !dbCoords.isEmpty {
+                return dbCoords
+            }
+            return fallbackStops
+        }
+        
+        let loaded = await loadRouteCoordinates(for: routeId)
+        if !loaded.isEmpty {
+            return loaded
+        }
+        if !fallbackStops.isEmpty {
+            return fallbackStops
+        }
+        return []
+    }
+    
     private static func loadCoordinatesFromGeoJSON(for routeId: String) -> [CLLocationCoordinate2D]? {
-        guard let bundleURL = Bundle.main.url(forResource: "subway-lines", withExtension: "geojson") ?? Bundle(for: SpatialDatabaseManager.self).url(forResource: "subway-lines", withExtension: "geojson"),
+        guard let bundleURL = TransitCartographyLoader.resolveTransitLinesGeoJSONURL() ??
+                              Bundle.main.url(forResource: "subway-lines", withExtension: "geojson") ??
+                              Bundle(for: SpatialDatabaseManager.self).url(forResource: "subway-lines", withExtension: "geojson"),
               let data = try? Data(contentsOf: bundleURL),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let features = json["features"] as? [[String: Any]] else {
@@ -178,23 +204,27 @@ public struct TransitRouteData {
         
         let targetRoute = routeId.uppercased()
         for feature in features {
-            if let props = feature["properties"] as? [String: Any],
-               let routeGroup = props["route_group"] as? String {
-                
-                let matches: Bool
-                switch routeGroup {
-                case "123": matches = ["1", "2", "3"].contains(targetRoute)
-                case "456": matches = ["4", "5", "6", "6X"].contains(targetRoute)
-                case "7": matches = ["7", "7X"].contains(targetRoute)
-                case "ACE": matches = ["A", "C", "E"].contains(targetRoute)
-                case "BDFM": matches = ["B", "D", "F", "FX", "M"].contains(targetRoute)
-                case "G": matches = targetRoute == "G"
-                case "JZ": matches = ["J", "Z"].contains(targetRoute)
-                case "L": matches = targetRoute == "L"
-                case "NQRW": matches = ["N", "Q", "R", "W"].contains(targetRoute)
-                case "S": matches = ["S", "GS", "FS", "H"].contains(targetRoute)
-                case "SIR": matches = targetRoute == "SIR" || targetRoute == "SI"
-                default: matches = routeGroup == targetRoute
+            if let props = feature["properties"] as? [String: Any] {
+                var matches = false
+                if let rId = (props["route_id"] as? String)?.uppercased(), rId == targetRoute {
+                    matches = true
+                } else if let shortName = (props["route_short_name"] as? String)?.uppercased(), shortName == targetRoute {
+                    matches = true
+                } else if let routeGroup = props["route_group"] as? String {
+                    switch routeGroup {
+                    case "123": matches = ["1", "2", "3"].contains(targetRoute)
+                    case "456": matches = ["4", "5", "6", "6X"].contains(targetRoute)
+                    case "7": matches = ["7", "7X"].contains(targetRoute)
+                    case "ACE": matches = ["A", "C", "E"].contains(targetRoute)
+                    case "BDFM": matches = ["B", "D", "F", "FX", "M"].contains(targetRoute)
+                    case "G": matches = targetRoute == "G"
+                    case "JZ": matches = ["J", "Z"].contains(targetRoute)
+                    case "L": matches = targetRoute == "L"
+                    case "NQRW": matches = ["N", "Q", "R", "W"].contains(targetRoute)
+                    case "S": matches = ["S", "GS", "FS", "H"].contains(targetRoute)
+                    case "SIR": matches = targetRoute == "SIR" || targetRoute == "SI"
+                    default: matches = routeGroup == targetRoute
+                    }
                 }
                 
                 if matches, let geom = feature["geometry"] as? [String: Any] {
@@ -245,7 +275,7 @@ public struct TransitRouteData {
         if clean.hasPrefix("S") && clean.count == 3 { return "SIR" }
         if clean.hasPrefix("H") { return "S" }
         
-        return "L"
+        return clean
     }
     
     private static func fallbackCoordinates(for routeId: String) -> [CLLocationCoordinate2D] {
@@ -400,14 +430,18 @@ public struct TransitRouteData {
             ]
             
         default:
-            // Generic NYC Midtown-Downtown corridor
-            return [
-                CLLocationCoordinate2D(latitude: 40.7680, longitude: -73.9818), // Columbus Circle
-                CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855), // Times Square
-                CLLocationCoordinate2D(latitude: 40.7484, longitude: -73.9857), // Herald Square
-                CLLocationCoordinate2D(latitude: 40.7350, longitude: -73.9905), // Union Square
-                CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)  // City Hall / Wall St
-            ]
+            let validRoutes = ["1", "2", "3", "4", "5", "6", "7", "A", "B", "C", "D", "E", "F", "G", "J", "L", "M", "N", "Q", "R", "S", "W", "Z", "SIR"]
+            if validRoutes.contains(routeId.uppercased()) {
+                // Generic NYC Midtown-Downtown corridor
+                return [
+                    CLLocationCoordinate2D(latitude: 40.7680, longitude: -73.9818), // Columbus Circle
+                    CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855), // Times Square
+                    CLLocationCoordinate2D(latitude: 40.7484, longitude: -73.9857), // Herald Square
+                    CLLocationCoordinate2D(latitude: 40.7350, longitude: -73.9905), // Union Square
+                    CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)  // City Hall / Wall St
+                ]
+            }
+            return []
         }
     }
 }

@@ -38,6 +38,8 @@ struct TransitRevealSheet: View {
     @State private var isRefreshing: Bool = false
     let referenceDate: Date?
     var onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
+    var onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil
+    var onClearRouteInspection: (() -> Void)? = nil
     @State private var pollProgress: Double = 0.0
     @State private var pollGeneration: Int = 0
     @State private var inspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil
@@ -51,7 +53,9 @@ struct TransitRevealSheet: View {
         initialAvailableDirections: Set<Int> = [0, 1],
         initialReliabilityTiers: [String: LineReliabilityTier] = [:],
         referenceDate: Date? = nil,
-        onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
+        onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
+        onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
+        onClearRouteInspection: (() -> Void)? = nil
     ) {
         self.stopId = stopId
         self._stopDetails = State(initialValue: initialDetails)
@@ -62,6 +66,8 @@ struct TransitRevealSheet: View {
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
         self.referenceDate = referenceDate
         self.onFocusMap = onFocusMap
+        self.onInspectRoute = onInspectRoute
+        self.onClearRouteInspection = onClearRouteInspection
     }
     
     var displayedArrivals: [SpatialDatabaseManager.ArrivalInfo] {
@@ -352,7 +358,9 @@ struct TransitRevealSheet: View {
                     currentStopId: stopId,
                     currentStopName: stopDetails?.name ?? "Current Station",
                     followOnArrival: followOn,
-                    onFocusMap: onFocusMap
+                    onFocusMap: onFocusMap,
+                    onInspectRoute: onInspectRoute,
+                    onClearRouteInspection: onClearRouteInspection
                 )
             } else {
                 SurfaceRunInspector(
@@ -361,7 +369,9 @@ struct TransitRevealSheet: View {
                     currentStopName: stopDetails?.name ?? "Current Stop",
                     modalClass: modalClass,
                     followOnArrival: followOn,
-                    onFocusMap: onFocusMap
+                    onFocusMap: onFocusMap,
+                    onInspectRoute: onInspectRoute,
+                    onClearRouteInspection: onClearRouteInspection
                 )
             }
         }
@@ -369,6 +379,9 @@ struct TransitRevealSheet: View {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 isLivePulsing = true
             }
+        }
+        .onDisappear {
+            onClearRouteInspection?()
         }
         .task(id: stopId) {
             await startPollingLifecycle()

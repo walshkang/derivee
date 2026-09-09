@@ -58,6 +58,8 @@ public struct SurfaceRunInspector: View {
     public let routeConfig: SurfaceInspectableRoute
     public var followOnArrival: SpatialDatabaseManager.ArrivalInfo? = nil
     public var onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
+    public var onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil
+    public var onClearRouteInspection: (() -> Void)? = nil
     
     @State private var stopLadder: [TrackStop] = []
     @State private var isLoadingLadder: Bool = true
@@ -75,7 +77,9 @@ public struct SurfaceRunInspector: View {
         currentStopName: String,
         modalClass: TransitModalClass = .bus,
         followOnArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
-        onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
+        onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
+        onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
+        onClearRouteInspection: (() -> Void)? = nil
     ) {
         self.arrival = arrival
         self.currentStopId = currentStopId
@@ -83,6 +87,8 @@ public struct SurfaceRunInspector: View {
         self.routeConfig = modalClass
         self.followOnArrival = followOnArrival
         self.onFocusMap = onFocusMap
+        self.onInspectRoute = onInspectRoute
+        self.onClearRouteInspection = onClearRouteInspection
     }
     
     public init(
@@ -91,7 +97,9 @@ public struct SurfaceRunInspector: View {
         currentStopName: String,
         routeConfig: SurfaceInspectableRoute,
         followOnArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
-        onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
+        onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
+        onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
+        onClearRouteInspection: (() -> Void)? = nil
     ) {
         self.arrival = arrival
         self.currentStopId = currentStopId
@@ -99,6 +107,8 @@ public struct SurfaceRunInspector: View {
         self.routeConfig = routeConfig
         self.followOnArrival = followOnArrival
         self.onFocusMap = onFocusMap
+        self.onInspectRoute = onInspectRoute
+        self.onClearRouteInspection = onClearRouteInspection
     }
     
     private var lineInfo: TransitRouteData.LineInfo {
@@ -166,6 +176,9 @@ public struct SurfaceRunInspector: View {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
+        }
+        .onDisappear {
+            onClearRouteInspection?()
         }
     }
     
@@ -579,7 +592,7 @@ public struct SurfaceRunInspector: View {
             }
         }
         
-        // 3. Fetch Stop Ladder
+        // 3. Fetch Stop Ladder & Synchronize Map Polyline (Wave PA.5)
         do {
             let ladder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
                 routeId: arrival.line,
@@ -587,9 +600,32 @@ public struct SurfaceRunInspector: View {
                 currentStopId: currentStopId,
                 currentArrivalMinutes: arrival.minutes
             )
+            
+            let stationCoord = ladder.first(where: { $0.isCurrent })?.coordinate ??
+                               ladder.first?.coordinate ??
+                               CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855)
+            
+            let polyline = await TransitRouteData.resolveInspectionPolyline(
+                routeId: arrival.line,
+                modalClass: routeConfig.modalClass,
+                fallbackStops: ladder.map(\.coordinate)
+            )
+            
+            let command = RouteInspectionCommand(
+                routeId: arrival.line,
+                lineName: lineInfo.name,
+                agencyColorHex: lineInfo.colorHex,
+                casingColorHex: "#FFFFFF",
+                modalClass: routeConfig.modalClass,
+                coordinates: polyline,
+                stationCoordinate: stationCoord,
+                shouldFrameCamera: true
+            )
+            
             await MainActor.run {
                 self.stopLadder = ladder
                 self.isLoadingLadder = false
+                self.onInspectRoute?(command)
             }
         } catch {
             await MainActor.run {

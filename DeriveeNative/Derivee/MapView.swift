@@ -25,6 +25,7 @@ struct MapView: UIViewRepresentable {
     var enableMetalFogEngine: Bool = MapCustomizationDefaults.defaultEnableMetalFogEngine
     var nearbyBusStops: [SpatialDatabaseManager.NearbyBusStop] = []
     var activeSignalCoordinate: CLLocationCoordinate2D? = nil
+    var activeInspectionCommand: RouteInspectionCommand? = nil
     var onAmbientMapTap: (() -> Void)? = nil
     var onMapGesture: (() -> Void)? = nil
     
@@ -89,6 +90,7 @@ struct MapView: UIViewRepresentable {
         context.coordinator.updateTransientHex(shape: transientHexShape, in: uiView)
         context.coordinator.updateTransientPulse(at: spatialStore.newlyUnlockedHexLocation, in: uiView)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
+        context.coordinator.updateRouteInspection(activeInspectionCommand, in: uiView)
         if let style = uiView.style {
             context.coordinator.updateTheme(selectedTheme, in: style)
             context.coordinator.updateFogOpacity(fogOpacity, in: style)
@@ -168,6 +170,7 @@ struct MapView: UIViewRepresentable {
         var isMapStyleLoaded: Bool = false
         var lastAppliedTheme: BasemapTheme?
         var lastAppliedCitySlug: String? = nil
+        var lastAppliedInspectionCommandId: UUID? = nil
         
         var lureTimer: Timer?
         var isLurePulsed: Bool = false
@@ -622,6 +625,28 @@ struct MapView: UIViewRepresentable {
             pulseLayer.circlePitchAlignment = NSExpression(forConstantValue: "map")
             style.insertLayer(pulseLayer, above: fogLayer)
             
+            // Layer 4: Ephemeral Route Inspection (ephemeral-route-source)
+            let routeSource = MLNShapeSource(identifier: ephemeralRouteSourceId, shape: nil, options: nil)
+            style.addSource(routeSource)
+            
+            let routeCasingLayer = MLNLineStyleLayer(identifier: ephemeralRouteCasingLayerId, source: routeSource)
+            routeCasingLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: "#FFFFFF"))
+            routeCasingLayer.lineWidth = NSExpression(forConstantValue: 6.0)
+            routeCasingLayer.lineOpacity = NSExpression(forConstantValue: 0.0)
+            routeCasingLayer.lineCap = NSExpression(forConstantValue: "round")
+            routeCasingLayer.lineJoin = NSExpression(forConstantValue: "round")
+            routeCasingLayer.lineOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
+            style.insertLayer(routeCasingLayer, above: pulseLayer)
+            
+            let routeLayer = MLNLineStyleLayer(identifier: ephemeralRouteLayerId, source: routeSource)
+            routeLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: "#FFB300"))
+            routeLayer.lineWidth = NSExpression(forConstantValue: 4.0)
+            routeLayer.lineOpacity = NSExpression(forConstantValue: 0.0)
+            routeLayer.lineCap = NSExpression(forConstantValue: "round")
+            routeLayer.lineJoin = NSExpression(forConstantValue: "round")
+            routeLayer.lineOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
+            style.insertLayer(routeLayer, above: routeCasingLayer)
+            
             // Nearby Bus Stops Source & Layer
             let busStopsSource = MLNShapeSource(identifier: nearbyBusStopsSourceId, features: [], options: nil)
             style.addSource(busStopsSource)
@@ -633,7 +658,7 @@ struct MapView: UIViewRepresentable {
             busStopsLayer.circleStrokeWidth = NSExpression(forConstantValue: 1.5)
             busStopsLayer.circleOpacity = NSExpression(forConstantValue: 0.95)
             busStopsLayer.circleOpacityTransition = MLNTransition(duration: 0.2, delay: 0)
-            style.insertLayer(busStopsLayer, above: fogLayer)
+            style.insertLayer(busStopsLayer, above: routeLayer)
             
             let source = MLNShapeSource(identifier: poiSourceId, features: [], options: nil)
             style.addSource(source)
@@ -937,70 +962,194 @@ struct MapView: UIViewRepresentable {
         }
         
         func updateTransitSheetState(showSheet: Bool, selectedStop: String?, in mapView: MLNMapView) {
+            if !showSheet {
+                lastSelectedStop = nil
+            } else if let stopId = selectedStop {
+                lastSelectedStop = stopId
+            }
+        }
+        
+        // MARK: - Wave PA.5: Synchronized Map Camera + Route Polyline for Inspectors
+        
+        /// Updates the Layer 4 Ephemeral Route Inspection polyline and casing through the fog.
+        /// Dispatched from Run Inspectors via closure-based map commands.
+        func updateRouteInspection(_ command: RouteInspectionCommand?, in mapView: MLNMapView) {
             guard let style = mapView.style else { return }
             
-            if showSheet, let stopId = selectedStop {
-                if lastSelectedStop != stopId || style.source(withIdentifier: ephemeralRouteSourceId) == nil {
-                    lastSelectedStop = stopId
+            if let cmd = command {
+                if lastAppliedInspectionCommandId != cmd.id {
+                    lastAppliedInspectionCommandId = cmd.id
                     
-                    // ARCHITECT GUARDRAIL 1: Load/Decode GeoJSON polyline off main thread
-                    Task.detached(priority: .userInitiated) {
-                        do {
-                            let details = try await SpatialDatabaseManager.shared.fetchStopDetails(for: stopId)
-                            let coords = await TransitRouteData.loadRouteCoordinates(for: stopId)
-                            let lineInfo = TransitRouteData.lineInfo(for: details.routeId)
-                            
-                            await MainActor.run {
-                            guard self.parent.showTransitSheet && self.parent.selectedTransitStop == stopId else { return }
-                            
-                            // Remove stale layers/sources if any
-                            if let layer = style.layer(withIdentifier: self.ephemeralRouteLayerId) { style.removeLayer(layer) }
-                            if let casing = style.layer(withIdentifier: self.ephemeralRouteCasingLayerId) { style.removeLayer(casing) }
-                            if let source = style.source(withIdentifier: self.ephemeralRouteSourceId) { style.removeSource(source) }
-                            
-                            guard !coords.isEmpty else { return }
-                            
-                            let line = MLNPolyline(coordinates: coords, count: UInt(coords.count))
-                            let source = MLNShapeSource(identifier: self.ephemeralRouteSourceId, shape: line, options: nil)
-                            style.addSource(source)
-                            
-                            // ARCHITECT GUARDRAIL 2: Dual-layer casing technique for dark MTA colors
-                            // 1. Background Casing Layer (White/Light silver outline)
-                            let casingLayer = MLNLineStyleLayer(identifier: self.ephemeralRouteCasingLayerId, source: source)
-                            casingLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: "#E5E5EA"))
-                            casingLayer.lineWidth = NSExpression(forConstantValue: 6)
-                            casingLayer.lineOpacity = NSExpression(forConstantValue: 0.8)
-                            casingLayer.lineCap = NSExpression(forConstantValue: "round")
-                            casingLayer.lineJoin = NSExpression(forConstantValue: "round")
-                            casingLayer.lineOpacityTransition = MLNTransition(duration: 0.2, delay: 0)
-                            style.addLayer(casingLayer)
-                            
-                            // 2. Primary Colored Route Line Layer
-                            let routeLayer = MLNLineStyleLayer(identifier: self.ephemeralRouteLayerId, source: source)
-                            routeLayer.lineColor = NSExpression(forConstantValue: lineInfo.uiColor)
-                            routeLayer.lineWidth = NSExpression(forConstantValue: 4)
-                            routeLayer.lineOpacity = NSExpression(forConstantValue: 0.95)
-                            routeLayer.lineCap = NSExpression(forConstantValue: "round")
-                            routeLayer.lineJoin = NSExpression(forConstantValue: "round")
-                            routeLayer.lineOpacityTransition = MLNTransition(duration: 0.2, delay: 0)
-                            style.addLayer(routeLayer)
+                    // 1. Resolve or create shape source
+                    let source: MLNShapeSource
+                    if let existingSource = style.source(withIdentifier: ephemeralRouteSourceId) as? MLNShapeSource {
+                        source = existingSource
+                    } else {
+                        let newSource = MLNShapeSource(identifier: ephemeralRouteSourceId, shape: nil, options: nil)
+                        style.addSource(newSource)
+                        source = newSource
+                    }
+                    
+                    // 2. Assign polyline geometry
+                    if !cmd.coordinates.isEmpty {
+                        let polyline = MLNPolyline(coordinates: cmd.coordinates, count: UInt(cmd.coordinates.count))
+                        source.shape = polyline
+                    } else {
+                        source.shape = nil
+                    }
+                    
+                    // 3. Dual-layer casing technique (6px outline) positioned in Layer 4
+                    let casingLayer: MLNLineStyleLayer
+                    if let existingCasing = style.layer(withIdentifier: ephemeralRouteCasingLayerId) as? MLNLineStyleLayer {
+                        casingLayer = existingCasing
+                    } else {
+                        let newCasing = MLNLineStyleLayer(identifier: ephemeralRouteCasingLayerId, source: source)
+                        newCasing.lineCap = NSExpression(forConstantValue: "round")
+                        newCasing.lineJoin = NSExpression(forConstantValue: "round")
+                        newCasing.lineOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
+                        
+                        if let busStops = style.layer(withIdentifier: nearbyBusStopsLayerId) {
+                            style.insertLayer(newCasing, below: busStops)
+                        } else if let lure = style.layer(withIdentifier: lureLayerId) {
+                            style.insertLayer(newCasing, below: lure)
+                        } else if let pulse = style.layer(withIdentifier: pulseLayerId) {
+                            style.insertLayer(newCasing, above: pulse)
+                        } else if let fog = style.layer(withIdentifier: fogLayerId) {
+                            style.insertLayer(newCasing, above: fog)
+                        } else {
+                            style.addLayer(newCasing)
                         }
-                    } catch {
-                        print("Map POI Fetch Error: \(error)")
+                        casingLayer = newCasing
+                    }
+                    
+                    casingLayer.lineColor = NSExpression(forConstantValue: cmd.casingColor)
+                    casingLayer.lineWidth = NSExpression(forConstantValue: 6.0)
+                    casingLayer.lineOpacity = NSExpression(forConstantValue: 0.80)
+                    
+                    // 4. Primary colored route line (4px stroke in agency official color)
+                    let routeLayer: MLNLineStyleLayer
+                    if let existingRoute = style.layer(withIdentifier: ephemeralRouteLayerId) as? MLNLineStyleLayer {
+                        routeLayer = existingRoute
+                    } else {
+                        let newRoute = MLNLineStyleLayer(identifier: ephemeralRouteLayerId, source: source)
+                        newRoute.lineCap = NSExpression(forConstantValue: "round")
+                        newRoute.lineJoin = NSExpression(forConstantValue: "round")
+                        newRoute.lineOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
+                        style.insertLayer(newRoute, above: casingLayer)
+                        routeLayer = newRoute
+                    }
+                    
+                    routeLayer.lineColor = NSExpression(forConstantValue: cmd.agencyColor)
+                    routeLayer.lineWidth = NSExpression(forConstantValue: 4.0)
+                    routeLayer.lineOpacity = NSExpression(forConstantValue: 0.95)
+                    
+                    // Maritime Ferries render with dashed line pattern [4.0, 3.0]
+                    if cmd.isDashed {
+                        routeLayer.lineDashPattern = NSExpression(forConstantValue: [4.0, 3.0])
+                    } else {
+                        routeLayer.lineDashPattern = nil
+                    }
+                    
+                    // 5. Synchronized map camera framing
+                    if cmd.shouldFrameCamera {
+                        frameRouteAndStation(
+                            coordinates: cmd.coordinates,
+                            station: cmd.stationCoordinate,
+                            in: mapView,
+                            animated: true
+                        )
+                    }
+                }
+            } else {
+                if lastAppliedInspectionCommandId != nil {
+                    lastAppliedInspectionCommandId = nil
+                    
+                    if let casingLayer = style.layer(withIdentifier: ephemeralRouteCasingLayerId) as? MLNLineStyleLayer {
+                        casingLayer.lineOpacity = NSExpression(forConstantValue: 0.0)
+                    }
+                    if let routeLayer = style.layer(withIdentifier: ephemeralRouteLayerId) as? MLNLineStyleLayer {
+                        routeLayer.lineOpacity = NSExpression(forConstantValue: 0.0)
+                    }
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                        guard let self = self, self.lastAppliedInspectionCommandId == nil,
+                              let currentStyle = mapView.style,
+                              let currentSource = currentStyle.source(withIdentifier: self.ephemeralRouteSourceId) as? MLNShapeSource else { return }
+                        currentSource.shape = nil
                     }
                 }
             }
-        } else {
-                lastSelectedStop = nil
-                if let layer = style.layer(withIdentifier: ephemeralRouteLayerId) {
-                    style.removeLayer(layer)
+        }
+        
+        /// Smoothly pans and zooms the camera to frame the user's station and the active route polyline,
+        /// accounting for the bottom-sheet presentation detent in edge padding.
+        func frameRouteAndStation(
+            coordinates: [CLLocationCoordinate2D],
+            station: CLLocationCoordinate2D,
+            in mapView: MLNMapView,
+            animated: Bool = true
+        ) {
+            var allPoints = coordinates
+            allPoints.append(station)
+            
+            guard let first = allPoints.first else { return }
+            
+            var minLat = first.latitude
+            var maxLat = first.latitude
+            var minLon = first.longitude
+            var maxLon = first.longitude
+            
+            for pt in allPoints {
+                minLat = min(minLat, pt.latitude)
+                maxLat = max(maxLat, pt.latitude)
+                minLon = min(minLon, pt.longitude)
+                maxLon = max(maxLon, pt.longitude)
+            }
+            
+            // Minimum span prevents over-zooming on single station or short segment
+            let minSpan = 0.008
+            if (maxLat - minLat) < minSpan {
+                let mid = (maxLat + minLat) / 2.0
+                minLat = mid - minSpan / 2.0
+                maxLat = mid + minSpan / 2.0
+            }
+            if (maxLon - minLon) < minSpan {
+                let mid = (maxLon + minLon) / 2.0
+                minLon = mid - minSpan / 2.0
+                maxLon = mid + minSpan / 2.0
+            }
+            
+            let bounds = MLNCoordinateBounds(
+                sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
+                ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon)
+            )
+            
+            // Asymmetric edge padding tailored to bottom-sheet detents (.fraction(0.40))
+            let bottomPadding = max(340.0, mapView.bounds.height * 0.42)
+            let edgePadding = UIEdgeInsets(top: 80, left: 40, bottom: bottomPadding, right: 40)
+            
+            let targetCamera = mapView.cameraThatFitsCoordinateBounds(bounds, edgePadding: edgePadding)
+            
+            // Enforce strict 2D top-down perspective (pitch = 0)
+            let finalCamera = MLNMapCamera(
+                lookingAtCenter: targetCamera.centerCoordinate,
+                altitude: targetCamera.altitude,
+                pitch: 0.0,
+                heading: mapView.camera.heading
+            )
+            
+            if animated {
+                mapView.setCamera(
+                    finalCamera,
+                    withDuration: 0.6,
+                    animationTimingFunction: CAMediaTimingFunction(name: .easeInEaseOut)
+                ) { [weak self] in
+                    guard let self = self, let mv = self.mapView else { return }
+                    self.cameraBridge.write(MapCameraState(mapView: mv))
                 }
-                if let casing = style.layer(withIdentifier: ephemeralRouteCasingLayerId) {
-                    style.removeLayer(casing)
-                }
-                if let source = style.source(withIdentifier: ephemeralRouteSourceId) {
-                    style.removeSource(source)
-                }
+            } else {
+                mapView.setCamera(finalCamera, animated: false)
+                cameraBridge.write(MapCameraState(mapView: mapView))
             }
         }
         
