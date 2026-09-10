@@ -1,6 +1,7 @@
 import Foundation
 import SwiftZSTD
 import CryptoKit
+import GRDB
 
 public final class CityPackManager: Sendable {
     public static let shared = CityPackManager()
@@ -146,9 +147,20 @@ public final class CityPackManager: Sendable {
                     if config.version >= 2,
                        let attrs = try? fileManager.attributesOfItem(atPath: nycTransitURL.path),
                        let size = attrs[.size] as? Int64, size > 2_000_000 {
-                        return config
+                        let hasDepartures: Bool = {
+                            guard let queue = try? DatabaseQueue(path: nycTransitURL.path) else { return false }
+                            return (try? queue.read { db in
+                                try db.tableExists("realtime_departures")
+                            }) ?? false
+                        }()
+                        if hasDepartures {
+                            return config
+                        }
+                        print("⚠️ Outdated NYC pack (missing realtime_departures) detected on disk, re-extracting...")
+                        try? fileManager.removeItem(at: nycTransitURL)
+                    } else {
+                        print("⚠️ Outdated NYC pack (v\(config.version)) detected on disk, re-extracting v2...")
                     }
-                    print("⚠️ Outdated NYC pack (v\(config.version)) detected on disk, re-extracting v2...")
                 } catch {
                     print("⚠️ Corrupted or outdated NYC pack detected, re-extracting: \(error)")
                 }

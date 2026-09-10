@@ -26,6 +26,7 @@ struct MapView: UIViewRepresentable {
     var nearbyBusStops: [SpatialDatabaseManager.NearbyBusStop] = []
     var activeSignalCoordinate: CLLocationCoordinate2D? = nil
     var activeInspectionCommand: RouteInspectionCommand? = nil
+    var activeCorridorTelemetry: Data? = nil
     var onAmbientMapTap: (() -> Void)? = nil
     var onMapGesture: (() -> Void)? = nil
     
@@ -91,6 +92,16 @@ struct MapView: UIViewRepresentable {
         context.coordinator.updateTransientPulse(at: spatialStore.newlyUnlockedHexLocation, in: uiView)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
         context.coordinator.updateRouteInspection(activeInspectionCommand, in: uiView)
+        
+        // Wave R.3: Real-Time Corridor Pulse Vehicle & Bunching Telemetry
+        if let telemetry = activeCorridorTelemetry {
+            context.coordinator.hasActiveCorridorTelemetry = true
+            context.coordinator.corridorPulseController.updateTelemetry(geoJsonData: telemetry)
+        } else if context.coordinator.hasActiveCorridorTelemetry {
+            context.coordinator.hasActiveCorridorTelemetry = false
+            context.coordinator.corridorPulseController.clearTelemetry()
+        }
+        
         if let style = uiView.style {
             context.coordinator.updateTheme(selectedTheme, in: style)
             context.coordinator.updateFogOpacity(fogOpacity, in: style)
@@ -187,6 +198,13 @@ struct MapView: UIViewRepresentable {
             return sync
         }()
         
+        // MARK: - Wave R.3: Corridor Pulse Real-Time Vehicle & Bunching Layers
+        var hasActiveCorridorTelemetry: Bool = false
+        lazy var corridorPulseController: CorridorPulseMapController = {
+            let ctrl = CorridorPulseMapController(mapView: self.mapView)
+            return ctrl
+        }()
+        
         init(_ parent: MapView) {
             self.parent = parent
             self.lastAppliedCitySlug = parent.spatialStore.activeCitySlug
@@ -254,6 +272,8 @@ struct MapView: UIViewRepresentable {
             // 6. Reset transient state & animations
             lastTransientHexShape = nil
             lastPulseLocation = nil
+            corridorPulseController.clearTelemetry()
+            hasActiveCorridorTelemetry = false
             if let style = mapView.style, let pulseSource = style.source(withIdentifier: pulseSourceId) as? MLNShapeSource {
                 pulseSource.shape = nil
             }
@@ -364,6 +384,7 @@ struct MapView: UIViewRepresentable {
             style.setImage(subwayDiamond, forName: "poi-subway-1")
             
             setupLayers(in: style)
+            corridorPulseController.configureCorridorLayers(in: style)
             populateSubwayStationBullets(in: style)
             let initialTheme = parent.selectedTheme
             BasemapThemeManager.applyTheme(initialTheme, in: style, animated: false)

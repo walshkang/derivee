@@ -113,3 +113,120 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         return true
     }
 }
+
+// MARK: - Wave R.3: Corridor Pulse Telemetry Models (Research Doc 19 §5)
+
+/// Real-time vehicle telemetry model for Corridor Pulse dynamic map visualization (Research Doc 19 §5).
+public struct CorridorVehicleTelemetry: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let vehicleId: String
+    public let tripId: String
+    public let routeId: String
+    public let coordinate: CLLocationCoordinate2D
+    public let bearing: Double
+    public let speedMps: Double
+    public let delaySec: Int
+    public let isTarget: Bool
+    public let isBunched: Bool
+    public let isServiceGap: Bool
+    public let statusColorHex: String
+    public let haloColorHex: String
+    
+    public init(
+        vehicleId: String,
+        tripId: String,
+        routeId: String,
+        coordinate: CLLocationCoordinate2D,
+        bearing: Double = 0.0,
+        speedMps: Double = 0.0,
+        delaySec: Int = 0,
+        isTarget: Bool = false,
+        isBunched: Bool = false,
+        isServiceGap: Bool = false,
+        statusColorHex: String = "#388E3C",
+        haloColorHex: String = "#C8E6C9"
+    ) {
+        self.id = vehicleId
+        self.vehicleId = vehicleId
+        self.tripId = tripId
+        self.routeId = routeId
+        self.coordinate = coordinate
+        self.bearing = bearing
+        self.speedMps = speedMps
+        self.delaySec = delaySec
+        self.isTarget = isTarget
+        self.isBunched = isBunched
+        self.isServiceGap = isServiceGap
+        self.statusColorHex = statusColorHex
+        self.haloColorHex = haloColorHex
+    }
+    
+    public static func == (lhs: CorridorVehicleTelemetry, rhs: CorridorVehicleTelemetry) -> Bool {
+        return lhs.vehicleId == rhs.vehicleId &&
+               lhs.tripId == rhs.tripId &&
+               lhs.routeId == rhs.routeId &&
+               abs(lhs.coordinate.latitude - rhs.coordinate.latitude) < 0.00001 &&
+               abs(lhs.coordinate.longitude - rhs.coordinate.longitude) < 0.00001 &&
+               abs(lhs.bearing - rhs.bearing) < 0.1 &&
+               lhs.isTarget == rhs.isTarget &&
+               lhs.isBunched == rhs.isBunched &&
+               lhs.isServiceGap == rhs.isServiceGap &&
+               lhs.statusColorHex == rhs.statusColorHex &&
+               lhs.haloColorHex == rhs.haloColorHex
+    }
+}
+
+/// Platooning / bunching corridor segment telemetry for MapLibre dynamic lines (Research Doc 19 §5).
+public struct CorridorBunchingSegmentTelemetry: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let trailingVehicleId: String
+    public let leadingVehicleId: String
+    public let coordinates: [CLLocationCoordinate2D]
+    public let lineColorHex: String
+    public let casingColorHex: String
+    public let severity: String
+    public let segmentLengthM: Double
+    public let compressionRatio: Double
+    
+    public init(
+        id: String = UUID().uuidString,
+        trailingVehicleId: String,
+        leadingVehicleId: String,
+        coordinates: [CLLocationCoordinate2D],
+        lineColorHex: String = "#B71C1C",
+        casingColorHex: String = "#FFEBEE",
+        severity: String = "critical",
+        segmentLengthM: Double = 0.0,
+        compressionRatio: Double = 0.0
+    ) {
+        self.id = id
+        self.trailingVehicleId = trailingVehicleId
+        self.leadingVehicleId = leadingVehicleId
+        self.coordinates = coordinates
+        self.lineColorHex = lineColorHex
+        self.casingColorHex = casingColorHex
+        self.severity = severity
+        self.segmentLengthM = segmentLengthM
+        self.compressionRatio = compressionRatio
+    }
+    
+    public static func == (lhs: CorridorBunchingSegmentTelemetry, rhs: CorridorBunchingSegmentTelemetry) -> Bool {
+        guard lhs.id == rhs.id &&
+              lhs.trailingVehicleId == rhs.trailingVehicleId &&
+              lhs.leadingVehicleId == rhs.leadingVehicleId &&
+              lhs.lineColorHex == rhs.lineColorHex &&
+              lhs.casingColorHex == rhs.casingColorHex &&
+              lhs.severity == rhs.severity &&
+              lhs.coordinates.count == rhs.coordinates.count else {
+            return false
+        }
+        for i in 0..<lhs.coordinates.count {
+            if abs(lhs.coordinates[i].latitude - rhs.coordinates[i].latitude) > 0.00001 ||
+               abs(lhs.coordinates[i].longitude - rhs.coordinates[i].longitude) > 0.00001 {
+                return false
+            }
+        }
+        return true
+    }
+}
+
