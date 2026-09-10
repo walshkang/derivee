@@ -208,6 +208,25 @@ type StopResolution struct {
 	IsParent     int // 0 or 1
 }
 
+// RealtimeDeparture represents an entry in the clustered realtime_departures table (Doc 16 §2 & §3)
+type RealtimeDeparture struct {
+	ComplexID             int64
+	DepartureTime         int64
+	FeedID                string
+	ParentStationID       string
+	ChildStopID           string
+	TripID                string
+	RouteID               string
+	RouteShortName        string
+	DirectionID           int
+	DynamicTerminalStopID string
+	DynamicTerminalName   string
+	IsExpress             int
+	ScheduledTrack        string
+	ActualTrack           string
+	UpdatedAt             int64
+}
+
 // Dataset represents a parsed in-memory GTFS dataset
 type Dataset struct {
 	Agencies        map[string]Agency
@@ -237,3 +256,4 @@ func NewDataset(compilationDate time.Time) *Dataset {
 		CompilationDate: compilationDate,
 	}
 }
+

@@ -10,6 +10,7 @@ import math
 import os
 import sqlite3
 import sys
+import time
 import urllib.request
 
 REGIONAL_HUB_ANCHORS = [
@@ -148,6 +149,32 @@ def main():
     cur.execute("""
         CREATE INDEX idx_stop_resolution_parent
         ON stop_resolution (feed_id, parent_station_id, complex_id);
+    """)
+    
+    cur.execute("DROP TABLE IF EXISTS realtime_departures;")
+    cur.execute("""
+        CREATE TABLE realtime_departures (
+            complex_id               INTEGER NOT NULL,
+            departure_time           INTEGER NOT NULL,
+            feed_id                  TEXT    NOT NULL,
+            parent_station_id        TEXT    NOT NULL,
+            child_stop_id            TEXT    NOT NULL,
+            trip_id                  TEXT    NOT NULL,
+            route_id                 TEXT    NOT NULL,
+            route_short_name         TEXT    NOT NULL,
+            direction_id             INTEGER NOT NULL CHECK(direction_id IN (0, 1)),
+            dynamic_terminal_stop_id TEXT    NOT NULL,
+            dynamic_terminal_name    TEXT    NOT NULL,
+            is_express               INTEGER NOT NULL DEFAULT 0 CHECK(is_express IN (0, 1)),
+            scheduled_track          TEXT,
+            actual_track             TEXT,
+            updated_at               INTEGER NOT NULL,
+            PRIMARY KEY (complex_id, departure_time, feed_id, child_stop_id, trip_id)
+        ) WITHOUT ROWID;
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_realtime_departures_ttl 
+        ON realtime_departures (departure_time);
     """)
     
     # 3. Read existing stops from transit.sqlite
@@ -325,13 +352,79 @@ def main():
         VALUES (?, ?, ?, ?, ?, ?, ?);
     """, stop_resolutions)
     
+    # Materialize baseline realtime departures for station complexes (Doc 16 §2 & §3)
+    print("🚂 Materializing realtime departures for station complexes...")
+    now_epoch = int(time.time())
+    base_day = (now_epoch // 86400) * 86400
+    
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='scheduled_hourly_patterns';")
+    has_patterns = cur.fetchone() is not None
+    
+    realtime_departures = []
+    if has_patterns:
+        cur.execute("""
+            SELECT 
+                sr.complex_id,
+                sr.feed_id,
+                sr.parent_station_id,
+                sr.child_stop_id,
+                p.route_id,
+                COALESCE(r.route_short_name, p.route_id) as route_short_name,
+                p.direction_id,
+                p.hour_of_day,
+                p.minute_offsets,
+                p.headsign
+            FROM stop_resolution sr
+            JOIN scheduled_hourly_patterns p ON (p.stop_id = sr.child_stop_id OR p.stop_id = sr.parent_station_id)
+            LEFT JOIN routes r ON r.route_id = p.route_id
+            WHERE sr.complex_id IN (
+                SELECT complex_id FROM complexes WHERE is_hub = 1 OR complex_id IN (602, 600001, 600002, 600003)
+            )
+            ORDER BY sr.complex_id, p.hour_of_day
+        """)
+        pattern_rows = cur.fetchall()
+        print(f"📊 Found {len(pattern_rows)} pattern rows for station complexes...")
+        
+        seen_keys = set()
+        for day_offset in [-1, 0, 1]:
+            day_start = base_day + (day_offset * 86400)
+            for row in pattern_rows:
+                cid, feed_id, parent_sid, child_sid, route_id, route_name, dir_id, hour, min_str, headsign = row
+                if not min_str:
+                    continue
+                is_exp = 1 if route_id in ("4", "5", "A", "D", "N", "Q", "2", "3") else 0
+                track = "3" if (is_exp and dir_id == 0) else ("2" if (is_exp and dir_id == 1) else ("1" if dir_id == 0 else "4"))
+                
+                minutes = [int(m.strip()) for m in min_str.split(",") if m.strip().isdigit()]
+                for m in minutes:
+                    dep_time = day_start + (hour * 3600) + (m * 60)
+                    trip_id = f"EXP_{route_id}_{child_sid}_{dep_time}"
+                    pk = (cid, dep_time, feed_id, child_sid, trip_id)
+                    if pk not in seen_keys:
+                        seen_keys.add(pk)
+                        realtime_departures.append((
+                            cid, dep_time, feed_id, parent_sid, child_sid, trip_id,
+                            route_id, route_name, dir_id, "", headsign or "Terminal",
+                            is_exp, track, track, now_epoch
+                        ))
+
+    print(f"💾 Inserting {len(realtime_departures)} materialized realtime_departures rows...")
+    cur.executemany("""
+        INSERT OR REPLACE INTO realtime_departures (
+            complex_id, departure_time, feed_id, parent_station_id, child_stop_id,
+            trip_id, route_id, route_short_name, direction_id,
+            dynamic_terminal_stop_id, dynamic_terminal_name, is_express,
+            scheduled_track, actual_track, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """, realtime_departures)
+    
     # Run optimizer
     print("⚡ Running PRAGMA optimize...")
     cur.execute("PRAGMA optimize;")
     conn.commit()
     conn.close()
     
-    print(f"🎉 Complete! Updated {db_path} with {len(complexes_rows)} complexes and {len(stop_resolutions)} stop resolutions.")
+    print(f"🎉 Complete! Updated {db_path} with {len(complexes_rows)} complexes, {len(stop_resolutions)} stop resolutions, and {len(realtime_departures)} departures.")
 
 if __name__ == "__main__":
     main()

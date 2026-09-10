@@ -551,6 +551,7 @@ struct ContentView: View {
         
         // Phase 1: Pre-Swap UI Query Teardown
         TransitRealtimeService.shared.prepareForCitySwap()
+        ComplexDepartureService.shared.prepareForCitySwap()
         showTransitSheet = false
         selectedTransitStop = nil
         isScanningBuses = false

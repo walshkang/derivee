@@ -66,6 +66,26 @@ func InitTransitDB(dbPath string) (*sql.DB, error) {
 	CREATE INDEX idx_stop_resolution_parent
 	ON stop_resolution (feed_id, parent_station_id, complex_id);
 
+	CREATE TABLE realtime_departures (
+		complex_id               INTEGER NOT NULL,
+		departure_time           INTEGER NOT NULL,
+		feed_id                  TEXT    NOT NULL,
+		parent_station_id        TEXT    NOT NULL,
+		child_stop_id            TEXT    NOT NULL,
+		trip_id                  TEXT    NOT NULL,
+		route_id                 TEXT    NOT NULL,
+		route_short_name         TEXT    NOT NULL,
+		direction_id             INTEGER NOT NULL CHECK(direction_id IN (0, 1)),
+		dynamic_terminal_stop_id TEXT    NOT NULL,
+		dynamic_terminal_name    TEXT    NOT NULL,
+		is_express               INTEGER NOT NULL DEFAULT 0 CHECK(is_express IN (0, 1)),
+		scheduled_track          TEXT,
+		actual_track             TEXT,
+		updated_at               INTEGER NOT NULL,
+		PRIMARY KEY (complex_id, departure_time, feed_id, child_stop_id, trip_id)
+	) WITHOUT ROWID;
+	CREATE INDEX idx_realtime_departures_ttl ON realtime_departures (departure_time);
+
 	CREATE TABLE scheduled_hourly_patterns (
 		stop_id TEXT NOT NULL,
 		route_id TEXT NOT NULL,
@@ -310,3 +330,62 @@ func BulkInsertPatterns(db *sql.DB, patterns []gtfs.ScheduledHourlyPattern) erro
 
 	return nil
 }
+
+// BulkInsertRealtimeDepartures populates the realtime_departures table in batches (Doc 16 §2 & §3)
+func BulkInsertRealtimeDepartures(db *sql.DB, departures []gtfs.RealtimeDeparture) error {
+	const batchSize = 2000
+	for i := 0; i < len(departures); i += batchSize {
+		end := i + batchSize
+		if end > len(departures) {
+			end = len(departures)
+		}
+
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+
+		stmt, err := tx.Prepare(`
+			INSERT OR REPLACE INTO realtime_departures (
+				complex_id, departure_time, feed_id, parent_station_id, child_stop_id,
+				trip_id, route_id, route_short_name, direction_id,
+				dynamic_terminal_stop_id, dynamic_terminal_name, is_express,
+				scheduled_track, actual_track, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		for _, d := range departures[i:end] {
+			var schedTrack interface{} = nil
+			if d.ScheduledTrack != "" {
+				schedTrack = d.ScheduledTrack
+			}
+			var actTrack interface{} = nil
+			if d.ActualTrack != "" {
+				actTrack = d.ActualTrack
+			}
+
+			if _, err := stmt.Exec(
+				d.ComplexID, d.DepartureTime, d.FeedID, d.ParentStationID, d.ChildStopID,
+				d.TripID, d.RouteID, d.RouteShortName, d.DirectionID,
+				d.DynamicTerminalStopID, d.DynamicTerminalName, d.IsExpress,
+				schedTrack, actTrack, d.UpdatedAt,
+			); err != nil {
+				stmt.Close()
+				tx.Rollback()
+				return fmt.Errorf("failed to insert realtime departure (complex=%d, trip=%s): %w", d.ComplexID, d.TripID, err)
+			}
+		}
+
+		stmt.Close()
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+

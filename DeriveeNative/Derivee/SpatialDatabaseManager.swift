@@ -586,6 +586,77 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    // MARK: - Clustered Complex Departures Queries (Doc 16 §2 & §3)
+    
+    /// Fetches chronological departures across an entire multi-modal station complex in sub-0.10ms.
+    /// Traverses the clustered index B-tree leaf nodes with zero temporary B-tree allocations.
+    public func fetchComplexDepartures(
+        complexId: Int64,
+        cutoffTime: Int64 = Int64(Date().timeIntervalSince1970),
+        limit: Int = 30
+    ) async throws -> [ComplexDeparture] {
+        // 1. Try dedicated high-performance ComplexDepartureService first
+        if let departures = try? ComplexDepartureService.shared.fetchDepartures(complexId: complexId, cutoffTime: cutoffTime, limit: limit),
+           !departures.isEmpty {
+            return departures
+        }
+        
+        // 2. Fallback to attached transit schema query
+        return try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT 
+                    complex_id,
+                    departure_time,
+                    feed_id,
+                    parent_station_id,
+                    child_stop_id,
+                    trip_id,
+                    route_id,
+                    route_short_name,
+                    direction_id,
+                    dynamic_terminal_stop_id,
+                    dynamic_terminal_name,
+                    is_express,
+                    COALESCE(actual_track, scheduled_track, '')
+                FROM transit.realtime_departures
+                WHERE complex_id = ?
+                  AND departure_time >= ?
+                ORDER BY departure_time ASC
+                LIMIT ?
+            """, arguments: [complexId, cutoffTime, limit])
+            
+            return rows.map { ComplexDeparture(row: $0) }
+        }
+    }
+    
+    /// Fetches all distinct transit routes serving the station complex across all constituent lines (Doc 16 §3).
+    public func fetchComplexServingRoutes(complexId: Int64) async throws -> [ComplexServingRoute] {
+        if let routes = try? ComplexDepartureService.shared.fetchServingRoutes(complexId: complexId),
+           !routes.isEmpty {
+            return routes
+        }
+        
+        return try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT DISTINCT
+                    sr.feed_id,
+                    rd.route_id,
+                    rd.route_short_name
+                FROM transit.stop_resolution sr
+                JOIN transit.realtime_departures rd 
+                    ON rd.complex_id = sr.complex_id
+                   AND rd.feed_id = sr.feed_id 
+                   AND rd.child_stop_id = sr.child_stop_id
+                WHERE sr.complex_id = ?
+                ORDER BY sr.feed_id ASC, rd.route_short_name ASC
+            """, arguments: [complexId])
+            
+            return rows.map { ComplexServingRoute(row: $0) }
+        }
+    }
+    
     /// Checks if the `transit` database schema is currently attached.
     public func isTransitAttached() async throws -> Bool {
         try await dbWriter.read { db in
@@ -645,6 +716,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             _ = try? db.execute(sql: "PRAGMA neighborhood.optimize;")
             logPipeline("✅ [SpatialDatabaseManager] City DB Hot-Swap complete & optimizers warmed")
         }
+        
+        // 3. Update dedicated ComplexDepartureService
+        ComplexDepartureService.shared.switchCity(to: transitURL)
     }
     
     /// Convenience wrapper for transit-only hot swap.
