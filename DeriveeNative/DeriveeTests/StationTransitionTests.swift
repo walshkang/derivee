@@ -190,4 +190,154 @@ final class StationTransitionTests: XCTestCase {
         let item4: [String: Any] = ["level": 0.0, "levels": "0"]
         XCTAssertFalse(predicateLevelMinus1.evaluate(with: item4), "Should not match different level 0.0")
     }
+    
+    // MARK: - 7. Discrete Layer Portal Model Tests (Doc 15 §2 & Doc 20 §3)
+    
+    func testDiscreteLayerPortalModelConnectorEvaluation() {
+        // Multi-level elevator spanning -2.0, -1.0, 0.0
+        let elevatorSpanningThreeFloors: [String: Any] = [
+            "feature_type": "elevator",
+            "level": 0.0,
+            "levels": "-2;-1;0",
+            "accessible": true
+        ]
+        
+        let predFloor0 = StationTransitVisualizationManager.makeFloorFilterPredicate(targetLevel: 0)
+        let predFloorMinus1 = StationTransitVisualizationManager.makeFloorFilterPredicate(targetLevel: -1)
+        let predFloorMinus2 = StationTransitVisualizationManager.makeFloorFilterPredicate(targetLevel: -2)
+        let predFloorMinus3 = StationTransitVisualizationManager.makeFloorFilterPredicate(targetLevel: -3)
+        
+        XCTAssertTrue(predFloor0.evaluate(with: elevatorSpanningThreeFloors), "Elevator must be visible on Floor 0")
+        XCTAssertTrue(predFloorMinus1.evaluate(with: elevatorSpanningThreeFloors), "Elevator must be visible on Floor -1")
+        XCTAssertTrue(predFloorMinus2.evaluate(with: elevatorSpanningThreeFloors), "Elevator must be visible on Floor -2")
+        XCTAssertFalse(predFloorMinus3.evaluate(with: elevatorSpanningThreeFloors), "Elevator must NOT be visible on Floor -3")
+        
+        // Escalator spanning -2 and -1
+        let escalatorMinus2ToMinus1: [String: Any] = [
+            "feature_type": "escalator",
+            "level": -1.0,
+            "levels": "-2;-1",
+            "circulation_direction": "down"
+        ]
+        XCTAssertFalse(predFloor0.evaluate(with: escalatorMinus2ToMinus1), "Escalator must NOT be visible on Floor 0")
+        XCTAssertTrue(predFloorMinus1.evaluate(with: escalatorMinus2ToMinus1), "Escalator must be visible on Floor -1")
+        XCTAssertTrue(predFloorMinus2.evaluate(with: escalatorMinus2ToMinus1), "Escalator must be visible on Floor -2")
+    }
+    
+    // MARK: - 8. Compound Layer Floor Predicate Tests (Doc 20 §3)
+    
+    func testCompoundLayerFloorPredicatesSegregateFeatureTypes() {
+        let footprintPred = StationTransitVisualizationManager.makeCompoundLayerFloorPredicate(
+            layerId: StationTransitVisualizationManager.Config.footprintLayerId,
+            targetLevel: -1
+        )
+        let platformPred = StationTransitVisualizationManager.makeCompoundLayerFloorPredicate(
+            layerId: StationTransitVisualizationManager.Config.platformLayerId,
+            targetLevel: -1
+        )
+        let exitPred = StationTransitVisualizationManager.makeCompoundLayerFloorPredicate(
+            layerId: StationTransitVisualizationManager.Config.exitLayerId,
+            targetLevel: -1
+        )
+        
+        let mezzanineOnMinus1: [String: Any] = [
+            "feature_type": "mezzanine",
+            "level": -1.0,
+            "levels": "-1"
+        ]
+        let platformOnMinus1: [String: Any] = [
+            "feature_type": "platform",
+            "level": -1.0,
+            "levels": "-1"
+        ]
+        let stairsSpanningMinus1: [String: Any] = [
+            "feature_type": "steps",
+            "level": -1.0,
+            "levels": "-2;-1"
+        ]
+        let entranceOnMinus1: [String: Any] = [
+            "feature_type": "subway_entrance",
+            "level": -1.0,
+            "levels": "-1"
+        ]
+        let mezzanineOnFloor0: [String: Any] = [
+            "feature_type": "mezzanine",
+            "level": 0.0,
+            "levels": "0"
+        ]
+        
+        // Footprint layer: matches mezzanine on -1, rejects platform, exit, and wrong-floor mezzanine
+        XCTAssertTrue(footprintPred.evaluate(with: mezzanineOnMinus1), "Footprint layer must match mezzanine on Floor -1")
+        XCTAssertFalse(footprintPred.evaluate(with: platformOnMinus1), "Footprint layer must NOT match platform line")
+        XCTAssertFalse(footprintPred.evaluate(with: entranceOnMinus1), "Footprint layer must NOT match portal entrance")
+        XCTAssertFalse(footprintPred.evaluate(with: mezzanineOnFloor0), "Footprint layer must NOT match mezzanine on Floor 0")
+        
+        // Platform layer: matches platform and stairs/escalators on -1, rejects mezzanine
+        XCTAssertTrue(platformPred.evaluate(with: platformOnMinus1), "Platform layer must match platform on Floor -1")
+        XCTAssertTrue(platformPred.evaluate(with: stairsSpanningMinus1), "Platform layer must match stairs on Floor -1")
+        XCTAssertFalse(platformPred.evaluate(with: mezzanineOnMinus1), "Platform layer must NOT match mezzanine fill")
+        
+        // Exit layer: matches portal entrance on -1, rejects platforms and mezzanines
+        XCTAssertTrue(exitPred.evaluate(with: entranceOnMinus1), "Exit layer must match portal on Floor -1")
+        XCTAssertFalse(exitPred.evaluate(with: platformOnMinus1), "Exit layer must NOT match platform line")
+        XCTAssertFalse(exitPred.evaluate(with: mezzanineOnMinus1), "Exit layer must NOT match mezzanine fill")
+    }
+    
+    // MARK: - 9. StationFloorplanStore Tests (Doc 15 §2 & Wave Q.4)
+    
+    func testStationFloorplanStoreLoadsFloorsForComplexes() {
+        let store = StationFloorplanStore.shared
+        store.bootstrap()
+        
+        // Penn Station (600001) should have 3 vertical storeys: 0, -1, -2
+        let pennFloors = store.floors(for: "600001")
+        XCTAssertEqual(pennFloors.count, 3, "Penn Station must have 3 distinct vertical storeys (0, -1, -2)")
+        XCTAssertTrue(store.hasMultiLevelFloorplan(for: "600001"))
+        
+        let ordinalsPenn = pennFloors.map { $0.ordinal }
+        XCTAssertEqual(ordinalsPenn, [0, -1, -2], "Penn floors must sort descending by vertical ordinal: 0, -1, -2")
+        
+        let defaultPenn = store.defaultFloor(for: "600001")
+        XCTAssertNotNil(defaultPenn)
+        XCTAssertEqual(defaultPenn?.ordinal, -1, "Default Penn floor should be the main mezzanine (-1)")
+        
+        // Grand Central (600002) should have 3 vertical storeys: 0, -2, -3
+        let gctFloors = store.floors(for: "600002")
+        XCTAssertEqual(gctFloors.count, 3, "Grand Central must have 3 distinct vertical storeys (0, -2, -3)")
+        let ordinalsGCT = gctFloors.map { $0.ordinal }
+        XCTAssertEqual(ordinalsGCT, [0, -2, -3], "Grand Central floors must sort descending: 0, -2, -3")
+        
+        // Union Square (602) should have 3 storeys: 0, -1, -2
+        let unionFloors = store.floors(for: "602")
+        XCTAssertEqual(unionFloors.count, 3, "Union Square must have 3 vertical storeys (0, -1, -2)")
+        
+        // Non-existent station should return empty floors
+        let unknownFloors = store.floors(for: "non_existent_stop_99999")
+        XCTAssertTrue(unknownFloors.isEmpty)
+        XCTAssertFalse(store.hasMultiLevelFloorplan(for: "non_existent_stop_99999"))
+    }
+    
+    // MARK: - 10. StationFloor Model Sorting & Features
+    
+    func testStationFloorModelSortingAndProperties() {
+        let fGround = StationFloor(complexId: "test", level: 0.0, ordinal: 0, name: "Street", featureTypes: ["subway_entrance"])
+        let fMezz = StationFloor(complexId: "test", level: -1.0, ordinal: -1, name: "Mezzanine", featureTypes: ["mezzanine", "steps"])
+        let fPlatform = StationFloor(complexId: "test", level: -2.0, ordinal: -2, name: "Platforms", featureTypes: ["platform", "escalator"])
+        
+        XCTAssertTrue(fGround.isGround)
+        XCTAssertTrue(fMezz.isSubterranean)
+        XCTAssertTrue(fPlatform.isSubterranean)
+        XCTAssertFalse(fGround.isElevated)
+        
+        XCTAssertTrue(fGround.hasExits)
+        XCTAssertFalse(fGround.hasPlatforms)
+        XCTAssertTrue(fMezz.hasMezzanine)
+        XCTAssertTrue(fMezz.hasVerticalCirculation)
+        XCTAssertTrue(fPlatform.hasPlatforms)
+        XCTAssertTrue(fPlatform.hasVerticalCirculation)
+        
+        let unsorted = [fPlatform, fGround, fMezz]
+        let sorted = unsorted.sorted()
+        XCTAssertEqual(sorted.map { $0.ordinal }, [0, -1, -2], "Sorting must place higher floors before lower floors")
+    }
 }

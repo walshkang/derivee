@@ -27,6 +27,7 @@ struct MapView: UIViewRepresentable {
     var activeSignalCoordinate: CLLocationCoordinate2D? = nil
     var activeInspectionCommand: RouteInspectionCommand? = nil
     var activeCorridorTelemetry: Data? = nil
+    var activeFloorLevel: Int? = nil
     var onAmbientMapTap: (() -> Void)? = nil
     var onMapGesture: (() -> Void)? = nil
     
@@ -100,6 +101,16 @@ struct MapView: UIViewRepresentable {
         } else if context.coordinator.hasActiveCorridorTelemetry {
             context.coordinator.hasActiveCorridorTelemetry = false
             context.coordinator.corridorPulseController.clearTelemetry()
+        }
+        
+        // Wave Q.4: Runtime 2D Floorplan Level Filtering (Doc 15 & 20)
+        if context.coordinator.lastAppliedFloorLevel != activeFloorLevel {
+            context.coordinator.lastAppliedFloorLevel = activeFloorLevel
+            if let floor = activeFloorLevel {
+                context.coordinator.stationVisualizationManager.applyFloorFilter(level: floor)
+            } else {
+                context.coordinator.stationVisualizationManager.clearFloorFilter()
+            }
         }
         
         if let style = uiView.style {
@@ -205,7 +216,8 @@ struct MapView: UIViewRepresentable {
             return ctrl
         }()
         
-        // MARK: - Wave Q.3: Multi-Scale Station Transition Controller (Doc 20)
+        // MARK: - Wave Q.3 / Q.4: Multi-Scale Station Transition Controller & Floor Filtering (Doc 20)
+        var lastAppliedFloorLevel: Int? = nil
         lazy var stationVisualizationManager: StationTransitVisualizationManager = {
             let mgr = StationTransitVisualizationManager(mapView: self.mapView)
             return mgr
@@ -562,8 +574,11 @@ struct MapView: UIViewRepresentable {
             subwayLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.insertLayer(subwayLinesLayer, above: subwayCasingLayer)
             
-            // Wave Q.3: Sub-Fog Station Footprints (Layer 3a) & Platforms (Layer 3b)
+            // Wave Q.3 / Q.4: Sub-Fog Station Footprints (Layer 3a) & Platforms (Layer 3b)
             stationVisualizationManager.configureTransitLayers(in: style, citySlug: parent.spatialStore.activeCitySlug)
+            if let floor = parent.activeFloorLevel {
+                stationVisualizationManager.applyFloorFilter(level: floor)
+            }
             
             // VERIFIED: MapLibre Native (iOS) initial fog shape requires CW winding order for exterior bounds.
             // Matches SpatialStore bounds order (Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left -> Top-Left).

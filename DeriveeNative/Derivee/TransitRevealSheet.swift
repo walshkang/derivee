@@ -44,6 +44,9 @@ struct TransitRevealSheet: View {
     @State private var pollGeneration: Int = 0
     @State private var inspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil
     @State private var reliabilityTiers: [String: LineReliabilityTier] = [:]
+    @State private var availableFloors: [StationFloor] = []
+    @State private var selectedFloor: StationFloor? = nil
+    var onSelectFloor: ((StationFloor) -> Void)? = nil
     
     init(
         stopId: String,
@@ -52,10 +55,13 @@ struct TransitRevealSheet: View {
         initialAlerts: [TransitAlert] = [],
         initialAvailableDirections: Set<Int> = [0, 1],
         initialReliabilityTiers: [String: LineReliabilityTier] = [:],
+        initialAvailableFloors: [StationFloor] = [],
+        initialSelectedFloor: StationFloor? = nil,
         referenceDate: Date? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
-        onClearRouteInspection: (() -> Void)? = nil
+        onClearRouteInspection: (() -> Void)? = nil,
+        onSelectFloor: ((StationFloor) -> Void)? = nil
     ) {
         self.stopId = stopId
         self._stopDetails = State(initialValue: initialDetails)
@@ -63,11 +69,14 @@ struct TransitRevealSheet: View {
         self._serviceAlerts = State(initialValue: initialAlerts)
         self._availableDirections = State(initialValue: initialAvailableDirections)
         self._reliabilityTiers = State(initialValue: initialReliabilityTiers)
+        self._availableFloors = State(initialValue: initialAvailableFloors)
+        self._selectedFloor = State(initialValue: initialSelectedFloor)
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
         self.referenceDate = referenceDate
         self.onFocusMap = onFocusMap
         self.onInspectRoute = onInspectRoute
         self.onClearRouteInspection = onClearRouteInspection
+        self.onSelectFloor = onSelectFloor
     }
     
     var displayedArrivals: [SpatialDatabaseManager.ArrivalInfo] {
@@ -269,6 +278,18 @@ struct TransitRevealSheet: View {
                             }
                             .buttonStyle(.plain)
                         }
+                    }
+                    
+                    // Wave Q.4: Interactive 2D Multi-Level Floorplan Stepper Pill
+                    if availableFloors.count > 1 {
+                        StationFloorStepperPill(
+                            floors: availableFloors,
+                            selectedFloor: $selectedFloor,
+                            onFloorChanged: { floor in
+                                onSelectFloor?(floor)
+                            }
+                        )
+                        .padding(.top, 2)
                     }
                     
                     // Segmented Tab Picker: [ Live Arrivals | Full Timetable ]
@@ -521,6 +542,23 @@ struct TransitRevealSheet: View {
         }
         
         guard let details = details else { return }
+        
+        // Wave Q.4: Resolve station complex & available 2D floorplans
+        if availableFloors.isEmpty {
+            if let cid = await StationFloorplanStore.shared.resolveComplexId(for: stopId) {
+                let floors = StationFloorplanStore.shared.floors(for: cid)
+                if !floors.isEmpty {
+                    self.availableFloors = floors
+                    if self.selectedFloor == nil {
+                        let def = StationFloorplanStore.shared.defaultFloor(for: cid)
+                        self.selectedFloor = def
+                        if let def = def {
+                            self.onSelectFloor?(def)
+                        }
+                    }
+                }
+            }
+        }
         
         // Load initial service alerts across all serving lines
         let alerts = await TransitRealtimeService.shared.fetchServiceAlerts(for: details.routeIds)

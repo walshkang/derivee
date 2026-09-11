@@ -42,6 +42,7 @@ struct ContentView: View {
     @State private var showRouteComparisonSheet: Bool = false
     @State private var routeComparisonVM: RouteComparisonViewModel? = nil
     @State private var activeRouteInspection: RouteInspectionCommand? = nil
+    @State private var activeFloorLevel: Int? = nil
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
@@ -94,6 +95,7 @@ struct ContentView: View {
                             nearbyBusStops: nearbyBusStops,
                             activeSignalCoordinate: activeNavigationSession?.activeSignalCoordinate,
                             activeInspectionCommand: activeRouteInspection,
+                            activeFloorLevel: activeFloorLevel,
                             onAmbientMapTap: {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                     isNearbyBusesExpanded = false
@@ -287,6 +289,7 @@ struct ContentView: View {
                         if !newValue {
                             selectedTransitStop = nil
                             activeRouteInspection = nil
+                            activeFloorLevel = nil
                         }
                     }
                 )) {
@@ -302,6 +305,9 @@ struct ContentView: View {
                             },
                             onClearRouteInspection: {
                                 activeRouteInspection = nil
+                            },
+                            onSelectFloor: { floor in
+                                activeFloorLevel = floor.ordinal
                             }
                         )
                             .presentationDetents([.medium, .large])

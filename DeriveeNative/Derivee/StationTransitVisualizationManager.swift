@@ -227,15 +227,32 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
     // MARK: - Layers Setup (7-Layer Z-Stack)
     
     @MainActor
+    public private(set) var currentFloorLevel: Int? = nil
+    
+    // MARK: - Layer Predicate Specifications (Doc 20 §3 & Wave Q.4)
+    
+    /// Returns the base feature_type predicate for a given indoor layer.
+    public static func basePredicate(for layerId: String) -> NSPredicate? {
+        switch layerId {
+        case Config.footprintLayerId:
+            return NSPredicate(format: "feature_type IN {'mezzanine', 'corridor', 'room', 'station_footprint'}")
+        case Config.platformLayerId:
+            return NSPredicate(format: "feature_type IN {'platform', 'station_platform', 'track', 'steps', 'escalator'}")
+        case Config.exitLayerId:
+            return NSPredicate(format: "feature_type IN {'subway_entrance', 'portal', 'elevator', 'station_exit'}")
+        default:
+            return nil
+        }
+    }
+    
+    @MainActor
     private func setupFootprintAndPlatformLayers(in style: MLNStyle) {
         guard let source = style.source(withIdentifier: Config.stationShapesSourceId) else { return }
         
         // 1. Layer 3a: station-interior-fill (2D Station Footprints)
         if style.layer(withIdentifier: Config.footprintLayerId) == nil {
             let footprintLayer = MLNFillStyleLayer(identifier: Config.footprintLayerId, source: source)
-            footprintLayer.predicate = NSPredicate(
-                format: "feature_type IN {'mezzanine', 'corridor', 'room', 'station_footprint'}"
-            )
+            footprintLayer.predicate = Self.basePredicate(for: Config.footprintLayerId)
             footprintLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: Config.colorFootprintFill))
             footprintLayer.fillOpacity = Self.footprintOpacityExpression()
             footprintLayer.fillAntialiased = NSExpression(forConstantValue: true)
@@ -243,12 +260,10 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
             insertSubFogLayer(footprintLayer, in: style)
         }
         
-        // 2. Layer 3b: station-platform-lines (Platforms & Tracks)
+        // 2. Layer 3b: station-platform-lines (Platforms & Tracks & Vertical Circulation)
         if style.layer(withIdentifier: Config.platformLayerId) == nil {
             let platformLayer = MLNLineStyleLayer(identifier: Config.platformLayerId, source: source)
-            platformLayer.predicate = NSPredicate(
-                format: "feature_type IN {'platform', 'station_platform', 'track'}"
-            )
+            platformLayer.predicate = Self.basePredicate(for: Config.platformLayerId)
             platformLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: Config.colorPlatformLine))
             platformLayer.lineOpacity = Self.platformOpacityExpression()
             platformLayer.lineWidth = Self.platformWidthExpression()
@@ -270,9 +285,7 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
         // Layer 6b: station-exit-symbols (Egress Portals) - Above Fog & Bullets
         if style.layer(withIdentifier: Config.exitLayerId) == nil {
             let exitLayer = MLNSymbolStyleLayer(identifier: Config.exitLayerId, source: source)
-            exitLayer.predicate = NSPredicate(
-                format: "feature_type IN {'subway_entrance', 'portal', 'elevator', 'station_exit'}"
-            )
+            exitLayer.predicate = Self.basePredicate(for: Config.exitLayerId)
             exitLayer.iconImageName = NSExpression(forConstantValue: Config.exitPortalImageName)
             exitLayer.iconOpacity = Self.exitOpacityExpression()
             exitLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
@@ -332,8 +345,15 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
     /// Constructs a type-safe NSPredicate for discrete floorplan filtering.
     /// Handles single floor levels, string-based level tags, and multi-level connectors.
     public static func makeFloorFilterPredicate(targetLevel: Int) -> NSPredicate {
-        let levelString = String(targetLevel)
-        let doubleVal = Double(targetLevel)
+        return makeFloorFilterPredicate(targetLevel: Double(targetLevel))
+    }
+    
+    /// Constructs a type-safe NSPredicate for discrete floorplan filtering supporting fractional levels.
+    public static func makeFloorFilterPredicate(targetLevel: Double) -> NSPredicate {
+        let levelInt = Int(targetLevel)
+        let isInteger = (targetLevel == Double(levelInt))
+        let levelString = isInteger ? String(levelInt) : String(format: "%.1f", targetLevel)
+        let doubleVal = targetLevel
         return NSPredicate(
             format: """
             (CAST(level, 'NSString') == %@) OR 
@@ -345,16 +365,40 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
         )
     }
     
-    /// Applies active floor slice filtering across all indoor station layers.
+    /// Constructs a compound predicate combining the layer's base feature_type filter with the target floor filter.
+    /// Ensures inactive vertical storeys are culled while keeping fills, lines, and portals cleanly separated.
+    public static func makeCompoundLayerFloorPredicate(layerId: String, targetLevel: Int) -> NSPredicate {
+        let floorPred = makeFloorFilterPredicate(targetLevel: targetLevel)
+        guard let basePred = basePredicate(for: layerId) else {
+            return floorPred
+        }
+        return NSCompoundPredicate(andPredicateWithSubpredicates: [basePred, floorPred])
+    }
+    
+    /// Applies active floor slice filtering across all indoor station layers using compound predicates.
     @MainActor
     public func applyFloorFilter(level: Int) {
         guard let style = mapView?.style else { return }
-        let predicate = Self.makeFloorFilterPredicate(targetLevel: level)
+        self.currentFloorLevel = level
         
         let indoorLayers = [Config.footprintLayerId, Config.platformLayerId, Config.exitLayerId]
         for layerId in indoorLayers {
             if let layer = style.layer(withIdentifier: layerId) as? MLNVectorStyleLayer {
-                layer.predicate = predicate
+                layer.predicate = Self.makeCompoundLayerFloorPredicate(layerId: layerId, targetLevel: level)
+            }
+        }
+    }
+    
+    /// Clears active floor filtering, restoring base feature_type predicates across all indoor layers.
+    @MainActor
+    public func clearFloorFilter() {
+        guard let style = mapView?.style else { return }
+        self.currentFloorLevel = nil
+        
+        let indoorLayers = [Config.footprintLayerId, Config.platformLayerId, Config.exitLayerId]
+        for layerId in indoorLayers {
+            if let layer = style.layer(withIdentifier: layerId) as? MLNVectorStyleLayer {
+                layer.predicate = Self.basePredicate(for: layerId)
             }
         }
     }

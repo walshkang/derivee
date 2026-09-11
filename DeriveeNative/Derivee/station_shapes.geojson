@@ -534,6 +534,309 @@
         "ref": "Exit Barclays",
         "name": "Flatbush Ave & Atlantic Ave Plaza Entrance"
       }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/penn_stairs_mth_to_lower_upper",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.994600, 40.751600],
+          [-73.994400, 40.751600]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Moynihan Train Hall Concourse",
+        "feature_type": "steps",
+        "accessible": false,
+        "circulation_direction": "down",
+        "levels": "-1;0",
+        "connects_levels": [-1.0, 0.0],
+        "ref": "Stairs MTH-0 to NYP-1",
+        "name": "Moynihan to Penn Concourse Stairs"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/penn_stairs_mth_to_lower_lower",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.994600, 40.751600],
+          [-73.994400, 40.751600]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -1.0,
+        "ordinal": -1,
+        "level_name": "Penn Station Main Concourse",
+        "feature_type": "steps",
+        "accessible": false,
+        "circulation_direction": "up",
+        "levels": "-1;0",
+        "connects_levels": [-1.0, 0.0],
+        "ref": "Stairs NYP-1 to MTH-0",
+        "name": "Penn Concourse to Moynihan Stairs"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/penn_escalator_track1_upper",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.993500, 40.750700],
+          [-73.993000, 40.750700]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -1.0,
+        "ordinal": -1,
+        "level_name": "Penn Station Main Concourse",
+        "feature_type": "escalator",
+        "accessible": false,
+        "circulation_direction": "down",
+        "levels": "-2;-1",
+        "connects_levels": [-2.0, -1.0],
+        "ref": "Escalator Track 1-2",
+        "name": "Concourse to Tracks 1-2 Escalator"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/penn_escalator_track1_lower",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.993500, 40.750700],
+          [-73.993000, 40.750700]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Platform Level",
+        "feature_type": "escalator",
+        "accessible": false,
+        "circulation_direction": "up",
+        "levels": "-2;-1",
+        "connects_levels": [-2.0, -1.0],
+        "ref": "Escalator Track 1-2",
+        "name": "Tracks 1-2 to Concourse Escalator"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/penn_elevator_8ave_l0",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.993800, 40.751800]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Street Level",
+        "feature_type": "elevator",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "levels": "-2;-1;0",
+        "connects_levels": [-2.0, -1.0, 0.0],
+        "ref": "Elevator 8th Ave",
+        "name": "8th Ave Street to Mezzanine & Platform Elevator"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/penn_elevator_8ave_lm1",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.993800, 40.751800]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -1.0,
+        "ordinal": -1,
+        "level_name": "Penn Station Main Concourse",
+        "feature_type": "elevator",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "levels": "-2;-1;0",
+        "connects_levels": [-2.0, -1.0, 0.0],
+        "ref": "Elevator 8th Ave",
+        "name": "8th Ave Street to Mezzanine & Platform Elevator"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/penn_elevator_8ave_lm2",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.993800, 40.751800]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Platform Level",
+        "feature_type": "elevator",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "levels": "-2;-1;0",
+        "connects_levels": [-2.0, -1.0, 0.0],
+        "ref": "Elevator 8th Ave",
+        "name": "8th Ave Street to Mezzanine & Platform Elevator"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/gct_escalator_lex_upper",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.976800, 40.752300],
+          [-73.976500, 40.752300]
+        ]
+      },
+      "properties": {
+        "complex_id": "600002",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Main Concourse",
+        "feature_type": "escalator",
+        "accessible": false,
+        "circulation_direction": "down",
+        "levels": "-2;0",
+        "connects_levels": [-2.0, 0.0],
+        "ref": "Lexington Escalator",
+        "name": "Grand Central Concourse to Lexington Subway Escalator"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/gct_escalator_lex_lower",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.976800, 40.752300],
+          [-73.976500, 40.752300]
+        ]
+      },
+      "properties": {
+        "complex_id": "600002",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Subway Platform",
+        "feature_type": "escalator",
+        "accessible": false,
+        "circulation_direction": "up",
+        "levels": "-2;0",
+        "connects_levels": [-2.0, 0.0],
+        "ref": "Lexington Escalator",
+        "name": "Lexington Subway to Concourse Escalator"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/gct_escalator_flushing_upper",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.976300, 40.752400],
+          [-73.976000, 40.752400]
+        ]
+      },
+      "properties": {
+        "complex_id": "600002",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Subway Platform",
+        "feature_type": "escalator",
+        "accessible": false,
+        "circulation_direction": "down",
+        "levels": "-3;-2",
+        "connects_levels": [-3.0, -2.0],
+        "ref": "Flushing 7 Deep Escalator",
+        "name": "Lexington Platform to 7 Line Escalator"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/gct_escalator_flushing_lower",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.976300, 40.752400],
+          [-73.976000, 40.752400]
+        ]
+      },
+      "properties": {
+        "complex_id": "600002",
+        "level": -3.0,
+        "ordinal": -3,
+        "level_name": "Flushing Line Platform",
+        "feature_type": "escalator",
+        "accessible": false,
+        "circulation_direction": "up",
+        "levels": "-3;-2",
+        "connects_levels": [-3.0, -2.0],
+        "ref": "Flushing 7 Deep Escalator",
+        "name": "7 Line to Lexington Platform Escalator"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/unionsq_stairs_transfer_upper",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.990400, 40.735200],
+          [-73.990200, 40.735200]
+        ]
+      },
+      "properties": {
+        "complex_id": "602",
+        "level": -1.0,
+        "ordinal": -1,
+        "level_name": "Broadway Platform",
+        "feature_type": "steps",
+        "accessible": false,
+        "circulation_direction": "down",
+        "levels": "-2;-1",
+        "connects_levels": [-2.0, -1.0],
+        "ref": "Broadway-Lexington Transfer Stairs",
+        "name": "N/Q/R to 4/5/6 Transfer Stairs"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "circulation/unionsq_stairs_transfer_lower",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.990400, 40.735200],
+          [-73.990200, 40.735200]
+        ]
+      },
+      "properties": {
+        "complex_id": "602",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Lexington Platform",
+        "feature_type": "steps",
+        "accessible": false,
+        "circulation_direction": "up",
+        "levels": "-2;-1",
+        "connects_levels": [-2.0, -1.0],
+        "ref": "Broadway-Lexington Transfer Stairs",
+        "name": "4/5/6 to N/Q/R Transfer Stairs"
+      }
     }
   ]
 }
