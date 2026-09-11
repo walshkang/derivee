@@ -224,5 +224,16 @@ public enum BasemapThemeManager {
             fogLayer.fillColorTransition = transition
             fogLayer.fillColor = NSExpression(forConstantValue: palette.fogColor)
         }
+        
+        // 11. Multi-Scale Station Layers (Wave Q.3 - Doc 20)
+        if let footprintLayer = style.layer(withIdentifier: StationTransitVisualizationManager.Config.footprintLayerId) as? MLNFillStyleLayer {
+            footprintLayer.fillColorTransition = transition
+            let footprintColor = theme == .transit ? UIColor(hex: "#1E232A") : UIColor(hex: StationTransitVisualizationManager.Config.colorFootprintFill)
+            footprintLayer.fillColor = NSExpression(forConstantValue: footprintColor)
+        }
+        if let platformLayer = style.layer(withIdentifier: StationTransitVisualizationManager.Config.platformLayerId) as? MLNLineStyleLayer {
+            platformLayer.lineColorTransition = transition
+            platformLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: StationTransitVisualizationManager.Config.colorPlatformLine))
+        }
     }
 }

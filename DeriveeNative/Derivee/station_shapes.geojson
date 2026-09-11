@@ -1,0 +1,539 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "footprint/penn_moynihan_concourse",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-73.998500, 40.750800],
+            [-73.994500, 40.750800],
+            [-73.994500, 40.752500],
+            [-73.998500, 40.752500],
+            [-73.998500, 40.750800]
+          ]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Moynihan Train Hall Concourse",
+        "feature_type": "mezzanine",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "MTH-0",
+        "name": "Moynihan Train Hall Atrium"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "footprint/penn_lower_concourse",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-73.994500, 40.750000],
+            [-73.991000, 40.750000],
+            [-73.991000, 40.752500],
+            [-73.994500, 40.752500],
+            [-73.994500, 40.750000]
+          ]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -1.0,
+        "ordinal": -1,
+        "level_name": "Penn Station Main Concourse",
+        "feature_type": "mezzanine",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "NYP-1",
+        "name": "Penn Station LIRR/NJT Concourse"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/penn_track_platform_1_2",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.997500, 40.750700],
+          [-73.991500, 40.750700]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Platform Level",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Tracks 1-2",
+        "name": "Platform 1"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/penn_track_platform_3_4",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.997500, 40.751100],
+          [-73.991500, 40.751100]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Platform Level",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Tracks 3-4",
+        "name": "Platform 2"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/penn_track_platform_5_6",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.997500, 40.751500],
+          [-73.991500, 40.751500]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Platform Level",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Tracks 5-6",
+        "name": "Platform 3"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/penn_subway_8ave_platform",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.993700, 40.749800],
+          [-73.993100, 40.753200]
+        ]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Subway Platform",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "A/C/E Platforms",
+        "name": "34 St - Penn Station (8th Ave)"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "portal/penn_8ave_33st_entrance",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.993600, 40.752600]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Street Level",
+        "feature_type": "subway_entrance",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Exit 33A",
+        "name": "8th Ave & 33rd St (NE Corner)"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "portal/penn_8ave_31st_entrance",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.994200, 40.750600]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Street Level",
+        "feature_type": "subway_entrance",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Exit 31A",
+        "name": "8th Ave & 31st St (SE Corner)"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "portal/penn_moynihan_9ave_entrance",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.998400, 40.751600]
+      },
+      "properties": {
+        "complex_id": "600001",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Street Level",
+        "feature_type": "portal",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Moynihan Portal",
+        "name": "9th Ave Moynihan Hall Entrance"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "footprint/gct_main_concourse",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-73.978200, 40.752200],
+            [-73.976200, 40.752200],
+            [-73.976200, 40.753600],
+            [-73.978200, 40.753600],
+            [-73.978200, 40.752200]
+          ]
+        ]
+      },
+      "properties": {
+        "complex_id": "600002",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Main Concourse",
+        "feature_type": "mezzanine",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "GCT-0",
+        "name": "Grand Central Main Concourse"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/gct_subway_lexington_platform",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.976500, 40.751200],
+          [-73.976100, 40.753800]
+        ]
+      },
+      "properties": {
+        "complex_id": "600002",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Subway Platform",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "4/5/6 Platforms",
+        "name": "Grand Central - 42 St (Lexington Ave)"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/gct_subway_flushing_platform",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.978500, 40.752400],
+          [-73.975500, 40.752400]
+        ]
+      },
+      "properties": {
+        "complex_id": "600002",
+        "level": -3.0,
+        "ordinal": -3,
+        "level_name": "Flushing Line Platform",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "7 Platform",
+        "name": "Grand Central - 42 St (7 Line)"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "portal/gct_42st_park_entrance",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.977400, 40.751800]
+      },
+      "properties": {
+        "complex_id": "600002",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Street Level",
+        "feature_type": "subway_entrance",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Exit 42A",
+        "name": "42nd St & Park Ave Portal"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "portal/gct_lex_43st_entrance",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.975800, 40.752600]
+      },
+      "properties": {
+        "complex_id": "600002",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Street Level",
+        "feature_type": "subway_entrance",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Exit 43L",
+        "name": "Lexington Ave & 43rd St"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "footprint/unionsq_mezzanine",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-73.991500, 40.734500],
+            [-73.989500, 40.734500],
+            [-73.989500, 40.736000],
+            [-73.991500, 40.736000],
+            [-73.991500, 40.734500]
+          ]
+        ]
+      },
+      "properties": {
+        "complex_id": "602",
+        "level": -1.0,
+        "ordinal": -1,
+        "level_name": "Mezzanine Concourse",
+        "feature_type": "mezzanine",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "USQ-1",
+        "name": "14 St - Union Square Mezzanine"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/unionsq_broadway_platform",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.990800, 40.734000],
+          [-73.990800, 40.736500]
+        ]
+      },
+      "properties": {
+        "complex_id": "602",
+        "level": -1.0,
+        "ordinal": -1,
+        "level_name": "Broadway Platform",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "N/Q/R/W Platforms",
+        "name": "14 St - Union Square (Broadway)"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/unionsq_lexington_platform",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.990000, 40.734200],
+          [-73.989800, 40.736600]
+        ]
+      },
+      "properties": {
+        "complex_id": "602",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Lexington Platform",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "4/5/6 Platforms",
+        "name": "14 St - Union Square (Lexington)"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "portal/unionsq_14st_bway_entrance",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.990900, 40.734400]
+      },
+      "properties": {
+        "complex_id": "602",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Street Level",
+        "feature_type": "subway_entrance",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Exit 14B",
+        "name": "14th St & Broadway (SW Corner)"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "footprint/fulton_atrium_concourse",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-74.009800, 40.709800],
+            [-74.008200, 40.709800],
+            [-74.008200, 40.710800],
+            [-74.009800, 40.710800],
+            [-74.009800, 40.709800]
+          ]
+        ]
+      },
+      "properties": {
+        "complex_id": "628",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Fulton Transit Center Atrium",
+        "feature_type": "mezzanine",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "FLT-0",
+        "name": "Fulton Center Atrium"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/fulton_broadway_platform",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.009200, 40.709300],
+          [-74.008800, 40.711200]
+        ]
+      },
+      "properties": {
+        "complex_id": "628",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Broadway Platform",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "4/5 Platforms",
+        "name": "Fulton St (Broadway/4/5)"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "portal/fulton_broadway_entrance",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-74.009100, 40.710200]
+      },
+      "properties": {
+        "complex_id": "628",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Street Level",
+        "feature_type": "subway_entrance",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Exit Fulton",
+        "name": "Fulton Center Broadway Transit Portal"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "footprint/atlantic_concourse",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-73.978800, 40.683800],
+            [-73.976800, 40.683800],
+            [-73.976800, 40.685000],
+            [-73.978800, 40.685000],
+            [-73.978800, 40.683800]
+          ]
+        ]
+      },
+      "properties": {
+        "complex_id": "600003",
+        "level": -1.0,
+        "ordinal": -1,
+        "level_name": "Atlantic Concourse",
+        "feature_type": "mezzanine",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "ATL-1",
+        "name": "Atlantic Ave - Barclays Center Concourse"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "platform/atlantic_subway_platform",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.978000, 40.683500],
+          [-73.977500, 40.685500]
+        ]
+      },
+      "properties": {
+        "complex_id": "600003",
+        "level": -2.0,
+        "ordinal": -2,
+        "level_name": "Platform Level",
+        "feature_type": "platform",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Subway & LIRR",
+        "name": "Atlantic Ave Platforms"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "portal/atlantic_barclays_plaza_entrance",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.977700, 40.684200]
+      },
+      "properties": {
+        "complex_id": "600003",
+        "level": 0.0,
+        "ordinal": 0,
+        "level_name": "Street Level",
+        "feature_type": "subway_entrance",
+        "accessible": true,
+        "wheelchair_desc": "yes",
+        "ref": "Exit Barclays",
+        "name": "Flatbush Ave & Atlantic Ave Plaza Entrance"
+      }
+    }
+  ]
+}

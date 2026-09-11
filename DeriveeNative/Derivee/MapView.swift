@@ -205,6 +205,12 @@ struct MapView: UIViewRepresentable {
             return ctrl
         }()
         
+        // MARK: - Wave Q.3: Multi-Scale Station Transition Controller (Doc 20)
+        lazy var stationVisualizationManager: StationTransitVisualizationManager = {
+            let mgr = StationTransitVisualizationManager(mapView: self.mapView)
+            return mgr
+        }()
+        
         init(_ parent: MapView) {
             self.parent = parent
             self.lastAppliedCitySlug = parent.spatialStore.activeCitySlug
@@ -383,6 +389,7 @@ struct MapView: UIViewRepresentable {
             style.setImage(busDot, forName: "poi-bus-3")
             style.setImage(subwayDiamond, forName: "poi-subway-1")
             
+            stationVisualizationManager.attach(to: mapView)
             setupLayers(in: style)
             corridorPulseController.configureCorridorLayers(in: style)
             populateSubwayStationBullets(in: style)
@@ -555,32 +562,8 @@ struct MapView: UIViewRepresentable {
             subwayLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.insertLayer(subwayLinesLayer, above: subwayCasingLayer)
             
-            // Sub-fog Subway Station Bullets (Orienting nodes beneath Fog of War)
-            let bulletsSource = MLNShapeSource(identifier: subwayStationBulletsSourceId, features: [], options: nil)
-            style.addSource(bulletsSource)
-            
-            let bulletsLayer = MLNCircleStyleLayer(identifier: subwayStationBulletsLayerId, source: bulletsSource)
-            let bulletFillColor = UIColor(hex: "#1C1C1E")
-            let bulletStrokeColor = UIColor(hex: "#FFFFFF")
-            bulletsLayer.circleColor = NSExpression(forConstantValue: bulletFillColor)
-            bulletsLayer.circleRadius = NSExpression(forConstantValue: 4.5)
-            bulletsLayer.circleStrokeColor = NSExpression(forConstantValue: bulletStrokeColor)
-            bulletsLayer.circleStrokeWidth = NSExpression(forConstantValue: 1.0)
-            bulletsLayer.circleOpacity = NSExpression(forConstantValue: parent.subwayStationMarkerStyle == .allStations ? 0.95 : 0.0)
-            bulletsLayer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)
-            style.insertLayer(bulletsLayer, above: subwayLinesLayer)
-            
-            // Smart Zoom Station Bullets Layer (z >= 14.5): Resolves discrete route bullets ([4][5][6] vs [6])
-            let smartZoomBulletsLayer = MLNSymbolStyleLayer(identifier: smartZoomStationBulletsLayerId, source: bulletsSource)
-            smartZoomBulletsLayer.minimumZoomLevel = 14.5
-            smartZoomBulletsLayer.iconImageName = NSExpression(forKeyPath: "bullet_icon_name")
-            smartZoomBulletsLayer.iconAllowsOverlap = NSExpression(forConstantValue: false)
-            smartZoomBulletsLayer.iconIgnoresPlacement = NSExpression(forConstantValue: false)
-            smartZoomBulletsLayer.iconAnchor = NSExpression(forConstantValue: "bottom")
-            smartZoomBulletsLayer.iconOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: -6)))
-            smartZoomBulletsLayer.iconOpacity = NSExpression(forConstantValue: parent.subwayStationMarkerStyle == .allStations ? 1.0 : 0.0)
-            smartZoomBulletsLayer.iconOpacityTransition = MLNTransition(duration: 0.2, delay: 0)
-            style.insertLayer(smartZoomBulletsLayer, above: bulletsLayer)
+            // Wave Q.3: Sub-Fog Station Footprints (Layer 3a) & Platforms (Layer 3b)
+            stationVisualizationManager.configureTransitLayers(in: style, citySlug: parent.spatialStore.activeCitySlug)
             
             // VERIFIED: MapLibre Native (iOS) initial fog shape requires CW winding order for exterior bounds.
             // Matches SpatialStore bounds order (Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left -> Top-Left).
@@ -595,7 +578,9 @@ struct MapView: UIViewRepresentable {
             let colorHex = "#1C1C1E"
             fogLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
             fogLayer.fillOpacity = NSExpression(forConstantValue: parent.fogOpacity)
-            style.insertLayer(fogLayer, above: bulletsLayer)
+            
+            let subFogAnchor = style.layer(withIdentifier: StationTransitVisualizationManager.Config.platformLayerId) ?? subwayLinesLayer
+            style.insertLayer(fogLayer, above: subFogAnchor)
             
             // Wave O.3: Hardware-accelerated Metal Custom Style Layer
             if parent.enableMetalFogEngine {
@@ -609,11 +594,11 @@ struct MapView: UIViewRepresentable {
                 // Research Doc 07 §3 Pattern A & Doc 20 §2:
                 // Precise Z-Index Placement: Insert fog directly below MLNSymbolStyleLayer
                 // (station bullets, basemap street/place labels, active POI symbols)
-                // and strictly above sub-fog transit networks (bulletsLayer)
+                // and strictly above sub-fog transit networks (platformLayer or subwayLinesLayer)
                 if let firstSymbolLayer = style.layers.first(where: { $0 is MLNSymbolStyleLayer }) {
                     style.insertLayer(metalFog, below: firstSymbolLayer)
                 } else {
-                    style.insertLayer(metalFog, above: bulletsLayer)
+                    style.insertLayer(metalFog, above: subFogAnchor)
                 }
                 
                 // Suppress legacy CPU polygon fill when hardware Metal engine is active
@@ -628,13 +613,53 @@ struct MapView: UIViewRepresentable {
             borderLayer.lineCap = NSExpression(forConstantValue: "round")
             style.insertLayer(borderLayer, above: fogLayer)
             
+            // Layer 6a: Station Macro Bullets (Orienting nodes ABOVE Fog of War - Doc 20 §2)
+            let bulletsSource = MLNShapeSource(identifier: subwayStationBulletsSourceId, features: [], options: nil)
+            style.addSource(bulletsSource)
+            
+            let bulletsLayer = MLNCircleStyleLayer(identifier: subwayStationBulletsLayerId, source: bulletsSource)
+            let bulletFillColor = UIColor(hex: "#1C1C1E")
+            let bulletStrokeColor = UIColor(hex: "#FFFFFF")
+            bulletsLayer.circleColor = NSExpression(forConstantValue: bulletFillColor)
+            bulletsLayer.circleRadius = StationTransitVisualizationManager.bulletRadiusExpression()
+            bulletsLayer.circleStrokeColor = NSExpression(forConstantValue: bulletStrokeColor)
+            bulletsLayer.circleStrokeWidth = NSExpression(forConstantValue: 1.0)
+            bulletsLayer.circleOpacity = parent.subwayStationMarkerStyle == .allStations 
+                ? StationTransitVisualizationManager.bulletOpacityExpression() 
+                : NSExpression(forConstantValue: 0.0)
+            bulletsLayer.circleStrokeOpacity = parent.subwayStationMarkerStyle == .allStations 
+                ? StationTransitVisualizationManager.bulletStrokeOpacityExpression() 
+                : NSExpression(forConstantValue: 0.0)
+            bulletsLayer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)
+            style.insertLayer(bulletsLayer, above: borderLayer)
+            
+            // Smart Zoom Station Bullets Layer (z >= 14.5): Resolves discrete route bullets ([4][5][6] vs [6])
+            let smartZoomBulletsLayer = MLNSymbolStyleLayer(identifier: smartZoomStationBulletsLayerId, source: bulletsSource)
+            smartZoomBulletsLayer.minimumZoomLevel = 14.5
+            smartZoomBulletsLayer.iconImageName = NSExpression(forKeyPath: "bullet_icon_name")
+            smartZoomBulletsLayer.iconAllowsOverlap = NSExpression(forConstantValue: false)
+            smartZoomBulletsLayer.iconIgnoresPlacement = NSExpression(forConstantValue: false)
+            smartZoomBulletsLayer.iconAnchor = NSExpression(forConstantValue: "bottom")
+            smartZoomBulletsLayer.iconOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: -6)))
+            smartZoomBulletsLayer.iconOpacity = parent.subwayStationMarkerStyle == .allStations 
+                ? StationTransitVisualizationManager.smartZoomBulletOpacityExpression() 
+                : NSExpression(forConstantValue: 0.0)
+            smartZoomBulletsLayer.iconOpacityTransition = MLNTransition(duration: 0.2, delay: 0)
+            style.insertLayer(smartZoomBulletsLayer, above: bulletsLayer)
+            
+            // Layer 6b: Egress Portals (station-exit-symbols) positioned above bulletsLayer (Doc 20 §2)
+            if let exitLayer = style.layer(withIdentifier: StationTransitVisualizationManager.Config.exitLayerId) {
+                style.insertLayer(exitLayer, above: smartZoomBulletsLayer)
+            }
+            
             let transientHexSource = MLNShapeSource(identifier: transientHexSourceId, shape: nil, options: nil)
             style.addSource(transientHexSource)
             
             let transientHexLayer = MLNFillStyleLayer(identifier: transientHexLayerId, source: transientHexSource)
             transientHexLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
             transientHexLayer.fillOpacity = NSExpression(forConstantValue: 0.0)
-            style.insertLayer(transientHexLayer, above: fogLayer)
+            let topStationLayer = style.layer(withIdentifier: StationTransitVisualizationManager.Config.exitLayerId) ?? smartZoomBulletsLayer
+            style.insertLayer(transientHexLayer, above: topStationLayer)
             
             let pulseSource = MLNShapeSource(identifier: pulseSourceId, shape: nil, options: nil)
             style.addSource(pulseSource)
@@ -644,7 +669,7 @@ struct MapView: UIViewRepresentable {
             pulseLayer.circleRadius = NSExpression(forConstantValue: 0.0)
             pulseLayer.circleOpacity = NSExpression(forConstantValue: 0.0)
             pulseLayer.circlePitchAlignment = NSExpression(forConstantValue: "map")
-            style.insertLayer(pulseLayer, above: fogLayer)
+            style.insertLayer(pulseLayer, above: transientHexLayer)
             
             // Layer 4: Ephemeral Route Inspection (ephemeral-route-source)
             let routeSource = MLNShapeSource(identifier: ephemeralRouteSourceId, shape: nil, options: nil)
@@ -738,6 +763,7 @@ struct MapView: UIViewRepresentable {
                 let shape = await TransitCartographyLoader.loadTransitLinesShape(for: citySlug)
                 source?.shape = shape
             }
+            stationVisualizationManager.updateStationShapes(for: citySlug, in: style)
         }
         
         func updateSubwayThoroughfares(show: Bool, theme: BasemapTheme, in style: MLNStyle) {
@@ -771,11 +797,19 @@ struct MapView: UIViewRepresentable {
                 bulletsLayer.circleColor = NSExpression(forConstantValue: bulletFillColor)
                 bulletsLayer.circleStrokeColor = NSExpression(forConstantValue: bulletStrokeColor)
                 bulletsLayer.circleOpacityTransition = MLNTransition(duration: 0, delay: 0)
-                bulletsLayer.circleOpacity = NSExpression(forConstantValue: markerStyle == .allStations ? 0.95 : 0.0)
+                bulletsLayer.circleOpacity = markerStyle == .allStations 
+                    ? StationTransitVisualizationManager.bulletOpacityExpression() 
+                    : NSExpression(forConstantValue: 0.0)
+                bulletsLayer.circleRadius = StationTransitVisualizationManager.bulletRadiusExpression()
+                bulletsLayer.circleStrokeOpacity = markerStyle == .allStations 
+                    ? StationTransitVisualizationManager.bulletStrokeOpacityExpression() 
+                    : NSExpression(forConstantValue: 0.0)
             }
             if let smartZoomLayer = style.layer(withIdentifier: smartZoomStationBulletsLayerId) as? MLNSymbolStyleLayer {
                 smartZoomLayer.iconOpacityTransition = MLNTransition(duration: 0, delay: 0)
-                smartZoomLayer.iconOpacity = NSExpression(forConstantValue: markerStyle == .allStations ? 1.0 : 0.0)
+                smartZoomLayer.iconOpacity = markerStyle == .allStations 
+                    ? StationTransitVisualizationManager.smartZoomBulletOpacityExpression() 
+                    : NSExpression(forConstantValue: 0.0)
             }
         }
         
