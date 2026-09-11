@@ -323,7 +323,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | Wave | Task ID | Title | Size | Status |
 |:---:|:---:|:---|:---:|:---:|
 | **S.1** | **WS1-TRACKING-APP-INTENT** | **`ToggleAmbientTrackingIntent` & App Intent Suite:** Implement `ToggleAmbientTrackingIntent` conforming to `AppIntent` and `AudioRecordingIntent`. Direct Darwin notification or shared `UserDefaults(suiteName:)` IPC to command `AmbientTrackingEngine` without cold-launching the full MapLibre/GRDB hierarchy. | **S** | ✅ Done |
-| **S.2** | **WS2-CONTROL-WIDGETS** | **Control Center & Lock Screen Widget Extension:** Implement iOS 18 `ControlWidgetToggle` for Control Center and Action Button. State synchronization reflecting active tracking status and hex exploration metrics in real time. | **S** | Planned |
+| **S.2** | **WS2-CONTROL-WIDGETS** | **Control Center & Lock Screen Widget Extension:** Implement iOS 18 `ControlWidgetToggle` for Control Center and Action Button. State synchronization reflecting active tracking status and hex exploration metrics in real time. | **S** | ✅ Done |
 
 ### 🔮 Wave O: MetalFogEngine & GPU Spatial Rendering Pipeline
 

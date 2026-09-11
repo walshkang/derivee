@@ -120,6 +120,7 @@ targets:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     sources:
       - path: DeriveeWidget
+      - path: Derivee/Widgets
       - path: Derivee/TrackingAttributes.swift
       - path: Derivee/MultimodalTripAttributes.swift
       - path: Derivee/MilestoneModels.swift

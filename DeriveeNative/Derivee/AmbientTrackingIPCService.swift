@@ -1,5 +1,8 @@
 import Foundation
 import CoreFoundation
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 /// High-performance cross-process IPC service coordinating tracking commands and state synchronization
 /// between App Intents, Control Center widgets, and the host application via Darwin notifications and App Group defaults.
@@ -170,6 +173,13 @@ public final class AmbientTrackingIPCService: @unchecked Sendable {
         let name = CFNotificationName(Self.commandNotification as CFString)
         CFNotificationCenterPostNotification(center, name, nil, nil, true)
         
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        if #available(iOS 18.0, *) {
+            ControlCenter.shared.reloadAllControls()
+        }
+        #endif
+        
         return targetState
     }
     
@@ -197,6 +207,13 @@ public final class AmbientTrackingIPCService: @unchecked Sendable {
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         let name = CFNotificationName(Self.statusNotification as CFString)
         CFNotificationCenterPostNotification(center, name, nil, nil, true)
+        
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        if #available(iOS 18.0, *) {
+            ControlCenter.shared.reloadAllControls()
+        }
+        #endif
     }
     
     // MARK: - Status Queries
