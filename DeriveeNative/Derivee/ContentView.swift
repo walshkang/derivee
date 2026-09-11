@@ -4,7 +4,7 @@ import CoreLocation
 struct ContentView: View {
     @State private var isHydrationComplete = false
     @State private var isCheckingHydration = true
-    @StateObject private var trackingEngine = AmbientTrackingEngine()
+    @StateObject private var trackingEngine = AmbientTrackingEngine.shared
     @State private var spatialStore = SpatialStore()
     @State private var cityDetectionService = CityDetectionService()
     @State private var showTransitSheet = false

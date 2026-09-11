@@ -35,8 +35,11 @@ public struct LiveLocationProvider: LocationProvider {
 
 @MainActor
 final class AmbientTrackingEngine: ObservableObject {
+    public static let shared = AmbientTrackingEngine()
+    
     private let locationManager = CLLocationManager()
     private let userDefaults: UserDefaults
+    private let ipcService: AmbientTrackingIPCService
     
     // Watchdog Shield to keep app alive in background
     private var backgroundSession: CLBackgroundActivitySession?
@@ -81,11 +84,14 @@ final class AmbientTrackingEngine: ObservableObject {
     init(
         locationProvider: any LocationProvider = LiveLocationProvider(),
         databaseManager: SpatialDatabaseManager = .shared,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = AppGroupConfig.sharedUserDefaults,
+        ipcService: AmbientTrackingIPCService? = nil
     ) {
         self.locationProvider = locationProvider
         self.databaseManager = databaseManager
         self.userDefaults = userDefaults
+        let resolvedIPC = ipcService ?? AmbientTrackingIPCService(userDefaults: userDefaults)
+        self.ipcService = resolvedIPC
         
         if userDefaults.object(forKey: AppStorageKeys.isTrackingEnabled) == nil {
             self.isTrackingEnabled = true
@@ -106,6 +112,32 @@ final class AmbientTrackingEngine: ObservableObject {
         
         setupTerminationObserver()
         cleanUpOrphanedLiveActivities()
+        setupDarwinIPC()
+    }
+    
+    private func setupDarwinIPC() {
+        ipcService.registerCommandHandler { [weak self] requestedState in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                if let requested = requestedState {
+                    self.isTrackingEnabled = requested
+                    if requested && !self.isTracking {
+                        self.startTracking()
+                    } else if !requested && self.isTracking {
+                        await self.stopTracking()
+                    }
+                } else {
+                    // Toggle current tracking state
+                    if self.isTracking {
+                        self.isTrackingEnabled = false
+                        await self.stopTracking()
+                    } else {
+                        self.isTrackingEnabled = true
+                        self.startTracking()
+                    }
+                }
+            }
+        }
     }
     
     private func setupTerminationObserver() {
@@ -161,10 +193,14 @@ final class AmbientTrackingEngine: ObservableObject {
         currentNeighborhood = nil
         isTracking = false
         
+        // 6. Stop Darwin IPC listeners
+        ipcService.stopListening()
+        
         logPipeline("🛑 [AmbientTrackingEngine] handleAppTermination complete — all location sessions killed")
     }
     
     deinit {
+        ipcService.stopListening()
         if let observer = terminationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -265,6 +301,13 @@ final class AmbientTrackingEngine: ObservableObject {
         sessionHexCount = 0
         sessionDistanceMeters = 0.0
         
+        ipcService.publishEngineState(
+            isActive: true,
+            sessionHexCount: sessionHexCount,
+            sessionDistanceMeters: sessionDistanceMeters,
+            activeNeighborhood: currentNeighborhood
+        )
+        
         if isLiveActivityEnabled {
             startLiveActivity()
         }
@@ -300,6 +343,12 @@ final class AmbientTrackingEngine: ObservableObject {
         currentNeighborhood = nil
         
         isTracking = false
+        ipcService.publishEngineState(
+            isActive: false,
+            sessionHexCount: 0,
+            sessionDistanceMeters: 0.0,
+            activeNeighborhood: nil
+        )
     }
     
     private func processLocation(_ location: CLLocation) {
@@ -364,6 +413,12 @@ final class AmbientTrackingEngine: ObservableObject {
                         activeNeighborhood: currentNeighborhood,
                         distanceMeters: sessionDistanceMeters
                     )
+                    ipcService.publishEngineState(
+                        isActive: true,
+                        sessionHexCount: sessionHexCount,
+                        sessionDistanceMeters: sessionDistanceMeters,
+                        activeNeighborhood: currentNeighborhood
+                    )
                     Task {
                         await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(45)))
                     }
@@ -395,6 +450,12 @@ final class AmbientTrackingEngine: ObservableObject {
                             generator.impactOccurred()
                             self.sessionHexCount += 1
                         }
+                        self.ipcService.publishEngineState(
+                            isActive: true,
+                            sessionHexCount: self.sessionHexCount,
+                            sessionDistanceMeters: self.sessionDistanceMeters,
+                            activeNeighborhood: self.currentNeighborhood
+                        )
                         if let activity = self.currentActivity {
                             let state = TrackingAttributes.ContentState(
                                 hexesCleared: self.sessionHexCount,
