@@ -1615,7 +1615,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     let dist = userLoc.distance(from: stopLoc)
                     
                     if dist <= radiusMeters {
-                        let stopName: String = row["stop_name"]
+                        let stopName: String = self.sanitizeStopName(row["stop_name"])
                         let routesStr: String = (row["routes"] as? String) ?? ""
                         let routes: [String]
                         if !routesStr.isEmpty {
@@ -1769,7 +1769,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 
                 let sql = "SELECT stop_name, \(locTypeSelect), \(routesSelect), \(parentSelect), \(latSelect), \(lonSelect), \(routeTypeSelect) FROM transit.stops WHERE stop_id = ?"
                 if let row = try Row.fetchOne(db, sql: sql, arguments: [stopId]) {
-                    var name: String = row["stop_name"] ?? ""
+                    var name: String = self.sanitizeStopName(row["stop_name"] ?? "")
                     var locationType: Int = row["location_type"] ?? 1
                     var routesStr: String? = row["routes"]
                     let parentStationId: String? = row["parent_station"]
@@ -1784,7 +1784,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         if isPrimaryGeneric || locationType == 0 {
                             let parentSql = "SELECT stop_name, \(locTypeSelect), \(routesSelect) FROM transit.stops WHERE stop_id = ?"
                             if let parentRow = try Row.fetchOne(db, sql: parentSql, arguments: [parentId]) {
-                                let parentName: String = parentRow["stop_name"] ?? ""
+                                let parentName: String = self.sanitizeStopName(parentRow["stop_name"] ?? "")
                                 if !self.isGenericStopName(parentName, stopId: parentId) {
                                     if isPrimaryGeneric {
                                         name = parentName
@@ -1837,7 +1837,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                                 LIMIT 1
                             """
                             if let nearbyRow = try Row.fetchOne(db, sql: nearbySql, arguments: [lat - latDelta, lat + latDelta, lon - lonDelta, lon + lonDelta, stopId, lat, lat, lon, lon]) {
-                                let nearbyName: String = nearbyRow["stop_name"] ?? ""
+                                let nearbyName: String = self.sanitizeStopName(nearbyRow["stop_name"] ?? "")
                                 if !self.isGenericStopName(nearbyName, stopId: "") {
                                     name = nearbyName.contains("/") || nearbyName.contains("&") ? nearbyName : "\(nearbyName) Area"
                                 }
@@ -1967,7 +1967,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         var seen = Set<String>()
                         var uniqueRows = [Row]()
                         for r in rows {
-                            let key = (r["parent_station"] as String?) ?? (r["stop_name"] as String? ?? (r["stop_id"] as String))
+                            let cleanName = self.sanitizeStopName(r["stop_name"] as String? ?? "")
+                            let key = (r["parent_station"] as String?) ?? (cleanName.isEmpty ? (r["stop_id"] as String) : cleanName)
                             if !seen.contains(key) {
                                 seen.insert(key)
                                 uniqueRows.append(r)
@@ -1998,7 +1999,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         
                         return uniqueRows.enumerated().map { idx, row in
                             let sId: String = row["stop_id"]
-                            let sName: String = row["stop_name"]
+                            let sName: String = self.sanitizeStopName(row["stop_name"])
                             let lat: Double = row["stop_lat"]
                             let lon: Double = row["stop_lon"]
                             let rStr: String? = row["routes"]
@@ -2074,8 +2075,57 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    public func isGenericStopName(_ name: String, stopId: String) -> Bool {
+    // MARK: - Stop Name Sanitization & Classification (Wave PB.2)
+    
+    private static let bayTerminalPattern = try? NSRegularExpression(
+        pattern: #"^BAY\s+(\d+|[A-Z])$"#,
+        options: [.caseInsensitive]
+    )
+    
+    private static let streetSuffixPattern = try? NSRegularExpression(
+        pattern: #"\b(ST|STREET|AV|AVE|AVENUE|BLVD|BOULEVARD|PKWY|PARKWAY|RD|ROAD|DR|DRIVE|LN|LANE|PL|PLACE|CT|COURT|WAY|TER|TERRACE|CIR|CIRCLE|HWY|HIGHWAY)\b"#,
+        options: [.caseInsensitive]
+    )
+    
+    private static let ferryRampPattern = try? NSRegularExpression(
+        pattern: #"^RAMP\s+[A-D](\b.*)?$"#,
+        options: [.caseInsensitive]
+    )
+    
+    /// Cleans internal dispatch noise tokens and normalizes transit terminal titles.
+    public func sanitizeStopName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return name }
+        
+        let upper = trimmed.uppercased()
+        
+        // 1. Dispatch noise at St George Ferry Terminal:
+        // Examples in GTFS:
+        // - "Saint George Ferry & Ramp B S51 & S81"
+        // - "Saint George Ferry & Ramp D S44 & S94"
+        // - "Saint George Ferry & Ramp B"
+        // - "St George Ferry & Ramp B S51 & S81"
+        // - "Ramp B S51 & S81"
+        // - "Ramp A S66"
+        // - "Ramp B"
+        if upper.contains("SAINT GEORGE FERRY & RAMP") ||
+           upper.contains("ST GEORGE FERRY & RAMP") ||
+           upper.contains("ST. GEORGE FERRY & RAMP") {
+            return "St George Ferry Terminal"
+        }
+        
+        // Standalone ramp tokens matching ^RAMP\s+[A-D](\b.*)?$
+        let rampRange = NSRange(location: 0, length: upper.utf16.count)
+        if Self.ferryRampPattern?.firstMatch(in: upper, options: [], range: rampRange) != nil {
+            return "St George Ferry Terminal"
+        }
+        
+        return trimmed
+    }
+    
+    public func isGenericStopName(_ name: String, stopId: String) -> Bool {
+        let cleanName = sanitizeStopName(name)
+        let trimmed = cleanName.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return true }
         
         let upper = trimmed.uppercased()
@@ -2088,9 +2138,26 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         ]
         if genericExact.contains(upper) { return true }
         
+        // Disambiguate standalone terminal bay patterns: ^BAY\s+(\d+|[A-Z])$ (e.g. "Bay 3", "Bay A")
+        let bayRange = NSRange(location: 0, length: upper.utf16.count)
+        if Self.bayTerminalPattern?.firstMatch(in: upper, options: [], range: bayRange) != nil {
+            return true
+        }
+        
+        // Protected real street intersections containing &, /, or street suffixes (St, Ave, Blvd, Pkwy, Rd)
+        if upper.contains("&") || upper.contains("/") {
+            return false
+        }
+        let suffixRange = NSRange(location: 0, length: upper.utf16.count)
+        if Self.streetSuffixPattern?.firstMatch(in: upper, options: [], range: suffixRange) != nil {
+            return false
+        }
+        
+        // Generic prefixes (e.g. "Platform A", "Gate 201", "Stop #402")
+        // NOTE: "BAY " is explicitly excluded and handled strictly by bayTerminalPattern above.
         let genericPrefixes = [
             "BUS STOP (", "TRANSIT STOP (", "TRANSIT STATION (", "STOP #", "STOP NO",
-            "PLATFORM ", "BAY ", "GATE ", "TRACK ", "BERTH ", "DOCK "
+            "PLATFORM ", "GATE ", "TRACK ", "BERTH ", "DOCK "
         ]
         for prefix in genericPrefixes {
             if upper.hasPrefix(prefix) { return true }
@@ -2958,9 +3025,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     }
     
     private func generateBusArrivals(for routeId: String, stopName: String) -> [ArrivalInfo] {
-        let availableDirs = generateFallbackAvailableDirections(for: stopName, routeId: routeId)
-        let (dest1, dir1) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 0, stopName: stopName)
-        let (dest2, dir2) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 1, stopName: stopName)
+        let cleanName = sanitizeStopName(stopName)
+        let availableDirs = generateFallbackAvailableDirections(for: cleanName, routeId: routeId)
+        let (dest1, dir1) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 0, stopName: cleanName)
+        let (dest2, dir2) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 1, stopName: cleanName)
         
         var arrivals: [ArrivalInfo] = []
         if availableDirs.contains(0) {
@@ -3441,7 +3509,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             var results: [SearchResultItem] = []
             for row in rows {
                 let stopId: String = row["stop_id"]
-                let stopName: String = row["stop_name"]
+                let stopName: String = self.sanitizeStopName(row["stop_name"])
                 let lat: Double = row["stop_lat"]
                 let lon: Double = row["stop_lon"]
                 let locationType: Int = row["location_type"] ?? 0

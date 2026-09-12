@@ -258,6 +258,7 @@
 		C39AB913CD50491A0700CE4A /* BusStopNameSanitizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17010EF06921260F5260DFBC /* BusStopNameSanitizationTests.swift */; };
 		C6D590308D719964B3A892A8 /* AppGroupConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC611C9668C4F7157503F3DD /* AppGroupConfig.swift */; };
 		C7A2E127A8CB1655E63F6473 /* GBFSDockValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0EB13573988E786C75D6AB /* GBFSDockValidator.swift */; };
+		C96A52938FB8475871C7E163 /* StopNameSanitizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9866CFA84BA574D7B57A3AD /* StopNameSanitizationTests.swift */; };
 		C9B80174BAE0448114099010 /* RunInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6EE3C7971F315F9C91A2478 /* RunInspectorTests.swift */; };
 		CA0D5E6079A57D95774177E5 /* StationFloor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD899C89F55753DABAB4C870 /* StationFloor.swift */; };
 		CA0D9C339E38BD4512C2356F /* composite_style.json in Resources */ = {isa = PBXBuildFile; fileRef = F309BC99CC7EF399C238B09C /* composite_style.json */; };
@@ -689,6 +690,7 @@
 		D89EE5A7DAD4D46ED08472A6 /* MultimodalTripAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultimodalTripAttributes.swift; sourceTree = "<group>"; };
 		D8AA6177CA7C6527DAE09E18 /* GRDBObservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GRDBObservationTests.swift; sourceTree = "<group>"; };
 		D8F4E8D656594B6F80422A02 /* testRouteComparisonListViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testRouteComparisonListViewSnapshot.1.png; sourceTree = "<group>"; };
+		D9866CFA84BA574D7B57A3AD /* StopNameSanitizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StopNameSanitizationTests.swift; sourceTree = "<group>"; };
 		D9BB8C028C1F65B7EB331BF9 /* MissedConnectionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissedConnectionDetector.swift; sourceTree = "<group>"; };
 		D9D98AB0B55983D69483A051 /* gtfs-realtime-NYCT.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "gtfs-realtime-NYCT.pb.swift"; sourceTree = "<group>"; };
 		DA46EB2F62050B718EF25B29 /* NavigationGuidanceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationGuidanceSheet.swift; sourceTree = "<group>"; };
@@ -1176,6 +1178,7 @@
 				AD49AEE5E58C52B7A99F4602 /* StatenIslandRailwayTests.swift */,
 				3BF9C60FCE26FEC11317A280 /* StationComplexTests.swift */,
 				AFD0D0C312565881E81C6339 /* StationTransitionTests.swift */,
+				D9866CFA84BA574D7B57A3AD /* StopNameSanitizationTests.swift */,
 				8C620FF203F57ED5764A4BF7 /* TrackingEngineTests.swift */,
 				6FE9FC12116C32B644578448 /* TrainInspectorTests.swift */,
 				0EFCFC3014D9FE6A95028C42 /* TransitCartographyTests.swift */,
@@ -1808,6 +1811,7 @@
 				E7A0C08B5F9C67EA6282D50D /* StatenIslandRailwayTests.swift in Sources */,
 				581E7B1603C43882088BD354 /* StationComplexTests.swift in Sources */,
 				022FB2E8E9FD4C606CBACE71 /* StationTransitionTests.swift in Sources */,
+				C96A52938FB8475871C7E163 /* StopNameSanitizationTests.swift in Sources */,
 				9838261106ACCE6615BCBC25 /* TrackingEngineTests.swift in Sources */,
 				3A7A25D9E26AD6E731D343CE /* TrainInspectorTests.swift in Sources */,
 				007BBC6E9424EBAE40FAEB9B /* TransitCartographyTests.swift in Sources */,
