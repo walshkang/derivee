@@ -82,6 +82,8 @@ struct TransitRouteBadge: View {
             } else {
                 Text(lineInfo.name)
                     .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .foregroundColor(Color(hex: lineInfo.textColorHex))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
@@ -148,6 +150,8 @@ struct TransitRouteBadge: View {
         case .regular:
             Text(lineInfo.name)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundColor(Color(hex: lineInfo.textColorHex))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
@@ -202,6 +206,8 @@ struct TransitRouteBadge: View {
         case .regular:
             Text(lineInfo.name)
                 .font(.system(size: 11, weight: .bold, design: .rounded))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 4)
                 .background(Color(hex: lineInfo.colorHex).opacity(0.15))
@@ -255,6 +261,8 @@ struct TransitRouteBadge: View {
                     .foregroundColor(.white)
                 Text(lineInfo.name)
                     .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .foregroundColor(.white)
             }
             .padding(.horizontal, 8)

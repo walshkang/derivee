@@ -1305,7 +1305,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.stopId = stopId
             self.name = name
             self.routeId = routeId
-            self.routeIds = routeIds.isEmpty ? [routeId] : routeIds
+            var seen = Set<String>()
+            let uniqueRoutes = routeIds.filter { seen.insert($0).inserted }
+            self.routeIds = uniqueRoutes.isEmpty ? [routeId] : uniqueRoutes
             self.routeType = routeType
             self.modalClass = modalClass ?? TransitModalClass.from(routeType: routeType)
             self.coordinate = coordinate
@@ -1855,17 +1857,26 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     
                     let isBusLocation = locationType == 0 || stopId.hasPrefix("BUS_") || name.contains("/")
                     
-                    let routeIds: [String]
+                    let rawRouteIds: [String]
                     if let rStr = routesStr, !rStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         let parsed = rStr.components(separatedBy: ",")
                             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                             .filter { !$0.isEmpty }
-                        routeIds = parsed.isEmpty ? (isBusLocation ? self.inferBusRoutes(from: name, stopId: stopId) : [self.inferRouteId(from: stopId, name: name)]) : parsed
+                        rawRouteIds = parsed.isEmpty ? (isBusLocation ? self.inferBusRoutes(from: name, stopId: stopId) : [self.inferRouteId(from: stopId, name: name)]) : parsed
                     } else if isBusLocation {
-                        routeIds = self.inferBusRoutes(from: name, stopId: stopId)
+                        rawRouteIds = self.inferBusRoutes(from: name, stopId: stopId)
                     } else {
-                        routeIds = [self.inferRouteId(from: stopId, name: name)]
+                        rawRouteIds = [self.inferRouteId(from: stopId, name: name)]
                     }
+                    
+                    var seenRouteSet = Set<String>()
+                    var dedupedRouteIds = [String]()
+                    for r in rawRouteIds {
+                        if seenRouteSet.insert(r).inserted {
+                            dedupedRouteIds.append(r)
+                        }
+                    }
+                    let routeIds = dedupedRouteIds
                     
                     let routeType: Int
                     if let raw = rawRouteType {

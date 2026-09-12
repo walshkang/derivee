@@ -193,6 +193,9 @@ struct DepartureMatrixView: View {
             if p1.minute != p2.minute {
                 return p1.minute < p2.minute
             }
+            if p1.routeId != p2.routeId {
+                return p1.routeId < p2.routeId
+            }
             return p1.id < p2.id
         }
     }
@@ -322,7 +325,18 @@ struct DepartureMatrixView: View {
             resultMap[h] = deduplicateDepartures(resultMap[h] ?? [])
         }
         
+        // Reset isNextDeparture and isImminentLive across all departures before tagging anchor
+        for h in 0..<24 {
+            if let deps = resultMap[h] {
+                for idx in deps.indices {
+                    resultMap[h]?[idx].isNextDeparture = false
+                    resultMap[h]?[idx].isImminentLive = false
+                }
+            }
+        }
+        
         // Find the single immediate upcoming departure across all 24 hours to tag with `isNextDeparture` (single anchor)
+        // Breaks ties by routeId lexicographical order (enforced by deduplicateDepartures sort)
         var foundNext = false
         for hOffset in 0..<24 {
             let h = (currentHour + hOffset) % 24
@@ -344,6 +358,9 @@ struct DepartureMatrixView: View {
             let sortedDeps = (resultMap[h] ?? []).sorted { p1, p2 in
                 if p1.minute != p2.minute {
                     return p1.minute < p2.minute
+                }
+                if p1.routeId != p2.routeId {
+                    return p1.routeId < p2.routeId
                 }
                 return p1.id < p2.id
             }
@@ -488,8 +505,10 @@ struct DepartureMatrixView: View {
                                     HStack(spacing: 4) {
                                         TransitRouteBadge(routeId: rId, lineInfo: rInfo, size: .filter, isSelected: isSelected)
                                         
-                                        Text(rInfo.name)
-                                            .font(.system(size: 11, weight: isSelected ? .bold : .medium, design: .rounded))
+                                        if rInfo.modalClass != .bus {
+                                            Text(rInfo.name)
+                                                .font(.system(size: 11, weight: isSelected ? .bold : .medium, design: .rounded))
+                                        }
                                     }
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 5)

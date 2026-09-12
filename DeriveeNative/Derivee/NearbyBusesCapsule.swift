@@ -29,7 +29,7 @@ struct NearbyBusesCapsule: View {
     }
     
     public var body: some View {
-        VStack(alignment: .trailing, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             if isExpanded {
                 // Expanded Quick Card of nearby bus stops
                 VStack(alignment: .leading, spacing: 10) {

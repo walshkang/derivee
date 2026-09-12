@@ -708,8 +708,15 @@ struct MapView: UIViewRepresentable {
             routeLayer.lineOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
             style.insertLayer(routeLayer, above: routeCasingLayer)
             
-            // Nearby Bus Stops Source & Layer
-            let busStopsSource = MLNShapeSource(identifier: nearbyBusStopsSourceId, features: [], options: nil)
+            // Nearby Bus Stops Source & Layer (Clustered to eliminate overlapping grapes at transit hubs)
+            let busStopsSource = MLNShapeSource(
+                identifier: nearbyBusStopsSourceId,
+                features: [],
+                options: [
+                    .clustered: true,
+                    .clusterRadius: 30
+                ]
+            )
             style.addSource(busStopsSource)
             
             let busStopsLayer = MLNCircleStyleLayer(identifier: nearbyBusStopsLayerId, source: busStopsSource)
@@ -1291,11 +1298,29 @@ struct MapView: UIViewRepresentable {
             ]
             let features = mapView.visibleFeatures(in: hitBox, styleLayerIdentifiers: targetLayers)
             
-            if let closest = TransitHitTest.closestFeature(to: point, among: features, in: mapView),
-               let stopId = closest.attributes["id"] as? String {
-                DispatchQueue.main.async {
-                    self.parent.selectedTransitStop = stopId
-                    self.parent.showTransitSheet = true
+            if let closest = TransitHitTest.closestFeature(to: point, among: features, in: mapView) {
+                if let stopId = closest.attributes["id"] as? String {
+                    DispatchQueue.main.async {
+                        self.parent.selectedTransitStop = stopId
+                        self.parent.showTransitSheet = true
+                    }
+                } else if let clusterFeature = closest as? MLNPointFeatureCluster,
+                          let busSource = mapView.style?.source(withIdentifier: nearbyBusStopsSourceId) as? MLNShapeSource {
+                    let leaves = busSource.leaves(of: clusterFeature, offset: 0, limit: 1)
+                    if let firstStop = leaves.first, let stopId = firstStop.attributes["id"] as? String {
+                        DispatchQueue.main.async {
+                            self.parent.selectedTransitStop = stopId
+                            self.parent.showTransitSheet = true
+                        }
+                    } else {
+                        DispatchQueue.main.async {
+                            self.parent.onAmbientMapTap?()
+                        }
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.parent.onAmbientMapTap?()
+                    }
                 }
             } else {
                 DispatchQueue.main.async {
