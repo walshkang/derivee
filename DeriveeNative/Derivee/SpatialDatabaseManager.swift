@@ -1542,7 +1542,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         /// Direction 0 corresponds to Uptown / North / Manhattan / Queens / Bronx / Inbound / East.
         public var resolvedDirectionId: Int {
             let dir = (direction ?? "").uppercased()
-            if dir.contains("DOWNTOWN") || dir.contains("SOUTH") || dir.contains("BROOKLYN") || dir.contains("OUTBOUND") || dir.contains("WEST") {
+            if dir.contains("DOWNTOWN") || dir.contains("SOUTH") || dir.contains("BROOKLYN") || dir.contains("OUTBOUND") || dir.contains("WEST") || dir.contains("TOTTENVILLE") {
                 return 1
             }
             return 0
@@ -1880,7 +1880,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     let modalClass = TransitModalClass.from(routeType: routeType)
                     let isBus = modalClass == .bus
                     let primaryRouteId = routeIds.first ?? (isBus ? "M15" : "L")
-                    let arrivals = isBus ? self.generateBusArrivals(for: primaryRouteId, stopName: name) : self.generateArrivals(for: primaryRouteId)
+                    let arrivals = isBus ? self.generateBusArrivals(for: primaryRouteId, stopName: name) : self.generateArrivals(for: primaryRouteId, stopId: stopId)
                     return StopDetails(stopId: stopId, name: name, routeId: primaryRouteId, routeIds: routeIds, routeType: routeType, modalClass: modalClass, arrivals: arrivals)
                 }
             } catch let error as DatabaseError {
@@ -2376,6 +2376,20 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 let resolvedIds = self.resolvePlatformStopIds(for: stopId, in: db)
                 let idPlaceholders = Array(repeating: "?", count: resolvedIds.count).joined(separator: ", ")
                 
+                // Terminal directional filtering (PB.1 / Bugs 1, 2)
+                let cleanStop = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
+                let isSIRRoute = (routeIds + [routeId ?? ""]).map { $0.uppercased() }.contains { $0 == "SIR" || $0 == "SI" } || cleanStop.hasPrefix("S31") || cleanStop.hasPrefix("S09")
+                if isSIRRoute {
+                    if (cleanStop == "S31" || cleanStop.hasPrefix("S31")) && directionId == 0 {
+                        let emptyRecords = (0..<24).map { HourScheduleRecord(hourOfDay: $0, departures: []) }
+                        return TimetableResult(records: emptyRecords, isHistoricalFallback: false, isObservedReplay: false)
+                    }
+                    if (cleanStop == "S09" || cleanStop.hasPrefix("S09")) && directionId == 1 {
+                        let emptyRecords = (0..<24).map { HourScheduleRecord(hourOfDay: $0, departures: []) }
+                        return TimetableResult(records: emptyRecords, isHistoricalFallback: false, isObservedReplay: false)
+                    }
+                }
+                
                 // Past days ($dayOffset < 0): Try Observed Reality Replay from stop_events
                 if dayOffset < 0 {
                     let eventColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stop_events)")
@@ -2653,7 +2667,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     if !rows.isEmpty {
                         let dirs = rows.compactMap { row -> Int? in row["direction_id"] }
                         if !dirs.isEmpty {
-                            return Set(dirs)
+                            return self.filterTerminalDirections(Set(dirs), for: stopId, routeId: routeId, routeIds: routeIds)
                         }
                     }
                 }
@@ -2677,7 +2691,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                             row["direction_id"]
                         }
                         if !dirs.isEmpty {
-                            return Set(dirs)
+                            return self.filterTerminalDirections(Set(dirs), for: stopId, routeId: routeId, routeIds: routeIds)
                         }
                     }
                 }
@@ -2692,8 +2706,39 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             if let row = try? Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
                 stopName = row["stop_name"] ?? ""
             }
-            return self.generateFallbackAvailableDirections(for: stopId, stopName: stopName, routeId: routeId ?? "L")
+            return self.filterTerminalDirections(
+                self.generateFallbackAvailableDirections(for: stopId, stopName: stopName, routeId: routeId ?? "L"),
+                for: stopId,
+                stopName: stopName,
+                routeId: routeId,
+                routeIds: routeIds
+            )
         }
+    }
+    
+    private func filterTerminalDirections(_ dirs: Set<Int>, for stopId: String, stopName: String = "", routeId: String? = nil, routeIds: [String] = []) -> Set<Int> {
+        let cleanId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
+        let lowerId = stopId.lowercased()
+        let lowerName = stopName.lowercased()
+        let allRoutes = (routeIds + [routeId ?? ""]).map { $0.uppercased() }
+        let isSIR = allRoutes.contains("SIR") || allRoutes.contains("SI") || cleanId.hasPrefix("S31") || cleanId.hasPrefix("S09")
+        
+        let isStGeorge = cleanId == "S31" || cleanId.hasPrefix("S31") || lowerId.contains("st_george") || lowerName.contains("st george") || lowerName.contains("st. george")
+        let isTottenville = cleanId == "S09" || cleanId.hasPrefix("S09") || lowerId.contains("tottenville") || lowerName.contains("tottenville")
+        
+        var filtered = dirs
+        if isSIR || cleanId.hasPrefix("S") {
+            if isStGeorge {
+                filtered.remove(0)
+                if filtered.isEmpty { filtered.insert(1) }
+                return filtered
+            } else if isTottenville {
+                filtered.remove(1)
+                if filtered.isEmpty { filtered.insert(0) }
+                return filtered
+            }
+        }
+        return filtered
     }
     
     public func fetchRouteCoordinates(for routeId: String) async throws -> [CLLocationCoordinate2D]? {
@@ -3021,7 +3066,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     routeId: primaryRoute,
                     routeIds: known.routes,
                     routeType: 1,
-                    arrivals: self.generateArrivals(for: primaryRoute)
+                    arrivals: self.generateArrivals(for: primaryRoute, stopId: stopId)
                 )
             }
             
@@ -3035,12 +3080,12 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 routeId: routeId,
                 routeIds: routeIds,
                 routeType: routeType,
-                arrivals: isBus ? self.generateBusArrivals(for: routeId, stopName: name) : self.generateArrivals(for: routeId)
+                arrivals: isBus ? self.generateBusArrivals(for: routeId, stopName: name) : self.generateArrivals(for: routeId, stopId: stopId)
             )
         }
     }
     
-    private func generateArrivals(for routeId: String) -> [ArrivalInfo] {
+    func generateArrivals(for routeId: String, stopId: String? = nil) -> [ArrivalInfo] {
         switch routeId.uppercased() {
         case "L":
             return [
@@ -3097,11 +3142,21 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 ArrivalInfo(line: "J", destination: "Jamaica Center", minutes: 4, direction: "Queens-bound", distanceDescription: "2 stops away"),
                 ArrivalInfo(line: "J", destination: "Broad St", minutes: 8, direction: "Manhattan-bound", distanceDescription: "4 stops away")
             ]
-        case "SIR":
-            return [
-                ArrivalInfo(line: "SIR", destination: "St George", minutes: 5, direction: "Inbound (St. George)", distanceDescription: "3 stops away"),
-                ArrivalInfo(line: "SIR", destination: "Tottenville", minutes: 12, direction: "Outbound (Tottenville)", distanceDescription: "7 stops away")
-            ]
+        case "SIR", "SI":
+            let cleanStop = (stopId ?? "").uppercased().replacingOccurrences(of: "STOP_", with: "")
+            let isStGeorge = cleanStop == "S31" || cleanStop.hasPrefix("S31") || cleanStop.contains("ST_GEORGE")
+            let isTottenville = cleanStop == "S09" || cleanStop.hasPrefix("S09") || cleanStop.contains("TOTTENVILLE")
+            
+            let stGeorgeArrival = ArrivalInfo(line: "SIR", destination: "St George", minutes: 5, direction: "Inbound (St George)", distanceDescription: "3 stops away")
+            let tottenvilleArrival = ArrivalInfo(line: "SIR", destination: "Tottenville", minutes: 12, direction: "Outbound (Tottenville)", distanceDescription: "7 stops away")
+            
+            if isStGeorge {
+                return [tottenvilleArrival]
+            } else if isTottenville {
+                return [stGeorgeArrival]
+            } else {
+                return [stGeorgeArrival, tottenvilleArrival]
+            }
         default:
             if TransitRealtimeService.SubwayFeed.isBusRoute(routeId) {
                 let (dest1, dir1) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 0)
@@ -3152,10 +3207,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
 
         // Single-direction terminal patterns or one-way stops
-        if lowerId.contains("8th_ave") || lowerId.contains("eighth_ave") || lowerId.contains("van_cortlandt") || lowerId.contains("wakefield") || lowerId.contains("inwood") || lowerId.contains("flushing") || lowerId.contains("pelham") || lowerId.contains("norwood") || lowerId.contains("dir1_only") {
+        if lowerId.contains("8th_ave") || lowerId.contains("eighth_ave") || lowerId.contains("van_cortlandt") || lowerId.contains("wakefield") || lowerId.contains("inwood") || lowerId.contains("flushing") || lowerId.contains("pelham") || lowerId.contains("norwood") || lowerId.contains("s31") || lowerId.contains("st_george") || lowerName.contains("st george") || lowerName.contains("st. george") || lowerId.contains("dir1_only") {
             return [1] // Southbound / Brooklyn / Outbound only
         }
-        if lowerId.contains("canarsie") || lowerId.contains("rockaway") || lowerId.contains("south_ferry") || lowerId.contains("flatbush") || lowerId.contains("coney_island") || lowerId.contains("church_ave") || lowerId.contains("hudson_yards") || lowerId.contains("world_trade") || lowerId.contains("broad_st") || lowerId.contains("tottenville") || lowerId.contains("dir0_only") {
+        if lowerId.contains("canarsie") || lowerId.contains("rockaway") || lowerId.contains("south_ferry") || lowerId.contains("flatbush") || lowerId.contains("coney_island") || lowerId.contains("church_ave") || lowerId.contains("hudson_yards") || lowerId.contains("world_trade") || lowerId.contains("broad_st") || lowerId.contains("tottenville") || lowerId.contains("s09") || lowerName.contains("tottenville") || lowerId.contains("dir0_only") {
             return [0] // Northbound / Manhattan / Inbound only
         }
         if lowerId.contains("1way_sb") || lowerId.contains("1way_south") {

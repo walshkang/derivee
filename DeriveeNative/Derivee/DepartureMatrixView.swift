@@ -93,8 +93,8 @@ struct DepartureMatrixView: View {
             return ["Uptown & Queens", "Downtown & Brooklyn"]
         case "J", "Z":
             return ["Queens (Jamaica)", "Manhattan (Broad St)"]
-        case "SIR":
-            return ["Inbound (St. George)", "Outbound (Tottenville)"]
+        case "SIR", "SI":
+            return ["Inbound (St George)", "Outbound (Tottenville)"]
         default:
             return ["Uptown / Northbound", "Downtown / Southbound"]
         }

@@ -91,8 +91,8 @@ public struct TransitRouteData {
             return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#FCCC0A", textColorHex: "#000000", modalClass: .subway, routeType: 1)
         case "S", "GS", "FS", "H":
             return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#808183", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
-        case "SIR":
-            return LineInfo(routeId: cleanId, name: "SIR", colorHex: "#0078C6", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 1)
+        case "SIR", "SI":
+            return LineInfo(routeId: cleanId, name: "SIR", colorHex: "#08179C", textColorHex: "#FFFFFF", modalClass: .subway, routeType: 2)
         default:
             if isFerryRoute(cleanId) {
                 return LineInfo(routeId: cleanId, name: cleanId, colorHex: "#00A3E0", textColorHex: "#FFFFFF", modalClass: .ferry, routeType: 4)
@@ -245,7 +245,10 @@ public struct TransitRouteData {
     public static func inferRouteId(from id: String) -> String {
         let clean = id.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         
-        let validRoutes = ["1", "2", "3", "4", "5", "6", "7", "A", "B", "C", "D", "E", "F", "G", "J", "L", "M", "N", "Q", "R", "S", "W", "Z", "SIR"]
+        let validRoutes = ["1", "2", "3", "4", "5", "6", "7", "A", "B", "C", "D", "E", "F", "G", "J", "L", "M", "N", "Q", "R", "S", "W", "Z", "SIR", "SI"]
+        if clean == "SI" || clean == "SIR" {
+            return "SIR"
+        }
         if validRoutes.contains(clean) {
             return clean
         }
@@ -420,7 +423,7 @@ public struct TransitRouteData {
                 CLLocationCoordinate2D(latitude: 40.7525, longitude: -73.9775)  // Grand Central - 42 St
             ]
             
-        case "SIR":
+        case "SIR", "SI":
             // Staten Island Railway
             return [
                 CLLocationCoordinate2D(latitude: 40.6430, longitude: -74.0730), // St. George
@@ -430,7 +433,7 @@ public struct TransitRouteData {
             ]
             
         default:
-            let validRoutes = ["1", "2", "3", "4", "5", "6", "7", "A", "B", "C", "D", "E", "F", "G", "J", "L", "M", "N", "Q", "R", "S", "W", "Z", "SIR"]
+            let validRoutes = ["1", "2", "3", "4", "5", "6", "7", "A", "B", "C", "D", "E", "F", "G", "J", "L", "M", "N", "Q", "R", "S", "W", "Z", "SIR", "SI"]
             if validRoutes.contains(routeId.uppercased()) {
                 // Generic NYC Midtown-Downtown corridor
                 return [

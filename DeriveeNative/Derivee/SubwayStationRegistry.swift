@@ -76,6 +76,7 @@ public enum SubwayStationRegistry {
         "L": (north: ["L01"], south: ["L29"]),
         "G": (north: ["G22"], south: ["F27"]),
         "SIR": (north: ["S31"], south: ["S09"]),
+        "SI": (north: ["S31"], south: ["S09"]),
         // Boston (MBTA) Subway
         "RED": (north: ["place-alfcl"], south: ["place-asmnl", "place-brntn"]),
         "ORANGE": (north: ["place-ogmnl"], south: ["place-forhl"]),

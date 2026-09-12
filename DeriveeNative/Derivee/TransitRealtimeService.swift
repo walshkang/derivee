@@ -63,7 +63,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 return .nqrw
             case "L":
                 return .l
-            case "SIR":
+            case "SIR", "SI":
                 return .sir
             default:
                 if clean.hasPrefix("6") || clean.hasPrefix("7") { return .numbered }
@@ -355,6 +355,24 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         }
                     }
                     
+                    // Terminal directional filtering (PB.1 / Bugs 1, 2):
+                    // Suppress impossible northbound departures at St George and impossible southbound departures at Tottenville
+                    let cleanRoute = tripRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                    let isSIR = cleanRoute == "SIR" || cleanRoute == "SI"
+                    if isSIR {
+                        let isStGeorge = cleanStopId == "S31" || cleanStopId.hasPrefix("S31")
+                        let isTottenville = cleanStopId == "S09" || cleanStopId.hasPrefix("S09")
+                        if isStGeorge {
+                            if destination.contains("St George") || direction.contains("Inbound") || currentStopId.hasSuffix("N") {
+                                continue
+                            }
+                        } else if isTottenville {
+                            if destination.contains("Tottenville") || direction.contains("Outbound") || currentStopId.hasSuffix("S") {
+                                continue
+                            }
+                        }
+                    }
+                    
                     rawArrivals.append((
                         line: tripRouteId,
                         destination: destination,
@@ -412,6 +430,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
         let f = feedRoute.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let t = targetRoute.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         if f == t { return true }
+        if (f == "SI" && t == "SIR") || (f == "SIR" && t == "SI") { return true }
         // Clean agency prefixes like "MTA NYCT_M10" -> "M10"
         let cleanFeed = f.components(separatedBy: "_").last ?? f
         let cleanTarget = t.components(separatedBy: "_").last ?? t
@@ -480,8 +499,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
         case "J", "Z":
             if isNorthbound { return "Queens-bound" }
             if isSouthbound { return "Manhattan-bound" }
-        case "SIR":
-            if isNorthbound { return "Inbound (St. George)" }
+        case "SIR", "SI":
+            if isNorthbound { return "Inbound (St George)" }
             if isSouthbound { return "Outbound (Tottenville)" }
         default:
             break
@@ -832,7 +851,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
         }
         
         // 4. Disambiguated Output Formatting
-        var label = "\(cleanLine) to \(terminalName)"
+        let displayLine = (cleanLine == "SI") ? "SIR" : cleanLine
+        var label = "\(displayLine) to \(terminalName)"
         if isShortTurn {
             label += " (Short Turn)"
         }

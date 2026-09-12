@@ -309,6 +309,7 @@
 		E68315879251CC0BA705BBFE /* TarExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB6441E329AB503A0902905 /* TarExtractor.swift */; };
 		E77438059773BB3D95A7CA61 /* GTFSRealtimeStreamProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D29252B85CFB08407EC3D8D8 /* GTFSRealtimeStreamProcessor.swift */; };
 		E78C9ED2D29E0FA2E88BC168 /* testConfidenceBandCanvasActiveScrubbingSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 138534CC34C2D1166573E06B /* testConfidenceBandCanvasActiveScrubbingSnapshot.1.png */; };
+		E7A0C08B5F9C67EA6282D50D /* StatenIslandRailwayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD49AEE5E58C52B7A99F4602 /* StatenIslandRailwayTests.swift */; };
 		E9323FA55C54D1214BF6F9EF /* RouteComparisonModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDF34BF165A20C611C77C859 /* RouteComparisonModelTests.swift */; };
 		EA03F6209F847793CCB2A4AA /* testCitySelectorPillSnapshots.1.png in Resources */ = {isa = PBXBuildFile; fileRef = D71C1EF9BB8CB7783240BD04 /* testCitySelectorPillSnapshots.1.png */; };
 		EA09408674D08E7A3948EDFF /* SubwayPositionInterpolatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEB93D862AEF3BD0F00847F /* SubwayPositionInterpolatorTests.swift */; };
@@ -620,6 +621,7 @@
 		AAB08F70BD61134E953A9F76 /* TrackingControlWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingControlWidget.swift; sourceTree = "<group>"; };
 		AC457A537529DB55EEC91D2C /* RouteComparisonViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteComparisonViewTests.swift; sourceTree = "<group>"; };
 		ACEA1BA69C2073E437F97CAA /* POIMaskingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POIMaskingTests.swift; sourceTree = "<group>"; };
+		AD49AEE5E58C52B7A99F4602 /* StatenIslandRailwayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatenIslandRailwayTests.swift; sourceTree = "<group>"; };
 		AE231D92FCB482AD8C3E6436 /* H3SpatialMemoryEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H3SpatialMemoryEngine.swift; sourceTree = "<group>"; };
 		AE52C1AEF96AD03646AAC256 /* OrientationClusterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationClusterTests.swift; sourceTree = "<group>"; };
 		AECB22D323FB4F1FADD6D8B8 /* CameraBounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraBounds.swift; sourceTree = "<group>"; };
@@ -1171,6 +1173,7 @@
 				F6EE3C7971F315F9C91A2478 /* RunInspectorTests.swift */,
 				6BAC4FDF126FEEE06EED9D7A /* SettingsDeepLinkTests.swift */,
 				FD3018C4BA13CF89BEBFCCBA /* SpatialStoreFogTests.swift */,
+				AD49AEE5E58C52B7A99F4602 /* StatenIslandRailwayTests.swift */,
 				3BF9C60FCE26FEC11317A280 /* StationComplexTests.swift */,
 				AFD0D0C312565881E81C6339 /* StationTransitionTests.swift */,
 				8C620FF203F57ED5764A4BF7 /* TrackingEngineTests.swift */,
@@ -1802,6 +1805,7 @@
 				C9B80174BAE0448114099010 /* RunInspectorTests.swift in Sources */,
 				EC99202B32B67D833CB29CE7 /* SettingsDeepLinkTests.swift in Sources */,
 				6F7AFB2044DA5AE96EB8CFB8 /* SpatialStoreFogTests.swift in Sources */,
+				E7A0C08B5F9C67EA6282D50D /* StatenIslandRailwayTests.swift in Sources */,
 				581E7B1603C43882088BD354 /* StationComplexTests.swift in Sources */,
 				022FB2E8E9FD4C606CBACE71 /* StationTransitionTests.swift in Sources */,
 				9838261106ACCE6615BCBC25 /* TrackingEngineTests.swift in Sources */,

@@ -46,7 +46,7 @@ struct TransitRouteBadge: View {
     
     @ViewBuilder
     private func renderSubwayBadge() -> some View {
-        let isSingleChar = lineInfo.name.count <= 2 && !["SIR", "RED", "PATH"].contains(lineInfo.name.uppercased())
+        let isSingleChar = lineInfo.name.count <= 2 && !["SIR", "SI", "RED", "PATH"].contains(lineInfo.name.uppercased())
         
         switch size {
         case .large:
