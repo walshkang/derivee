@@ -1153,13 +1153,18 @@ struct MapView: UIViewRepresentable {
         
         /// Smoothly pans and zooms the camera to frame the user's station and the active route polyline,
         /// accounting for the bottom-sheet presentation detent in edge padding.
+        /// Camera Safety Invariant (Wave PB.3): Filters out errant coordinates (>45km / 0.4° lat from station).
         func frameRouteAndStation(
             coordinates: [CLLocationCoordinate2D],
             station: CLLocationCoordinate2D,
             in mapView: MLNMapView,
             animated: Bool = true
         ) {
-            var allPoints = coordinates
+            let validCoords = coordinates.filter { pt in
+                abs(pt.latitude - station.latitude) < 0.4 &&
+                abs(pt.longitude - station.longitude) < 0.5
+            }
+            var allPoints = validCoords
             allPoints.append(station)
             
             guard let first = allPoints.first else { return }

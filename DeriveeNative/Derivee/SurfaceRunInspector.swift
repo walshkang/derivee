@@ -55,6 +55,7 @@ public struct SurfaceRunInspector: View {
     public let arrival: SpatialDatabaseManager.ArrivalInfo
     public let currentStopId: String
     public let currentStopName: String
+    public let currentStopCoordinate: CLLocationCoordinate2D?
     public let routeConfig: SurfaceInspectableRoute
     public var followOnArrival: SpatialDatabaseManager.ArrivalInfo? = nil
     public var onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
@@ -75,6 +76,7 @@ public struct SurfaceRunInspector: View {
         arrival: SpatialDatabaseManager.ArrivalInfo,
         currentStopId: String,
         currentStopName: String,
+        currentStopCoordinate: CLLocationCoordinate2D? = nil,
         modalClass: TransitModalClass = .bus,
         followOnArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
@@ -84,6 +86,7 @@ public struct SurfaceRunInspector: View {
         self.arrival = arrival
         self.currentStopId = currentStopId
         self.currentStopName = currentStopName
+        self.currentStopCoordinate = currentStopCoordinate
         self.routeConfig = modalClass
         self.followOnArrival = followOnArrival
         self.onFocusMap = onFocusMap
@@ -95,6 +98,7 @@ public struct SurfaceRunInspector: View {
         arrival: SpatialDatabaseManager.ArrivalInfo,
         currentStopId: String,
         currentStopName: String,
+        currentStopCoordinate: CLLocationCoordinate2D? = nil,
         routeConfig: SurfaceInspectableRoute,
         followOnArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
@@ -104,6 +108,7 @@ public struct SurfaceRunInspector: View {
         self.arrival = arrival
         self.currentStopId = currentStopId
         self.currentStopName = currentStopName
+        self.currentStopCoordinate = currentStopCoordinate
         self.routeConfig = routeConfig
         self.followOnArrival = followOnArrival
         self.onFocusMap = onFocusMap
@@ -561,9 +566,14 @@ public struct SurfaceRunInspector: View {
     
     private func synchronizeWithMap() {
         let coord = stopLadder.first(where: { $0.isCurrent })?.coordinate ??
-                    CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855)
-        onFocusMap?(coord)
-        dismiss()
+                    currentStopCoordinate ??
+                    stopLadder.first?.coordinate
+        if let coord = coord {
+            onFocusMap?(coord)
+            dismiss()
+        } else {
+            dismiss()
+        }
     }
     
     private func loadInspectorData() async {
@@ -592,18 +602,22 @@ public struct SurfaceRunInspector: View {
             }
         }
         
-        // 3. Fetch Stop Ladder & Synchronize Map Polyline (Wave PA.5)
+        // 3. Fetch Stop Ladder & Synchronize Map Polyline (Wave PA.5 & Wave PB.3)
         do {
             let ladder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
                 routeId: arrival.line,
                 directionId: directionId,
                 currentStopId: currentStopId,
-                currentArrivalMinutes: arrival.minutes
+                currentArrivalMinutes: arrival.minutes,
+                tappedCoordinate: currentStopCoordinate
             )
             
-            let stationCoord = ladder.first(where: { $0.isCurrent })?.coordinate ??
-                               ladder.first?.coordinate ??
-                               CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855)
+            var stationCoord = ladder.first(where: { $0.isCurrent })?.coordinate ??
+                               currentStopCoordinate ??
+                               ladder.first?.coordinate
+            if stationCoord == nil {
+                stationCoord = try? await SpatialDatabaseManager.shared.fetchStopCoordinate(for: currentStopId)
+            }
             
             let polyline = await TransitRouteData.resolveInspectionPolyline(
                 routeId: arrival.line,
@@ -611,21 +625,28 @@ public struct SurfaceRunInspector: View {
                 fallbackStops: ladder.map(\.coordinate)
             )
             
-            let command = RouteInspectionCommand(
-                routeId: arrival.line,
-                lineName: lineInfo.name,
-                agencyColorHex: lineInfo.colorHex,
-                casingColorHex: "#FFFFFF",
-                modalClass: routeConfig.modalClass,
-                coordinates: polyline,
-                stationCoordinate: stationCoord,
-                shouldFrameCamera: true
-            )
-            
-            await MainActor.run {
-                self.stopLadder = ladder
-                self.isLoadingLadder = false
-                self.onInspectRoute?(command)
+            if let validStationCoord = stationCoord {
+                let command = RouteInspectionCommand(
+                    routeId: arrival.line,
+                    lineName: lineInfo.name,
+                    agencyColorHex: lineInfo.colorHex,
+                    casingColorHex: "#FFFFFF",
+                    modalClass: routeConfig.modalClass,
+                    coordinates: polyline,
+                    stationCoordinate: validStationCoord,
+                    shouldFrameCamera: true
+                )
+                
+                await MainActor.run {
+                    self.stopLadder = ladder
+                    self.isLoadingLadder = false
+                    self.onInspectRoute?(command)
+                }
+            } else {
+                await MainActor.run {
+                    self.stopLadder = ladder
+                    self.isLoadingLadder = false
+                }
             }
         } catch {
             await MainActor.run {

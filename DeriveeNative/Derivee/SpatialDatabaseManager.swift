@@ -1289,6 +1289,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let routeIds: [String]
         public let routeType: Int // GTFS route_type (0: LRT, 1: Subway, 2: Rail, 3: Bus, 4: Ferry, etc.)
         public let modalClass: TransitModalClass
+        public let coordinate: CLLocationCoordinate2D?
         public let arrivals: [ArrivalInfo]
         
         public init(
@@ -1298,6 +1299,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             routeIds: [String] = [],
             routeType: Int,
             modalClass: TransitModalClass? = nil,
+            coordinate: CLLocationCoordinate2D? = nil,
             arrivals: [ArrivalInfo]
         ) {
             self.stopId = stopId
@@ -1306,6 +1308,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.routeIds = routeIds.isEmpty ? [routeId] : routeIds
             self.routeType = routeType
             self.modalClass = modalClass ?? TransitModalClass.from(routeType: routeType)
+            self.coordinate = coordinate
             self.arrivals = arrivals
         }
     }
@@ -1881,7 +1884,22 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     let isBus = modalClass == .bus
                     let primaryRouteId = routeIds.first ?? (isBus ? "M15" : "L")
                     let arrivals = isBus ? self.generateBusArrivals(for: primaryRouteId, stopName: name) : self.generateArrivals(for: primaryRouteId, stopId: stopId)
-                    return StopDetails(stopId: stopId, name: name, routeId: primaryRouteId, routeIds: routeIds, routeType: routeType, modalClass: modalClass, arrivals: arrivals)
+                    let coord: CLLocationCoordinate2D?
+                    if let lat = stopLat, let lon = stopLon {
+                        coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                    } else {
+                        coord = nil
+                    }
+                    return StopDetails(
+                        stopId: stopId,
+                        name: name,
+                        routeId: primaryRouteId,
+                        routeIds: routeIds,
+                        routeType: routeType,
+                        modalClass: modalClass,
+                        coordinate: coord,
+                        arrivals: arrivals
+                    )
                 }
             } catch let error as DatabaseError {
                 print("⚠️ Transit DB table missing or unattached: \(error.message). Using fallback.")
@@ -1941,17 +1959,38 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    /// Fetches the coordinate for a given stop ID from `transit.stops`.
+    public func fetchStopCoordinate(for stopId: String) async throws -> CLLocationCoordinate2D? {
+        return try await dbWriter.read { db in
+            try self.ensureTransitAttached(in: db)
+            let sql = "SELECT stop_lat, stop_lon FROM transit.stops WHERE stop_id = ? LIMIT 1"
+            if let row = try Row.fetchOne(db, sql: sql, arguments: [stopId]),
+               let lat = row["stop_lat"] as? Double,
+               let lon = row["stop_lon"] as? Double {
+                return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+            }
+            return nil
+        }
+    }
+
     /// Fetches the ordered progression of stops along a route for the Track Thermometer.
     /// Marks passed stops, the current stop, terminus stops, and progressive arrival minutes.
+    /// Supports both subway scheduled patterns (Tier 1) and spatial corridor progression along surface bus routes (Tier 2).
     public func fetchRouteStopLadder(
         routeId: String,
         directionId: Int,
         currentStopId: String,
-        currentArrivalMinutes: Int = 0
+        currentArrivalMinutes: Int = 0,
+        tappedCoordinate: CLLocationCoordinate2D? = nil
     ) async throws -> [TrackStop] {
         return try await dbWriter.read { db in
             do {
                 try self.ensureTransitAttached(in: db)
+                let lookupRouteId = (routeId.uppercased() == "SIR") ? "SI" : routeId
+                var rows = [Row]()
+                var isPatternRows = false
+                
+                // Tier 1: Query scheduled_hourly_patterns (Subway / Rail)
                 let patternColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_hourly_patterns)")
                 if !patternColumns.isEmpty {
                     let sql = """
@@ -1961,117 +2000,181 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         WHERE p.route_id = ? AND p.direction_id = ?
                         ORDER BY p.rowid ASC
                     """
-                    let rows = try Row.fetchAll(db, sql: sql, arguments: [routeId, directionId])
+                    rows = try Row.fetchAll(db, sql: sql, arguments: [lookupRouteId, directionId])
+                    if rows.isEmpty && lookupRouteId != routeId {
+                        rows = try Row.fetchAll(db, sql: sql, arguments: [routeId, directionId])
+                    }
                     if !rows.isEmpty {
-                        // Deduplicate stops by name or parent_station while preserving progression order
-                        var seen = Set<String>()
-                        var uniqueRows = [Row]()
-                        for r in rows {
-                            let cleanName = self.sanitizeStopName(r["stop_name"] as String? ?? "")
-                            let key = (r["parent_station"] as String?) ?? (cleanName.isEmpty ? (r["stop_id"] as String) : cleanName)
-                            if !seen.contains(key) {
-                                seen.insert(key)
-                                uniqueRows.append(r)
-                            }
-                        }
+                        isPatternRows = true
+                    }
+                }
+                
+                // Tier 2: Query real stops from transit.stops (Bus / Surface corridors)
+                if rows.isEmpty {
+                    let cleanRoute = lookupRouteId.replacingOccurrences(of: "-SBS", with: "")
+                    let busSql = """
+                        SELECT stop_id, stop_name, stop_lat, stop_lon, parent_station, routes
+                        FROM transit.stops
+                        WHERE (',' || routes || ',') LIKE ? OR (',' || routes || ',') LIKE ?
+                    """
+                    let candidateRows = try Row.fetchAll(db, sql: busSql, arguments: ["%,\(lookupRouteId),%", "%,\(cleanRoute),%"])
+                    
+                    if !candidateRows.isEmpty {
+                        // Order by corridor spatial progression
+                        let lats = candidateRows.compactMap { $0["stop_lat"] as? Double }
+                        let lons = candidateRows.compactMap { $0["stop_lon"] as? Double }
+                        let minLat = lats.min() ?? 0
+                        let maxLat = lats.max() ?? 0
+                        let minLon = lons.min() ?? 0
+                        let maxLon = lons.max() ?? 0
+                        let latSpan = maxLat - minLat
+                        let lonSpan = maxLon - minLon
                         
-                        // Sort direction: if directionId == 1 (typically Downtown/Southbound), check latitude ordering
-                        if directionId == 1 && uniqueRows.count >= 2 {
-                            let lat0: Double = uniqueRows.first?["stop_lat"] ?? 0
-                            let lat1: Double = uniqueRows.last?["stop_lat"] ?? 0
-                            if lat0 < lat1 {
-                                uniqueRows.reverse()
-                            }
-                        } else if directionId == 0 && uniqueRows.count >= 2 {
-                            let lat0: Double = uniqueRows.first?["stop_lat"] ?? 0
-                            let lat1: Double = uniqueRows.last?["stop_lat"] ?? 0
-                            if lat0 > lat1 {
-                                uniqueRows.reverse()
-                            }
-                        }
-                        
-                        let cleanTarget = currentStopId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-                        let currentIndex = uniqueRows.firstIndex { row in
-                            let sId = (row["stop_id"] as? String ?? "").uppercased()
-                            let pId = (row["parent_station"] as? String ?? "").uppercased()
-                            return sId == cleanTarget || pId == cleanTarget || sId.hasPrefix(cleanTarget) || cleanTarget.hasPrefix(sId)
-                        } ?? 0
-                        
-                        return uniqueRows.enumerated().map { idx, row in
-                            let sId: String = row["stop_id"]
-                            let sName: String = self.sanitizeStopName(row["stop_name"])
-                            let lat: Double = row["stop_lat"]
-                            let lon: Double = row["stop_lon"]
-                            let rStr: String? = row["routes"]
+                        let isEastWest = lonSpan > latSpan
+                        rows = candidateRows.sorted { r1, r2 in
+                            let lat1: Double = r1["stop_lat"] ?? 0
+                            let lat2: Double = r2["stop_lat"] ?? 0
+                            let lon1: Double = r1["stop_lon"] ?? 0
+                            let lon2: Double = r2["stop_lon"] ?? 0
                             
-                            let isPassed = idx < currentIndex
-                            let isCurrent = idx == currentIndex
-                            let isTerminus = idx == 0 || idx == (uniqueRows.count - 1)
-                            
-                            let eta: Int?
-                            if isPassed {
-                                eta = nil
-                            } else if isCurrent {
-                                eta = currentArrivalMinutes
+                            if isEastWest {
+                                return directionId == 0 ? (lon1 < lon2) : (lon1 > lon2)
                             } else {
-                                eta = currentArrivalMinutes + (idx - currentIndex) * 2
+                                return directionId == 0 ? (lat1 < lat2) : (lat1 > lat2)
                             }
-                            
-                            let transfers = StationBulletRenderer.parseAndNormalizeRoutes(rStr ?? "")
-                                .filter { $0 != routeId.uppercased() }
-                            
-                            return TrackStop(
-                                id: "\(sId)_\(idx)",
-                                stopId: sId,
-                                stopName: sName,
-                                coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
-                                sequenceIndex: idx,
-                                isPassed: isPassed,
-                                isCurrent: isCurrent,
-                                isTerminus: isTerminus,
-                                estimatedMinutes: eta,
-                                transferRoutes: transfers
-                            )
                         }
                     }
                 }
+                
+                if !rows.isEmpty {
+                    // Deduplicate stops by name or parent_station while preserving progression order
+                    var seen = Set<String>()
+                    var uniqueRows = [Row]()
+                    for r in rows {
+                        let cleanName = self.sanitizeStopName(r["stop_name"] as String? ?? "")
+                        let key = (r["parent_station"] as String?) ?? (cleanName.isEmpty ? (r["stop_id"] as String) : cleanName)
+                        if !seen.contains(key) {
+                            seen.insert(key)
+                            uniqueRows.append(r)
+                        }
+                    }
+                    
+                    // Sort direction check for pattern rows (where rowid ASC was used)
+                    if isPatternRows && uniqueRows.count >= 2 {
+                        let lat0: Double = uniqueRows.first?["stop_lat"] ?? 0
+                        let lat1: Double = uniqueRows.last?["stop_lat"] ?? 0
+                        if directionId == 1 && lat0 < lat1 {
+                            uniqueRows.reverse()
+                        } else if directionId == 0 && lat0 > lat1 {
+                            uniqueRows.reverse()
+                        }
+                    }
+                    
+                    let cleanTarget = currentStopId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                    var resolvedIndex = uniqueRows.firstIndex { row in
+                        let sId = (row["stop_id"] as? String ?? "").uppercased()
+                        let pId = (row["parent_station"] as? String ?? "").uppercased()
+                        return sId == cleanTarget || pId == cleanTarget || sId.hasPrefix(cleanTarget) || cleanTarget.hasPrefix(sId)
+                    }
+                    
+                    if resolvedIndex == nil {
+                        let targetNameSql = "SELECT stop_name FROM transit.stops WHERE stop_id = ? LIMIT 1"
+                        if let targetRow = try? Row.fetchOne(db, sql: targetNameSql, arguments: [currentStopId]),
+                           let targetName = targetRow["stop_name"] as? String {
+                            let cleanTargetName = self.sanitizeStopName(targetName)
+                            resolvedIndex = uniqueRows.firstIndex { row in
+                                let rName = self.sanitizeStopName(row["stop_name"] as? String ?? "")
+                                return rName == cleanTargetName
+                            }
+                        }
+                    }
+                    
+                    let currentIndex = resolvedIndex ?? 0
+                    
+                    return uniqueRows.enumerated().map { idx, row in
+                        let sId: String = row["stop_id"]
+                        let sName: String = self.sanitizeStopName(row["stop_name"])
+                        let lat: Double = row["stop_lat"]
+                        let lon: Double = row["stop_lon"]
+                        let rStr: String? = row["routes"]
+                        
+                        let isPassed = idx < currentIndex
+                        let isCurrent = idx == currentIndex
+                        let isTerminus = idx == 0 || idx == (uniqueRows.count - 1)
+                        
+                        let eta: Int?
+                        if isPassed {
+                            eta = nil
+                        } else if isCurrent {
+                            eta = currentArrivalMinutes
+                        } else {
+                            eta = currentArrivalMinutes + (idx - currentIndex) * 2
+                        }
+                        
+                        let transfers = StationBulletRenderer.parseAndNormalizeRoutes(rStr ?? "")
+                            .filter { $0 != routeId.uppercased() && $0 != lookupRouteId.uppercased() }
+                        
+                        return TrackStop(
+                            id: "\(sId)_\(idx)",
+                            stopId: sId,
+                            stopName: sName,
+                            coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                            sequenceIndex: idx,
+                            isPassed: isPassed,
+                            isCurrent: isCurrent,
+                            isTerminus: isTerminus,
+                            estimatedMinutes: eta,
+                            transferRoutes: transfers
+                        )
+                    }
+                }
+                
+                // Fallback when route has no stops in DB: Anchor strictly to tapped stop's actual coordinate
+                let targetStopSql = "SELECT stop_id, stop_name, stop_lat, stop_lon, routes FROM transit.stops WHERE stop_id = ? LIMIT 1"
+                if let targetRow = try? Row.fetchOne(db, sql: targetStopSql, arguments: [currentStopId]),
+                   let lat = targetRow["stop_lat"] as? Double,
+                   let lon = targetRow["stop_lon"] as? Double {
+                    let sName = self.sanitizeStopName(targetRow["stop_name"] as? String ?? currentStopId)
+                    let rStr = targetRow["routes"] as? String ?? ""
+                    let transfers = StationBulletRenderer.parseAndNormalizeRoutes(rStr)
+                        .filter { $0 != routeId.uppercased() }
+                    return [
+                        TrackStop(
+                            id: "\(currentStopId)_0",
+                            stopId: currentStopId,
+                            stopName: sName,
+                            coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                            sequenceIndex: 0,
+                            isPassed: false,
+                            isCurrent: true,
+                            isTerminus: true,
+                            estimatedMinutes: currentArrivalMinutes,
+                            transferRoutes: transfers
+                        )
+                    ]
+                }
             } catch {
-                // fall through to synthetic fallback
+                // fall through to tappedCoordinate fallback
             }
             
-            // Synthetic / Fixture Fallback when database patterns are unavailable
-            return self.generateFallbackStopLadder(routeId: routeId, currentStopId: currentStopId, arrivalMinutes: currentArrivalMinutes)
-        }
-    }
-    
-    private func generateFallbackStopLadder(routeId: String, currentStopId: String, arrivalMinutes: Int) -> [TrackStop] {
-        let stopNames = [
-            "Origin Terminal",
-            "Midtown Crossing",
-            "Central Square",
-            "Transit Hub Platform",
-            "Market St Station",
-            "Civic Center",
-            "Uptown Transfer",
-            "Final Destination"
-        ]
-        let currentIdx = 3
-        return stopNames.enumerated().map { idx, name in
-            let isPassed = idx < currentIdx
-            let isCurrent = idx == currentIdx
-            let eta = isPassed ? nil : (arrivalMinutes + (idx - currentIdx) * 2)
-            return TrackStop(
-                id: "\(routeId)_stop_\(idx)",
-                stopId: isCurrent ? currentStopId : "stop_\(idx)",
-                stopName: isCurrent ? (currentStopId.replacingOccurrences(of: "_", with: " ").capitalized) : name,
-                coordinate: CLLocationCoordinate2D(latitude: 40.7580 + Double(idx) * 0.005, longitude: -73.9855 + Double(idx) * 0.003),
-                sequenceIndex: idx,
-                isPassed: isPassed,
-                isCurrent: isCurrent,
-                isTerminus: idx == 0 || idx == stopNames.count - 1,
-                estimatedMinutes: eta,
-                transferRoutes: idx % 2 == 0 ? ["4", "5"] : []
-            )
+            if let coord = tappedCoordinate {
+                return [
+                    TrackStop(
+                        id: "\(currentStopId)_0",
+                        stopId: currentStopId,
+                        stopName: self.sanitizeStopName(currentStopId),
+                        coordinate: coord,
+                        sequenceIndex: 0,
+                        isPassed: false,
+                        isCurrent: true,
+                        isTerminus: true,
+                        estimatedMinutes: currentArrivalMinutes,
+                        transferRoutes: []
+                    )
+                ]
+            }
+            
+            return []
         }
     }
     
@@ -3090,6 +3193,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     routeId: primaryRoute,
                     routeIds: candidate.routes,
                     routeType: 3,
+                    coordinate: CLLocationCoordinate2D(latitude: candidate.lat, longitude: candidate.lon),
                     arrivals: self.generateBusArrivals(for: primaryRoute, stopName: candidate.name)
                 )
             }

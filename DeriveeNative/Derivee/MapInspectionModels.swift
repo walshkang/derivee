@@ -53,8 +53,13 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
     }
     
     /// Computes southwest and northeast bounds enclosing all route coordinates and the user's station.
+    /// Camera Safety Invariant (Wave PB.3): Filters out any errant coordinates (>45km / 0.4° lat from station).
     public func computedBoundingBox() -> (sw: CLLocationCoordinate2D, ne: CLLocationCoordinate2D)? {
-        var allPoints = coordinates
+        let validCoords = coordinates.filter { pt in
+            abs(pt.latitude - stationCoordinate.latitude) < 0.4 &&
+            abs(pt.longitude - stationCoordinate.longitude) < 0.5
+        }
+        var allPoints = validCoords
         allPoints.append(stationCoordinate)
         
         guard let first = allPoints.first else { return nil }
