@@ -164,12 +164,23 @@ struct TransitRevealSheet: View {
         return "arrow.triangle.swap"
     }
     
-    private func corridorNote(for dir: String, items: [SpatialDatabaseManager.ArrivalInfo]) -> String? {
-        let dests = Set(items.map { $0.destination })
+    internal static func computeCorridorNote(for dir: String, items: [SpatialDatabaseManager.ArrivalInfo]) -> String? {
+        let dests = Set(items.map { $0.destination.trimmingCharacters(in: .whitespacesAndNewlines) })
         if dests.count == 1, let single = dests.first {
-            return "to \(single)"
+            let cleanDir = dir.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let cleanSingle = single.lowercased()
+            // Suppress if direction header already contains the destination (e.g. "TO ST GEORGE FERRY")
+            if cleanDir.contains(cleanSingle) || cleanDir == "to \(cleanSingle)" {
+                return nil
+            }
+            // Suppress when the section note duplicates the arrival row destination verbatim
+            return nil
         }
         return nil
+    }
+    
+    private func corridorNote(for dir: String, items: [SpatialDatabaseManager.ArrivalInfo]) -> String? {
+        Self.computeCorridorNote(for: dir, items: items)
     }
     
     private func stationSubtitle(for details: SpatialDatabaseManager.StopDetails) -> String {

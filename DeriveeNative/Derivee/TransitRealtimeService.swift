@@ -468,6 +468,10 @@ public final class TransitRealtimeService: @unchecked Sendable {
         if SubwayFeed.isBusRoute(line) {
             let dirId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
             let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : (isEastbound ? "Eastbound" : (isWestbound ? "Westbound" : nil)))
+            let dest = resolveDestination(tripUpdate: tripUpdate, line: line, stopId: stopId)
+            if !dest.isEmpty && !dest.contains(" - Northbound") && !dest.contains(" - Southbound") {
+                return "To \(dest)"
+            }
             return Self.resolveBusDestination(routeId: line, directionId: dirId, directionHint: hint).direction
         }
         
@@ -732,8 +736,15 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 ? ("Bay Ridge - 86 St (Subway R)", "Northbound & Brooklyn")
                 : ("Staten Island Mall", "Southbound & Staten Island")
         default:
+            let effectiveDir = isNorthOrUptown ? 0 : 1
+            if let rd = SpatialDatabaseManager.shared.resolveRouteDirection(routeId: cleanRoute, directionId: effectiveDir), !rd.headsign.isEmpty {
+                return (rd.headsign, "To \(rd.headsign)")
+            }
+            if let extrema = SpatialDatabaseManager.shared.resolveCorridorExtrema(routeId: cleanRoute, directionId: effectiveDir), !extrema.isEmpty {
+                return (extrema, "To \(extrema)")
+            }
             let dirStr = isNorthOrUptown ? "Northbound" : "Southbound"
-            return ("\(cleanRoute) - \(dirStr)", isNorthOrUptown ? "Uptown & Northbound" : "Downtown & Southbound")
+            return ("\(cleanRoute) - \(dirStr)", "To \(cleanRoute) - \(dirStr)")
         }
     }
     
@@ -756,15 +767,11 @@ public final class TransitRealtimeService: @unchecked Sendable {
             if let d = directionId { return d == 0 }
             return true
         }()
-        
-        if SubwayFeed.isBusRoute(line) {
-            let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : (isEastbound ? "Eastbound" : (isWestbound ? "Westbound" : nil)))
-            return Self.resolveBusDestination(routeId: line, directionId: directionId, directionHint: hint).destination
-        }
-        
+        let effectiveDirectionId = directionId ?? (effectiveNorthbound ? 0 : 1)
+        let isBus = SubwayFeed.isBusRoute(line)
         let cleanLine = line.uppercased().trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "_").last ?? line.uppercased()
         
-        // 1. Dynamic Terminal Inference: Reverse scan for final non-skipped stop update
+        // 1. Dynamic Terminal Inference (Tier 1): Reverse scan for final non-skipped stop update
         let nonSkippedUpdates = tripUpdate.stopTimeUpdate.filter { update in
             if update.hasScheduleRelationship && update.scheduleRelationship == .skipped {
                 return false
@@ -776,9 +783,41 @@ public final class TransitRealtimeService: @unchecked Sendable {
         let terminalStopId = terminalUpdate?.stopID ?? ""
         let cleanTerminalId = SubwayStationRegistry.cleanStopId(terminalStopId)
         
+        // Tier 1 Live Stream Stop Name Resolution
+        var liveResolvedTerminalName: String? = nil
+        if !terminalStopId.isEmpty {
+            if isBus {
+                liveResolvedTerminalName = SpatialDatabaseManager.shared.resolveStopName(for: terminalStopId) ?? SubwayStationRegistry.resolveStationName(for: terminalStopId)
+            } else {
+                liveResolvedTerminalName = SubwayStationRegistry.resolveStationName(for: terminalStopId) ?? SpatialDatabaseManager.shared.resolveStopName(for: terminalStopId)
+            }
+        }
+        
+        if isBus {
+            // Tier 1: If live stop_time_update resolved a valid stop name, return it
+            if let term = liveResolvedTerminalName, !term.isEmpty {
+                return term
+            }
+            // Tier 2: Check SQLite route_directions (or in-memory cache)
+            if let rd = SpatialDatabaseManager.shared.resolveRouteDirection(routeId: cleanLine, directionId: effectiveDirectionId), !rd.headsign.isEmpty {
+                return rd.headsign
+            }
+            // Tier 3: Spatial corridor extrema fallback
+            if let extrema = SpatialDatabaseManager.shared.resolveCorridorExtrema(routeId: cleanLine, directionId: effectiveDirectionId), !extrema.isEmpty {
+                return extrema
+            }
+            // Fallback: resolveBusDestination
+            let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : (isEastbound ? "Eastbound" : (isWestbound ? "Westbound" : nil)))
+            return Self.resolveBusDestination(routeId: line, directionId: directionId, directionHint: hint).destination
+        }
+        
         let terminalName: String = {
-            if !terminalStopId.isEmpty, let name = SubwayStationRegistry.resolveStationName(for: terminalStopId) {
-                return name
+            if let term = liveResolvedTerminalName, !term.isEmpty {
+                return term
+            }
+            // Tier 2: Check route_directions for subway
+            if let rd = SpatialDatabaseManager.shared.resolveRouteDirection(routeId: cleanLine, directionId: effectiveDirectionId), !rd.headsign.isEmpty {
+                return rd.headsign
             }
             let fallback = SubwayStationRegistry.defaultTerminal(route: cleanLine, isNorthbound: effectiveNorthbound)
             if !fallback.name.isEmpty && fallback.name != "Uptown / Northbound" && fallback.name != "Downtown / Southbound" {

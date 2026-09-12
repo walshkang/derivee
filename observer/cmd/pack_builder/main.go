@@ -201,10 +201,14 @@ func main() {
 	complexes, resolutions := gtfs.BuildComplexResolutionHierarchy(mergedDataset.Stops, mtaLookup, "subway", gtfs.RegionalHubAnchors)
 	log.Printf("Generated %d complexes and %d stop_resolution rows (WITHOUT ROWID)", len(complexes), len(resolutions))
 
-	// 6. Compact Timetable into Scheduled Hourly Patterns
+	// 6. Compact Timetable into Scheduled Hourly Patterns & Route Directions
 	log.Println("Compacting schedule into scheduled_hourly_patterns (14-day calendar unrolling)...")
 	patterns := gtfs.CompactDataset(mergedDataset)
 	log.Printf("Generated %d scheduled_hourly_patterns rows", len(patterns))
+
+	log.Println("Computing statistical mode route directions (Wave PB.5)...")
+	routeDirections := gtfs.ComputeRouteDirections(mergedDataset)
+	log.Printf("Generated %d route_directions rows", len(routeDirections))
 
 	// 7. Create and Populate SQLite Transit Database
 	tempDir, err := os.MkdirTemp("", "transit_pack_*")
@@ -234,6 +238,9 @@ func main() {
 	}
 	if err := builder.BulkInsertPatterns(db, patterns); err != nil {
 		log.Fatalf("BulkInsertPatterns failed: %v", err)
+	}
+	if err := builder.BulkInsertRouteDirections(db, routeDirections); err != nil {
+		log.Fatalf("BulkInsertRouteDirections failed: %v", err)
 	}
 
 	// 8. Run Query Optimizer and ANALYZE

@@ -99,6 +99,14 @@ func InitTransitDB(dbPath string) (*sql.DB, error) {
 	);
 	CREATE INDEX idx_patterns_lookup ON scheduled_hourly_patterns(stop_id, route_id, direction_id);
 
+	CREATE TABLE route_directions (
+		route_id TEXT NOT NULL,
+		direction_id INTEGER NOT NULL,
+		headsign TEXT NOT NULL,
+		terminal_stop_id TEXT NOT NULL,
+		PRIMARY KEY (route_id, direction_id)
+	);
+
 	CREATE TABLE headway_history (
 		stop_id TEXT NOT NULL,
 		day_offset INTEGER NOT NULL,
@@ -377,6 +385,47 @@ func BulkInsertRealtimeDepartures(db *sql.DB, departures []gtfs.RealtimeDepartur
 				stmt.Close()
 				tx.Rollback()
 				return fmt.Errorf("failed to insert realtime departure (complex=%d, trip=%s): %w", d.ComplexID, d.TripID, err)
+			}
+		}
+
+		stmt.Close()
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// BulkInsertRouteDirections populates the route_directions table in batches (Wave PB.5)
+func BulkInsertRouteDirections(db *sql.DB, directions []gtfs.RouteDirection) error {
+	const batchSize = 1000
+	for i := 0; i < len(directions); i += batchSize {
+		end := i + batchSize
+		if end > len(directions) {
+			end = len(directions)
+		}
+
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+
+		stmt, err := tx.Prepare(`
+			INSERT OR REPLACE INTO route_directions (
+				route_id, direction_id, headsign, terminal_stop_id
+			) VALUES (?, ?, ?, ?)
+		`)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		for _, rd := range directions[i:end] {
+			if _, err := stmt.Exec(rd.RouteID, rd.DirectionID, rd.Headsign, rd.TerminalStopID); err != nil {
+				stmt.Close()
+				tx.Rollback()
+				return fmt.Errorf("failed to insert route_direction (%s, dir=%d): %w", rd.RouteID, rd.DirectionID, err)
 			}
 		}
 

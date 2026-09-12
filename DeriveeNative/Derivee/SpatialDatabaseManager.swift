@@ -3,6 +3,20 @@ import GRDB
 import CoreLocation
 import H3
 
+public struct RouteDirectionInfo: Sendable, Equatable {
+    public let routeId: String
+    public let directionId: Int
+    public let headsign: String
+    public let terminalStopId: String
+    
+    public init(routeId: String, directionId: Int, headsign: String, terminalStopId: String = "") {
+        self.routeId = routeId
+        self.directionId = directionId
+        self.headsign = headsign
+        self.terminalStopId = terminalStopId
+    }
+}
+
 public final class SpatialDatabaseManager: @unchecked Sendable {
     public private(set) static var isSharedInitialized: Bool = false
     public static let shared = SpatialDatabaseManager()
@@ -16,6 +30,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     private let transitLock = NSLock()
     private var _currentTransitDBURL: URL?
     private var _currentNeighborhoodDBURL: URL?
+    
+    private let routeDirectionsLock = NSLock()
+    private var _routeDirectionsCache: [String: [Int: RouteDirectionInfo]] = [:]
+    private var _stopNamesCache: [String: String] = [:]
     
     public var currentTransitDBURL: URL? {
         get {
@@ -374,7 +392,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             }
             let escapedPath = targetURL.path.replacingOccurrences(of: "'", with: "''")
             try db.execute(sql: "ATTACH DATABASE '\(escapedPath)' AS transit;")
+            self.clearRouteDirectionsCache()
         }
+        self.warmRouteDirectionsIfNeeded(in: db)
     }
     
     /// Ensures that the connection has the current target neighborhood database attached.
@@ -416,6 +436,219 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         try ensureTransitAttached(in: db, force: force)
         try ensureNeighborhoodAttached(in: db, force: force)
     }
+
+    // MARK: - Route Directions & Destination Engine (Wave PB.5)
+    
+    /// Pre-warms the in-memory route directions cache from transit.route_directions or scheduled_hourly_patterns.
+    public func warmRouteDirectionsIfNeeded(in db: Database) {
+        routeDirectionsLock.lock()
+        if !_routeDirectionsCache.isEmpty {
+            routeDirectionsLock.unlock()
+            return
+        }
+        routeDirectionsLock.unlock()
+        
+        var newCache: [String: [Int: RouteDirectionInfo]] = [:]
+        
+        // 1. Query route_directions table (support both attached transit.route_directions and standalone route_directions)
+        let querySql: String? = {
+            if (try? Row.fetchOne(db, sql: "SELECT 1 FROM transit.route_directions LIMIT 1")) != nil {
+                return "SELECT route_id, direction_id, headsign, terminal_stop_id FROM transit.route_directions"
+            }
+            if (try? Row.fetchOne(db, sql: "SELECT 1 FROM route_directions LIMIT 1")) != nil {
+                return "SELECT route_id, direction_id, headsign, terminal_stop_id FROM route_directions"
+            }
+            return nil
+        }()
+        
+        if let sql = querySql, let rows = try? Row.fetchAll(db, sql: sql) {
+            for row in rows {
+                let rId: String = (row["route_id"] as String? ?? "").uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                let dir: Int = row["direction_id"] ?? 0
+                let headsign: String = row["headsign"] ?? ""
+                let term: String = row["terminal_stop_id"] ?? ""
+                if !rId.isEmpty {
+                    if newCache[rId] == nil { newCache[rId] = [:] }
+                    newCache[rId]?[dir] = RouteDirectionInfo(routeId: rId, directionId: dir, headsign: headsign, terminalStopId: term)
+                }
+            }
+        }
+        
+        // 2. Query scheduled_hourly_patterns for any additional headsigns (e.g. subway lines)
+        let patternSql: String? = {
+            if (try? Row.fetchOne(db, sql: "SELECT 1 FROM transit.scheduled_hourly_patterns LIMIT 1")) != nil {
+                return """
+                    SELECT route_id, direction_id, headsign, count(*) as cnt
+                    FROM transit.scheduled_hourly_patterns
+                    WHERE headsign != ''
+                    GROUP BY route_id, direction_id, headsign
+                    ORDER BY route_id, direction_id, cnt DESC
+                """
+            }
+            if (try? Row.fetchOne(db, sql: "SELECT 1 FROM scheduled_hourly_patterns LIMIT 1")) != nil {
+                return """
+                    SELECT route_id, direction_id, headsign, count(*) as cnt
+                    FROM scheduled_hourly_patterns
+                    WHERE headsign != ''
+                    GROUP BY route_id, direction_id, headsign
+                    ORDER BY route_id, direction_id, cnt DESC
+                """
+            }
+            return nil
+        }()
+        
+        if let sql = patternSql, let rows = try? Row.fetchAll(db, sql: sql) {
+            for row in rows {
+                let rId: String = (row["route_id"] as String? ?? "").uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                let dir: Int = row["direction_id"] ?? 0
+                let headsign: String = row["headsign"] ?? ""
+                if !rId.isEmpty {
+                    if newCache[rId] == nil { newCache[rId] = [:] }
+                    if newCache[rId]?[dir] == nil {
+                        newCache[rId]?[dir] = RouteDirectionInfo(routeId: rId, directionId: dir, headsign: headsign, terminalStopId: "")
+                    }
+                }
+            }
+        }
+        
+        routeDirectionsLock.lock()
+        if _routeDirectionsCache.isEmpty {
+            _routeDirectionsCache = newCache
+        }
+        routeDirectionsLock.unlock()
+    }
+    
+    /// Resolves pre-compiled route direction and modal headsign for a given route and direction (Tier 2).
+    public func resolveRouteDirection(routeId: String, directionId: Int) -> RouteDirectionInfo? {
+        let cleanRoute = routeId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        
+        routeDirectionsLock.lock()
+        let isWarmed = !_routeDirectionsCache.isEmpty
+        if isWarmed {
+            defer { routeDirectionsLock.unlock() }
+            return lookupCachedRouteDirection(cleanRoute: cleanRoute, directionId: directionId)
+        }
+        routeDirectionsLock.unlock()
+        
+        // Lazy warm if empty
+        _ = try? dbWriter.read { db in
+            try? self.ensureTransitAttached(in: db)
+            self.warmRouteDirectionsIfNeeded(in: db)
+        }
+        
+        routeDirectionsLock.lock()
+        defer { routeDirectionsLock.unlock() }
+        return lookupCachedRouteDirection(cleanRoute: cleanRoute, directionId: directionId)
+    }
+    
+    private func lookupCachedRouteDirection(cleanRoute: String, directionId: Int) -> RouteDirectionInfo? {
+        if let match = _routeDirectionsCache[cleanRoute]?[directionId] {
+            return match
+        }
+        if cleanRoute == "SIR", let match = _routeDirectionsCache["SI"]?[directionId] {
+            return match
+        }
+        if cleanRoute == "SI", let match = _routeDirectionsCache["SIR"]?[directionId] {
+            return match
+        }
+        let stripped = cleanRoute.replacingOccurrences(of: "-SBS", with: "")
+        if let match = _routeDirectionsCache[stripped]?[directionId] {
+            return match
+        }
+        return nil
+    }
+    
+    /// Resolves official human-readable stop or station name for a given stop ID via memory cache, registry, or SQLite.
+    public func resolveStopName(for stopId: String) -> String? {
+        let cleanId = SubwayStationRegistry.cleanStopId(stopId)
+        if let regName = SubwayStationRegistry.resolveStationName(for: stopId) {
+            return regName
+        }
+        if let regClean = SubwayStationRegistry.resolveStationName(for: cleanId) {
+            return regClean
+        }
+        
+        routeDirectionsLock.lock()
+        if let cached = _stopNamesCache[cleanId] ?? _stopNamesCache[stopId] {
+            routeDirectionsLock.unlock()
+            return cached
+        }
+        routeDirectionsLock.unlock()
+        
+        let foundName: String? = try? dbWriter.read { db in
+            try? self.ensureTransitAttached(in: db)
+            if let row = try? Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ? OR stop_id = ? LIMIT 1", arguments: [stopId, cleanId]),
+               let rawName = row["stop_name"] as String?, !rawName.isEmpty {
+                return self.sanitizeStopName(rawName)
+            }
+            return nil
+        }
+        
+        if let name = foundName, !name.isEmpty {
+            routeDirectionsLock.lock()
+            _stopNamesCache[cleanId] = name
+            _stopNamesCache[stopId] = name
+            routeDirectionsLock.unlock()
+            return name
+        }
+        
+        return nil
+    }
+    
+    /// Projects stops along the route's principal spatial axis to resolve the extreme terminal endpoint (Tier 3 fallback).
+    public func resolveCorridorExtrema(routeId: String, directionId: Int) -> String? {
+        let cleanRoute = routeId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let stripped = cleanRoute.replacingOccurrences(of: "-SBS", with: "")
+        let lookupRoute = (cleanRoute == "SIR") ? "SI" : cleanRoute
+        
+        return try? dbWriter.read { db in
+            try? self.ensureTransitAttached(in: db)
+            let busSql = """
+                SELECT stop_name, stop_lat, stop_lon
+                FROM transit.stops
+                WHERE (',' || routes || ',') LIKE ? OR (',' || routes || ',') LIKE ?
+            """
+            guard let rows = try? Row.fetchAll(db, sql: busSql, arguments: ["%,\(lookupRoute),%", "%,\(stripped),%"]), !rows.isEmpty else {
+                return nil
+            }
+            
+            let lats = rows.compactMap { $0["stop_lat"] as? Double }
+            let lons = rows.compactMap { $0["stop_lon"] as? Double }
+            guard !lats.isEmpty, !lons.isEmpty else { return nil }
+            
+            let minLat = lats.min() ?? 0
+            let maxLat = lats.max() ?? 0
+            let minLon = lons.min() ?? 0
+            let maxLon = lons.max() ?? 0
+            let isEastWest = (maxLon - minLon) > (maxLat - minLat)
+            
+            let sorted = rows.sorted { r1, r2 in
+                let lat1: Double = r1["stop_lat"] ?? 0
+                let lat2: Double = r2["stop_lat"] ?? 0
+                let lon1: Double = r1["stop_lon"] ?? 0
+                let lon2: Double = r2["stop_lon"] ?? 0
+                if isEastWest {
+                    return directionId == 0 ? (lon1 < lon2) : (lon1 > lon2)
+                } else {
+                    return directionId == 0 ? (lat1 < lat2) : (lat1 > lat2)
+                }
+            }
+            
+            if let terminal = sorted.last, let rawName = terminal["stop_name"] as String?, !rawName.isEmpty {
+                return self.sanitizeStopName(rawName)
+            }
+            return nil
+        }
+    }
+    
+    /// Clears the in-memory route directions and stop names caches (e.g. on city hot-swap).
+    public func clearRouteDirectionsCache() {
+        routeDirectionsLock.lock()
+        _routeDirectionsCache.removeAll()
+        _stopNamesCache.removeAll()
+        routeDirectionsLock.unlock()
+    }
+
 
     
     /// Resolves platform stop IDs for a given parent or platform stop ID via stop_resolution or stops hierarchy.
@@ -700,6 +933,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         logPipeline("🔄 [SpatialDatabaseManager] Starting City DB Hot-Swap (Transit: \(transitURL.path), Neighborhood: \(neighborhoodURL?.path ?? "none"))")
         currentTransitDBURL = transitURL
         currentNeighborhoodDBURL = neighborhoodURL
+        self.clearRouteDirectionsCache()
         
         // 1. Drain internal caches and prepared statements across all reader connections in the GRDB pool
         if let pool = dbWriter as? DatabasePool {

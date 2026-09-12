@@ -147,16 +147,16 @@ public final class CityPackManager: Sendable {
                     if config.version >= 2,
                        let attrs = try? fileManager.attributesOfItem(atPath: nycTransitURL.path),
                        let size = attrs[.size] as? Int64, size > 2_000_000 {
-                        let hasDepartures: Bool = {
+                        let isUpToDate: Bool = {
                             guard let queue = try? DatabaseQueue(path: nycTransitURL.path) else { return false }
                             return (try? queue.read { db in
-                                try db.tableExists("realtime_departures")
+                                try db.tableExists("realtime_departures") && db.tableExists("route_directions")
                             }) ?? false
                         }()
-                        if hasDepartures {
+                        if isUpToDate {
                             return config
                         }
-                        print("⚠️ Outdated NYC pack (missing realtime_departures) detected on disk, re-extracting...")
+                        print("⚠️ Outdated NYC pack (missing realtime_departures or route_directions) detected on disk, re-extracting...")
                         try? fileManager.removeItem(at: nycTransitURL)
                     } else {
                         print("⚠️ Outdated NYC pack (v\(config.version)) detected on disk, re-extracting v2...")

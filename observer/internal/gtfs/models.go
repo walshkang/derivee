@@ -227,6 +227,14 @@ type RealtimeDeparture struct {
 	UpdatedAt             int64
 }
 
+// RouteDirection represents an entry in the route_directions table (Wave PB.5)
+type RouteDirection struct {
+	RouteID        string
+	DirectionID    int
+	Headsign       string
+	TerminalStopID string
+}
+
 // Dataset represents a parsed in-memory GTFS dataset
 type Dataset struct {
 	Agencies        map[string]Agency
