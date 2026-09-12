@@ -130,15 +130,24 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
     
     // MARK: - Style Layer Configuration (Doc 20 §2 & §5)
     
-    /// Configures the multi-scale station transition layers into the MapLibre style following the strict 7-layer Z-stack.
+    /// Configures Sub-Fog station transition layers (Footprints & Platforms) into the MapLibre style (Doc 20 §2 Layers 3a & 3b).
     @MainActor
-    public func configureTransitLayers(
+    public func configureSubFogLayers(
         in style: MLNStyle,
         citySlug: String? = nil
     ) {
         registerExitPortalImage(in: style)
         setupStationShapesSource(in: style, citySlug: citySlug)
         setupFootprintAndPlatformLayers(in: style)
+    }
+    
+    /// Configures the multi-scale station transition layers into the MapLibre style following the strict 7-layer Z-stack.
+    @MainActor
+    public func configureTransitLayers(
+        in style: MLNStyle,
+        citySlug: String? = nil
+    ) {
+        configureSubFogLayers(in: style, citySlug: citySlug)
         setupExitPortalLayer(in: style)
         applyTransitionsToExistingBullets(in: style)
     }
@@ -279,18 +288,25 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
     }
     
     @MainActor
-    private func setupExitPortalLayer(in style: MLNStyle) {
+    public func setupExitPortalLayer(in style: MLNStyle, above siblingLayer: MLNStyleLayer? = nil) {
         guard let source = style.source(withIdentifier: Config.stationShapesSourceId) else { return }
         
+        // If layer already exists in style, remove it first so repositioning or re-adding is safe and never throws a duplicate identifier error.
+        if let existingLayer = style.layer(withIdentifier: Config.exitLayerId) {
+            style.removeLayer(existingLayer)
+        }
+        
         // Layer 6b: station-exit-symbols (Egress Portals) - Above Fog & Bullets
-        if style.layer(withIdentifier: Config.exitLayerId) == nil {
-            let exitLayer = MLNSymbolStyleLayer(identifier: Config.exitLayerId, source: source)
-            exitLayer.predicate = Self.basePredicate(for: Config.exitLayerId)
-            exitLayer.iconImageName = NSExpression(forConstantValue: Config.exitPortalImageName)
-            exitLayer.iconOpacity = Self.exitOpacityExpression()
-            exitLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
-            exitLayer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
-            
+        let exitLayer = MLNSymbolStyleLayer(identifier: Config.exitLayerId, source: source)
+        exitLayer.predicate = Self.basePredicate(for: Config.exitLayerId)
+        exitLayer.iconImageName = NSExpression(forConstantValue: Config.exitPortalImageName)
+        exitLayer.iconOpacity = Self.exitOpacityExpression()
+        exitLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
+        exitLayer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+        
+        if let sibling = siblingLayer {
+            style.insertLayer(exitLayer, above: sibling)
+        } else {
             insertAboveFogLayer(exitLayer, in: style)
         }
     }
@@ -329,10 +345,12 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
         // Must be inserted ABOVE Fog, and above/below vicinity bubble
         if let vicinityBubble = style.layer(withIdentifier: "vicinity-bubble-overlay") {
             style.insertLayer(layer, below: vicinityBubble)
-        } else if let hexLayer = style.layer(withIdentifier: "boundary-borders-layer") {
-            style.insertLayer(layer, above: hexLayer)
+        } else if let smartZoomBullets = style.layer(withIdentifier: Config.smartZoomBulletLayerId) {
+            style.insertLayer(layer, above: smartZoomBullets)
         } else if let bulletsLayer = style.layer(withIdentifier: Config.bulletLayerId) {
             style.insertLayer(layer, above: bulletsLayer)
+        } else if let hexLayer = style.layer(withIdentifier: "boundary-borders-layer") {
+            style.insertLayer(layer, above: hexLayer)
         } else if let fogLayer = style.layer(withIdentifier: "cloud-layer") {
             style.insertLayer(layer, above: fogLayer)
         } else {

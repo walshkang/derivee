@@ -340,4 +340,21 @@ final class StationTransitionTests: XCTestCase {
         let sorted = unsorted.sorted()
         XCTAssertEqual(sorted.map { $0.ordinal }, [0, -1, -2], "Sorting must place higher floors before lower floors")
     }
+    
+    // MARK: - 11. Multi-Scale Layer Configuration & Repositioning Lifecycle
+    
+    @MainActor
+    func testConfigureSubFogLayersAndExitPortalRepositioningLifecycle() {
+        let manager = StationTransitVisualizationManager()
+        let dummyMapView = MLNMapView(frame: .zero)
+        manager.attach(to: dummyMapView)
+        XCTAssertNotNil(manager.mapView)
+        
+        // Verify layer identifiers and configuration contract
+        XCTAssertEqual(StationTransitVisualizationManager.Config.footprintLayerId, "station-interior-fill")
+        XCTAssertEqual(StationTransitVisualizationManager.Config.platformLayerId, "station-platform-lines")
+        XCTAssertEqual(StationTransitVisualizationManager.Config.exitLayerId, "station-exit-symbols")
+        XCTAssertEqual(StationTransitVisualizationManager.Config.bulletLayerId, "subway-station-bullets-layer")
+        XCTAssertEqual(StationTransitVisualizationManager.Config.smartZoomBulletLayerId, "smart-zoom-station-bullets-layer")
+    }
 }

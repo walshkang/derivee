@@ -575,7 +575,7 @@ struct MapView: UIViewRepresentable {
             style.insertLayer(subwayLinesLayer, above: subwayCasingLayer)
             
             // Wave Q.3 / Q.4: Sub-Fog Station Footprints (Layer 3a) & Platforms (Layer 3b)
-            stationVisualizationManager.configureTransitLayers(in: style, citySlug: parent.spatialStore.activeCitySlug)
+            stationVisualizationManager.configureSubFogLayers(in: style, citySlug: parent.spatialStore.activeCitySlug)
             if let floor = parent.activeFloorLevel {
                 stationVisualizationManager.applyFloorFilter(level: floor)
             }
@@ -663,9 +663,7 @@ struct MapView: UIViewRepresentable {
             style.insertLayer(smartZoomBulletsLayer, above: bulletsLayer)
             
             // Layer 6b: Egress Portals (station-exit-symbols) positioned above bulletsLayer (Doc 20 §2)
-            if let exitLayer = style.layer(withIdentifier: StationTransitVisualizationManager.Config.exitLayerId) {
-                style.insertLayer(exitLayer, above: smartZoomBulletsLayer)
-            }
+            stationVisualizationManager.setupExitPortalLayer(in: style, above: smartZoomBulletsLayer)
             
             let transientHexSource = MLNShapeSource(identifier: transientHexSourceId, shape: nil, options: nil)
             style.addSource(transientHexSource)
