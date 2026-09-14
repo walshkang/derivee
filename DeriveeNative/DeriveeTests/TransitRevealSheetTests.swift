@@ -1813,6 +1813,73 @@ final class TransitRevealSheetTests: XCTestCase {
         XCTAssertNil(arrBoardingNoTrack.formattedTrack)
         XCTAssertEqual(arrBoardingNoTrack.commuterStatusDescription, "Boarding")
     }
+
+    // MARK: - Wave PC.3 Single-Sheet Transition Hierarchy & FC-5 Invariant Tests
+
+    @MainActor
+    func testSingleSheetInPlaceTransitionHierarchy() {
+        let fixedDate = Date(timeIntervalSince1970: 1736337600)
+        let mockDetails = SpatialDatabaseManager.StopDetails(
+            stopId: "stop_bedford",
+            name: "Bedford Ave",
+            routeId: "L",
+            routeType: 1,
+            arrivals: [
+                SpatialDatabaseManager.ArrivalInfo(line: "L", destination: "8th Ave", minutes: 2, direction: "Manhattan-bound", distanceDescription: "Approaching", arrivalDate: fixedDate.addingTimeInterval(120)),
+                SpatialDatabaseManager.ArrivalInfo(line: "L", destination: "Canarsie - Rockaway Pkwy", minutes: 4, direction: "Brooklyn-bound", distanceDescription: "1 stop away", arrivalDate: fixedDate.addingTimeInterval(240))
+            ]
+        )
+        
+        // 1. Station overview state (inspectingArrival == nil)
+        let overviewSheet = TransitRevealSheet(
+            stopId: "stop_bedford",
+            initialDetails: mockDetails,
+            initialLiveArrivals: mockDetails.arrivals,
+            initialInspectingArrival: nil,
+            referenceDate: fixedDate
+        )
+        let overviewHosting = UIHostingController(rootView: overviewSheet)
+        XCTAssertNotNil(overviewHosting.view)
+        
+        // 2. In-place inspector state (initialInspectingArrival != nil)
+        let targetArrival = mockDetails.arrivals[0]
+        let inspectingSheet = TransitRevealSheet(
+            stopId: "stop_bedford",
+            initialDetails: mockDetails,
+            initialLiveArrivals: mockDetails.arrivals,
+            initialInspectingArrival: targetArrival,
+            referenceDate: fixedDate,
+            onFocusMap: { _ in },
+            onInspectRoute: { _ in },
+            onClearRouteInspection: { }
+        )
+        let inspectingHosting = UIHostingController(rootView: inspectingSheet)
+        XCTAssertNotNil(inspectingHosting.view)
+    }
+
+    func testFirstClickInvariantFC5ZeroNestedSheets() throws {
+        // Enforce First-Click Invariant FC-5: Zero Nested Sheet Stacking
+        // TransitRevealSheet must NEVER present .sheet(item: $inspectingArrival)
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let targetFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/TransitRevealSheet.swift")
+        
+        let content = try String(contentsOf: targetFile, encoding: .utf8)
+        
+        XCTAssertFalse(
+            content.contains(".sheet(item: $inspectingArrival)"),
+            "FC-5 Violation: TransitRevealSheet must not use .sheet(item: $inspectingArrival). Inspection must transition in-place."
+        )
+        
+        XCTAssertTrue(
+            content.contains("inspectorView(for:"),
+            "TransitRevealSheet must route inspection to an in-place inspectorView(for:)."
+        )
+        XCTAssertTrue(
+            content.contains("onBack:"),
+            "TransitRevealSheet must supply an onBack closure to transition back to the station overview."
+        )
+    }
 }
 
 

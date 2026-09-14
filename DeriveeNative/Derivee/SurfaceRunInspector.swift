@@ -58,6 +58,7 @@ public struct SurfaceRunInspector: View {
     public let currentStopCoordinate: CLLocationCoordinate2D?
     public let routeConfig: SurfaceInspectableRoute
     public var followOnArrival: SpatialDatabaseManager.ArrivalInfo? = nil
+    public var onBack: (() -> Void)? = nil
     public var onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
     public var onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil
     public var onClearRouteInspection: (() -> Void)? = nil
@@ -80,6 +81,7 @@ public struct SurfaceRunInspector: View {
         currentStopCoordinate: CLLocationCoordinate2D? = nil,
         modalClass: TransitModalClass = .bus,
         followOnArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
+        onBack: (() -> Void)? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
         onClearRouteInspection: (() -> Void)? = nil
@@ -90,6 +92,7 @@ public struct SurfaceRunInspector: View {
         self.currentStopCoordinate = currentStopCoordinate
         self.routeConfig = modalClass
         self.followOnArrival = followOnArrival
+        self.onBack = onBack
         self.onFocusMap = onFocusMap
         self.onInspectRoute = onInspectRoute
         self.onClearRouteInspection = onClearRouteInspection
@@ -102,6 +105,7 @@ public struct SurfaceRunInspector: View {
         currentStopCoordinate: CLLocationCoordinate2D? = nil,
         routeConfig: SurfaceInspectableRoute,
         followOnArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
+        onBack: (() -> Void)? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
         onClearRouteInspection: (() -> Void)? = nil
@@ -112,6 +116,7 @@ public struct SurfaceRunInspector: View {
         self.currentStopCoordinate = currentStopCoordinate
         self.routeConfig = routeConfig
         self.followOnArrival = followOnArrival
+        self.onBack = onBack
         self.onFocusMap = onFocusMap
         self.onInspectRoute = onInspectRoute
         self.onClearRouteInspection = onClearRouteInspection
@@ -130,7 +135,44 @@ public struct SurfaceRunInspector: View {
     }
     
     public var body: some View {
-        NavigationStack {
+        VStack(alignment: .leading, spacing: 0) {
+            // Pinned Navigation Header
+            HStack(alignment: .center) {
+                if let onBack = onBack {
+                    Button(action: onBack) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 15, weight: .bold))
+                            Text(currentStopName)
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(Color(hex: "#FFB300"))
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(isFerry ? "Ferry Inspector" : "Bus Inspector")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+            
+            Divider()
+            
             ScrollViewReader { scrollProxy in
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 16) {
@@ -154,9 +196,10 @@ public struct SurfaceRunInspector: View {
                         }
                     }
                     .padding(.horizontal, 20)
-                    .padding(.top, 16)
+                    .padding(.top, 14)
                     .padding(.bottom, 36)
                 }
+                .scrollBounceBehavior(.basedOnSize)
                 .onChange(of: isLoadingLadder) { _, loading in
                     if !loading, let currentStop = stopLadder.first(where: { $0.isCurrent }) {
                         withAnimation(.easeInOut(duration: 0.35)) {
@@ -165,25 +208,7 @@ public struct SurfaceRunInspector: View {
                     }
                 }
             }
-            .navigationTitle(isFerry ? "Ferry Inspector" : "Bus Inspector")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
         }
-        .presentationDetents([.fraction(0.40), .fraction(0.88)])
-        .presentationDragIndicator(.visible)
-        .presentationContentInteraction(.scrolls)
-        .transitSheetGlassBackground()
         .task {
             await loadInspectorData()
         }

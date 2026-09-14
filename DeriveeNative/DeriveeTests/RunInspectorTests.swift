@@ -559,5 +559,87 @@ final class RunInspectorTests: XCTestCase {
         let surfaceHosting = UIHostingController(rootView: surface)
         XCTAssertNotNil(surfaceHosting.view)
     }
+
+    // MARK: - Wave PC.3 Single-Sheet Transition Hierarchy & OnBack Callback Tests
+
+    @MainActor
+    func testGuidewayRunInspectorOnBackCallbackExecution() {
+        var onBackCalled = false
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 2,
+            direction: "Manhattan",
+            distanceDescription: "Approaching"
+        )
+        
+        let guideway = GuidewayRunInspector(
+            arrival: arrival,
+            currentStopId: "L11",
+            currentStopName: "Bedford Av",
+            onBack: {
+                onBackCalled = true
+            }
+        )
+        
+        XCTAssertNotNil(guideway.onBack)
+        guideway.onBack?()
+        XCTAssertTrue(onBackCalled)
+        
+        // Verify view construction with onBack provided
+        let hosting = UIHostingController(rootView: guideway)
+        XCTAssertNotNil(hosting.view)
+        
+        // Verify view construction without onBack (standalone fallback)
+        let standaloneGuideway = GuidewayRunInspector(
+            arrival: arrival,
+            currentStopId: "L11",
+            currentStopName: "Bedford Av"
+        )
+        XCTAssertNil(standaloneGuideway.onBack)
+        let standaloneHosting = UIHostingController(rootView: standaloneGuideway)
+        XCTAssertNotNil(standaloneHosting.view)
+    }
+
+    @MainActor
+    func testSurfaceRunInspectorOnBackCallbackExecution() {
+        var onBackCalled = false
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "M15-SBS",
+            destination: "South Ferry",
+            minutes: 3,
+            direction: "Downtown",
+            distanceDescription: "1 stop away"
+        )
+        
+        let surface = SurfaceRunInspector(
+            arrival: arrival,
+            currentStopId: "stop_m15",
+            currentStopName: "2nd Ave & 23rd St",
+            modalClass: .bus,
+            onBack: {
+                onBackCalled = true
+            }
+        )
+        
+        XCTAssertNotNil(surface.onBack)
+        surface.onBack?()
+        XCTAssertTrue(onBackCalled)
+        
+        // Verify view construction with onBack provided
+        let hosting = UIHostingController(rootView: surface)
+        XCTAssertNotNil(hosting.view)
+        
+        // Verify view construction without onBack (standalone fallback)
+        let standaloneSurface = SurfaceRunInspector(
+            arrival: arrival,
+            currentStopId: "stop_m15",
+            currentStopName: "2nd Ave & 23rd St",
+            modalClass: .bus
+        )
+        XCTAssertNil(standaloneSurface.onBack)
+        let standaloneHosting = UIHostingController(rootView: standaloneSurface)
+        XCTAssertNotNil(standaloneHosting.view)
+    }
 }
 

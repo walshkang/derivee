@@ -57,6 +57,7 @@ struct TransitRevealSheet: View {
         initialReliabilityTiers: [String: LineReliabilityTier] = [:],
         initialAvailableFloors: [StationFloor] = [],
         initialSelectedFloor: StationFloor? = nil,
+        initialInspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
         referenceDate: Date? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
@@ -71,6 +72,7 @@ struct TransitRevealSheet: View {
         self._reliabilityTiers = State(initialValue: initialReliabilityTiers)
         self._availableFloors = State(initialValue: initialAvailableFloors)
         self._selectedFloor = State(initialValue: initialSelectedFloor)
+        self._inspectingArrival = State(initialValue: initialInspectingArrival)
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
         self.referenceDate = referenceDate
         self.onFocusMap = onFocusMap
@@ -204,6 +206,63 @@ struct TransitRevealSheet: View {
     }
     
     var body: some View {
+        Group {
+            if let arr = inspectingArrival {
+                inspectorView(for: arr)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing),
+                        removal: .move(edge: .trailing)
+                    ))
+            } else {
+                stationOverview
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading),
+                        removal: .move(edge: .leading)
+                    ))
+            }
+        }
+        .animation(.snappy(duration: 0.28, extraBounce: 0.0), value: inspectingArrival?.id)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationContentInteraction(.scrolls)
+        .transitSheetGlassBackground()
+        .sheet(item: $selectedRecord) { rec in
+            TransitMatrixInspectorView(record: rec)
+                .presentationDetents([.fraction(0.5), .large])
+                .presentationDragIndicator(.visible)
+                .presentationContentInteraction(.scrolls)
+                .transitSheetGlassBackground()
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                isLivePulsing = true
+            }
+        }
+        .onDisappear {
+            onClearRouteInspection?()
+        }
+        .task(id: stopId) {
+            await startPollingLifecycle()
+        }
+        .onChange(of: stopId) { _, _ in
+            inspectingArrival = nil
+        }
+        .onChange(of: selectedDirection) { _, newDir in
+            Task {
+                await reloadTimetable(direction: newDir, dayOffset: selectedDayOffset)
+            }
+        }
+        .onChange(of: selectedDayOffset) { _, newOffset in
+            Task {
+                await reloadTimetable(direction: selectedDirection, dayOffset: newOffset)
+            }
+        }
+    }
+    
+    // MARK: - Station Overview
+    
+    @ViewBuilder
+    private var stationOverview: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Pinned Header: Line Badge + Station Name + Tab Picker
             if let details = stopDetails {
@@ -329,7 +388,11 @@ struct TransitRevealSheet: View {
                                 pollProgress: pollProgress,
                                 reliabilityResolver: { arrival in reliabilityTier(for: arrival) },
                                 onRefresh: { triggerManualRefresh() },
-                                onInspectArrival: { arrival in inspectingArrival = arrival }
+                                onInspectArrival: { arrival in
+                                    withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
+                                        inspectingArrival = arrival
+                                    }
+                                }
                             )
                             
                             Divider()
@@ -366,69 +429,51 @@ struct TransitRevealSheet: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: stopDetails != nil)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        .presentationContentInteraction(.scrolls)
-        .transitSheetGlassBackground()
-        .sheet(item: $selectedRecord) { rec in
-            TransitMatrixInspectorView(record: rec)
-                .presentationDetents([.fraction(0.5), .large])
-                .presentationDragIndicator(.visible)
-                .presentationContentInteraction(.scrolls)
-                .transitSheetGlassBackground()
-        }
-        .sheet(item: $inspectingArrival) { arr in
-            let lineInfo = TransitRouteData.lineInfo(for: arr.line)
-            let modalClass = (stopDetails?.modalClass == .bus || stopDetails?.modalClass == .ferry)
-                ? stopDetails!.modalClass
-                : lineInfo.modalClass
-            let followOn = resolveFollowOnArrival(for: arr)
-            
-            if modalClass == .subway || modalClass == .lightRail {
-                GuidewayRunInspector(
-                    arrival: arr,
-                    currentStopId: stopId,
-                    currentStopName: stopDetails?.name ?? "Current Station",
-                    currentStopCoordinate: stopDetails?.coordinate,
-                    followOnArrival: followOn,
-                    onFocusMap: onFocusMap,
-                    onInspectRoute: onInspectRoute,
-                    onClearRouteInspection: onClearRouteInspection
-                )
-            } else {
-                SurfaceRunInspector(
-                    arrival: arr,
-                    currentStopId: stopId,
-                    currentStopName: stopDetails?.name ?? "Current Stop",
-                    currentStopCoordinate: stopDetails?.coordinate,
-                    modalClass: modalClass,
-                    followOnArrival: followOn,
-                    onFocusMap: onFocusMap,
-                    onInspectRoute: onInspectRoute,
-                    onClearRouteInspection: onClearRouteInspection
-                )
-            }
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                isLivePulsing = true
-            }
-        }
-        .onDisappear {
-            onClearRouteInspection?()
-        }
-        .task(id: stopId) {
-            await startPollingLifecycle()
-        }
-        .onChange(of: selectedDirection) { _, newDir in
-            Task {
-                await reloadTimetable(direction: newDir, dayOffset: selectedDayOffset)
-            }
-        }
-        .onChange(of: selectedDayOffset) { _, newOffset in
-            Task {
-                await reloadTimetable(direction: selectedDirection, dayOffset: newOffset)
-            }
+    }
+    
+    // MARK: - Inspector View Router
+    
+    @ViewBuilder
+    private func inspectorView(for arr: SpatialDatabaseManager.ArrivalInfo) -> some View {
+        let lineInfo = TransitRouteData.lineInfo(for: arr.line)
+        let modalClass = (stopDetails?.modalClass == .bus || stopDetails?.modalClass == .ferry)
+            ? stopDetails!.modalClass
+            : lineInfo.modalClass
+        let followOn = resolveFollowOnArrival(for: arr)
+        
+        if modalClass == .subway || modalClass == .lightRail {
+            GuidewayRunInspector(
+                arrival: arr,
+                currentStopId: stopId,
+                currentStopName: stopDetails?.name ?? "Current Station",
+                currentStopCoordinate: stopDetails?.coordinate,
+                followOnArrival: followOn,
+                onBack: {
+                    withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
+                        inspectingArrival = nil
+                    }
+                },
+                onFocusMap: onFocusMap,
+                onInspectRoute: onInspectRoute,
+                onClearRouteInspection: onClearRouteInspection
+            )
+        } else {
+            SurfaceRunInspector(
+                arrival: arr,
+                currentStopId: stopId,
+                currentStopName: stopDetails?.name ?? "Current Stop",
+                currentStopCoordinate: stopDetails?.coordinate,
+                modalClass: modalClass,
+                followOnArrival: followOn,
+                onBack: {
+                    withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
+                        inspectingArrival = nil
+                    }
+                },
+                onFocusMap: onFocusMap,
+                onInspectRoute: onInspectRoute,
+                onClearRouteInspection: onClearRouteInspection
+            )
         }
     }
     
