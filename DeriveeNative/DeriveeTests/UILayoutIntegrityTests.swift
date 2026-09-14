@@ -79,6 +79,7 @@ final class UILayoutIntegrityTests: XCTestCase {
             routeIds: ["S51", "S81"],
             stopId: "200153",
             liveArrivals: [],
+            initialRouteFilter: "ALL",
             referenceDate: date1410
         )
         
@@ -95,6 +96,42 @@ final class UILayoutIntegrityTests: XCTestCase {
         
         XCTAssertTrue(s51Pill.isNextDeparture, "S51 at 14:15 must be flagged as NEXT departure because S51 precedes S81 lexicographically")
         XCTAssertFalse(s81Pill.isNextDeparture, "S81 at 14:15 must NOT be flagged as NEXT departure")
+    }
+    
+    func testDepartureMatrixSingleRouteDefaultingScopesToActiveLine() {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 9; comps.day = 12
+        comps.hour = 14; comps.minute = 10; comps.second = 0
+        let date1410 = calendar.date(from: comps)!
+        
+        let deps = [
+            SpatialDatabaseManager.DeparturePillRecord(id: "DEP_S81_15", tripId: "T_S81", routeId: "S81", destination: "St George", minute: 15),
+            SpatialDatabaseManager.DeparturePillRecord(id: "DEP_S51_15", tripId: "T_S51", routeId: "S51", destination: "St George", minute: 15),
+            SpatialDatabaseManager.DeparturePillRecord(id: "DEP_S51_30", tripId: "T_S51_2", routeId: "S51", destination: "St George", minute: 30)
+        ]
+        
+        let sampleHours = (0..<24).map { h in
+            if h == 14 { return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 14, departures: deps) }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+        
+        // Default without initialRouteFilter must scope exclusively to routeId "S51"
+        let view = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "S51",
+            routeIds: ["S51", "S81"],
+            stopId: "200153",
+            liveArrivals: [],
+            referenceDate: date1410
+        )
+        
+        let reconciled = view.reconciledRecords(at: date1410)
+        let hour14 = reconciled.first(where: { $0.hourOfDay == 14 })!
+        
+        // Only S51 departures must be present in the reconciled stream
+        XCTAssertEqual(hour14.departures.count, 2, "Default single-route scope must filter out co-located S81 departures")
+        XCTAssertTrue(hour14.departures.allSatisfy { $0.routeId == "S51" }, "All departures must belong to active route S51")
     }
     
     func testDepartureMatrixResetPreExistingNextFlags() {

@@ -1880,6 +1880,101 @@ final class TransitRevealSheetTests: XCTestCase {
             "TransitRevealSheet must supply an onBack closure to transition back to the station overview."
         )
     }
+
+    // MARK: - Wave PC.4 Timetable Departure Matrix Tests (Bugs 2.1–2.4)
+
+    func testDepartureMatrixDestinationBadges() {
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Far Rockaway - Mott Av"), "ROCKAWAY")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Rockaway Park - Beach 116 St"), "ROCK PK")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Ozone Park - Lefferts Blvd"), "LEFFERTS")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Eastchester - Dyre Av"), "DYRE")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Nereid Ave - 238 St"), "NEREID")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Pelham Bay Park"), "PELHAM")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Wakefield - 241 St"), "WAKEFIELD")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Flatbush Ave - Brooklyn College"), "FLATBUSH")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Inwood - 207 St"), "INWOOD")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "34 St - Hudson Yards"), "HUDSON YDS")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Flushing - Main St"), "FLUSHING")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Canarsie - Rockaway Pkwy"), "CANARSIE")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "8th Ave"), "8 AV")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "St George Ferry"), "ST GEORGE")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Tottenville"), "TOTTENVILLE")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: "Terminal"), "EXP")
+        XCTAssertEqual(DepartureMatrixView.destinationBadge(for: ""), "EXP")
+    }
+
+    func testDepartureMatrixSingleRouteDefaulting() {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 9; comps.day = 14
+        comps.hour = 12; comps.minute = 0; comps.second = 0
+        let date1200 = calendar.date(from: comps)!
+
+        let departures = [
+            SpatialDatabaseManager.DeparturePillRecord(id: "DEP_A1", tripId: "T_A1", routeId: "A", destination: "Far Rockaway", minute: 5),
+            SpatialDatabaseManager.DeparturePillRecord(id: "DEP_C1", tripId: "T_C1", routeId: "C", destination: "Euclid Ave", minute: 10),
+            SpatialDatabaseManager.DeparturePillRecord(id: "DEP_E1", tripId: "T_E1", routeId: "E", destination: "World Trade Center", minute: 15),
+            SpatialDatabaseManager.DeparturePillRecord(id: "DEP_A2", tripId: "T_A2", routeId: "A", destination: "Lefferts Blvd", minute: 20)
+        ]
+
+        let sampleHours = (0..<24).map { h in
+            if h == 12 { return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: 12, departures: departures) }
+            return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+        }
+
+        // Initialize at multi-trunk station (42 St - PABT) with [A, C, E]
+        let view = DepartureMatrixView(
+            records: sampleHours,
+            routeId: "A",
+            routeIds: ["A", "C", "E"],
+            stopId: "stop_pabt",
+            liveArrivals: [],
+            referenceDate: date1200
+        )
+
+        let reconciled = view.reconciledRecords(at: date1200)
+        let hour12 = reconciled.first(where: { $0.hourOfDay == 12 })!
+
+        // Must strictly contain A line departures, eliminating C and E from initial matrix view
+        XCTAssertEqual(hour12.departures.count, 2, "Default single-route scope must filter out co-located C and E departures")
+        XCTAssertEqual(hour12.departures.map(\.id), ["DEP_A1", "DEP_A2"], "Only active line (A) departures must be included")
+    }
+
+    func testFirstClickInvariantFC4ZeroUnclippedHeightCollisions() throws {
+        // Enforce First-Click Invariant FC-4: Zero Unclipped Height Collisions
+        // HourRowView must dynamically expand without hardcoded 56pt height clamp
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let targetFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/DepartureMatrixView.swift")
+
+        let content = try String(contentsOf: targetFile, encoding: .utf8)
+
+        XCTAssertFalse(
+            content.contains(".frame(height: Self.defaultRowHeight, alignment: .top)"),
+            "FC-4 Violation: HourRowView in DepartureMatrixView must not be clamped with fixed row height"
+        )
+        XCTAssertTrue(
+            content.contains(".fixedSize(horizontal: false, vertical: true)"),
+            "HourRowView must specify .fixedSize(horizontal: false, vertical: true) for dynamic vertical expansion"
+        )
+    }
+
+    func testDepartureMatrixMinuteCapsuleFormat() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let targetFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/DepartureMatrixView.swift")
+
+        let content = try String(contentsOf: targetFile, encoding: .utf8)
+
+        XCTAssertTrue(
+            content.contains("String(format: \":%02d\", pill.minute)"),
+            "Departure pills must render clean :MM minute capsules (e.g. :21)"
+        )
+        XCTAssertFalse(
+            content.contains("String(format: \"%02d:%02d\", hour, pill.minute)"),
+            "Departure pills must not repeat the row hour prefix (e.g. 14:21 inside 14:00 row)"
+        )
+    }
 }
 
 

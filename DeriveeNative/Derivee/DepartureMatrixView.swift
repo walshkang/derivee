@@ -30,6 +30,7 @@ struct DepartureMatrixView: View {
         availableDirections: Set<Int> = [0, 1],
         selectedDirection: Binding<Int> = .constant(0),
         selectedDayOffset: Binding<Int> = .constant(0),
+        initialRouteFilter: String? = nil,
         isHistoricalFallback: Bool = false,
         isObservedReplay: Bool = false,
         scheduleValidity: ScheduleValidity? = nil,
@@ -37,7 +38,8 @@ struct DepartureMatrixView: View {
     ) {
         self.records = records
         self.routeId = routeId
-        self.routeIds = routeIds.isEmpty ? [routeId] : routeIds
+        let effectiveRouteIds = routeIds.isEmpty ? [routeId] : routeIds
+        self.routeIds = effectiveRouteIds
         self.stopId = stopId
         self.liveArrivals = liveArrivals
         let effectiveDirs = availableDirections.isEmpty ? Set([0, 1]) : availableDirections
@@ -49,11 +51,14 @@ struct DepartureMatrixView: View {
         self._selectedDirection = selectedDirection
         self._selectedDayOffset = selectedDayOffset
         
-        let targetHour = (selectedDayOffset.wrappedValue == 0)
-            ? Calendar.current.component(.hour, from: referenceDate ?? Date())
-            : 0
-        self._scrollPositionID = State(initialValue: targetHour)
-        self._isInitialized = State(initialValue: true)
+        let defaultFilter: String = {
+            if let initial = initialRouteFilter { return initial }
+            if effectiveRouteIds.contains(routeId) { return routeId }
+            return effectiveRouteIds.first ?? routeId
+        }()
+        self._selectedRouteFilter = State(initialValue: defaultFilter)
+        self._scrollPositionID = State(initialValue: nil)
+        self._isInitialized = State(initialValue: false)
         
         if !effectiveDirs.contains(selectedDirection.wrappedValue), let firstAvailable = effectiveDirs.sorted().first {
             DispatchQueue.main.async {
@@ -112,6 +117,76 @@ struct DepartureMatrixView: View {
         if !availableDirections.contains(selectedDirection), let firstAvailable = availableDirections.sorted().first {
             selectedDirection = firstAvailable
         }
+    }
+    
+    static func destinationBadge(for destination: String) -> String {
+        let trimmed = destination.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.uppercased() != "TERMINAL" else {
+            return "EXP"
+        }
+        let upper = trimmed.uppercased()
+        
+        // High-frequency branch & terminal disambiguations
+        if upper.contains("FAR ROCKAWAY") {
+            return "ROCKAWAY"
+        } else if upper.contains("ROCKAWAY PARK") || upper.contains("BEACH 116") {
+            return "ROCK PK"
+        } else if upper.contains("LEFFERTS") {
+            return "LEFFERTS"
+        } else if upper.contains("DYRE") {
+            return "DYRE"
+        } else if upper.contains("NEREID") {
+            return "NEREID"
+        } else if upper.contains("PELHAM") {
+            return "PELHAM"
+        } else if upper.contains("PARKCHESTER") {
+            return "PARKCHESTER"
+        } else if upper.contains("WAKEFIELD") || upper.contains("241") {
+            return "WAKEFIELD"
+        } else if upper.contains("FLATBUSH") {
+            return "FLATBUSH"
+        } else if upper.contains("UTICA") {
+            return "UTICA"
+        } else if upper.contains("NEW LOTS") {
+            return "NEW LOTS"
+        } else if upper.contains("INWOOD") || upper.contains("207") {
+            return "INWOOD"
+        } else if upper.contains("HUDSON YARDS") {
+            return "HUDSON YDS"
+        } else if upper.contains("FLUSHING") || upper.contains("MAIN ST") {
+            return "FLUSHING"
+        } else if upper.contains("CANARSIE") {
+            return "CANARSIE"
+        } else if upper.contains("8TH AVE") || upper.contains("8 AV") {
+            return "8 AV"
+        } else if upper.contains("CHURCH") {
+            return "CHURCH"
+        } else if upper.contains("COURT SQ") {
+            return "COURT SQ"
+        } else if upper.contains("ST GEORGE") {
+            return "ST GEORGE"
+        } else if upper.contains("TOTTENVILLE") {
+            return "TOTTENVILLE"
+        } else if upper.contains("WOODLAWN") {
+            return "WOODLAWN"
+        } else if upper.contains("BOWLING GREEN") {
+            return "BWLG GRN"
+        }
+        
+        // General fallback: clean separators and strip street suffixes
+        let firstPart = trimmed.components(separatedBy: " - ").first ?? trimmed
+        let clean = firstPart
+            .replacingOccurrences(of: " Ave", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: " Av", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: " St", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: " Blvd", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        
+        if clean.isEmpty || clean == "TERMINAL" {
+            return "EXP"
+        }
+        return String(clean.prefix(8))
     }
     
     private var filteredRecords: [SpatialDatabaseManager.HourScheduleRecord] {
@@ -473,27 +548,6 @@ struct DepartureMatrixView: View {
                 if routeIds.count > 1 {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.15)) {
-                                    selectedRouteFilter = "ALL"
-                                }
-                            } label: {
-                                Text("All Routes")
-                                    .font(.system(size: 11, weight: selectedRouteFilter == "ALL" ? .bold : .medium, design: .rounded))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(
-                                        Capsule()
-                                            .fill(selectedRouteFilter == "ALL" ? Color(hex: "#FFB300").opacity(0.18) : Color.primary.opacity(0.05))
-                                    )
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(selectedRouteFilter == "ALL" ? Color(hex: "#FFB300") : Color.primary.opacity(0.08), lineWidth: 1)
-                                    )
-                                    .foregroundColor(selectedRouteFilter == "ALL" ? Color(hex: "#FFB300") : .secondary)
-                            }
-                            .buttonStyle(.plain)
-                            
                             ForEach(routeIds, id: \.self) { rId in
                                 let rInfo = TransitRouteData.lineInfo(for: rId)
                                 let isSelected = selectedRouteFilter.uppercased() == rId.uppercased()
@@ -603,7 +657,6 @@ struct DepartureMatrixView: View {
                             allScheduleDates: allTransitionDates,
                             isStatic: referenceDate != nil
                         )
-                        .frame(height: Self.defaultRowHeight, alignment: .top)
                         .id(hourRec.hourOfDay)
                         
                         if hourRec.hourOfDay != 23 {
@@ -658,6 +711,7 @@ struct DepartureMatrixView: View {
         .task {
             guard !isInitialized else { return }
             let initialTarget = resolveInitialScrollTarget(relativeTo: referenceDate ?? currentDate)
+            await Task.yield()
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
@@ -759,11 +813,15 @@ private struct HourRowView: View {
     var body: some View {
         if isStatic {
             rowContent(activeHour: currentHour)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 4)
         } else {
             TimelineView(.explicit(allScheduleDates)) { context in
                 let wallHour = Calendar.current.component(.hour, from: context.date)
                 rowContent(activeHour: wallHour)
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.vertical, 4)
         }
     }
     
@@ -836,6 +894,10 @@ private struct DeparturePillView: View {
     
     private var isDuplicated: Bool {
         pill.scheduleRelationship == .duplicated
+    }
+    
+    static func destinationBadge(for destination: String) -> String {
+        DepartureMatrixView.destinationBadge(for: destination)
     }
     
     var body: some View {
@@ -920,8 +982,8 @@ private struct DeparturePillView: View {
                     .frame(width: 5, height: 5)
             }
             
-            // Monospace Full Time (HH:mm)
-            Text(String(format: "%02d:%02d", hour, pill.minute))
+            // Monospace Minute Capsule (:MM)
+            Text(String(format: ":%02d", pill.minute))
                 .font(.system(size: 11, weight: isNext ? .bold : (pill.isExpress ? .heavy : .semibold), design: .monospaced))
                 .strikethrough(isCanceled, color: Color(hex: "#FF453A"))
                 .foregroundColor(
@@ -929,11 +991,16 @@ private struct DeparturePillView: View {
                     (isPast ? .secondary : (pill.isExpress ? Color(hex: routeInfo.textColorHex) : .primary))
                 )
             
-            // Express Tag
+            // Express / Branch Destination Badge
             if pill.isExpress && !isCanceled {
-                Text("EXP")
+                let badge = Self.destinationBadge(for: pill.destination)
+                Text(badge)
                     .font(.system(size: 8, weight: .bold, design: .rounded))
                     .foregroundColor(Color(hex: routeInfo.textColorHex).opacity(isPast ? 0.5 : 0.9))
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(Color(hex: routeInfo.textColorHex).opacity(0.18))
+                    .clipShape(Capsule())
             }
         }
         .padding(.horizontal, pill.isExpress ? 7 : 6)
