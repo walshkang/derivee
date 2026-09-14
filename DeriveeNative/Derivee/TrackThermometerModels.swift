@@ -141,6 +141,26 @@ public struct CrowdDensityEstimate: Sendable, Equatable {
             }
         }
         
+        /// Commuter-grade concise tri-tier status label (design.md §13.3 & Task PC.1).
+        public var glanceableTitle: String {
+            switch self {
+            case .light: return "Light"
+            case .moderate: return "Moderate"
+            case .crowded: return "Crowded"
+            case .full: return "Crowded"
+            }
+        }
+        
+        /// Glanceable status indicator emoji for semantic micro-badges.
+        public var statusEmoji: String {
+            switch self {
+            case .light: return "🟢"
+            case .moderate: return "🟡"
+            case .crowded: return "🟠"
+            case .full: return "🔴"
+            }
+        }
+        
         public var statusColor: Color {
             switch self {
             case .light: return Color(hex: "#10B981")    // Emerald

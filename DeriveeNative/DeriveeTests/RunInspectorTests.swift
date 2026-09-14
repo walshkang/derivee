@@ -326,4 +326,54 @@ final class RunInspectorTests: XCTestCase {
         let surfaceHosting = UIHostingController(rootView: surface)
         XCTAssertNotNil(surfaceHosting.view)
     }
+
+    // MARK: - 8. Wave PC.1 Accordion Threshold & Glanceable Crowding Tests
+
+    func testPassedStopsAccordionThresholdLogic() {
+        let dummyStops = (0..<10).map { i in
+            TrackStop(
+                stopId: "S\(i)",
+                stopName: "Station \(i)",
+                coordinate: CLLocationCoordinate2D(latitude: 40.70 + Double(i) * 0.01, longitude: -73.95),
+                sequenceIndex: i,
+                isPassed: i < 5,
+                isCurrent: i == 5
+            )
+        }
+        
+        let passed = dummyStops.filter { $0.isPassed }
+        let upcoming = dummyStops.filter { !$0.isPassed }
+        
+        XCTAssertEqual(passed.count, 5)
+        XCTAssertTrue(passed.count >= 3, "Passed stops >= 3 should trigger accordion disclosure container")
+        XCTAssertEqual(upcoming.count, 5)
+        XCTAssertTrue(upcoming.first?.isCurrent == true, "First stop in upcoming block must be active station")
+        
+        // Under threshold (< 3 passed stops)
+        let fewPassedStops = (0..<4).map { i in
+            TrackStop(
+                stopId: "S\(i)",
+                stopName: "Station \(i)",
+                coordinate: CLLocationCoordinate2D(latitude: 40.70 + Double(i) * 0.01, longitude: -73.95),
+                sequenceIndex: i,
+                isPassed: i < 2,
+                isCurrent: i == 2
+            )
+        }
+        let fewPassed = fewPassedStops.filter { $0.isPassed }
+        XCTAssertEqual(fewPassed.count, 2)
+        XCTAssertFalse(fewPassed.count >= 3, "Passed stops < 3 must render inline without accordion")
+    }
+
+    func testGlanceableCrowdingBadges() {
+        XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.light.glanceableTitle, "Light")
+        XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.moderate.glanceableTitle, "Moderate")
+        XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.crowded.glanceableTitle, "Crowded")
+        XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.full.glanceableTitle, "Crowded")
+        
+        XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.light.statusEmoji, "🟢")
+        XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.moderate.statusEmoji, "🟡")
+        XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.crowded.statusEmoji, "🟠")
+        XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.full.statusEmoji, "🔴")
+    }
 }

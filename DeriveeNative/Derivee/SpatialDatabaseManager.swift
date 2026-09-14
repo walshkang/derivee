@@ -1747,6 +1747,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let isHoldingStation: Bool
         public let progressLambda: Double
         public let isAssigned: Bool
+        public let vehicleCoordinate: CLLocationCoordinate2D?
+        public let vehicleBearing: Double?
         
         public init(
             id: UUID = UUID(),
@@ -1760,7 +1762,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             scheduleRelationship: ScheduleRelationship = .scheduled,
             isHoldingStation: Bool = false,
             progressLambda: Double = 0.0,
-            isAssigned: Bool = false
+            isAssigned: Bool = false,
+            vehicleCoordinate: CLLocationCoordinate2D? = nil,
+            vehicleBearing: Double? = nil
         ) {
             self.id = id
             self.line = line
@@ -1774,6 +1778,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.isHoldingStation = isHoldingStation
             self.progressLambda = progressLambda
             self.isAssigned = isAssigned
+            self.vehicleCoordinate = vehicleCoordinate
+            self.vehicleBearing = vehicleBearing
         }
         
         /// Direction ID (0 or 1) inferred from the direction label.

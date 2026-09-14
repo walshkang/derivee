@@ -64,6 +64,7 @@ public struct SurfaceRunInspector: View {
     
     @State private var stopLadder: [TrackStop] = []
     @State private var isLoadingLadder: Bool = true
+    @State private var isPassedStopsExpanded: Bool = false
     @State private var crowdEstimate: CrowdDensityEstimate = CrowdDensityEstimate(level: .moderate, isLiveSensors: false)
     @State private var activeDisruption: String? = nil
     @State private var isDisruptionDismissed: Bool = false
@@ -130,30 +131,39 @@ public struct SurfaceRunInspector: View {
     
     public var body: some View {
         NavigationStack {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
-                    // 1. Hero: Identity & Imminence
-                    renderHeroHeader()
-                    
-                    // 2. Alert: Active Disruption Banner (if present & not dismissed)
-                    if let disruption = activeDisruption, !isDisruptionDismissed {
-                        renderDisruptionBanner(disruption)
+            ScrollViewReader { scrollProxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // 1. Hero: Identity & Imminence
+                        renderHeroHeader()
+                        
+                        // 2. Alert: Active Disruption Banner (if present & not dismissed)
+                        if let disruption = activeDisruption, !isDisruptionDismissed {
+                            renderDisruptionBanner(disruption)
+                        }
+                        
+                        Divider()
+                            .padding(.vertical, 2)
+                        
+                        // 3. Core: Stop Progression Ladder
+                        renderStopProgressionLadder()
+                        
+                        // 4. Context: Follow-On Departure
+                        if let nextArr = followOnArrival {
+                            renderFollowOnDeparture(nextArr)
+                        }
                     }
-                    
-                    Divider()
-                        .padding(.vertical, 2)
-                    
-                    // 3. Core: Stop Progression Ladder
-                    renderStopProgressionLadder()
-                    
-                    // 4. Context: Follow-On Departure
-                    if let nextArr = followOnArrival {
-                        renderFollowOnDeparture(nextArr)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 36)
+                }
+                .onChange(of: isLoadingLadder) { _, loading in
+                    if !loading, let currentStop = stopLadder.first(where: { $0.isCurrent }) {
+                        withAnimation(.easeInOut(duration: 0.35)) {
+                            scrollProxy.scrollTo("ACTIVE_STATION_\(currentStop.id)", anchor: .top)
+                        }
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 36)
             }
             .navigationTitle(isFerry ? "Ferry Inspector" : "Bus Inspector")
             .navigationBarTitleDisplayMode(.inline)
@@ -376,9 +386,66 @@ public struct SurfaceRunInspector: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
             } else {
+                let passedStops = stopLadder.filter { $0.isPassed }
+                let activeAndUpcomingStops = stopLadder.filter { !$0.isPassed }
+                let shouldCollapsePassed = passedStops.count >= 3
+                
                 VStack(spacing: 0) {
-                    ForEach(Array(stopLadder.enumerated()), id: \.element.id) { index, stop in
-                        renderLadderNode(stop: stop, isFirst: index == 0, isLast: index == stopLadder.count - 1)
+                    if shouldCollapsePassed {
+                        // Collapsed Accordion Header / Toggle
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.22)) {
+                                isPassedStopsExpanded.toggle()
+                            }
+                        } label: {
+                            HStack(alignment: .center, spacing: 14) {
+                                // Continuous Track Stem indicator
+                                VStack(spacing: 0) {
+                                    Rectangle()
+                                        .fill(Color.clear)
+                                        .frame(width: 4, height: 6)
+                                    Circle()
+                                        .fill(Color.secondary.opacity(0.35))
+                                        .frame(width: 8, height: 8)
+                                    Rectangle()
+                                        .fill(Color.secondary.opacity(0.25))
+                                        .frame(width: 4, height: 6)
+                                }
+                                .frame(width: 24)
+                                
+                                Text("\(passedStops.count) \(routeConfig.stopLabelNoun.lowercased())s passed")
+                                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.secondary)
+                                
+                                Image(systemName: isPassedStopsExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                            }
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        
+                        if isPassedStopsExpanded {
+                            ForEach(Array(passedStops.enumerated()), id: \.element.id) { index, stop in
+                                renderLadderNode(stop: stop, isFirst: index == 0, isLast: false)
+                            }
+                        }
+                    } else {
+                        // Fewer than 3 passed stops: render inline
+                        ForEach(Array(passedStops.enumerated()), id: \.element.id) { index, stop in
+                            renderLadderNode(stop: stop, isFirst: index == 0, isLast: false)
+                        }
+                    }
+                    
+                    // Active & Upcoming stops
+                    ForEach(Array(activeAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
+                        let isFirstInBlock = passedStops.isEmpty && index == 0
+                        let isLastInBlock = index == activeAndUpcomingStops.count - 1
+                        renderLadderNode(stop: stop, isFirst: isFirstInBlock, isLast: isLastInBlock)
+                            .id(stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id)
                     }
                 }
                 .padding(.vertical, 10)
@@ -552,7 +619,7 @@ public struct SurfaceRunInspector: View {
             Circle()
                 .fill(crowdEstimate.level.statusColor)
                 .frame(width: 6, height: 6)
-            Text(crowdEstimate.level.title)
+            Text(crowdEstimate.level.glanceableTitle)
                 .font(.system(size: 9.5, weight: .bold, design: .rounded))
                 .foregroundColor(crowdEstimate.level.statusColor)
         }
@@ -625,6 +692,11 @@ public struct SurfaceRunInspector: View {
                 fallbackStops: ladder.map(\.coordinate)
             )
             
+            let vehicleLoc = TransitRealtimeService.shared.resolveVehicleLocation(
+                arrival: arrival,
+                ladder: ladder
+            )
+            
             if let validStationCoord = stationCoord {
                 let command = RouteInspectionCommand(
                     routeId: arrival.line,
@@ -634,7 +706,10 @@ public struct SurfaceRunInspector: View {
                     modalClass: routeConfig.modalClass,
                     coordinates: polyline,
                     stationCoordinate: validStationCoord,
-                    shouldFrameCamera: true
+                    shouldFrameCamera: true,
+                    vehicleCoordinate: vehicleLoc?.coordinate,
+                    vehicleBearing: vehicleLoc?.bearing,
+                    vehicleStatus: arrival.distanceDescription
                 )
                 
                 await MainActor.run {

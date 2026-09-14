@@ -242,4 +242,138 @@ final class InspectorMapSyncTests: XCTestCase {
         sheet.onClearRouteInspection?()
         XCTAssertEqual(clearCount, 1)
     }
+
+    // MARK: - 4. Wave PC.1 Live Map Vehicle Tracking & Location Resolution Tests
+
+    func testRouteInspectionCommandVehiclePuckAttributes() {
+        let station = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9772)
+        let vehicle = CLLocationCoordinate2D(latitude: 40.7600, longitude: -73.9700)
+        let coords = [
+            CLLocationCoordinate2D(latitude: 40.7500, longitude: -73.9800),
+            station
+        ]
+        
+        let cmd = RouteInspectionCommand(
+            routeId: "L",
+            lineName: "14th St - Canarsie Local",
+            agencyColorHex: "#A7A9AC",
+            modalClass: .subway,
+            coordinates: coords,
+            stationCoordinate: station,
+            vehicleCoordinate: vehicle,
+            vehicleBearing: 45.0,
+            vehicleStatus: "Approaching"
+        )
+        
+        XCTAssertNotNil(cmd.vehicleCoordinate)
+        XCTAssertEqual(cmd.vehicleCoordinate?.latitude, vehicle.latitude)
+        XCTAssertEqual(cmd.vehicleCoordinate?.longitude, vehicle.longitude)
+        XCTAssertEqual(cmd.vehicleBearing, 45.0)
+        XCTAssertEqual(cmd.vehicleStatus, "Approaching")
+        
+        // Bounding box must enclose both station and vehicle
+        let bounds = cmd.computedBoundingBox()
+        XCTAssertNotNil(bounds)
+        guard let b = bounds else { return }
+        XCTAssertLessThanOrEqual(b.sw.latitude, station.latitude)
+        XCTAssertGreaterThanOrEqual(b.ne.latitude, vehicle.latitude)
+        XCTAssertLessThanOrEqual(b.sw.longitude, coords[0].longitude)
+        XCTAssertGreaterThanOrEqual(b.ne.longitude, vehicle.longitude)
+    }
+
+    func testVehicleLocationResolutionBusGPS() {
+        let gpsCoord = CLLocationCoordinate2D(latitude: 40.7300, longitude: -73.9800)
+        let busArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "M15",
+            destination: "South Ferry",
+            minutes: 3,
+            direction: "Downtown",
+            distanceDescription: "1 stop away",
+            vehicleCoordinate: gpsCoord,
+            vehicleBearing: 180.0
+        )
+        
+        let dummyLadder = [
+            TrackStop(stopId: "1", stopName: "Stop 1", coordinate: CLLocationCoordinate2D(latitude: 40.74, longitude: -73.98), sequenceIndex: 0, isPassed: true),
+            TrackStop(stopId: "2", stopName: "Stop 2", coordinate: CLLocationCoordinate2D(latitude: 40.73, longitude: -73.98), sequenceIndex: 1, isCurrent: true)
+        ]
+        
+        let resolved = TransitRealtimeService.shared.resolveVehicleLocation(arrival: busArrival, ladder: dummyLadder)
+        XCTAssertNotNil(resolved)
+        XCTAssertEqual(resolved?.coordinate.latitude, gpsCoord.latitude)
+        XCTAssertEqual(resolved?.coordinate.longitude, gpsCoord.longitude)
+        XCTAssertEqual(resolved?.bearing, 180.0)
+    }
+
+    func testVehicleLocationResolutionSubwayPlatform() {
+        let subwayArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 0,
+            distanceDescription: "Boarding"
+        )
+        
+        let stationCoord = CLLocationCoordinate2D(latitude: 40.7173, longitude: -73.9566)
+        let nextCoord = CLLocationCoordinate2D(latitude: 40.7180, longitude: -73.9500)
+        let dummyLadder = [
+            TrackStop(stopId: "L10", stopName: "Bedford Av", coordinate: stationCoord, sequenceIndex: 0, isCurrent: true),
+            TrackStop(stopId: "L11", stopName: "Lorimer St", coordinate: nextCoord, sequenceIndex: 1)
+        ]
+        
+        let resolved = TransitRealtimeService.shared.resolveVehicleLocation(arrival: subwayArrival, ladder: dummyLadder)
+        XCTAssertNotNil(resolved)
+        XCTAssertEqual(resolved?.coordinate.latitude, stationCoord.latitude)
+        XCTAssertEqual(resolved?.coordinate.longitude, stationCoord.longitude)
+        XCTAssertNotNil(resolved?.bearing)
+    }
+
+    func testVehicleLocationResolutionSubwayInterpolation() {
+        let subwayArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 2,
+            distanceDescription: "Approaching",
+            progressLambda: 0.80
+        )
+        
+        let upstreamCoord = CLLocationCoordinate2D(latitude: 40.7100, longitude: -73.9500)
+        let currentCoord = CLLocationCoordinate2D(latitude: 40.7200, longitude: -73.9600)
+        let dummyLadder = [
+            TrackStop(stopId: "L09", stopName: "1 Av", coordinate: upstreamCoord, sequenceIndex: 0, isPassed: true),
+            TrackStop(stopId: "L10", stopName: "Bedford Av", coordinate: currentCoord, sequenceIndex: 1, isCurrent: true)
+        ]
+        
+        let resolved = TransitRealtimeService.shared.resolveVehicleLocation(arrival: subwayArrival, ladder: dummyLadder)
+        XCTAssertNotNil(resolved)
+        
+        // Progress 0.80 means vehicle is 80% of the way from upstream (40.71) toward current (40.72)
+        let expectedLat = 40.7100 + (40.7200 - 40.7100) * 0.80
+        let expectedLon = -73.9500 + (-73.9600 - (-73.9500)) * 0.80
+        XCTAssertEqual(resolved!.coordinate.latitude, expectedLat, accuracy: 0.0001)
+        XCTAssertEqual(resolved!.coordinate.longitude, expectedLon, accuracy: 0.0001)
+        XCTAssertNotNil(resolved?.bearing)
+    }
+
+    func testVehicleLocationResolutionTerminusHold() {
+        let heldArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 5,
+            distanceDescription: "At Terminus",
+            isHoldingStation: true
+        )
+        
+        let originCoord = CLLocationCoordinate2D(latitude: 40.6350, longitude: -73.9010)
+        let nextCoord = CLLocationCoordinate2D(latitude: 40.6400, longitude: -73.9020)
+        let dummyLadder = [
+            TrackStop(stopId: "L29", stopName: "Canarsie-Rockaway Pkwy", coordinate: originCoord, sequenceIndex: 0, isPassed: true),
+            TrackStop(stopId: "L28", stopName: "East 105 St", coordinate: nextCoord, sequenceIndex: 1, isPassed: true),
+            TrackStop(stopId: "L10", stopName: "Bedford Av", coordinate: CLLocationCoordinate2D(latitude: 40.7173, longitude: -73.9566), sequenceIndex: 2, isCurrent: true)
+        ]
+        
+        let resolved = TransitRealtimeService.shared.resolveVehicleLocation(arrival: heldArrival, ladder: dummyLadder)
+        XCTAssertNotNil(resolved)
+        XCTAssertEqual(resolved?.coordinate.latitude, originCoord.latitude)
+        XCTAssertEqual(resolved?.coordinate.longitude, originCoord.longitude)
+    }
 }

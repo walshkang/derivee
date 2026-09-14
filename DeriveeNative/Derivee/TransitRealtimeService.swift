@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 import SwiftProtobuf
 
 public struct TransitAlert: Identifiable, Sendable, Equatable {
@@ -137,7 +138,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
             return set
         }()
         
-        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship, isHoldingStation: Bool, progressLambda: Double, isAssigned: Bool)] = []
+        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship, isHoldingStation: Bool, progressLambda: Double, isAssigned: Bool, vehicleCoord: CLLocationCoordinate2D?, vehicleBearing: Double?)] = []
         let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         
         // 1. Index VehiclePositions from the feed by tripId and vehicleId
@@ -222,6 +223,21 @@ public final class TransitRealtimeService: @unchecked Sendable {
                     return vp.trip.TransitRealtime_nyctTripDescriptor.isAssigned
                 }
                 return false
+            }()
+            
+            // Direct GPS vehicle telemetry (bus or equipped consist)
+            let directVehicleCoord: CLLocationCoordinate2D? = {
+                if let vp = matchedVehicle, vp.hasPosition, abs(vp.position.latitude) > 0.1 {
+                    return CLLocationCoordinate2D(latitude: Double(vp.position.latitude), longitude: Double(vp.position.longitude))
+                }
+                return nil
+            }()
+            
+            let directVehicleBearing: Double? = {
+                if let vp = matchedVehicle, vp.hasPosition && vp.position.hasBearing {
+                    return Double(vp.position.bearing)
+                }
+                return nil
             }()
             
             let isVehicleStoppedAt: Bool = {
@@ -383,7 +399,9 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         scheduleRelationship: effectiveRelationship,
                         isHoldingStation: dwellState.isHolding,
                         progressLambda: dwellState.linearProgress,
-                        isAssigned: isAssigned
+                        isAssigned: isAssigned,
+                        vehicleCoord: directVehicleCoord,
+                        vehicleBearing: directVehicleBearing
                     ))
                 }
             }
@@ -419,7 +437,9 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 scheduleRelationship: item.scheduleRelationship,
                 isHoldingStation: item.isHoldingStation,
                 progressLambda: item.progressLambda,
-                isAssigned: item.isAssigned
+                isAssigned: item.isAssigned,
+                vehicleCoordinate: item.vehicleCoord,
+                vehicleBearing: item.vehicleBearing
             )
         }
         
@@ -902,5 +922,94 @@ public final class TransitRealtimeService: @unchecked Sendable {
         }
         
         return label
+    }
+    
+    // MARK: - Live Vehicle Location Resolution (Task PC.1 / WPC1)
+    
+    /// Resolves the real-time vehicle coordinate and bearing along the route progression.
+    /// Uses direct GPS telemetry when available (e.g. buses), or falls back to station snapping
+    /// and kinematic polyline interpolation for underground subway consists.
+    public func resolveVehicleLocation(
+        arrival: SpatialDatabaseManager.ArrivalInfo,
+        ladder: [TrackStop]
+    ) -> (coordinate: CLLocationCoordinate2D, bearing: Double?)? {
+        // 1. Direct GPS Telemetry (Bus / Surface)
+        if let directCoord = arrival.vehicleCoordinate {
+            return (directCoord, arrival.vehicleBearing)
+        }
+        
+        guard !ladder.isEmpty else { return nil }
+        
+        let currentIndex = ladder.firstIndex(where: { $0.isCurrent }) ?? 0
+        let currentStop = ladder[currentIndex]
+        
+        // 2. Consist is dwelling at the active platform or boarding
+        if arrival.minutes <= 0 || arrival.distanceDescription == "Boarding" || arrival.distanceDescription == "At Platform" {
+            let bearing: Double? = {
+                if currentIndex + 1 < ladder.count {
+                    return Self.calculateBearing(from: currentStop.coordinate, to: ladder[currentIndex + 1].coordinate)
+                }
+                return nil
+            }()
+            return (currentStop.coordinate, bearing)
+        }
+        
+        // 3. Consist is held or dwelling at origin terminus
+        if arrival.isHoldingStation {
+            let originStop = ladder.first!
+            let bearing = ladder.count > 1 ? Self.calculateBearing(from: originStop.coordinate, to: ladder[1].coordinate) : nil
+            return (originStop.coordinate, bearing)
+        }
+        
+        // 4. In Transit / Approaching Upstream Stations
+        let desc = arrival.distanceDescription ?? ""
+        if desc == "Approaching" {
+            if currentIndex > 0 {
+                let prevStop = ladder[currentIndex - 1]
+                let lambda = arrival.progressLambda > 0 ? arrival.progressLambda : 0.85
+                let lat = prevStop.coordinate.latitude + (currentStop.coordinate.latitude - prevStop.coordinate.latitude) * lambda
+                let lon = prevStop.coordinate.longitude + (currentStop.coordinate.longitude - prevStop.coordinate.longitude) * lambda
+                let bearing = Self.calculateBearing(from: prevStop.coordinate, to: currentStop.coordinate)
+                return (CLLocationCoordinate2D(latitude: lat, longitude: lon), bearing)
+            } else {
+                return (currentStop.coordinate, nil)
+            }
+        }
+        
+        // Parse "X stops away"
+        var stopsAway = 1
+        if let match = desc.range(of: "\\d+", options: .regularExpression),
+           let num = Int(desc[match]) {
+            stopsAway = max(1, num)
+        }
+        
+        let targetIdx = max(0, currentIndex - stopsAway)
+        let segStart = ladder[targetIdx]
+        let nextIdx = min(ladder.count - 1, targetIdx + 1)
+        let segEnd = ladder[nextIdx]
+        
+        if targetIdx != nextIdx {
+            let lambda = arrival.progressLambda > 0 ? arrival.progressLambda : 0.35
+            let lat = segStart.coordinate.latitude + (segEnd.coordinate.latitude - segStart.coordinate.latitude) * lambda
+            let lon = segStart.coordinate.longitude + (segEnd.coordinate.longitude - segStart.coordinate.longitude) * lambda
+            let bearing = Self.calculateBearing(from: segStart.coordinate, to: segEnd.coordinate)
+            return (CLLocationCoordinate2D(latitude: lat, longitude: lon), bearing)
+        } else {
+            return (segStart.coordinate, nil)
+        }
+    }
+    
+    /// Great-circle initial bearing between two coordinates in degrees [0, 360).
+    public static func calculateBearing(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> Double {
+        let lat1 = start.latitude * .pi / 180.0
+        let lon1 = start.longitude * .pi / 180.0
+        let lat2 = end.latitude * .pi / 180.0
+        let lon2 = end.longitude * .pi / 180.0
+        let dLon = lon2 - lon1
+        let y = sin(dLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        let radians = atan2(y, x)
+        let degrees = radians * 180.0 / .pi
+        return (degrees + 360.0).truncatingRemainder(dividingBy: 360.0)
     }
 }

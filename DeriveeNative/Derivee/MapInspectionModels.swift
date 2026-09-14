@@ -14,6 +14,9 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
     public let coordinates: [CLLocationCoordinate2D]
     public let stationCoordinate: CLLocationCoordinate2D
     public let shouldFrameCamera: Bool
+    public let vehicleCoordinate: CLLocationCoordinate2D?
+    public let vehicleBearing: Double?
+    public let vehicleStatus: String?
     
     public init(
         id: UUID = UUID(),
@@ -24,7 +27,10 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         modalClass: TransitModalClass,
         coordinates: [CLLocationCoordinate2D],
         stationCoordinate: CLLocationCoordinate2D,
-        shouldFrameCamera: Bool = true
+        shouldFrameCamera: Bool = true,
+        vehicleCoordinate: CLLocationCoordinate2D? = nil,
+        vehicleBearing: Double? = nil,
+        vehicleStatus: String? = nil
     ) {
         self.id = id
         self.routeId = routeId
@@ -35,6 +41,9 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         self.coordinates = coordinates
         self.stationCoordinate = stationCoordinate
         self.shouldFrameCamera = shouldFrameCamera
+        self.vehicleCoordinate = vehicleCoordinate
+        self.vehicleBearing = vehicleBearing
+        self.vehicleStatus = vehicleStatus
     }
     
     /// Official primary line stroke color (4px).
@@ -52,7 +61,7 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         modalClass == .ferry
     }
     
-    /// Computes southwest and northeast bounds enclosing all route coordinates and the user's station.
+    /// Computes southwest and northeast bounds enclosing all route coordinates, user station, and active vehicle.
     /// Camera Safety Invariant (Wave PB.3): Filters out any errant coordinates (>45km / 0.4° lat from station).
     public func computedBoundingBox() -> (sw: CLLocationCoordinate2D, ne: CLLocationCoordinate2D)? {
         let validCoords = coordinates.filter { pt in
@@ -61,6 +70,13 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         }
         var allPoints = validCoords
         allPoints.append(stationCoordinate)
+        
+        if let vCoord = vehicleCoordinate {
+            if abs(vCoord.latitude - stationCoordinate.latitude) < 0.4 &&
+               abs(vCoord.longitude - stationCoordinate.longitude) < 0.5 {
+                allPoints.append(vCoord)
+            }
+        }
         
         guard let first = allPoints.first else { return nil }
         
@@ -105,7 +121,25 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
               lhs.shouldFrameCamera == rhs.shouldFrameCamera &&
               abs(lhs.stationCoordinate.latitude - rhs.stationCoordinate.latitude) < 0.00001 &&
               abs(lhs.stationCoordinate.longitude - rhs.stationCoordinate.longitude) < 0.00001 &&
-              lhs.coordinates.count == rhs.coordinates.count else {
+              lhs.coordinates.count == rhs.coordinates.count &&
+              lhs.vehicleStatus == rhs.vehicleStatus else {
+            return false
+        }
+        
+        if let lCoord = lhs.vehicleCoordinate, let rCoord = rhs.vehicleCoordinate {
+            if abs(lCoord.latitude - rCoord.latitude) > 0.00001 ||
+               abs(lCoord.longitude - rCoord.longitude) > 0.00001 {
+                return false
+            }
+        } else if (lhs.vehicleCoordinate == nil) != (rhs.vehicleCoordinate == nil) {
+            return false
+        }
+        
+        if let lBearing = lhs.vehicleBearing, let rBearing = rhs.vehicleBearing {
+            if abs(lBearing - rBearing) > 0.1 {
+                return false
+            }
+        } else if (lhs.vehicleBearing == nil) != (rhs.vehicleBearing == nil) {
             return false
         }
         
