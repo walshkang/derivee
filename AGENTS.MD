@@ -22,6 +22,7 @@
   - [`18_high_performance_transit_bottom_sheet_swiftui.md`](file:///Volumes/T7ssd/derivee/docs/research/18_high_performance_transit_bottom_sheet_swiftui.md): iOS 17 `.scrollPosition(id:)`, deterministic row heights, `TimelineView(.explicit(dates))` localized invalidation, 3-tier optical glass stack (>7.2:1 AAA), and `.presentationContentInteraction(.scrolls)`.
   - [`19_corridor_pulse_realtime_transit_health_engine.md`](file:///Volumes/T7ssd/derivee/docs/research/19_corridor_pulse_realtime_transit_health_engine.md): Osuna-Newell wait times $E[W] = \frac{\mu_h}{2}(1 + CV_h^2)$, TCQSM bunching $\alpha = 0.25$ & gap $\beta = 1.75$, Go regularity engine, and MapLibre GPU casing/marker layers.
   - [`20_maplibre_metal_multiscale_transit_transitions.md`](file:///Volumes/T7ssd/derivee/docs/research/20_maplibre_metal_multiscale_transit_transitions.md): Continuous paint-property cross-dissolve ($z \in [15.0, 16.5]$), 7-layer Z-stack below/above Fog, `CAST()` floor predicates, and overzooming to $\text{maxzoom}=16$.
+  - [`21_mobile_map_transit_testing_invariants.md`](file:///Volumes/T7ssd/derivee/docs/research/21_mobile_map_transit_testing_invariants.md): Shift-left local bouncer, 0.0s above-the-fold glance budget, monotonic anti-jitter ETAs, terminal dwell clamps, dynamic height clearance, and 100pt thumb zone.
 - **Pure Native Swift:** The project has migrated away from React Native / Expo. The app is a pure native iOS application written in Swift (iOS 17.0+).
 - **Project Generation:** The Xcode project is generated using `xcodegen`. Do NOT manually modify `.pbxproj` files or configure Xcode through the GUI. Instead, update `project.yml` and run `xcodegen`.
 - **Dependencies:** All dependencies (like `H3` and `GRDB`) are managed exclusively via Swift Package Manager (SPM) defined in `project.yml`. Do NOT use CocoaPods or Carthage.
@@ -68,7 +69,10 @@
   - **Tier 1 (Core Logic, C++, Go, GRDB, GIS):** Headless unit tests (`DeriveeCoreTests` / `go test`), memory budgets, and binary assertions. **Zero screenshot/snapshot requirement.**
   - **Tier 2 (SwiftUI Screens, Sheets, Cards):** Programmatic `swift-snapshot-testing` image regressions in `DeriveeTests/__Snapshots__/` and/or embedded screenshots in `walkthrough.md`.
   - **Tier 3 (MapLibre & Metal Shaders):** Numerical geometry assertions (`interiorPolygons`, vertex winding) and RMSD parity telemetry kernels — avoid flaky simulator GL/Metal snapshot diffing.
-- **CI/CD Enforcement (Phase 4):** Both test targets run in CI using **GitHub Actions**. Do NOT use Xcode Cloud due to its rigid `.xcodeproj` expectations which conflict with our dynamic `xcodegen` setup. CI acts as a post-push safety net on `main` to catch regressions immediately.
+- **Local Ergonomic Bouncer & UI Wave Definition of Done (Mandatory Shift-Left Gate):** Remote GitHub Actions CI has been retired in favor of the **2-Tier Local Bouncer** architecture (Research Doc 21). Before declaring ANY task touching UI, sheets, navigation, or maps as `✅ Done` in `ROADMAP.MD`:
+  1. Run `./scripts/verify-ux.sh` in the terminal and verify all 44 commuter ergonomics assertions pass with zero failures.
+  2. Staged commits must pass the `.githooks/pre-commit` AST bouncer without using `--no-verify`.
+  3. Agents are **strictly prohibited** from declaring task completion or updating `ROADMAP.MD` if `./scripts/verify-ux.sh` fails.
 - **Simulator Environment:** The local development environment has advanced to iOS 26.5. When running tests via `xcodebuild`, you MUST explicitly specify a valid simulator destination (e.g., `-destination 'platform=iOS Simulator,name=iPhone 17e,OS=latest'`). Do not use legacy devices like the iPhone 15 Pro.
 
 ## 4. Backend & Ecosystem Directives

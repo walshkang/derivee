@@ -1054,3 +1054,45 @@ Before submitting or merging any PR modifying user-facing SwiftUI views in Déri
    - Raw trip ID rendering: `grep -rn "tripId" DeriveeNative/Derivee/GuidewayRunInspector.swift`
 2. **0.0s Above-the-Fold Verification:** Verify in simulator (iPhone 17e) that upon opening the view, the user's primary commuter question is answered above the fold without any touch interaction.
 3. **Dynamic Type & Rotation Tolerance:** Verify that expanding font sizes or rotating to landscape does not cause cell overlaps or unclipped bounding box clipping.
+
+### 13.5 Automated Ergonomics Bouncer Architecture (2-Tier Shift-Left)
+
+To eliminate visual and cognitive regressions without the overhead and delay of remote cloud CI, Dérivée enforces a 100% local, two-tier ergonomic testing architecture (see [Research Document 21: `docs/research/21_mobile_map_transit_testing_invariants.md`](file:///Volumes/T7ssd/derivee/docs/research/21_mobile_map_transit_testing_invariants.md)):
+
+```
+Developer / Agent Commit Attempt
+               │
+               ▼
+┌────────────────────────────────────────┐
+│  Tier 1: Git Pre-Commit AST Bouncer     │  < 100ms
+│  (.githooks/pre-commit)                │  Checks staged Swift changes
+│  - Blocks hardcoded row heights        │
+│  - Blocks raw telemetry acronyms       │
+│  - Blocks nested sheets in bottom sheet│
+│  - Blocks unanchored stop ladders      │
+└──────────────────┬─────────────────────┘
+                   │ Pass
+                   ▼
+┌────────────────────────────────────────┐
+│  Tier 2: Headless Ergonomics Suite     │  < 15s (Headless)
+│  (scripts/verify-ux.sh)                │  iPhone 17e simulator
+│  - CommuterErgonomicsTests.swift       │  (Zero PNG diffs, 100% data)
+│  - 44 mathematical/layout assertions   │
+│  - FC-1 to FC-6 verification           │
+│  - 0.0s Glance Budget verification     │
+│  - Degraded State handling             │
+└──────────────────┬─────────────────────┘
+                   │ Pass
+                   ▼
+       Direct to main Commit / Push
+```
+
+1. **Tier 1: Pre-Commit AST/Pattern Bouncer (`.githooks/pre-commit`)**
+   - Configured automatically via [`scripts/setup-hooks.sh`](file:///Volumes/T7ssd/derivee/scripts/setup-hooks.sh) (`git config core.hooksPath .githooks`).
+   - Executes in $< 100\text{ms}$ directly against staged Swift changes (`git diff --cached --name-only`).
+   - Immediately aborts `git commit` if prohibited anti-patterns (e.g., hardcoded `.frame(height: 56)`, `trip_id`, nested `.sheet` in bottom sheet components) are detected.
+2. **Tier 2: Headless Commuter Ergonomics Suite ([`scripts/verify-ux.sh`](file:///Volumes/T7ssd/derivee/scripts/verify-ux.sh))**
+   - Headless test execution targeting `DeriveeTests/CommuterErgonomicsTests` via `xcodebuild`.
+   - Curates test results with an instantaneous, human-readable CLI reporter summarizing all 44 assertions across 9 ergonomic test suites.
+   - Self-configures `core.hooksPath` on run, ensuring hook configuration is idempotent and never forgotten.
+   - Mandatory gate in the **UI Wave Definition of Done** for both agents and human contributors.

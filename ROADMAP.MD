@@ -68,7 +68,7 @@ The project has fully abandoned the hybrid React Native / Expo architecture. All
 | **1** | **TEST-PHASE1** | **Core Engine Unit Tests (Background & SQLite)** | **M** | ✅ Done |
 | **2** | **TEST-PHASE2** | **Spatial Math & Transit Hydration Unit Tests** | **S** | ✅ Done |
 | **3** | **TEST-PHASE3** | **Automated UI / Snapshot Testing** | **M** | ✅ Done |
-| **4** | **TEST-PHASE4** | **CI/CD Pipeline (GitHub Actions)** | **M** | ✅ Done |
+| **4** | **TEST-PHASE4** | **Local Shift-Left Ergonomics & Test Bouncer** | **M** | ✅ Done (Supersedes Remote CI) |
 
 ### 🎨 Design Alignment & Ship
 
@@ -402,9 +402,12 @@ All core engine, spatial math, transit hydration, snapshot, and live observation
 
 All live `ValueObservation` → `recomputeFogShape()` reactivity tests (`SpatialStoreFogTests.swift` and `GRDBObservationTests.swift`) are actively verified and passing in CI.
 
-### Phase 4: CI/CD Pipeline (Complete ✅)
+### Phase 4: Local Shift-Left Ergonomics & Test Bouncer (Complete ✅)
 
-The GitHub Actions CI/CD pipeline is active on `main`. The project embraces a solo "vibe coding" workflow: commits are pushed directly to `main` without Pull Requests, and the CI acts as a post-push safety net to prevent regressions, rather than a strict pre-merge blocker.
+Remote GitHub Actions CI (`.github/workflows/ci.yml`) has been retired and superseded by a 100% local, two-tier "Local Ergonomic Bouncer" engineered specifically for solo vibe-coding (see [Research Document 21: `docs/research/21_mobile_map_transit_testing_invariants.md`](file:///Volumes/T7ssd/derivee/docs/research/21_mobile_map_transit_testing_invariants.md)):
 
-> [!WARNING]
-> **CI Safety: `XCTSkip` Convention.** All sandbox-limited tests must use explicit `throw XCTSkip("Reason")`. The `disabled_` prefix convention is banned — if a future agent renames a test to "fix the gap," it will hang CI indefinitely. The `XCTSkip` convention is enforced and verified (see `SpatialStoreFogTests.swift:131`).
+1. **Tier 1: Pre-Commit AST/Pattern Bouncer (`.githooks/pre-commit`):** Sub-100ms local git hook that intercepts commits on staged Swift code. Blocks hardcoded row heights (`.frame(height: 56)`), raw telemetry acronyms (`trip_id`, `AVL`, `GTFS-RT VP`), nested bottom sheet presentations (`.sheet`), and unanchored stop ladders before commits enter history.
+2. **Tier 2: Headless Commuter Ergonomics Suite (`scripts/verify-ux.sh`):** Headless test runner executing [`CommuterErgonomicsTests.swift`](file:///Volumes/T7ssd/derivee/DeriveeNative/DeriveeTests/CommuterErgonomicsTests.swift) (44 assertions across FC-1 to FC-6, 0.0s Glance Budget, and Degraded State Handling) in under 18 seconds without flaky visual snapshot diffs. Includes a curated ASCII progress reporter and automatically self-configures `git config core.hooksPath .githooks`.
+
+> [!TIP]
+> **Solo Vibe Coding Workflow:** Pushes go directly to `main` without PR delays or remote CI queues. The local bouncer provides instant, reliable feedback directly on the developer's workstation prior to every commit and push. All UI changes must satisfy the **UI Wave Definition of Done** defined in [`AGENTS.md`](file:///Volumes/T7ssd/derivee/AGENTS.md).

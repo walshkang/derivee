@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -e
+
+# ==============================================================================
+# Dérivée Local Ergonomic Bouncer: Pre-Commit Gate (<0.2s)
+# Validates staged Swift code against First-Click Invariants (FC-1 to FC-6).
+# Bypass for emergencies only: git commit --no-verify
+# ==============================================================================
+
+# Find staged Swift files in the native UI directory (exclude tests and docs)
+STAGED_SWIFT=$(git diff --cached --name-only --diff-filter=d | grep -E '^DeriveeNative/Derivee/.*\.swift$' || true)
+
+if [ -z "$STAGED_SWIFT" ]; then
+    exit 0
+fi
+
+ERRORS=0
+
+for FILE in $STAGED_SWIFT; do
+    # FC-5: Zero nested modal sheets on top of bottom sheets
+    if [ "$FILE" = "DeriveeNative/Derivee/TransitRevealSheet.swift" ]; then
+        if git show :"$FILE" | grep -n '\.sheet(item: \$inspectingArrival)' > /dev/null 2>&1; then
+            echo "❌ [FC-5 Violation] in $FILE:"
+            echo "   Nested .sheet(item: \$inspectingArrival) modal presentation is strictly prohibited."
+            echo "   Use in-place transition hierarchy with onBack chevron (see design.md § 13)."
+            ERRORS=$((ERRORS + 1))
+        fi
+    fi
+
+    # FC-2: Zero raw database keys or telemetry acronyms in user Text() views
+    if git show :"$FILE" | grep -En 'Text\(.*(TRIP |REALTIME AVL|trip_id)' > /dev/null 2>&1; then
+        echo "❌ [FC-2 Violation] in $FILE:"
+        echo "   Raw telemetry or database keys detected in Text(...) view."
+        echo "   Use human operational proximity (e.g. '2 stops away • Approaching Lorimer St')."
+        ERRORS=$((ERRORS + 1))
+    fi
+
+    # FC-4: Zero hardcoded row heights on dynamic timetable departure containers
+    if [ "$FILE" = "DeriveeNative/Derivee/DepartureMatrixView.swift" ]; then
+        if git show :"$FILE" | grep -n '\.frame(height: Self\.defaultRowHeight, alignment: \.top)' > /dev/null 2>&1; then
+            echo "❌ [FC-4 Violation] in $FILE:"
+            echo "   Hardcoded .frame(height: Self.defaultRowHeight) clamps dynamic wrapping departures."
+            echo "   Use .fixedSize(horizontal: false, vertical: true) for dynamic vertical expansion."
+            ERRORS=$((ERRORS + 1))
+        fi
+    fi
+done
+
+if [ $ERRORS -gt 0 ]; then
+    echo ""
+    echo "🚨 [Local Bouncer] Commit aborted due to $ERRORS Ergonomic Invariant violation(s)."
+    echo "   Fix the violation(s) above or run './scripts/verify-ux.sh' to inspect."
+    echo "   Emergency bypass: git commit -n (or --no-verify)"
+    exit 1
+fi
+
+exit 0
