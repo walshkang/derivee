@@ -138,7 +138,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
             return set
         }()
         
-        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship, isHoldingStation: Bool, progressLambda: Double, isAssigned: Bool, vehicleCoord: CLLocationCoordinate2D?, vehicleBearing: Double?)] = []
+        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship, isHoldingStation: Bool, progressLambda: Double, isAssigned: Bool, vehicleCoord: CLLocationCoordinate2D?, vehicleBearing: Double?, track: String?)] = []
         let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         
         // 1. Index VehiclePositions from the feed by tripId and vehicleId
@@ -389,6 +389,19 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         }
                     }
                     
+                    let track: String? = {
+                        if stopUpdate.hasTransitRealtime_nyctStopTimeUpdate {
+                            let nyctUpdate = stopUpdate.TransitRealtime_nyctStopTimeUpdate
+                            if nyctUpdate.hasActualTrack && !nyctUpdate.actualTrack.isEmpty {
+                                return nyctUpdate.actualTrack
+                            }
+                            if nyctUpdate.hasScheduledTrack && !nyctUpdate.scheduledTrack.isEmpty {
+                                return nyctUpdate.scheduledTrack
+                            }
+                        }
+                        return nil
+                    }()
+                    
                     rawArrivals.append((
                         line: tripRouteId,
                         destination: destination,
@@ -401,7 +414,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         progressLambda: dwellState.linearProgress,
                         isAssigned: isAssigned,
                         vehicleCoord: directVehicleCoord,
-                        vehicleBearing: directVehicleBearing
+                        vehicleBearing: directVehicleBearing,
+                        track: track
                     ))
                 }
             }
@@ -439,7 +453,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 progressLambda: item.progressLambda,
                 isAssigned: item.isAssigned,
                 vehicleCoordinate: item.vehicleCoord,
-                vehicleBearing: item.vehicleBearing
+                vehicleBearing: item.vehicleBearing,
+                track: item.track
             )
         }
         

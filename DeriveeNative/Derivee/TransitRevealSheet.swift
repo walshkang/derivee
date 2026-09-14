@@ -911,8 +911,31 @@ struct LiveArrivalsCarousel: View {
                                             }
                                             
                                             HStack(alignment: .center, spacing: 6) {
-                                                if let dist = arrival.distanceDescription {
-                                                    Text(dist)
+                                                let displayDist: String? = {
+                                                    if arrival.minutes == 0 {
+                                                        // Invariant FC-3: Suppress redundant "Boarding" text when BOARDING capsule is rendered
+                                                        if let trk = arrival.formattedTrack {
+                                                            return trk
+                                                        }
+                                                        if let dist = arrival.distanceDescription, !dist.localizedCaseInsensitiveContains("boarding") {
+                                                            return dist
+                                                        }
+                                                        return nil
+                                                    } else {
+                                                        if let dist = arrival.distanceDescription, !dist.isEmpty {
+                                                            if let trk = arrival.formattedTrack {
+                                                                return "\(dist) • \(trk)"
+                                                            }
+                                                            return dist
+                                                        } else if let trk = arrival.formattedTrack {
+                                                            return trk
+                                                        }
+                                                        return nil
+                                                    }
+                                                }()
+                                                
+                                                if let distText = displayDist {
+                                                    Text(distText)
                                                         .font(.caption2)
                                                         .foregroundColor(.secondary)
                                                         .lineLimit(1)

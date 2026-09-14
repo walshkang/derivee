@@ -136,10 +136,20 @@ public struct GuidewayRunInspector: View {
                 TransitRouteBadge(routeId: arrival.line, lineInfo: lineInfo, size: .large)
                 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(arrival.destination)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(arrival.destination)
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        
+                        if arrival.minutes == 0 {
+                            let trackSuffix = arrival.formattedTrack.map { " (\($0))" } ?? ""
+                            Text("• Boarding\(trackSuffix)")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(Color(hex: "#FFB300"))
+                                .lineLimit(1)
+                        }
+                    }
                     
                     if let dir = arrival.direction {
                         Text(dir.uppercased())
@@ -175,34 +185,53 @@ public struct GuidewayRunInspector: View {
                                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                 .foregroundColor(.secondary)
                         }
-                    }
-                    
-                    if let dist = arrival.distanceDescription {
-                        Text(dist)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
+                        
+                        if let dist = arrival.distanceDescription, !dist.isEmpty, dist.lowercased() != "boarding" {
+                            Text(dist)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
             }
             
-            // Status Badges & Telemetry Bar
+            // Commuter Context & Action Bar (Invariants FC-2 & FC-3)
             HStack(spacing: 8) {
-                // Trip ID Badge
-                if let tripId = arrival.tripId {
+                // Vehicle Proximity Pill
+                let proximity = arrival.proximityContext(ladder: stopLadder, currentStopName: currentStopName)
+                HStack(spacing: 5) {
+                    Image(systemName: "tram.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(lineInfo.color)
+                    Text(proximity)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                
+                // Follow-On Departure Imminence
+                if let nextArr = followOnArrival {
                     HStack(spacing: 4) {
-                        Image(systemName: "train.side.front.car")
-                            .font(.system(size: 10))
-                        Text(tripId.count > 16 ? "TRIP ...\(tripId.suffix(12))" : "TRIP \(tripId)")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(.secondary)
+                        let followOnText = nextArr.minutes == 0 ? "Next train due now" : "Next train in \(nextArr.minutes)m"
+                        Text(followOnText)
+                            .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color.primary.opacity(0.06))
-                    .foregroundColor(.secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 
-                // Station Hold or Realtime AVL
+                // Station Hold (if active)
                 if arrival.isHoldingStation {
                     HStack(spacing: 4) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -215,19 +244,6 @@ public struct GuidewayRunInspector: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(Color(hex: "#FFB300").opacity(0.18))
-                    .clipShape(Capsule())
-                } else {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Color(hex: "#10B981"))
-                            .frame(width: 5, height: 5)
-                        Text("REALTIME AVL")
-                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                            .foregroundColor(Color(hex: "#059669"))
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color(hex: "#10B981").opacity(0.12))
                     .clipShape(Capsule())
                 }
                 

@@ -1749,6 +1749,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let isAssigned: Bool
         public let vehicleCoordinate: CLLocationCoordinate2D?
         public let vehicleBearing: Double?
+        public let track: String?
         
         public init(
             id: UUID = UUID(),
@@ -1764,7 +1765,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             progressLambda: Double = 0.0,
             isAssigned: Bool = false,
             vehicleCoordinate: CLLocationCoordinate2D? = nil,
-            vehicleBearing: Double? = nil
+            vehicleBearing: Double? = nil,
+            track: String? = nil
         ) {
             self.id = id
             self.line = line
@@ -1780,6 +1782,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.isAssigned = isAssigned
             self.vehicleCoordinate = vehicleCoordinate
             self.vehicleBearing = vehicleBearing
+            self.track = track
         }
         
         /// Direction ID (0 or 1) inferred from the direction label.
@@ -1791,6 +1794,112 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 return 1
             }
             return 0
+        }
+        
+        /// Formatted track designation (e.g. "Track 1") or nil if unspecified.
+        public var formattedTrack: String? {
+            guard let t = track?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else {
+                return nil
+            }
+            if t.localizedCaseInsensitiveContains("track") {
+                return t
+            }
+            return "Track \(t)"
+        }
+        
+        /// Consolidated canonical commuter status token (Invariant FC-3).
+        public var commuterStatusDescription: String {
+            if isHoldingStation {
+                return "Station Hold"
+            }
+            if minutes == 0 || distanceDescription?.localizedCaseInsensitiveContains("boarding") == true {
+                if let trk = formattedTrack {
+                    return "Boarding (\(trk))"
+                }
+                return "Boarding"
+            }
+            if let dist = distanceDescription, !dist.isEmpty {
+                if let trk = formattedTrack {
+                    return "\(dist) (\(trk))"
+                }
+                return dist
+            }
+            if minutes > 0 {
+                if let trk = formattedTrack {
+                    return "\(minutes) min (\(trk))"
+                }
+                return "\(minutes) min"
+            }
+            return "Due"
+        }
+        
+        /// Actionable vehicle proximity context for commuter hero headers (Invariant FC-2).
+        /// Replaces developer telemetry (trip IDs, AVL) with human-centered proximity
+        /// such as "2 stops away • Approaching Lorimer St", "Approaching Bedford Av", or "Boarding".
+        public func proximityContext(ladder: [TrackStop] = [], currentStopName: String? = nil) -> String {
+            if isHoldingStation {
+                return "Station Hold"
+            }
+            
+            let isBoarding = minutes == 0 || distanceDescription?.localizedCaseInsensitiveContains("boarding") == true
+            if isBoarding {
+                if let name = currentStopName, !name.isEmpty {
+                    return "Boarding at \(name)"
+                }
+                return "Boarding"
+            }
+            
+            let desc = distanceDescription ?? ""
+            if desc.localizedCaseInsensitiveContains("terminus") {
+                if let origin = ladder.first?.stopName, !origin.isEmpty {
+                    return "At Terminus • \(origin)"
+                }
+                return "At Terminus"
+            }
+            
+            if desc.localizedCaseInsensitiveContains("approaching") {
+                if let name = currentStopName, !name.isEmpty {
+                    return "Approaching \(name)"
+                }
+                return "Approaching"
+            }
+            
+            // Check for "X stops away" or "X stop away"
+            if let range = desc.range(of: "\\d+", options: .regularExpression),
+               let stopsAway = Int(desc[range]), stopsAway > 0 {
+                let stopNoun = stopsAway == 1 ? "stop" : "stops"
+                if !ladder.isEmpty {
+                    let currentIndex = ladder.firstIndex(where: { $0.isCurrent }) ??
+                                       ladder.firstIndex(where: { $0.stopName == currentStopName })
+                    if let curIdx = currentIndex {
+                        let targetIdx = curIdx - stopsAway
+                        let approachingIdx = targetIdx + 1
+                        if approachingIdx >= 0 && approachingIdx < ladder.count {
+                            let approachingStop = ladder[approachingIdx].stopName
+                            return "\(stopsAway) \(stopNoun) away • Approaching \(approachingStop)"
+                        }
+                    }
+                }
+                return "\(stopsAway) \(stopNoun) away"
+            }
+            
+            if desc.contains("mi away") {
+                return desc
+            }
+            
+            if desc.localizedCaseInsensitiveContains("scheduled") {
+                return "Scheduled departure"
+            }
+            
+            if !desc.isEmpty {
+                return desc
+            }
+            
+            if minutes > 0 {
+                return "\(minutes) min away"
+            }
+            
+            return "Due now"
         }
     }
     

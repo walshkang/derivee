@@ -206,10 +206,20 @@ public struct SurfaceRunInspector: View {
                 TransitRouteBadge(routeId: arrival.line, lineInfo: lineInfo, size: .large)
                 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(arrival.destination)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(arrival.destination)
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        
+                        if arrival.minutes == 0 {
+                            let trackSuffix = arrival.formattedTrack.map { " (\($0))" } ?? ""
+                            Text("• Boarding\(trackSuffix)")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(Color(hex: "#FFB300"))
+                                .lineLimit(1)
+                        }
+                    }
                     
                     if let dir = arrival.direction {
                         Text(dir.uppercased())
@@ -245,48 +255,53 @@ public struct SurfaceRunInspector: View {
                                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                 .foregroundColor(.secondary)
                         }
-                    }
-                    
-                    // Stops away countdown is displayed for Bus, suppressed for Ferry (§10.6.1)
-                    if routeConfig.displaysStopsAwayCountdown, let dist = arrival.distanceDescription {
-                        Text(dist)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
+                        
+                        // Stops away countdown is displayed for Bus, suppressed for Ferry (§10.6.1)
+                        if routeConfig.displaysStopsAwayCountdown, let dist = arrival.distanceDescription, !dist.isEmpty, dist.lowercased() != "boarding" {
+                            Text(dist)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
             }
             
-            // Status Badges & Vehicle Telemetry Bar
+            // Commuter Context & Action Bar (Invariants FC-2 & FC-3)
             HStack(spacing: 8) {
-                // Vehicle / Vessel Number Badge
-                if let tripId = arrival.tripId {
-                    HStack(spacing: 4) {
-                        Image(systemName: isFerry ? "ferry.fill" : "bus.fill")
-                            .font(.system(size: 10))
-                        let label = formatVehicleId(tripId)
-                        Text(label)
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color.primary.opacity(0.06))
-                    .foregroundColor(.secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                // Vehicle Proximity Pill
+                let proximity = arrival.proximityContext(ladder: stopLadder, currentStopName: currentStopName)
+                HStack(spacing: 5) {
+                    Image(systemName: isFerry ? "ferry.fill" : "bus.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(lineInfo.color)
+                    Text(proximity)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 
-                // Realtime AVL Indicator
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color(hex: "#10B981"))
-                        .frame(width: 5, height: 5)
-                    Text("REALTIME AVL")
-                        .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(hex: "#059669"))
+                // Follow-On Departure Imminence
+                if let nextArr = followOnArrival {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(.secondary)
+                        let modeNoun = isFerry ? "ferry" : "bus"
+                        let followOnText = nextArr.minutes == 0 ? "Next \(modeNoun) due now" : "Next \(modeNoun) in \(nextArr.minutes)m"
+                        Text(followOnText)
+                            .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color(hex: "#10B981").opacity(0.12))
-                .clipShape(Capsule())
                 
                 // 5. Signal: Crowding Micro-Badge
                 renderCrowdingMicroBadge()
@@ -311,19 +326,6 @@ public struct SurfaceRunInspector: View {
                 }
                 .buttonStyle(.plain)
             }
-        }
-    }
-    
-    private func formatVehicleId(_ tripId: String) -> String {
-        if isFerry {
-            return tripId.count > 12 ? "VESSEL #\(tripId.suffix(8))" : "VESSEL #\(tripId)"
-        } else {
-            // Bus vehicle ID formatting (#5421)
-            let digits = tripId.filter { $0.isNumber }
-            if digits.count >= 4 {
-                return "#\(digits.suffix(4))"
-            }
-            return tripId.count > 10 ? "#\(tripId.suffix(6))" : "#\(tripId)"
         }
     }
     

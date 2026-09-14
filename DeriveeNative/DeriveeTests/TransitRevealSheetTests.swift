@@ -1788,5 +1788,31 @@ final class TransitRevealSheetTests: XCTestCase {
         XCTAssertEqual(merged.minute, 15)
         XCTAssertTrue(merged.isLive, "Merged pill should inherit live status from the matching departure")
     }
+
+    // MARK: - Wave PC.2 Track Propagation & Canonical Boarding Status Tests
+
+    func testWavePC2BoardingStatusAndTrackPropagation() {
+        let arrBoardingWithTrack = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 0,
+            direction: "Manhattan",
+            distanceDescription: "Boarding",
+            track: "1"
+        )
+        XCTAssertEqual(arrBoardingWithTrack.formattedTrack, "Track 1")
+        XCTAssertEqual(arrBoardingWithTrack.commuterStatusDescription, "Boarding (Track 1)")
+        
+        let arrBoardingNoTrack = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 0,
+            direction: "Manhattan",
+            distanceDescription: "Boarding"
+        )
+        XCTAssertNil(arrBoardingNoTrack.formattedTrack)
+        XCTAssertEqual(arrBoardingNoTrack.commuterStatusDescription, "Boarding")
+    }
 }
+
 

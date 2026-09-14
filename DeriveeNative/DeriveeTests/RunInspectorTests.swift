@@ -376,4 +376,188 @@ final class RunInspectorTests: XCTestCase {
         XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.crowded.statusEmoji, "🟠")
         XCTAssertEqual(CrowdDensityEstimate.CrowdLevel.full.statusEmoji, "🔴")
     }
+
+    // MARK: - 9. Wave PC.2 Telemetry De-Jargonization & Canonical Status Tests (FC-2, FC-3)
+
+    func testProximityContextWithLadder() {
+        let ladder = [
+            TrackStop(stopId: "L01", stopName: "Canarsie - Rockaway Pkwy", coordinate: CLLocationCoordinate2D(latitude: 40.6466, longitude: -73.9018), sequenceIndex: 0, isPassed: true, isCurrent: false, isTerminus: true),
+            TrackStop(stopId: "L10", stopName: "Lorimer St", coordinate: CLLocationCoordinate2D(latitude: 40.7140, longitude: -73.9497), sequenceIndex: 1, isPassed: true, isCurrent: false),
+            TrackStop(stopId: "L11", stopName: "Bedford Av", coordinate: CLLocationCoordinate2D(latitude: 40.7173, longitude: -73.9568), sequenceIndex: 2, isPassed: false, isCurrent: true),
+            TrackStop(stopId: "L12", stopName: "1 Av", coordinate: CLLocationCoordinate2D(latitude: 40.7309, longitude: -73.9816), sequenceIndex: 3, isPassed: false, isCurrent: false),
+            TrackStop(stopId: "L13", stopName: "8 Av", coordinate: CLLocationCoordinate2D(latitude: 40.7397, longitude: -74.0025), sequenceIndex: 4, isPassed: false, isCurrent: false, isTerminus: true)
+        ]
+        
+        // 2 stops away: vehicle at index 0 (Canarsie), approaching index 1 (Lorimer St)
+        let arr2Stops = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 4,
+            distanceDescription: "2 stops away"
+        )
+        XCTAssertEqual(
+            arr2Stops.proximityContext(ladder: ladder, currentStopName: "Bedford Av"),
+            "2 stops away • Approaching Lorimer St",
+            "Vehicle 2 stops upstream must show the upcoming approaching station name"
+        )
+        
+        // 1 stop away: vehicle at index 1 (Lorimer St), approaching index 2 (Bedford Av)
+        let arr1Stop = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 2,
+            distanceDescription: "1 stop away"
+        )
+        XCTAssertEqual(
+            arr1Stop.proximityContext(ladder: ladder, currentStopName: "Bedford Av"),
+            "1 stop away • Approaching Bedford Av"
+        )
+        
+        // Approaching current station
+        let arrApproaching = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 1,
+            distanceDescription: "Approaching"
+        )
+        XCTAssertEqual(
+            arrApproaching.proximityContext(ladder: ladder, currentStopName: "Bedford Av"),
+            "Approaching Bedford Av"
+        )
+        
+        // Boarding at current station
+        let arrBoarding = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 0,
+            distanceDescription: "Boarding"
+        )
+        XCTAssertEqual(
+            arrBoarding.proximityContext(ladder: ladder, currentStopName: "Bedford Av"),
+            "Boarding at Bedford Av"
+        )
+        
+        // Dwelling at terminus
+        let arrTerminus = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 8,
+            distanceDescription: "At Terminus"
+        )
+        XCTAssertEqual(
+            arrTerminus.proximityContext(ladder: ladder, currentStopName: "Bedford Av"),
+            "At Terminus • Canarsie - Rockaway Pkwy"
+        )
+        
+        // Holding at station
+        let arrHolding = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 3,
+            isHoldingStation: true
+        )
+        XCTAssertEqual(
+            arrHolding.proximityContext(ladder: ladder, currentStopName: "Bedford Av"),
+            "Station Hold"
+        )
+        
+        // Graceful fallback when ladder is empty
+        XCTAssertEqual(
+            arr2Stops.proximityContext(ladder: [], currentStopName: "Bedford Av"),
+            "2 stops away"
+        )
+    }
+
+    func testCommuterStatusDescriptionAndTrackFormatting() {
+        // Track formatting
+        let arrWithTrack1 = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 0,
+            distanceDescription: "Boarding",
+            track: "1"
+        )
+        XCTAssertEqual(arrWithTrack1.formattedTrack, "Track 1")
+        XCTAssertEqual(arrWithTrack1.commuterStatusDescription, "Boarding (Track 1)")
+        
+        let arrWithFullTrackName = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 2,
+            distanceDescription: "Approaching",
+            track: "Track 2"
+        )
+        XCTAssertEqual(arrWithFullTrackName.formattedTrack, "Track 2")
+        XCTAssertEqual(arrWithFullTrackName.commuterStatusDescription, "Approaching (Track 2)")
+        
+        let arrNoTrack = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 0,
+            distanceDescription: "Boarding"
+        )
+        XCTAssertNil(arrNoTrack.formattedTrack)
+        XCTAssertEqual(arrNoTrack.commuterStatusDescription, "Boarding")
+        
+        let arrMinutes = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 5,
+            track: "3"
+        )
+        XCTAssertEqual(arrMinutes.commuterStatusDescription, "5 min (Track 3)")
+        
+        let arrHolding = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 2,
+            isHoldingStation: true
+        )
+        XCTAssertEqual(arrHolding.commuterStatusDescription, "Station Hold")
+    }
+
+    @MainActor
+    func testInspectorViewConstructionWithTrackAndFollowOn() {
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 0,
+            direction: "Manhattan",
+            distanceDescription: "Boarding",
+            track: "1"
+        )
+        let followOn = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 4,
+            direction: "Manhattan"
+        )
+        
+        let guideway = GuidewayRunInspector(
+            arrival: arrival,
+            currentStopId: "L11",
+            currentStopName: "Bedford Av",
+            followOnArrival: followOn
+        )
+        let guidewayHosting = UIHostingController(rootView: guideway)
+        XCTAssertNotNil(guidewayHosting.view)
+        
+        let busArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "S51",
+            destination: "St George Ferry",
+            minutes: 0,
+            direction: "Inbound",
+            distanceDescription: "Boarding"
+        )
+        let surface = SurfaceRunInspector(
+            arrival: busArrival,
+            currentStopId: "stop_s51",
+            currentStopName: "Midland Beach",
+            modalClass: .bus,
+            followOnArrival: followOn
+        )
+        let surfaceHosting = UIHostingController(rootView: surface)
+        XCTAssertNotNil(surfaceHosting.view)
+    }
 }
+
