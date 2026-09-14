@@ -107,6 +107,69 @@ public struct TransitRouteData {
         }
     }
     
+    // MARK: - Canonical Transit Route Ordering (Wave PD.1 / Invariant FC-3)
+    
+    /// Official Metropolitan Transportation Authority (MTA) transit agency route ordering:
+    /// 1, 2, 3, 4, 5, 6, 6X, 7, 7X, A, C, E, B, D, F, FX, M, G, J, Z, L, N, Q, R, W, S, SIR
+    public static let canonicalSubwayOrder: [String] = [
+        "1", "2", "3",
+        "4", "5", "6", "6X",
+        "7", "7X",
+        "A", "C", "E",
+        "B", "D", "F", "FX", "M",
+        "G",
+        "J", "Z",
+        "L",
+        "N", "Q", "R", "W",
+        "S", "SIR"
+    ]
+    
+    private static let canonicalSubwayIndexMap: [String: Int] = {
+        var map: [String: Int] = [:]
+        for (idx, route) in canonicalSubwayOrder.enumerated() {
+            map[route] = idx
+        }
+        // Aliases
+        map["SI"] = map["SIR"]
+        map["GS"] = map["S"]
+        map["FS"] = map["S"]
+        map["H"] = map["S"]
+        return map
+    }()
+    
+    /// Returns the canonical sort index for a transit route identifier.
+    public static func canonicalOrderIndex(for route: String) -> Int {
+        let clean = route.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if let idx = canonicalSubwayIndexMap[clean] {
+            return idx
+        }
+        if isBusRoute(clean) {
+            return 1000
+        }
+        if isLightRailRoute(clean) {
+            return 2000
+        }
+        if isFerryRoute(clean) {
+            return 3000
+        }
+        return 500
+    }
+    
+    /// Returns true if r1 precedes r2 in canonical agency transit order.
+    public static func isCanonicalAscending(_ r1: String, _ r2: String) -> Bool {
+        let idx1 = canonicalOrderIndex(for: r1)
+        let idx2 = canonicalOrderIndex(for: r2)
+        if idx1 != idx2 {
+            return idx1 < idx2
+        }
+        return r1.localizedStandardCompare(r2) == .orderedAscending
+    }
+    
+    /// Enforces canonical MTA transit agency route ordering across an array of route identifiers.
+    public static func sortCanonical(_ routes: [String]) -> [String] {
+        return routes.sorted(by: isCanonicalAscending)
+    }
+    
     /// Determines whether a given route identifier or stop ID corresponds to a Maritime Ferry route
     public static func isFerryRoute(_ routeId: String) -> Bool {
         let clean = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)

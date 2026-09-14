@@ -81,8 +81,9 @@ def fetch_mta_stations():
         mta_lookup[gtfs_id.upper()] = cid
         
         if cid not in complex_metadata:
+            c_name = "Times Sq-42 St / 42 St-PABT" if cid == 611 else stop_name
             complex_metadata[cid] = {
-                "name": stop_name,
+                "name": c_name,
                 "borough": normalize_borough(borough),
                 "lats": [lat] if lat else [],
                 "lons": [lon] if lon else []

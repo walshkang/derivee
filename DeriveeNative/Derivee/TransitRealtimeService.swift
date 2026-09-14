@@ -88,6 +88,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
     func fetchLiveArrivals(for stopId: String, routeIds: [String]) async throws -> [SpatialDatabaseManager.ArrivalInfo] {
         guard !routeIds.isEmpty else { return [] }
         let uniqueFeeds = Array(Set(routeIds.map { SubwayFeed.feed(for: $0) }))
+        let memberStopIds = await SpatialDatabaseManager.shared.resolveComplexMemberStopIds(for: stopId)
         
         var allArrivals: [SpatialDatabaseManager.ArrivalInfo] = []
         
@@ -102,7 +103,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
                     guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
                         return []
                     }
-                    return try self.parseFeedMessage(data: data, stopId: stopId, targetRouteIds: routeIds)
+                    return try self.parseFeedMessage(data: data, stopId: stopId, targetRouteIds: routeIds, targetStopIds: memberStopIds)
                 }
             }
             
@@ -111,8 +112,17 @@ public final class TransitRealtimeService: @unchecked Sendable {
             }
         }
         
-        allArrivals.sort { $0.minutes < $1.minutes }
-        return Array(allArrivals.prefix(12))
+        var seenKeys = Set<String>()
+        var uniqueArrivals: [SpatialDatabaseManager.ArrivalInfo] = []
+        for arr in allArrivals {
+            let key = "\(arr.line)_\(arr.destination)_\(arr.minutes)_\(arr.track ?? "")"
+            if seenKeys.insert(key).inserted {
+                uniqueArrivals.append(arr)
+            }
+        }
+        
+        uniqueArrivals.sort { $0.minutes < $1.minutes }
+        return Array(uniqueArrivals.prefix(12))
     }
     
     /// Parses binary Protobuf GTFS-RT feed message data into `SpatialDatabaseManager.ArrivalInfo` models
@@ -121,6 +131,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
         stopId: String,
         targetRouteId: String = "",
         targetRouteIds: [String] = [],
+        targetStopIds: Set<String>? = nil,
         referenceDate: Date = Date()
     ) throws -> [SpatialDatabaseManager.ArrivalInfo] {
         let feedMessage = try TransitRealtime_FeedMessage(
@@ -279,7 +290,14 @@ public final class TransitRealtimeService: @unchecked Sendable {
             // Match stop updates
             for (idx, stopUpdate) in tripUpdate.stopTimeUpdate.enumerated() {
                 let currentStopId = stopUpdate.stopID.uppercased()
-                let matches = isStopMatch(currentStopId: currentStopId, targetStopId: cleanStopId)
+                let matches: Bool
+                if let memberSet = targetStopIds, !memberSet.isEmpty {
+                    matches = memberSet.contains { memberId in
+                        self.isStopMatch(currentStopId: currentStopId, targetStopId: memberId)
+                    }
+                } else {
+                    matches = isStopMatch(currentStopId: currentStopId, targetStopId: cleanStopId)
+                }
                 
                 if matches {
                     var effectiveRelationship = tripRelationship

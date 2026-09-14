@@ -349,14 +349,41 @@ struct MapView: UIViewRepresentable {
                 do {
                     let loadedPOIs = try await SpatialDatabaseManager.shared.dbWriter.read { db in
                         try SpatialDatabaseManager.shared.ensureTransitAttached(in: db)
-                        let rows = try Row.fetchAll(db, sql: """
-                            SELECT p.stop_id, p.stop_name, p.stop_lat, p.stop_lon,
-                                   COALESCE(GROUP_CONCAT(DISTINCT c.routes), p.routes, '') AS child_routes
-                            FROM transit.stops p
-                            LEFT JOIN transit.stops c ON c.parent_station = p.stop_id AND c.routes IS NOT NULL AND c.routes != ''
-                            WHERE p.location_type = 1
-                            GROUP BY p.stop_id
-                        """)
+                        let tableRows = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(complexes)")
+                        let hasComplexes = !tableRows.isEmpty
+                        
+                        let sql: String
+                        if hasComplexes {
+                            sql = """
+                                SELECT 
+                                    COALESCE(cx.complex_id, p.stop_id) AS group_id,
+                                    CASE 
+                                        WHEN cx.complex_id = 611 THEN 'Times Sq-42 St / 42 St-PABT'
+                                        ELSE COALESCE(cx.complex_name, p.stop_name)
+                                    END AS stop_name,
+                                    COALESCE(cx.latitude, p.stop_lat) AS stop_lat,
+                                    COALESCE(cx.longitude, p.stop_lon) AS stop_lon,
+                                    MIN(p.stop_id) AS stop_id,
+                                    COALESCE(GROUP_CONCAT(DISTINCT ch.routes), GROUP_CONCAT(DISTINCT p.routes), '') AS child_routes
+                                FROM transit.stops p
+                                LEFT JOIN transit.stop_resolution sr ON sr.parent_station_id = p.stop_id
+                                LEFT JOIN transit.complexes cx ON cx.complex_id = sr.complex_id
+                                LEFT JOIN transit.stops ch ON ch.parent_station = p.stop_id AND ch.routes IS NOT NULL AND ch.routes != ''
+                                WHERE p.location_type = 1
+                                GROUP BY COALESCE(cx.complex_id, p.stop_id)
+                            """
+                        } else {
+                            sql = """
+                                SELECT p.stop_id, p.stop_name, p.stop_lat, p.stop_lon,
+                                       COALESCE(GROUP_CONCAT(DISTINCT c.routes), p.routes, '') AS child_routes
+                                FROM transit.stops p
+                                LEFT JOIN transit.stops c ON c.parent_station = p.stop_id AND c.routes IS NOT NULL AND c.routes != ''
+                                WHERE p.location_type = 1
+                                GROUP BY p.stop_id
+                            """
+                        }
+                        
+                        let rows = try Row.fetchAll(db, sql: sql)
                         return rows.map { row in
                             let lat: Double = row["stop_lat"]
                             let lon: Double = row["stop_lon"]

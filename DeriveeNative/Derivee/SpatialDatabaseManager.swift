@@ -714,6 +714,14 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     
     // MARK: - Station Complex & Topological Resolution Queries (Doc 15 & 16)
     
+    /// Official canonical display name for multi-modal station complexes (Wave PD.1).
+    public static func canonicalComplexName(complexId: Int64, rawName: String) -> String {
+        if complexId == 611 || rawName.contains("Times Sq") {
+            return "Times Sq-42 St / 42 St-PABT"
+        }
+        return rawName
+    }
+    
     /// Fetches the physical station complex by its complex ID.
     public func fetchComplex(for complexId: Int64) async throws -> StationComplex? {
         try await dbWriter.read { db in
@@ -726,9 +734,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             """, arguments: [complexId]) else {
                 return nil
             }
+            let rawName: String = row["complex_name"]
             return StationComplex(
                 id: row["complex_id"],
-                name: row["complex_name"],
+                name: Self.canonicalComplexName(complexId: row["complex_id"], rawName: rawName),
                 borough: row["borough"],
                 coordinate: CLLocationCoordinate2D(latitude: row["latitude"], longitude: row["longitude"]),
                 isHub: (row["is_hub"] as Int? ?? 0) != 0
@@ -762,9 +771,10 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 return nil
             }
             
+            let rawName: String = row["complex_name"]
             return StationComplex(
                 id: row["complex_id"],
-                name: row["complex_name"],
+                name: Self.canonicalComplexName(complexId: row["complex_id"], rawName: rawName),
                 borough: row["borough"],
                 coordinate: CLLocationCoordinate2D(latitude: row["latitude"], longitude: row["longitude"]),
                 isHub: (row["is_hub"] as Int? ?? 0) != 0
@@ -797,6 +807,58 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    /// Resolves all constituent parent stations and child platform stop IDs belonging to the complex of a given stop ID (Wave PD.1).
+    public func resolveComplexMemberStopIds(for stopId: String) async -> Set<String> {
+        do {
+            return try await dbWriter.read { db in
+                self.resolveComplexMemberStopIds(for: stopId, in: db)
+            }
+        } catch {
+            return [stopId]
+        }
+    }
+    
+    /// Synchronous variant of `resolveComplexMemberStopIds` executing within an existing db read transaction.
+    public func resolveComplexMemberStopIds(for stopId: String, in db: Database) -> Set<String> {
+        var result: Set<String> = [stopId]
+        guard (try? self.ensureTransitAttached(in: db)) != nil else { return result }
+        
+        guard let _ = try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(stop_resolution)") else {
+            return result
+        }
+        
+        let cid: Int64?
+        if stopId.hasPrefix("complex_") {
+            let clean = stopId.replacingOccurrences(of: "complex_", with: "")
+            cid = Int64(clean)
+        } else {
+            let baseStop = stopId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
+            let row = try? Row.fetchOne(db, sql: """
+                SELECT complex_id FROM transit.stop_resolution
+                WHERE child_stop_id = ? OR parent_station_id = ? OR child_stop_id = ? OR parent_station_id = ?
+                LIMIT 1
+            """, arguments: [stopId, stopId, baseStop, baseStop])
+            cid = row?["complex_id"]
+        }
+        
+        guard let complexId = cid else { return result }
+        
+        if let rows = try? Row.fetchAll(db, sql: """
+            SELECT parent_station_id, child_stop_id FROM transit.stop_resolution
+            WHERE complex_id = ?
+        """, arguments: [complexId]) {
+            for r in rows {
+                if let p: String = r["parent_station_id"], !p.isEmpty {
+                    result.insert(p)
+                }
+                if let c: String = r["child_stop_id"], !c.isEmpty {
+                    result.insert(c)
+                }
+            }
+        }
+        return result
+    }
+    
     /// Fetches all known station complexes in the active transit database.
     public func fetchAllComplexes() async throws -> [StationComplex] {
         try await dbWriter.read { db in
@@ -808,9 +870,11 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             """)
             
             return rows.map { row in
-                StationComplex(
-                    id: row["complex_id"],
-                    name: row["complex_name"],
+                let cid: Int64 = row["complex_id"]
+                let rawName: String = row["complex_name"]
+                return StationComplex(
+                    id: cid,
+                    name: Self.canonicalComplexName(complexId: cid, rawName: rawName),
                     borough: row["borough"],
                     coordinate: CLLocationCoordinate2D(latitude: row["latitude"], longitude: row["longitude"]),
                     isHub: (row["is_hub"] as Int? ?? 0) != 0
@@ -1541,7 +1605,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.routeId = routeId
             var seen = Set<String>()
             let uniqueRoutes = routeIds.filter { seen.insert($0).inserted }
-            self.routeIds = uniqueRoutes.isEmpty ? [routeId] : uniqueRoutes
+            let canonicallySorted = TransitRouteData.sortCanonical(uniqueRoutes)
+            self.routeIds = canonicallySorted.isEmpty ? [routeId] : canonicallySorted
             self.routeType = routeType
             self.modalClass = modalClass ?? TransitModalClass.from(routeType: routeType)
             self.coordinate = coordinate
@@ -2106,6 +2171,79 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         return try await dbWriter.read { db in
             do {
                 try self.ensureTransitAttached(in: db)
+                
+                // Tier 0: Multi-Modal Station Complex Resolution (Wave PD.1 / Doc 15 & 16)
+                let hasComplexTables = (try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(complexes)")) != nil &&
+                                      (try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(stop_resolution)")) != nil
+                
+                if hasComplexTables {
+                    let cid: Int64?
+                    if stopId.hasPrefix("complex_") {
+                        let clean = stopId.replacingOccurrences(of: "complex_", with: "")
+                        cid = Int64(clean)
+                    } else {
+                        let baseStop = stopId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
+                        let row = try? Row.fetchOne(db, sql: """
+                            SELECT complex_id FROM transit.stop_resolution
+                            WHERE child_stop_id = ? OR parent_station_id = ? OR child_stop_id = ? OR parent_station_id = ?
+                            LIMIT 1
+                        """, arguments: [stopId, stopId, baseStop, baseStop])
+                        cid = row?["complex_id"]
+                    }
+                    
+                    if let complexId = cid,
+                       let cxRow = try? Row.fetchOne(db, sql: """
+                           SELECT complex_id, complex_name, latitude, longitude FROM transit.complexes WHERE complex_id = ?
+                       """, arguments: [complexId]) {
+                        let cid: Int64 = cxRow["complex_id"]
+                        let rawName: String = cxRow["complex_name"]
+                        let unifiedName = Self.canonicalComplexName(complexId: cid, rawName: rawName)
+                        let cLat: Double = cxRow["latitude"]
+                        let cLon: Double = cxRow["longitude"]
+                        
+                        // Query all distinct routes across all constituent member stops/platforms in this complex
+                        let complexRoutesSql = """
+                            SELECT DISTINCT c.routes
+                            FROM transit.stop_resolution sr
+                            JOIN transit.stops c ON c.stop_id = sr.child_stop_id OR c.stop_id = sr.parent_station_id
+                            WHERE sr.complex_id = ? AND c.routes IS NOT NULL AND c.routes != ''
+                        """
+                        var collected = [String]()
+                        if let routeRows = try? Row.fetchAll(db, sql: complexRoutesSql, arguments: [cid]) {
+                            for r in routeRows {
+                                let rStr: String = r["routes"] ?? ""
+                                for item in rStr.components(separatedBy: CharacterSet(charactersIn: ",;/| ")) {
+                                    var trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                                    if trimmed == "GS" || trimmed == "FS" || trimmed == "H" {
+                                        trimmed = "S"
+                                    } else if trimmed == "SI" {
+                                        trimmed = "SIR"
+                                    }
+                                    if !trimmed.isEmpty && !collected.contains(trimmed) {
+                                        collected.append(trimmed)
+                                    }
+                                }
+                            }
+                        }
+                        
+                        let canonicalRouteIds = TransitRouteData.sortCanonical(collected)
+                        if !canonicalRouteIds.isEmpty {
+                            let primaryRoute = canonicalRouteIds.first ?? "1"
+                            let arrivals = self.generateArrivals(for: primaryRoute, stopId: stopId)
+                            return StopDetails(
+                                stopId: stopId,
+                                name: unifiedName,
+                                routeId: primaryRoute,
+                                routeIds: canonicalRouteIds,
+                                routeType: 1,
+                                modalClass: .subway,
+                                coordinate: CLLocationCoordinate2D(latitude: cLat, longitude: cLon),
+                                arrivals: arrivals
+                            )
+                        }
+                    }
+                }
+                
                 let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stops)")
                 let hasRoutes = columns.contains { ($0["name"] as? String) == "routes" }
                 let hasLocationType = columns.contains { ($0["name"] as? String) == "location_type" }

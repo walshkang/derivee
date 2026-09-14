@@ -11,27 +11,19 @@ public enum StationBulletRenderer: Sendable {
         var result = [String]()
         
         for item in items {
-            let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            var trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            if trimmed == "GS" || trimmed == "FS" || trimmed == "H" {
+                trimmed = "S"
+            } else if trimmed == "SI" {
+                trimmed = "SIR"
+            }
             guard !trimmed.isEmpty, !seen.contains(trimmed) else { continue }
             seen.insert(trimmed)
             result.append(trimmed)
         }
         
-        // Sort routes in natural transit order (numbers first, then letters, then multi-char)
-        result.sort { r1, r2 in
-            let n1 = Int(r1)
-            let n2 = Int(r2)
-            if let a = n1, let b = n2 {
-                return a < b
-            } else if n1 != nil {
-                return true
-            } else if n2 != nil {
-                return false
-            }
-            return r1 < r2
-        }
-        
-        return result
+        // Sort routes in canonical MTA transit agency order (Wave PD.1)
+        return TransitRouteData.sortCanonical(result)
     }
     
     /// Returns a deterministic icon cache key for a route set (e.g. `bullet_4_5_6`).

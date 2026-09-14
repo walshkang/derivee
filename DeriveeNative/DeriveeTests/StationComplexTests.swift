@@ -139,4 +139,69 @@ final class StationComplexTests: XCTestCase {
             XCTAssertTrue(hub.isHub, "Leading complexes should be regional hubs")
         }
     }
+    
+    // MARK: - Wave PD.1: Canonical MTA Route Ordering & Station Complex Unification
+    
+    func testCanonicalRouteOrdering() {
+        // Scrambled input with numbers, IRT, IND blue, IND orange, BMT yellow, Shuttles, SIR
+        let scrambled = ["SIR", "W", "F", "E", "6X", "B", "1", "A", "N", "7", "C", "M", "L", "4", "S"]
+        let sorted = TransitRouteData.sortCanonical(scrambled)
+        
+        let expected = ["1", "4", "6X", "7", "A", "C", "E", "B", "F", "M", "L", "N", "W", "S", "SIR"]
+        XCTAssertEqual(sorted, expected, "Routes must strictly follow canonical MTA trunk order")
+        
+        // Bullet renderer integration test
+        let parsed = StationBulletRenderer.parseAndNormalizeRoutes("E, B, 1, A, N, 7, C")
+        XCTAssertEqual(parsed, ["1", "7", "A", "C", "E", "B", "N"])
+    }
+    
+    func testTimesSquareComplexUnification() async throws {
+        // Tapping parent station 127 (1/2/3) must unify to Times Sq-42 St / 42 St-PABT
+        let details127 = try await spatialManager.fetchStopDetails(for: "127")
+        XCTAssertEqual(details127.name, "Times Sq-42 St / 42 St-PABT")
+        
+        // Verify routes span across all member platforms and are canonically sorted
+        let routes127 = details127.routeIds
+        XCTAssertTrue(routes127.contains("1"))
+        XCTAssertTrue(routes127.contains("7") || routes127.contains("7X"))
+        XCTAssertTrue(routes127.contains("A") || routes127.contains("C") || routes127.contains("E"))
+        XCTAssertTrue(routes127.contains("N") || routes127.contains("Q") || routes127.contains("R") || routes127.contains("W"))
+        XCTAssertEqual(routes127, TransitRouteData.sortCanonical(routes127), "routeIds must be canonically ordered")
+        
+        // Tapping parent station A27 (42 St-PABT A/C/E) must unify to the same complex title
+        let detailsA27 = try await spatialManager.fetchStopDetails(for: "A27")
+        XCTAssertEqual(detailsA27.name, "Times Sq-42 St / 42 St-PABT")
+        XCTAssertEqual(detailsA27.routeIds, routes127, "Both 127 and A27 must resolve to identical unified complex routes")
+    }
+    
+    func testFultonStreetComplexUnification() async throws {
+        // Tapping parent station 229 (2/3) must unify to Fulton St
+        let details = try await spatialManager.fetchStopDetails(for: "229")
+        XCTAssertEqual(details.name, "Fulton St")
+        let routes = details.routeIds
+        XCTAssertTrue(routes.contains("2") || routes.contains("3"))
+        XCTAssertTrue(routes.contains("4") || routes.contains("5"))
+        XCTAssertTrue(routes.contains("A") || routes.contains("C"))
+        XCTAssertTrue(routes.contains("J") || routes.contains("Z"))
+        XCTAssertEqual(routes, TransitRouteData.sortCanonical(routes))
+    }
+    
+    func testUnionSquareComplexUnification() async throws {
+        // Tapping parent station 635 (4/5/6) must unify to 14 St-Union Sq
+        let details = try await spatialManager.fetchStopDetails(for: "635")
+        XCTAssertEqual(details.name, "14 St-Union Sq")
+        let routes = details.routeIds
+        XCTAssertTrue(routes.contains("4") || routes.contains("5") || routes.contains("6"))
+        XCTAssertTrue(routes.contains("L"))
+        XCTAssertTrue(routes.contains("N") || routes.contains("Q") || routes.contains("R") || routes.contains("W"))
+        XCTAssertEqual(routes, TransitRouteData.sortCanonical(routes))
+    }
+    
+    func testResolveComplexMemberStopIds() async throws {
+        let members127 = await spatialManager.resolveComplexMemberStopIds(for: "127")
+        XCTAssertTrue(members127.contains("127"))
+        XCTAssertTrue(members127.contains("A27") || members127.contains("A27N"))
+        XCTAssertTrue(members127.contains("R16") || members127.contains("R16N"))
+        XCTAssertTrue(members127.contains("725") || members127.contains("725N"))
+    }
 }
