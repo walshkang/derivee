@@ -546,6 +546,12 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 | G8 | **No Serif Fonts:** Strictly modern geometric sans-serif (SF Pro / Inter). | Design system consistency. |
 | G9 | **Pure Light Mode & Dual Daytime Modes:** Interface is locked to `.preferredColorScheme(.light)` with two curated daytime themes: Standard Exploration (Parchment white, graphite fog) and Transit Navigation (Porcelain white, high-contrast transit, 40% fog). **Electric Amber (`#FFB300`)** is the universal accent color across both modes. | Brand identity & clarity: Eliminates dark-mode visual confusion while optimizing for exploration and effortless transit navigation. |
 | G10 | **Screen Enumeration is Exhaustive:** Screens 0–4 are the only screens. Agents must not invent additional screens, modals, or navigation flows not defined in §3. Screen 4 encompasses Search (4A), Route Comparison (4B), and Active Navigation (4C) per §12. Multi-city UI surfaces (City Selector, `CityDownloadPromptSheet`, `Settings > Cities & Storage`) are sub-views within existing Screens 1 and 3 per §11 — they do not constitute new top-level screens. Run Inspectors (§10.5, §10.6) are sub-sheets within Screen 2. | Prevents scope creep and hallucinated features. |
+| G11 | **Zero Dead Past Space (FC-1):** Every view or sheet presenting sequential or chronological transit data must auto-anchor to the active item (`isCurrent`). Completed/passed items must be auto-scrolled past or collapsed into a disclosure container (`X stops passed ▾`, default collapsed when count $\ge 3$). Matrix views anchor to the current wall-clock hour. | Prevents commuter disorientation and dead scrolling. |
+| G12 | **Zero Raw Telemetry & Database Keys (FC-2):** Interfaces must strictly speak commuter plain language. Zero internal identifiers (`trip_id`, `route_id`, `stop_id`), feed acronyms (`AVL`, `VP`), or enum literals (`IN_TRANSIT_TO`) may appear in the UI. Translate all telemetry into proximity context (*"2 stops away • Approaching Lorimer St"*). | Eliminates developer jargon from user-facing screens. |
+| G13 | **Zero Duplicate Status Signals (FC-3):** Each operational status signal must appear in exactly one canonical UI element within a viewport. Never stack redundant badges (e.g. `• BOARDING` pill + `Boarding` text) or duplicate route labels (`[S51] S51`). | Reduces cognitive clutter and glance overhead. |
+| G14 | **Dynamic Row Heights & Zero Cell Collisions (FC-4):** Every layout container, list row, and table cell must dynamically calculate its bounding height from its contents. Hardcoded frame heights (`.frame(height: 56.0)`) on wrapping containers are strictly prohibited. | Prevents multi-line text and bubble overlap across dynamic type sizes. |
+| G15 | **Single-Sheet Modal Hierarchy (FC-5):** Inspection and detail flows must transition in-place or push onto a single unified navigation stack. Never present a modal `.sheet` on top of an already-presented modal `.sheet`. | Eliminates squished background cards and nested modal swipe gesture conflicts. |
+| G16 | **Thumb Zone Commuter Priority (FC-6):** The bottom 100pt of any scrollable view or interactive surface is strictly reserved for high-frequency commuter insights and primary navigation actions. Low-frequency CTAs (file imports, cache clears) belong in Settings or menus. | Ensures one-handed thumb ergonomics during active transit travel. |
 
 ---
 
@@ -961,3 +967,90 @@ The existing `ReliabilityHeatmapCanvas` (§10.1) renders a 24×7 grid. Wave N ad
 * **Dynamic GBFS Dock Gating:** Real-time 3-tier dock availability badges (>3 low risk, 1–2 moderate fallback pre-armed, 0 auto-reroute). E-bike SOC % overlays.
 * **Dynamic Recovery:** Automated missed-connection detection via live GPS vs platform departure timestamps. Instant 1-tap recovery card suggesting alternate legs.
 * **Live Activity & Dynamic Island:** Native iOS Live Activity with transfer countdowns, step transitions, and subterranean exit guidance.
+
+---
+
+## 13. Commuter Ergonomics & First-Click Usefulness Audit (Wave PC)
+
+> **Cognitive Contract:** Every interactive entry point across Screens 0–4 must answer the commuter's primary operational question **above the fold within 0.0s of opening**, requiring zero scrolling, zero mental decryption of developer telemetry, and zero modal clutter.
+
+### 13.1 Philosophy & The 0.5s Glance Window
+
+Urban transit navigation differs fundamentally from desktop or leisurely mobile app usage:
+1. **The In-Motion Cognitive Constraint:** Commuters consult Dérivée while walking down stairs, crossing turnstiles, jogging between platforms, or standing on crowded trains. The usable cognitive glance window is **0.5s to 2.0s**.
+2. **First-Click Cognitive Invariants:** If a commuter opens an inspector and sees 15 passed stations from the origin terminal before finding their train, the interface has failed. If a commuter sees raw database keys (`TRIP 091850_L..N`), their trust in the system's real-time accuracy degrades.
+3. **Ergonomic Determinism:** Commuter focus is preserved when layout heights adapt dynamically without clipping, modal sheets transition smoothly in-place without nested stacking, and critical actions remain within the natural lower-third thumb zone.
+
+### 13.2 5-Screen First-Click Commuter Question & Above-the-Fold Answer Matrix
+
+| Screen / Surface | Primary Commuter Question (0.0s) | Above-the-Fold Required Answer (0.0s, No Scrolling) | Strict Rejection Criteria (P0 Violations) | Key Files |
+|---|---|---|---|---|
+| **Screen 0**<br>`OnboardingView` | *"Is Dérivée ready to navigate, and how much setup is left?"* | Atmospheric crystalline aperture animation + unambiguous progress indicator (*"Setting up offline city pack... 42%"*). Auto-advances when ready. | Static hang without progress feedback; interactive buttons before DB is ready; failure to decompress delta. | `OnboardingView.swift`<br>`HydrationManager.swift` |
+| **Screen 1**<br>`MapView` + Overlays | *"Where am I, what have I unlocked, and what transit is immediately around me?"* | 2D top-down map centered on user; amber pulsing location dot; crisp fog boundary; Ghost POIs within 200m; Nearby Buses capsule with stop count and line badges; top Search Capsule; Recenter & Compass cluster. | Clutter outside 200m; teardrop pins with labels; 3D perspective pitch; manual "Start Tracking" button. | `MapView.swift`<br>`SearchCapsuleOverlay.swift`<br>`NearbyBusesCapsule.swift` |
+| **Screen 2**<br>`TransitRevealSheet` | *"When is the next departure for my line, and is it on time?"* | Stop name heading with agency pill; top 3–4 live arrival rows visible immediately (e.g. `[ L ] 8 Av — 2 min • Approaching`); per-line reliability badge (`● High`). | Header chrome, service alerts, or floor steppers pushing arrival rows below fold at `.medium` detent. | `TransitRevealSheet.swift`<br>`RouteReliabilityBadge.swift` |
+| **Sub-sheet 2A**<br>`GuidewayRunInspector` | *"Where is my specific train right now, and when does it reach my station?"* | Vehicle proximity hero (*"2 stops away • Approaching Lorimer St"*); follow-on departure (*"Next train in 4 min"*); stop ladder auto-anchored to active station (`isCurrent`); passed stops collapsed into accordion. | Starting view at terminal origin (forcing scroll past 15+ passed stops); raw `trip_id` or `AVL` acronyms; duplicate stacked boarding tags. | `GuidewayRunInspector.swift` |
+| **Sub-sheet 2B**<br>`SurfaceRunInspector` | *"Where is my bus along this street, and how soon will it arrive?"* | Clear line headsign (*"To St George Ferry"*); live distance/stop count; follow-on departure interval; stop ladder anchored to active stop with passed stops collapsed. | Manhattan mock stops displayed on outer-borough routes; camera flying across water; missing headsign orientation. | `SurfaceRunInspector.swift` |
+| **Screen 2 Matrix**<br>`DepartureMatrixView` | *"What is the complete schedule for my line throughout the day?"* | Pre-filtered to active route tab (e.g. `[ A ]`); wall-clock scroll anchored to current hour; compact `:MM` minute capsules. | Multi-line wrap collisions with subsequent hours (hardcoded 56pt frame); repeated `14:21` prefixes in `14:00` row; opening at 00:00. | `DepartureMatrixView.swift` |
+| **Screen 3**<br>`StatsView` | *"How much of this city have I discovered, and what are my top milestones?"* | Overall city completion percentage; unlocked hex count; neighborhood leaderboard sorted by progress; active city selector. | Bottom 100pt thumb zone occupied by full-width GPX upload button instead of exploration stats; heavy non-native charts. | `StatsView.swift`<br>`SettingsView.swift` |
+| **Screen 4A**<br>`PlaceSearchView` | *"Where do I want to go, and can I quickly select a station or saved place?"* | Auto-focused search input; instant offline prefix matches; quick-access mode filter pills (`Subway`, `Buses`, `Rail`, `Saved`); recent destinations within thumb reach. | Empty state without recent destinations; slow network search block; obscured tap targets. | `PlaceSearchView.swift`<br>`SearchViewModel.swift` |
+| **Screen 4B**<br>`RouteComparisonListView` | *"Which route option is the fastest, most reliable, or best for my mode?"* | Multi-profile selector bar (`[Most Reliable]`, `[Fastest]`, etc.); ranked itinerary cards with P10–P90 arrival bands, 3-tier confidence badges, transfer counts, and disruption callouts. | Unranked cards; raw seconds instead of human duration; missing confidence intervals; truncated transfer badges. | `RouteComparisonListView.swift`<br>`RouteComparisonCardView.swift` |
+| **Screen 4C**<br>`NavigationGuidanceSheet` | *"What is my immediate next maneuver, and where do I board / transfer / exit?"* | Prominent next-maneuver card with natural landmarks and block counts; subterranean platform car recommendation badge; 3-tier bottom sheet detents (15%/50%/90%); thumb zone action buttons. | Raw distance-only prompts without landmarks; car positioning rendered on bus routes; action buttons placed at top of screen. | `NavigationGuidanceSheet.swift`<br>`ThumbZoneActionBar.swift` |
+
+### 13.3 The 6 First-Click Invariants (FC-1 to FC-6)
+
+#### FC-1: Zero Dead Past Space Without an Active Anchor
+- **Principle:** Commuters consult an arrival or timetable to know what to do *next*. Displaying already-completed stops or elapsed hours by default forces unnecessary cognitive triage and thumb swiping.
+- **Rule:**
+  1. `GuidewayRunInspector` and `SurfaceRunInspector` must auto-scroll/anchor to the user's active stop (`isCurrent`).
+  2. Preceding completed stations must collapse into a single disclosure accordion (`X stops passed ▾`) defaulting to closed whenever passed count $\ge 3$.
+  3. `DepartureMatrixView` must anchor its initial vertical scroll position to the current wall-clock hour.
+- **Remediation Task:** **PC.1** (`WPC1-INSPECTOR-ANCHORING`), **PC.4** (`WPC4-TIMETABLE-MATRIX-FIX`).
+
+#### FC-2: Zero Raw Database Keys or Telemetry Acronyms
+- **Principle:** Database primary keys, protocol buffer hash IDs, and internal hardware telemetry are developer artifacts. Exposing them in the UI creates cognitive friction and looks unpolished.
+- **Rule:**
+  1. Strip all raw `trip_id` hash strings (e.g. `TRIP 091850_L..N`).
+  2. Strip internal telemetry acronyms (e.g. `REALTIME AVL`, `GTFS-RT VP`).
+  3. Replace with commuter-actionable semantics: vehicle proximity (*"2 stops away • Approaching Lorimer St"*), follow-on imminence (*"Next train in 4 min"*), and track designation (*"Track 1"*).
+- **Remediation Task:** **PC.2** (`WPC2-CLEAN-TELEMETRY-HERO`).
+
+#### FC-3: Zero Duplicate Status Pills
+- **Principle:** Stacking duplicate badges representing the same operational fact makes the interface feel chaotic and buggy.
+- **Rule:**
+  1. Consolidate vehicle status into a single canonical badge or line token. When `arrival.minutes == 0` and `distanceDescription == "Boarding"`, render `[ L ] 8 Av • Boarding (Track 1)`. Never stack a `• BOARDING` orange pill on top of `Boarding` text.
+  2. When a timetable filter capsule already displays the route badge `[S51]`, omit the adjacent plaintext `S51`.
+  3. Suppress corridor section notes when they duplicate the arrival row destination verbatim.
+- **Remediation Task:** **PC.2** (`WPC2-CLEAN-TELEMETRY-HERO`), **PB.4**, **PB.5**.
+
+#### FC-4: Zero Unclipped Height Collisions
+- **Principle:** Fixed frame heights on variable-length text cause catastrophic visual collisions when lines wrap, especially on high-density corridors or when users enable iOS Dynamic Type.
+- **Rule:**
+  1. Never apply hardcoded `.frame(height:)` to table rows, list cells, or wrapping horizontal capsule bars.
+  2. In `HourRowView`, allow rows to dynamically expand vertically with `.fixedSize(horizontal: false, vertical: true)` and explicit vertical padding.
+  3. Ensure route badges have `.fixedSize(horizontal: true, vertical: false)` and `.lineLimit(1)` to avoid vertical letter clipping.
+- **Remediation Task:** **PC.4** (`WPC4-TIMETABLE-MATRIX-FIX`), **PB.4**.
+
+#### FC-5: Zero Nested Sheet Stacking
+- **Principle:** Presenting a SwiftUI modal `.sheet` on top of an existing modal `.sheet` triggers iOS card scaling, visually squishing the underlying view, creating gesture dismissal ambiguity, and confusing the user's mental spatial stack.
+- **Rule:**
+  1. All transit inspection workflows within `TransitRevealSheet` must transition in-place or push onto a unified navigation stack.
+  2. Never call `.sheet(item: $inspectingArrival)` from within an active bottom sheet.
+  3. Support seamless interactive drag-to-dismiss of the entire sheet from both station overview and run inspector states.
+- **Remediation Task:** **PC.3** (`WPC3-SINGLE-SHEET-TRANSITION`).
+
+#### FC-6: Thumb Zone Reserved for High-Frequency Insights
+- **Principle:** Fitts's Law dictates that the lower third of a smartphone display is the fastest, least fatiguing zone for touch interaction during one-handed use. Filling this zone with low-frequency administrative buttons degrades day-to-day usability.
+- **Rule:**
+  1. The bottom 100pt of any scrollable view or interactive HUD must be reserved for high-frequency commuter insights (upcoming departures, sheet detent toggles, primary navigation actions like "Start Journey").
+  2. Low-frequency CTAs — such as `"Upload Previous Workouts"` GPX file import, "Clear Cache", or developer diagnostics — must reside exclusively in `SettingsView` or overflow toolbar menus.
+- **Remediation Task:** **PC.5** (`WPC5-VIEWPORT-OPTIMIZATION`).
+
+### 13.4 Audit Protocol for Agents & Field Testing
+
+Before submitting or merging any PR modifying user-facing SwiftUI views in Dérivée:
+1. **Pre-Flight Invariant Scan:** Run grep checks for prohibited patterns:
+   - Fixed height rows: `grep -rn "frame(height: 56" DeriveeNative/Derivee/`
+   - Nested sheet presentation: `grep -rn "\.sheet(" DeriveeNative/Derivee/TransitRevealSheet.swift`
+   - Raw trip ID rendering: `grep -rn "tripId" DeriveeNative/Derivee/GuidewayRunInspector.swift`
+2. **0.0s Above-the-Fold Verification:** Verify in simulator (iPhone 17e) that upon opening the view, the user's primary commuter question is answered above the fold without any touch interaction.
+3. **Dynamic Type & Rotation Tolerance:** Verify that expanding font sizes or rotating to landscape does not cause cell overlaps or unclipped bounding box clipping.
