@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreLocation
 import UserNotifications
+import UniformTypeIdentifiers
 
 public enum SettingsSection: String, Hashable, CaseIterable, Identifiable {
     case mapAesthetics = "mapAesthetics"
@@ -19,6 +20,7 @@ struct SettingsView: View {
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject var trackingEngine: AmbientTrackingEngine
     var spatialStore: SpatialStore
+    var cityDetectionService: CityDetectionService? = nil
     var onDismissToMap: (() -> Void)? = nil
     var scrollToSection: SettingsSection? = nil
     
@@ -34,6 +36,11 @@ struct SettingsView: View {
     @State private var showPauseTrackingAlert = false
     @State private var locationStatus: String = "Undetermined"
     @State private var notificationsEnabled: Bool = false
+    @State private var showFileImporter = false
+    @State private var isImporting = false
+    @State private var importProgress = 0.0
+    @State private var showImportAlert = false
+    @State private var importSummaryAlertMessage: String? = nil
     
     var body: some View {
         ScrollViewReader { proxy in
@@ -163,7 +170,23 @@ struct SettingsView: View {
                 .id(SettingsSection.citiesStorage)
                 .id("citiesStorage")
                 
-                Section(header: Text("Data Management"), footer: Text("Clearing the cache will require downloading transit and tile data on the next launch.")) {
+                Section(header: Text("Data Management"), footer: Text("Upload past workout files (GPX or FIT) to backfill your exploration map across metros. Clearing the cache will require downloading transit and tile data on the next launch.")) {
+                    Button {
+                        showFileImporter = true
+                    } label: {
+                        HStack {
+                            Label("Upload Previous Workouts", systemImage: "square.and.arrow.down")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if isImporting {
+                                ProgressView(value: importProgress)
+                                    .tint(Color(hex: "#FFB300"))
+                                    .frame(width: 48)
+                            }
+                        }
+                    }
+                    .disabled(isImporting)
+                    
                     Button(role: .destructive) {
                         showCacheAlert = true
                     } label: {
@@ -247,6 +270,28 @@ struct SettingsView: View {
                     }
                 }
             }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [
+                    UTType.xml,
+                    UTType(filenameExtension: "gpx") ?? .xml,
+                    UTType(filenameExtension: "fit") ?? .data
+                ],
+                allowsMultipleSelection: false
+            ) { result in
+                do {
+                    guard let selectedFile = try result.get().first else { return }
+                    let isSecurityScoped = selectedFile.startAccessingSecurityScopedResource()
+                    importGPX(from: selectedFile, isSecurityScoped: isSecurityScoped)
+                } catch {
+                    print("Error selecting file: \(error)")
+                }
+            }
+            .alert("GPX Workout Import", isPresented: $showImportAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(importSummaryAlertMessage ?? "GPX import completed.")
+            }
         }
     }
     
@@ -274,6 +319,59 @@ struct SettingsView: View {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             DispatchQueue.main.async {
                 self.notificationsEnabled = granted
+            }
+        }
+    }
+    
+    private func importGPX(from url: URL, isSecurityScoped: Bool = false) {
+        isImporting = true
+        importProgress = 0.0
+        
+        Task.detached(priority: .userInitiated) {
+            defer {
+                if isSecurityScoped {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            do {
+                let parser = GPXParser()
+                let coordinates = try parser.parse(url: url)
+                
+                let processor = GPXProcessor()
+                let currentLoc = await MainActor.run { trackingEngine.lastKnownLocation?.coordinate }
+                let activeSlug = await MainActor.run { cityDetectionService?.activeCitySlug ?? "nyc" }
+                let manifest = await MainActor.run { cityDetectionService?.manifest ?? .defaultManifest }
+                
+                processor.processAndInsertMultiCity(
+                    coordinates: coordinates,
+                    manifest: manifest,
+                    defaultCitySlug: activeSlug,
+                    userLocation: currentLoc,
+                    onProgress: { progress in
+                        Task { @MainActor in
+                            self.importProgress = progress
+                        }
+                    },
+                    onComplete: { result in
+                        Task { @MainActor in
+                            self.isImporting = false
+                            if result.totalHexesImported > 0 {
+                                let cityBreakdown = result.cityHexCounts.map { "\($0.key.uppercased()): \($0.value)" }.joined(separator: ", ")
+                                self.importSummaryAlertMessage = "Successfully imported \(result.totalHexesImported) hexes across \(result.citiesCount) metro(s) (\(cityBreakdown))."
+                            } else {
+                                self.importSummaryAlertMessage = "No new exploration hexes found in GPX file."
+                            }
+                            self.showImportAlert = true
+                        }
+                    }
+                )
+            } catch {
+                print("Failed to process GPX: \(error)")
+                await MainActor.run {
+                    self.isImporting = false
+                    self.importSummaryAlertMessage = "Failed to parse GPX file: \(error.localizedDescription)"
+                    self.showImportAlert = true
+                }
             }
         }
     }

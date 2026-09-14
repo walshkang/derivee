@@ -269,7 +269,7 @@ struct TransitRevealSheet: View {
                 let routeInfo = TransitRouteData.lineInfo(for: details.routeId)
                 let isBus = details.routeType == 3
                 
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .center, spacing: 12) {
                         if details.routeIds.count > 1 {
                             if details.modalClass == .bus {
@@ -301,8 +301,7 @@ struct TransitRevealSheet: View {
                         
                         VStack(alignment: .leading, spacing: 2) {
                             Text(details.name)
-                                .font(.title2)
-                                .bold()
+                                .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.primary)
                                 .lineLimit(2)
                                 .minimumScaleFactor(0.85)
@@ -314,7 +313,7 @@ struct TransitRevealSheet: View {
                         
                         Spacer()
                     }
-                    .padding(.top, 14)
+                    .padding(.top, 8)
                     
                     // Active Service Alerts Banner
                     if !serviceAlerts.isEmpty {
@@ -342,7 +341,7 @@ struct TransitRevealSheet: View {
                                         .foregroundColor(.secondary)
                                 }
                                 .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
+                                .padding(.vertical, 4)
                                 .background(Color(hex: "#FF9500").opacity(0.12))
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
@@ -359,7 +358,6 @@ struct TransitRevealSheet: View {
                                 onSelectFloor?(floor)
                             }
                         )
-                        .padding(.top, 2)
                     }
                     
                     // Segmented Tab Picker: [ Live Arrivals | Full Timetable ]
@@ -371,13 +369,12 @@ struct TransitRevealSheet: View {
                     .pickerStyle(.segmented)
                     
                     Divider()
-                        .padding(.top, 2)
                 }
                 .padding(.horizontal, 20)
                 
                 // Scrollable Content
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 10) {
                         if selectedTab == .liveArrivals {
                             // Real-time Arrivals Organized by Direction
                             LiveArrivalsCarousel(
@@ -420,7 +417,7 @@ struct TransitRevealSheet: View {
                         }
                     }
                     .padding(.horizontal, 20)
-                    .padding(.top, 8)
+                    .padding(.top, 4)
                     .padding(.bottom, 24)
                 }
                 .scrollBounceBehavior(.basedOnSize)
@@ -861,7 +858,7 @@ struct LiveArrivalsCarousel: View {
     let onInspectArrival: (SpatialDatabaseManager.ArrivalInfo) -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 8) {
                 Text("UPCOMING DEPARTURES")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -886,7 +883,7 @@ struct LiveArrivalsCarousel: View {
                     .padding(.vertical, 6)
             } else {
                 ForEach(groupedArrivals) { group in
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
                         // Direction Section Header
                         HStack(alignment: .center, spacing: 6) {
                             Image(systemName: group.iconName)
@@ -922,7 +919,7 @@ struct LiveArrivalsCarousel: View {
                             }
                         }
                         .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
+                        .padding(.vertical, 3.5)
                         .background(Color.primary.opacity(0.04))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         
@@ -1034,14 +1031,14 @@ struct LiveArrivalsCarousel: View {
                                         }
                                     }
                                     .contentShape(Rectangle())
-                                    .padding(.vertical, 3)
+                                    .padding(.vertical, 2.5)
                                     .padding(.horizontal, 4)
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
                     }
-                    .padding(.bottom, 4)
+                    .padding(.bottom, 3)
                 }
             }
         }

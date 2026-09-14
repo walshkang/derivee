@@ -156,4 +156,34 @@ final class ExplorationJournalTests: XCTestCase {
         let vc = UIHostingController(rootView: view)
         assertSnapshot(of: vc, as: .image(on: ViewImageConfig(size: CGSize(width: 393, height: 852)), precision: 0.98))
     }
+    
+    func testWavePC5StatsViewThumbZoneRelocation() throws {
+        // Enforce Wave PC.5 (WPC5-VIEWPORT-OPTIMIZATION) and FC-6:
+        // Persistent full-width "Upload Previous Workouts" GPX button in StatsView
+        // must be relocated to SettingsView and the navigation toolbar.
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let statsFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/StatsView.swift")
+        let statsContent = try String(contentsOf: statsFile, encoding: .utf8)
+
+        // 1. Persistent bottom action bar removed from StatsView
+        XCTAssertFalse(
+            statsContent.contains("// Bottom GPX Import Action Bar (Always visible in single city and All Metros modes)"),
+            "FC-6 Violation: Persistent bottom GPX import action bar must be removed from StatsView"
+        )
+        
+        // 2. Toolbar item in StatsView provides the upload action
+        XCTAssertTrue(
+            statsContent.contains("Image(systemName: \"square.and.arrow.down\")"),
+            "StatsView toolbar must provide the square.and.arrow.down upload action"
+        )
+
+        // 3. SettingsView under Data Management provides the upload action
+        let settingsFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/SettingsView.swift")
+        let settingsContent = try String(contentsOf: settingsFile, encoding: .utf8)
+        XCTAssertTrue(
+            settingsContent.contains("Label(\"Upload Previous Workouts\", systemImage: \"square.and.arrow.down\")"),
+            "SettingsView Data Management section must provide the Upload Previous Workouts action"
+        )
+    }
 }

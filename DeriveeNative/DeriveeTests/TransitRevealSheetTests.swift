@@ -1975,6 +1975,56 @@ final class TransitRevealSheetTests: XCTestCase {
             "Departure pills must not repeat the row hour prefix (e.g. 14:21 inside 14:00 row)"
         )
     }
+
+    func testWavePC5ViewportOptimizationAndCompactChrome() throws {
+        // Enforce Wave PC.5 (WPC5-VIEWPORT-OPTIMIZATION):
+        // Tighten vertical padding in TransitRevealSheet header, service alerts, and floorplan stepper
+        // so at least 3 to 4 live arrival rows are immediately visible above the fold at .medium detent.
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let targetFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/TransitRevealSheet.swift")
+        let content = try String(contentsOf: targetFile, encoding: .utf8)
+
+        // 1. Header spacing tightened to 6
+        XCTAssertTrue(
+            content.contains("VStack(alignment: .leading, spacing: 6)"),
+            "TransitRevealSheet pinned header spacing must be tightened to 6pt"
+        )
+        XCTAssertFalse(
+            content.contains(".padding(.top, 14)\n                    \n                    // Active Service Alerts Banner"),
+            "TransitRevealSheet header top padding must be tightened from 14pt"
+        )
+        
+        // 2. Alert padding tightened to 4
+        XCTAssertTrue(
+            content.contains(".padding(.vertical, 4)\n                                .background(Color(hex: \"#FF9500\").opacity(0.12))"),
+            "Service alerts banner vertical padding must be tightened to 4pt"
+        )
+        
+        // 3. Carousel header spacing tightened to 8
+        XCTAssertTrue(
+            content.contains("VStack(alignment: .leading, spacing: 8) {\n            HStack(alignment: .center, spacing: 8) {\n                Text(\"UPCOMING DEPARTURES\")"),
+            "LiveArrivalsCarousel spacing must be tightened to 8pt"
+        )
+
+        // 4. Direction header vertical padding tightened to 3.5
+        XCTAssertTrue(
+            content.contains(".padding(.vertical, 3.5)\n                        .background(Color.primary.opacity(0.04))"),
+            "Direction section header vertical padding must be tightened to 3.5pt"
+        )
+
+        // 5. Floor stepper pill padding tightened
+        let stepperFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/StationFloorStepperPill.swift")
+        let stepperContent = try String(contentsOf: stepperFile, encoding: .utf8)
+        XCTAssertTrue(
+            stepperContent.contains("VStack(alignment: .leading, spacing: 3)"),
+            "StationFloorStepperPill spacing must be tightened to 3pt"
+        )
+        XCTAssertTrue(
+            stepperContent.contains(".frame(width: 22, height: 24)"),
+            "StationFloorStepperPill chevron buttons must be 24pt high"
+        )
+    }
 }
 
 

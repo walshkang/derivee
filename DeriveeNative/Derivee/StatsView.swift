@@ -84,6 +84,21 @@ struct StatsView: View {
                 .padding(.bottom, 10)
                 .background(Color(UIColor.systemGroupedBackground))
                 
+                // Transient Import Progress Banner (Only visible during active GPX parsing/ingestion)
+                if isImporting {
+                    HStack(spacing: 12) {
+                        ProgressView(value: importProgress)
+                            .tint(Color(hex: "#FFB300"))
+                        Text("Processing Multi-City GPX...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                
                 if browsingMode.isAllMetros {
                     // Global All Metros Summary View
                     if let summary = allMetrosSummary {
@@ -126,36 +141,6 @@ struct StatsView: View {
                         journalContent
                     }
                 }
-                
-                // Bottom GPX Import Action Bar (Always visible in single city and All Metros modes)
-                VStack(spacing: 16) {
-                    if isImporting {
-                        VStack(spacing: 8) {
-                            Text("Processing Multi-City GPX...")
-                                .font(.caption)
-                            ProgressView(value: importProgress)
-                                .tint(Color(hex: "#FFB300"))
-                        }
-                        .padding(.horizontal, 40)
-                    } else {
-                        Button(action: {
-                            showFileImporter = true
-                        }) {
-                            HStack {
-                                Image(systemName: "square.and.arrow.down")
-                                Text("Upload Previous Workouts")
-                            }
-                            .font(.headline)
-                            .foregroundColor(colorScheme == .dark ? .black : .white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(colorScheme == .dark ? Color.white : Color.black)
-                            .cornerRadius(12)
-                        }
-                    }
-                }
-                .padding()
-                .background(Color(UIColor.systemGroupedBackground))
             }
             .navigationTitle("Exploration Stats")
             .navigationBarTitleDisplayMode(.inline)
@@ -167,16 +152,27 @@ struct StatsView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gear")
+                    HStack(spacing: 16) {
+                        Button {
+                            showFileImporter = true
+                        } label: {
+                            Image(systemName: "square.and.arrow.down")
+                        }
+                        .disabled(isImporting)
+                        .accessibilityLabel("Upload Previous Workouts")
+                        
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Image(systemName: "gear")
+                        }
+                        .accessibilityLabel("Settings")
                     }
                 }
             }
             .sheet(isPresented: $showSettings) {
                 NavigationStack {
-                    SettingsView(trackingEngine: trackingEngine, spatialStore: spatialStore, onDismissToMap: {
+                    SettingsView(trackingEngine: trackingEngine, spatialStore: spatialStore, cityDetectionService: cityDetectionService, onDismissToMap: {
                         showSettings = false
                         dismiss()
                     })

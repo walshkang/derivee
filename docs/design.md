@@ -1043,7 +1043,7 @@ Urban transit navigation differs fundamentally from desktop or leisurely mobile 
 - **Rule:**
   1. The bottom 100pt of any scrollable view or interactive HUD must be reserved for high-frequency commuter insights (upcoming departures, sheet detent toggles, primary navigation actions like "Start Journey").
   2. Low-frequency CTAs — such as `"Upload Previous Workouts"` GPX file import, "Clear Cache", or developer diagnostics — must reside exclusively in `SettingsView` or overflow toolbar menus.
-- **Remediation Task:** **PC.5** (`WPC5-VIEWPORT-OPTIMIZATION`).
+- **Remediation Task:** **PC.5** (`WPC5-VIEWPORT-OPTIMIZATION` — ✅ Implemented).
 
 ### 13.4 Audit Protocol for Agents & Field Testing
 

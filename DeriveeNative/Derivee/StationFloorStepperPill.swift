@@ -67,7 +67,7 @@ public struct StationFloorStepperPill: View {
     }
     
     public var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .center, spacing: 8) {
                 // Multi-Level Indicator Icon
                 Image(systemName: "square.2.layers.3d.top.filled")
@@ -82,7 +82,7 @@ public struct StationFloorStepperPill: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(canStepDown ? .primary : .secondary.opacity(0.35))
-                        .frame(width: 24, height: 28)
+                        .frame(width: 22, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -98,8 +98,8 @@ public struct StationFloorStepperPill: View {
                         } label: {
                             Text(floor.shortName)
                                 .font(.system(size: 12, weight: isSelected ? .bold : .medium, design: .rounded))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 3.5)
                                 .background(
                                     ZStack {
                                         if isSelected {
@@ -127,7 +127,7 @@ public struct StationFloorStepperPill: View {
                     Image(systemName: "chevron.up")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(canStepUp ? .primary : .secondary.opacity(0.35))
-                        .frame(width: 24, height: 28)
+                        .frame(width: 22, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
