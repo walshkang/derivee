@@ -405,4 +405,141 @@ final class InspectorMapSyncTests: XCTestCase {
         XCTAssertEqual(focusedCoord?.latitude, targetCoord.latitude)
         XCTAssertEqual(focusedCoord?.longitude, targetCoord.longitude)
     }
+
+    // MARK: - Wave PD.3: Approaching Train Progression & Bounded Vehicle Framing
+
+    private func makePD3TestLadder() -> [TrackStop] {
+        var ladder: [TrackStop] = []
+        for i in 0..<15 {
+            let name: String
+            if i == 12 {
+                name = "Graham Av"
+            } else if i == 13 {
+                name = "Lorimer St"
+            } else if i == 14 {
+                name = "Bedford Av"
+            } else {
+                name = "Stop \(i)"
+            }
+            ladder.append(TrackStop(
+                stopId: "L\(i)",
+                stopName: name,
+                coordinate: CLLocationCoordinate2D(latitude: 40.70 + Double(i) * 0.005, longitude: -73.95),
+                sequenceIndex: i,
+                isPassed: i < 14,
+                isCurrent: i == 14
+            ))
+        }
+        return ladder
+    }
+
+    func testPD3_VehicleStopIndexResolution() {
+        let dummyLadder = makePD3TestLadder()
+        
+        // 1. "2 stops away" -> index 14 - 2 = 12
+        let arr2Stops = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 4, distanceDescription: "2 stops away"
+        )
+        let idx2Stops = TransitRealtimeService.shared.resolveVehicleStopIndex(arrival: arr2Stops, ladder: dummyLadder)
+        XCTAssertEqual(idx2Stops, 12, "2 stops away should resolve to 2 stops upstream of commuter station")
+        
+        // 2. "Approaching" -> index 14 - 1 = 13
+        let arrApproaching = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 2, distanceDescription: "Approaching"
+        )
+        let idxApproaching = TransitRealtimeService.shared.resolveVehicleStopIndex(arrival: arrApproaching, ladder: dummyLadder)
+        XCTAssertEqual(idxApproaching, 13, "'Approaching' should resolve to 1 stop upstream")
+        
+        // 3. "Boarding" -> index 14
+        let arrBoarding = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 0, distanceDescription: "Boarding"
+        )
+        let idxBoarding = TransitRealtimeService.shared.resolveVehicleStopIndex(arrival: arrBoarding, ladder: dummyLadder)
+        XCTAssertEqual(idxBoarding, 14, "'Boarding' should resolve to commuter station index")
+        
+        // 4. "At Terminus" -> index 0
+        let arrTerminus = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 12, distanceDescription: "At Terminus"
+        )
+        let idxTerminus = TransitRealtimeService.shared.resolveVehicleStopIndex(arrival: arrTerminus, ladder: dummyLadder)
+        XCTAssertEqual(idxTerminus, 0, "'At Terminus' should resolve to sequence index 0")
+        
+        // 5. GPS coordinate matching
+        let arrGPS = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 6,
+            vehicleCoordinate: CLLocationCoordinate2D(latitude: 40.70 + 7.0 * 0.005, longitude: -73.95)
+        )
+        let idxGPS = TransitRealtimeService.shared.resolveVehicleStopIndex(arrival: arrGPS, ladder: dummyLadder)
+        XCTAssertEqual(idxGPS, 7, "Direct GPS coordinate should snap to closest upstream sequence index")
+    }
+
+    func testPD3_AnnotateLadderWithApproachingTrain() {
+        let dummyLadder = makePD3TestLadder()
+        
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 4, distanceDescription: "2 stops away • Approaching Lorimer St"
+        )
+        
+        let annotated = TransitRealtimeService.shared.annotateLadderWithVehicle(ladder: dummyLadder, arrival: arrival)
+        XCTAssertEqual(annotated.count, 15)
+        
+        // Prior stops 0...11 should be isPassed = true
+        for i in 0...11 {
+            XCTAssertTrue(annotated[i].isPassed, "Stop \(i) prior to live vehicle must be marked isPassed")
+            XCTAssertFalse(annotated[i].isVehicleHere, "Stop \(i) must not have vehicle marker")
+            XCTAssertFalse(annotated[i].isCurrent, "Stop \(i) is not commuter station")
+        }
+        
+        // Stop 12 (Graham Av) is live train stop
+        XCTAssertTrue(annotated[12].isVehicleHere, "Graham Av must be marked with isVehicleHere = true")
+        XCTAssertFalse(annotated[12].isPassed, "Live vehicle stop must not be marked isPassed")
+        XCTAssertFalse(annotated[12].isCurrent, "Graham Av is not commuter station")
+        
+        // Stop 13 (Lorimer St) is intermediate approaching stop
+        XCTAssertFalse(annotated[13].isPassed, "Intermediate approaching stop must be active, not passed")
+        XCTAssertFalse(annotated[13].isVehicleHere, "Lorimer St does not have the train yet")
+        XCTAssertFalse(annotated[13].isCurrent, "Lorimer St is not commuter station")
+        
+        // Stop 14 (Bedford Av) is commuter station
+        XCTAssertTrue(annotated[14].isCurrent, "Bedford Av must be marked with isCurrent = true")
+        XCTAssertFalse(annotated[14].isPassed, "Commuter station must not be passed")
+        XCTAssertFalse(annotated[14].isVehicleHere, "Commuter station does not have train yet")
+    }
+
+    func testPD3_RouteInspectionCommandTightVehicleBoundingBox() {
+        let station = CLLocationCoordinate2D(latitude: 40.7173, longitude: -73.9566) // Bedford Av
+        let vehicle = CLLocationCoordinate2D(latitude: 40.7145, longitude: -73.9440) // Graham Av
+        
+        let fullRouteCoords = [
+            CLLocationCoordinate2D(latitude: 40.6466, longitude: -73.9018), // Canarsie (Far away South)
+            CLLocationCoordinate2D(latitude: 40.7145, longitude: -73.9440), // Graham Av
+            CLLocationCoordinate2D(latitude: 40.7150, longitude: -73.9500), // Intermediate Lorimer
+            CLLocationCoordinate2D(latitude: 40.7173, longitude: -73.9566), // Bedford Av
+            CLLocationCoordinate2D(latitude: 40.7397, longitude: -74.0025)  // 8 Av (Far away North/West)
+        ]
+        
+        let cmd = RouteInspectionCommand(
+            routeId: "L",
+            lineName: "14th Street-Canarsie Local",
+            agencyColorHex: "#A7A9AC",
+            modalClass: .subway,
+            coordinates: fullRouteCoords,
+            stationCoordinate: station,
+            vehicleCoordinate: vehicle
+        )
+        
+        let bounds = cmd.computedBoundingBox(tightVehicleBounding: true)
+        XCTAssertNotNil(bounds)
+        guard let b = bounds else { return }
+        
+        // Must tightly enclose Graham Av and Bedford Av
+        XCTAssertLessThanOrEqual(b.sw.latitude, min(station.latitude, vehicle.latitude))
+        XCTAssertGreaterThanOrEqual(b.ne.latitude, max(station.latitude, vehicle.latitude))
+        
+        // Must strictly exclude distant Canarsie (40.6466)
+        XCTAssertGreaterThan(b.sw.latitude, 40.6800, "Tight bounding box must not expand to Canarsie terminal")
+        
+        // Must strictly exclude distant 8th Ave (40.7397)
+        XCTAssertLessThan(b.ne.latitude, 40.7350, "Tight bounding box must not expand to Manhattan 8 Av terminal")
+    }
 }

@@ -724,4 +724,101 @@ final class CommuterErgonomicsTests: XCTestCase {
             "Wave PD.2 Violation: TransitRevealSheet must declare inspectionPeekDetent"
         )
     }
+
+    // MARK: - Wave PD.3: Approaching Train Progression & Bounded Vehicle Framing Invariants
+
+    private func makePD3TestLadder() -> [TrackStop] {
+        var ladder: [TrackStop] = []
+        for i in 0..<15 {
+            let name: String
+            if i == 12 {
+                name = "Graham Av"
+            } else if i == 13 {
+                name = "Lorimer St"
+            } else if i == 14 {
+                name = "Bedford Av"
+            } else {
+                name = "Stop \(i)"
+            }
+            ladder.append(TrackStop(
+                stopId: "L\(i)",
+                stopName: name,
+                coordinate: CLLocationCoordinate2D(latitude: 40.70 + Double(i) * 0.005, longitude: -73.95),
+                sequenceIndex: i,
+                isPassed: i < 14,
+                isCurrent: i == 14
+            ))
+        }
+        return ladder
+    }
+
+    func testWavePD3_ApproachingTrainLadder_StartsAtLiveVehicleStop() {
+        let dummyLadder = makePD3TestLadder()
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 4, distanceDescription: "2 stops away"
+        )
+        
+        let annotated = TransitRealtimeService.shared.annotateLadderWithVehicle(ladder: dummyLadder, arrival: arrival)
+        let activeAndUpcoming = annotated.filter { !$0.isPassed }
+        
+        XCTAssertEqual(activeAndUpcoming.first?.stopName, "Graham Av", "Approaching progression ladder must start at oncoming train stop (Graham Av)")
+        XCTAssertEqual(activeAndUpcoming.first?.isVehicleHere, true, "Oncoming train stop must have isVehicleHere = true")
+    }
+
+    func testWavePD3_ApproachingTrainLadder_CollapsesStopsPriorToLiveTrain() {
+        let dummyLadder = makePD3TestLadder()
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 4, distanceDescription: "2 stops away"
+        )
+        
+        let annotated = TransitRealtimeService.shared.annotateLadderWithVehicle(ladder: dummyLadder, arrival: arrival)
+        let earlierStops = annotated.filter { $0.isPassed }
+        
+        XCTAssertEqual(earlierStops.count, 12, "Stops prior to live vehicle (0...11) must be classified as isPassed = true for earlier stops collapse")
+    }
+
+    func testWavePD3_ApproachingTrainLadder_RendersIntermediateStopsActive() {
+        let dummyLadder = makePD3TestLadder()
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 4, distanceDescription: "2 stops away"
+        )
+        
+        let annotated = TransitRealtimeService.shared.annotateLadderWithVehicle(ladder: dummyLadder, arrival: arrival)
+        let intermediate = annotated.first(where: { $0.stopName == "Lorimer St" })
+        
+        XCTAssertNotNil(intermediate)
+        XCTAssertFalse(intermediate?.isPassed ?? true, "Intermediate approaching stops between live train and user must NOT be passed")
+        XCTAssertFalse(intermediate?.isCurrent ?? true, "Intermediate stop is not commuter station")
+        XCTAssertFalse(intermediate?.isVehicleHere ?? true, "Intermediate stop does not have the train yet")
+    }
+
+    func testWavePD3_ApproachingTrainLadder_HighlightsYouAreHere() {
+        let dummyLadder = makePD3TestLadder()
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 4, distanceDescription: "2 stops away"
+        )
+        
+        let annotated = TransitRealtimeService.shared.annotateLadderWithVehicle(ladder: dummyLadder, arrival: arrival)
+        let commuterStop = annotated.first(where: { $0.isCurrent })
+        
+        XCTAssertNotNil(commuterStop)
+        XCTAssertEqual(commuterStop?.stopName, "Bedford Av")
+        XCTAssertEqual(commuterStop?.isCurrent, true)
+        XCTAssertEqual(commuterStop?.isPassed, false)
+    }
+
+    func testWavePD3_SourceCodeVerification() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        
+        let guidewayContent = try String(contentsOf: deriveeDir.appendingPathComponent("GuidewayRunInspector.swift"), encoding: .utf8)
+        XCTAssertTrue(guidewayContent.contains("TRAIN HERE"), "GuidewayRunInspector must render 'TRAIN HERE' badge on live vehicle stop")
+        XCTAssertTrue(guidewayContent.contains("earlier stop"), "GuidewayRunInspector must collapse prior stops into 'earlier stops'")
+        
+        let mapContent = try String(contentsOf: deriveeDir.appendingPathComponent("MapView.swift"), encoding: .utf8)
+        XCTAssertTrue(mapContent.contains("MLNZoomLevelForAltitude"), "MapView must use MLNZoomLevelForAltitude for camera zoom clamping")
+        XCTAssertTrue(mapContent.contains("MLNAltitudeForZoomLevel"), "MapView must use MLNAltitudeForZoomLevel for camera altitude calculation")
+        XCTAssertTrue(mapContent.contains("14.5") && mapContent.contains("15.5"), "MapView must clamp camera zoom to z in [14.5, 15.5]")
+    }
 }

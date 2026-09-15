@@ -61,18 +61,35 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         modalClass == .ferry
     }
     
-    /// Computes southwest and northeast bounds enclosing all route coordinates, user station, and active vehicle.
+    /// Computes southwest and northeast bounds enclosing the route inspection geometry.
+    /// When `tightVehicleBounding` is true and `vehicleCoordinate` is available, calculates a tight
+    /// bounding box enclosing the commuter station, the live vehicle, and intermediate route curvature.
     /// Camera Safety Invariant (Wave PB.3): Filters out any errant coordinates (>45km / 0.4° lat from station).
-    public func computedBoundingBox() -> (sw: CLLocationCoordinate2D, ne: CLLocationCoordinate2D)? {
+    public func computedBoundingBox(tightVehicleBounding: Bool = false) -> (sw: CLLocationCoordinate2D, ne: CLLocationCoordinate2D)? {
         let validCoords = coordinates.filter { pt in
             abs(pt.latitude - stationCoordinate.latitude) < 0.4 &&
             abs(pt.longitude - stationCoordinate.longitude) < 0.5
         }
-        var allPoints = validCoords
-        allPoints.append(stationCoordinate)
         
-        if let vCoord = vehicleCoordinate {
-            if abs(vCoord.latitude - stationCoordinate.latitude) < 0.4 &&
+        var allPoints: [CLLocationCoordinate2D] = []
+        
+        if tightVehicleBounding, let vCoord = vehicleCoordinate,
+           abs(vCoord.latitude - stationCoordinate.latitude) < 0.4 &&
+           abs(vCoord.longitude - stationCoordinate.longitude) < 0.5 {
+            allPoints = [stationCoordinate, vCoord]
+            
+            // Include intermediate route coordinates between station and vehicle to preserve track curvature
+            let intermediate = Self.extractIntermediateCoordinates(
+                between: stationCoordinate,
+                and: vCoord,
+                in: validCoords
+            )
+            allPoints.append(contentsOf: intermediate)
+        } else {
+            allPoints = validCoords
+            allPoints.append(stationCoordinate)
+            if let vCoord = vehicleCoordinate,
+               abs(vCoord.latitude - stationCoordinate.latitude) < 0.4 &&
                abs(vCoord.longitude - stationCoordinate.longitude) < 0.5 {
                 allPoints.append(vCoord)
             }
@@ -93,7 +110,7 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         }
         
         // Ensure a minimum span to prevent excessive zooming on single-point routes
-        let minSpan = 0.008
+        let minSpan = tightVehicleBounding ? 0.004 : 0.008
         if (maxLat - minLat) < minSpan {
             let mid = (maxLat + minLat) / 2.0
             minLat = mid - minSpan / 2.0
@@ -109,6 +126,40 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
             sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
             ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon)
         )
+    }
+    
+    /// Finds the slice of polyline coordinates along `coords` that fall between the projections
+    /// of point A and point B.
+    public static func extractIntermediateCoordinates(
+        between coordA: CLLocationCoordinate2D,
+        and coordB: CLLocationCoordinate2D,
+        in coords: [CLLocationCoordinate2D]
+    ) -> [CLLocationCoordinate2D] {
+        guard coords.count >= 2 else { return [] }
+        
+        var idxA = 0
+        var bestDistA = Double.infinity
+        var idxB = 0
+        var bestDistB = Double.infinity
+        
+        for (i, pt) in coords.enumerated() {
+            let dA = pow(pt.latitude - coordA.latitude, 2) + pow(pt.longitude - coordA.longitude, 2)
+            if dA < bestDistA {
+                bestDistA = dA
+                idxA = i
+            }
+            let dB = pow(pt.latitude - coordB.latitude, 2) + pow(pt.longitude - coordB.longitude, 2)
+            if dB < bestDistB {
+                bestDistB = dB
+                idxB = i
+            }
+        }
+        
+        let start = min(idxA, idxB)
+        let end = max(idxA, idxB)
+        guard start < end else { return [] }
+        
+        return Array(coords[start...end])
     }
     
     public static func == (lhs: RouteInspectionCommand, rhs: RouteInspectionCommand) -> Bool {

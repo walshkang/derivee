@@ -1045,4 +1045,108 @@ public final class TransitRealtimeService: @unchecked Sendable {
         let degrees = radians * 180.0 / .pi
         return (degrees + 360.0).truncatingRemainder(dividingBy: 360.0)
     }
+    
+    // MARK: - Live Vehicle Stop Progression & Annotation (Task PD.3 / WPD3)
+    
+    /// Resolves the sequence index of the stop where the oncoming train is currently dwelling or approaching from.
+    public func resolveVehicleStopIndex(
+        arrival: SpatialDatabaseManager.ArrivalInfo,
+        ladder: [TrackStop]
+    ) -> Int? {
+        guard !ladder.isEmpty else { return nil }
+        
+        let currentIndex = ladder.firstIndex(where: { $0.isCurrent }) ?? 0
+        
+        // 1. Consist is dwelling at the active commuter platform or boarding
+        let desc = arrival.distanceDescription ?? ""
+        if arrival.minutes <= 0 ||
+           desc.localizedCaseInsensitiveContains("boarding") ||
+           desc.localizedCaseInsensitiveContains("at platform") {
+            return currentIndex
+        }
+        
+        // 2. Consist is held or dwelling at origin terminus
+        if arrival.isHoldingStation || desc.localizedCaseInsensitiveContains("terminus") {
+            return 0
+        }
+        
+        // 3. Parse "X stops away" or "X stop away" (evaluated before "approaching" to disambiguate "2 stops away • Approaching X")
+        if let range = desc.range(of: "\\d+\\s*stops?", options: [.regularExpression, .caseInsensitive]),
+           let numRange = desc[range].range(of: "\\d+", options: .regularExpression),
+           let num = Int(desc[range][numRange]) {
+            let stopsAway = max(1, num)
+            return max(0, currentIndex - stopsAway)
+        }
+        
+        // 4. Consist is approaching user's station (1 stop away / inter-station)
+        if desc.localizedCaseInsensitiveContains("approaching") {
+            return max(0, currentIndex - 1)
+        }
+        
+        // 5. Fallback for any standalone digit in distance description e.g. "2 away"
+        if let match = desc.range(of: "\\d+", options: .regularExpression),
+           let num = Int(desc[match]) {
+            let stopsAway = max(1, num)
+            return max(0, currentIndex - stopsAway)
+        }
+        
+        // 5. Direct GPS Telemetry (Buses / Surface / GPS Consists)
+        if let vCoord = arrival.vehicleCoordinate {
+            var bestIdx = 0
+            var bestDist = Double.infinity
+            let searchLimit = min(ladder.count - 1, currentIndex)
+            for i in 0...searchLimit {
+                let stopCoord = ladder[i].coordinate
+                let dLat = stopCoord.latitude - vCoord.latitude
+                let dLon = stopCoord.longitude - vCoord.longitude
+                let distSq = dLat * dLat + dLon * dLon
+                if distSq < bestDist {
+                    bestDist = distSq
+                    bestIdx = i
+                }
+            }
+            return bestIdx
+        }
+        
+        // Fallback for scheduled departures with unknown vehicle position:
+        // Returns currentIndex so ladder starts at commuter station
+        return currentIndex
+    }
+    
+    /// Re-evaluates stop progression states based on the live oncoming vehicle position:
+    /// - Marks `isVehicleHere = true` at the vehicle's current stop.
+    /// - Truncates/marks `isPassed = true` ONLY for stops strictly prior to the live vehicle (`idx < vehicleStopIndex`).
+    /// - Intermediate stops between live train and commuter station (`vehicleStopIndex < idx < currentIndex`)
+    ///   are marked active approaching (`isPassed = false`, `isCurrent = false`, `isVehicleHere = false`).
+    /// - Commuter stop (`idx == currentIndex`) preserves `isCurrent = true`.
+    public func annotateLadderWithVehicle(
+        ladder: [TrackStop],
+        arrival: SpatialDatabaseManager.ArrivalInfo
+    ) -> [TrackStop] {
+        guard !ladder.isEmpty else { return [] }
+        
+        let vehicleIdx = resolveVehicleStopIndex(arrival: arrival, ladder: ladder) ??
+                         (ladder.firstIndex(where: { $0.isCurrent }) ?? 0)
+        let currentIdx = ladder.firstIndex(where: { $0.isCurrent }) ?? 0
+        
+        return ladder.enumerated().map { idx, stop in
+            let isVehicleHere = (idx == vehicleIdx)
+            let isPassed = idx < vehicleIdx
+            let isCurrent = (idx == currentIdx)
+            
+            return TrackStop(
+                id: stop.id,
+                stopId: stop.stopId,
+                stopName: stop.stopName,
+                coordinate: stop.coordinate,
+                sequenceIndex: stop.sequenceIndex,
+                isPassed: isPassed,
+                isCurrent: isCurrent,
+                isTerminus: stop.isTerminus,
+                estimatedMinutes: stop.estimatedMinutes,
+                transferRoutes: stop.transferRoutes,
+                isVehicleHere: isVehicleHere
+            )
+        }
+    }
 }

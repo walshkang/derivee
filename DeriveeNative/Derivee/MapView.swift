@@ -1310,6 +1310,7 @@ struct MapView: UIViewRepresentable {
         
         /// Smoothly pans and zooms the camera to frame the user's station and the active route polyline,
         /// accounting for the bottom-sheet presentation detent in edge padding.
+        /// Clamps zoom level strictly to z in [14.5, 15.5] with tight vehicle-station bounding (Wave PD.3).
         /// Camera Safety Invariant (Wave PB.3): Filters out errant coordinates (>45km / 0.4° lat from station).
         func frameRouteAndStation(
             coordinates: [CLLocationCoordinate2D],
@@ -1322,14 +1323,25 @@ struct MapView: UIViewRepresentable {
                 abs(pt.latitude - station.latitude) < 0.4 &&
                 abs(pt.longitude - station.longitude) < 0.5
             }
-            var allPoints = validCoords
-            allPoints.append(station)
             
-            if let vCoord = vehicleCoordinate {
-                if abs(vCoord.latitude - station.latitude) < 0.4 &&
-                   abs(vCoord.longitude - station.longitude) < 0.5 {
-                    allPoints.append(vCoord)
-                }
+            var allPoints: [CLLocationCoordinate2D] = []
+            let isTightVehicleFraming = (vehicleCoordinate != nil)
+            
+            if let vCoord = vehicleCoordinate,
+               abs(vCoord.latitude - station.latitude) < 0.4 &&
+               abs(vCoord.longitude - station.longitude) < 0.5 {
+                allPoints = [station, vCoord]
+                
+                // Include intermediate route coordinates between station and vehicle to preserve track curvature
+                let intermediate = RouteInspectionCommand.extractIntermediateCoordinates(
+                    between: station,
+                    and: vCoord,
+                    in: validCoords
+                )
+                allPoints.append(contentsOf: intermediate)
+            } else {
+                allPoints = validCoords
+                allPoints.append(station)
             }
             
             guard let first = allPoints.first else { return }
@@ -1347,7 +1359,7 @@ struct MapView: UIViewRepresentable {
             }
             
             // Minimum span prevents over-zooming on single station or short segment
-            let minSpan = 0.008
+            let minSpan = isTightVehicleFraming ? 0.004 : 0.008
             if (maxLat - minLat) < minSpan {
                 let mid = (maxLat + minLat) / 2.0
                 minLat = mid - minSpan / 2.0
@@ -1370,10 +1382,28 @@ struct MapView: UIViewRepresentable {
             
             let targetCamera = mapView.cameraThatFitsCoordinateBounds(bounds, edgePadding: edgePadding)
             
+            // Clamp camera zoom level to z in [14.5, 15.5] (Wave PD.3)
+            let viewportSize = (mapView.bounds.size.width > 0 && mapView.bounds.size.height > 0)
+                ? mapView.bounds.size
+                : CGSize(width: 393, height: 852)
+            let rawZoom = MLNZoomLevelForAltitude(
+                targetCamera.altitude,
+                0.0,
+                targetCamera.centerCoordinate.latitude,
+                viewportSize
+            )
+            let clampedZoom = min(max(rawZoom, 14.5), 15.5)
+            let clampedAltitude = MLNAltitudeForZoomLevel(
+                clampedZoom,
+                0.0,
+                targetCamera.centerCoordinate.latitude,
+                viewportSize
+            )
+            
             // Enforce strict 2D top-down perspective (pitch = 0)
             let finalCamera = MLNMapCamera(
                 lookingAtCenter: targetCamera.centerCoordinate,
-                altitude: targetCamera.altitude,
+                altitude: clampedAltitude,
                 pitch: 0.0,
                 heading: mapView.camera.heading
             )

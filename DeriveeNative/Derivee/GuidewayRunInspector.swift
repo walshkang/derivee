@@ -129,9 +129,19 @@ public struct GuidewayRunInspector: View {
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .onChange(of: isLoadingLadder) { _, loading in
-                    if !loading, let currentStop = stopLadder.first(where: { $0.isCurrent }) {
-                        withAnimation(.easeInOut(duration: 0.35)) {
-                            scrollProxy.scrollTo("ACTIVE_STATION_\(currentStop.id)", anchor: .top)
+                    if !loading {
+                        let targetId: String? = {
+                            if let vehicleStop = stopLadder.first(where: { $0.isVehicleHere }) {
+                                return "VEHICLE_STOP_\(vehicleStop.id)"
+                            } else if let currentStop = stopLadder.first(where: { $0.isCurrent }) {
+                                return "ACTIVE_STATION_\(currentStop.id)"
+                            }
+                            return nil
+                        }()
+                        if let id = targetId {
+                            withAnimation(.easeInOut(duration: 0.35)) {
+                                scrollProxy.scrollTo(id, anchor: .top)
+                            }
                         }
                     }
                 }
@@ -354,13 +364,13 @@ public struct GuidewayRunInspector: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
             } else {
-                let passedStops = stopLadder.filter { $0.isPassed }
-                let activeAndUpcomingStops = stopLadder.filter { !$0.isPassed }
-                let shouldCollapsePassed = passedStops.count >= 3
+                let earlierStops = stopLadder.filter { $0.isPassed }
+                let approachingAndUpcomingStops = stopLadder.filter { !$0.isPassed }
+                let hasEarlierStops = !earlierStops.isEmpty
                 
                 VStack(spacing: 0) {
-                    if shouldCollapsePassed {
-                        // Collapsed Accordion Header / Toggle
+                    if hasEarlierStops {
+                        // Collapsed Accordion Header / Toggle for Earlier Stops (Wave PD.3)
                         Button {
                             withAnimation(.easeInOut(duration: 0.22)) {
                                 isPassedStopsExpanded.toggle()
@@ -381,7 +391,9 @@ public struct GuidewayRunInspector: View {
                                 }
                                 .frame(width: 24)
                                 
-                                Text("\(passedStops.count) stops passed")
+                                let count = earlierStops.count
+                                let noun = count == 1 ? "earlier stop" : "earlier stops"
+                                Text("\(count) \(noun)")
                                     .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                                     .foregroundColor(.secondary)
                                 
@@ -397,23 +409,18 @@ public struct GuidewayRunInspector: View {
                         .buttonStyle(.plain)
                         
                         if isPassedStopsExpanded {
-                            ForEach(Array(passedStops.enumerated()), id: \.element.id) { index, stop in
+                            ForEach(Array(earlierStops.enumerated()), id: \.element.id) { index, stop in
                                 renderLadderNode(stop: stop, isFirst: index == 0, isLast: false)
                             }
                         }
-                    } else {
-                        // Fewer than 3 passed stops: render inline
-                        ForEach(Array(passedStops.enumerated()), id: \.element.id) { index, stop in
-                            renderLadderNode(stop: stop, isFirst: index == 0, isLast: false)
-                        }
                     }
                     
-                    // Active & Upcoming stops
-                    ForEach(Array(activeAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
-                        let isFirstInBlock = passedStops.isEmpty && index == 0
-                        let isLastInBlock = index == activeAndUpcomingStops.count - 1
+                    // Approaching & Upcoming stops (starts at live oncoming train's current stop)
+                    ForEach(Array(approachingAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
+                        let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded) && index == 0
+                        let isLastInBlock = index == approachingAndUpcomingStops.count - 1
                         renderLadderNode(stop: stop, isFirst: isFirstInBlock, isLast: isLastInBlock)
-                            .id(stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id)
+                            .id(stop.isVehicleHere ? "VEHICLE_STOP_\(stop.id)" : (stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id))
                     }
                 }
                 .padding(.vertical, 10)
@@ -437,7 +444,21 @@ public struct GuidewayRunInspector: View {
                 
                 // Central Node
                 ZStack {
-                    if stop.isCurrent {
+                    if stop.isVehicleHere && !stop.isCurrent {
+                        Circle()
+                            .stroke(lineInfo.color.opacity(0.35), lineWidth: 4)
+                            .frame(width: 24, height: 24)
+                            .scaleEffect(isPulsing ? 1.25 : 0.95)
+                            .opacity(isPulsing ? 1.0 : 0.5)
+                        
+                        Circle()
+                            .fill(lineInfo.color)
+                            .frame(width: 14, height: 14)
+                        
+                        Image(systemName: "tram.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.white)
+                    } else if stop.isCurrent {
                         Circle()
                             .stroke(Color(hex: "#FFB300"), lineWidth: 3)
                             .frame(width: 20, height: 20)
@@ -447,6 +468,12 @@ public struct GuidewayRunInspector: View {
                         Circle()
                             .fill(Color(hex: "#FFB300"))
                             .frame(width: 10, height: 10)
+                        
+                        if stop.isVehicleHere {
+                            Image(systemName: "tram.fill")
+                                .font(.system(size: 6, weight: .bold))
+                                .foregroundColor(.black)
+                        }
                     } else if stop.isPassed {
                         Circle()
                             .fill(Color.secondary.opacity(0.35))
@@ -465,11 +492,11 @@ public struct GuidewayRunInspector: View {
                             .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
                     }
                 }
-                .frame(width: 22, height: 22)
+                .frame(width: 24, height: 24)
                 
                 // Lower Stem
                 Rectangle()
-                    .fill(isLast ? Color.clear : (stop.isPassed && !stop.isCurrent ? Color.secondary.opacity(0.25) : lineInfo.color))
+                    .fill(isLast ? Color.clear : (stop.isPassed && !stop.isCurrent && !stop.isVehicleHere ? Color.secondary.opacity(0.25) : lineInfo.color))
                     .frame(width: 4, height: 18)
             }
             .frame(width: 24)
@@ -483,9 +510,27 @@ public struct GuidewayRunInspector: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             Text(stop.stopName)
-                                .font(.system(size: stop.isCurrent ? 14.5 : 13.5, weight: stop.isCurrent ? .bold : .medium, design: .rounded))
+                                .font(.system(size: (stop.isCurrent || stop.isVehicleHere) ? 14.5 : 13.5,
+                                              weight: (stop.isCurrent || stop.isVehicleHere) ? .bold : .medium,
+                                              design: .rounded))
                                 .foregroundColor(stop.isPassed ? .secondary : .primary)
                                 .lineLimit(1)
+                            
+                            if stop.isVehicleHere && !stop.isCurrent {
+                                HStack(spacing: 3) {
+                                    Circle()
+                                        .fill(Color.white)
+                                        .frame(width: 4, height: 4)
+                                        .opacity(isPulsing ? 1.0 : 0.3)
+                                    Text("TRAIN HERE")
+                                        .font(.system(size: 8.5, weight: .black, design: .monospaced))
+                                }
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(lineInfo.color)
+                                .foregroundColor(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 3.5))
+                            }
                             
                             if stop.isCurrent {
                                 Text("YOU ARE HERE")
@@ -526,7 +571,11 @@ public struct GuidewayRunInspector: View {
                     Spacer()
                     
                     // ETA Indicator
-                    if let eta = stop.estimatedMinutes {
+                    if stop.isVehicleHere && !stop.isCurrent {
+                        Text("Live")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(lineInfo.color)
+                    } else if let eta = stop.estimatedMinutes {
                         if eta == 0 {
                             Text("Now")
                                 .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -642,14 +691,18 @@ public struct GuidewayRunInspector: View {
             }
         }
         
-        // 3. Fetch Stop Ladder & Synchronize Map Polyline (Wave PA.5 & Wave PB.3)
+        // 3. Fetch Stop Ladder & Synchronize Map Polyline (Wave PA.5 & Wave PB.3 & Wave PD.3)
         do {
-            let ladder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            let rawLadder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
                 routeId: arrival.line,
                 directionId: directionId,
                 currentStopId: currentStopId,
                 currentArrivalMinutes: arrival.minutes,
                 tappedCoordinate: currentStopCoordinate
+            )
+            let ladder = TransitRealtimeService.shared.annotateLadderWithVehicle(
+                ladder: rawLadder,
+                arrival: arrival
             )
             
             var stationCoord = ladder.first(where: { $0.isCurrent })?.coordinate ??
