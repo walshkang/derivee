@@ -324,7 +324,7 @@ final class TransitRevealSheetTests: XCTestCase {
         let details = try await dbManager.fetchStopDetails(for: "stop_lorimer")
         XCTAssertEqual(details.name, "Lorimer St Station")
         XCTAssertEqual(details.routeId, "L")
-        XCTAssertEqual(details.routeIds, ["L", "G"], "Multi-route stations must parse all comma-separated routes into routeIds array.")
+        XCTAssertEqual(details.routeIds, ["G", "L"], "Multi-route stations must parse all comma-separated routes into canonically-ordered routeIds array.")
     }
     
     func testMultiRouteFeedMessageParsing() throws {

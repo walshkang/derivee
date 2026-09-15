@@ -376,4 +376,33 @@ final class InspectorMapSyncTests: XCTestCase {
         XCTAssertEqual(resolved?.coordinate.latitude, originCoord.latitude)
         XCTAssertEqual(resolved?.coordinate.longitude, originCoord.longitude)
     }
+
+    // MARK: - Wave PD.2: Focus on Map & Return Navigation
+
+    @MainActor
+    func testPD2_FocusMapClosureExecution() {
+        var focusedCoord: CLLocationCoordinate2D? = nil
+        let targetCoord = CLLocationCoordinate2D(latitude: 40.7173, longitude: -73.9566)
+        
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8 Av",
+            minutes: 2
+        )
+        
+        let guideway = GuidewayRunInspector(
+            arrival: arrival,
+            currentStopId: "L10",
+            currentStopName: "Bedford Av",
+            currentStopCoordinate: targetCoord,
+            onFocusMap: { coord in
+                focusedCoord = coord
+            }
+        )
+        
+        guideway.onFocusMap?(targetCoord)
+        XCTAssertNotNil(focusedCoord)
+        XCTAssertEqual(focusedCoord?.latitude, targetCoord.latitude)
+        XCTAssertEqual(focusedCoord?.longitude, targetCoord.longitude)
+    }
 }

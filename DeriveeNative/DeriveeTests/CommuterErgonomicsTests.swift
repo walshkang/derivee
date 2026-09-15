@@ -626,4 +626,102 @@ final class CommuterErgonomicsTests: XCTestCase {
         let confidence = GTFSRealtimeConfidenceTier.staticSchedule
         XCTAssertEqual(confidence.title, "SCHEDULED")
     }
+
+    // MARK: - Wave PD.2: Interactive 3-Detent Persistent Dock & Return Navigation Tests
+
+    func testPD2_RunInspectors_SynchronizeWithMapHasZeroDismissCalls() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        
+        let guidewayFile = deriveeDir.appendingPathComponent("GuidewayRunInspector.swift")
+        let guidewayContent = try String(contentsOf: guidewayFile, encoding: .utf8)
+        
+        if let range = guidewayContent.range(of: "private func synchronizeWithMap()") {
+            let funcSnippet = String(guidewayContent[range.lowerBound...])
+            let endSnippet = String(funcSnippet.prefix(500))
+            XCTAssertFalse(
+                endSnippet.contains("dismiss()"),
+                "Wave PD.2 Violation: GuidewayRunInspector.synchronizeWithMap must not call dismiss()"
+            )
+        } else {
+            XCTFail("GuidewayRunInspector must define synchronizeWithMap()")
+        }
+        
+        let surfaceFile = deriveeDir.appendingPathComponent("SurfaceRunInspector.swift")
+        let surfaceContent = try String(contentsOf: surfaceFile, encoding: .utf8)
+        
+        if let range = surfaceContent.range(of: "private func synchronizeWithMap()") {
+            let funcSnippet = String(surfaceContent[range.lowerBound...])
+            let endSnippet = String(funcSnippet.prefix(500))
+            XCTAssertFalse(
+                endSnippet.contains("dismiss()"),
+                "Wave PD.2 Violation: SurfaceRunInspector.synchronizeWithMap must not call dismiss()"
+            )
+        } else {
+            XCTFail("SurfaceRunInspector must define synchronizeWithMap()")
+        }
+    }
+
+    func testPD2_RunInspectors_ExitButtonTriggersOnBack() {
+        var guidewayBackCalled = false
+        let arr = SpatialDatabaseManager.ArrivalInfo(line: "L", destination: "8 Av", minutes: 3)
+        let guideway = GuidewayRunInspector(
+            arrival: arr,
+            currentStopId: "L11",
+            currentStopName: "Bedford Av",
+            onBack: { guidewayBackCalled = true }
+        )
+        guideway.onBack?()
+        XCTAssertTrue(guidewayBackCalled, "GuidewayRunInspector onBack callback must be invoked on exit")
+
+        var surfaceBackCalled = false
+        let surface = SurfaceRunInspector(
+            arrival: arr,
+            currentStopId: "stop_1",
+            currentStopName: "Kent Av",
+            modalClass: .bus,
+            onBack: { surfaceBackCalled = true }
+        )
+        surface.onBack?()
+        XCTAssertTrue(surfaceBackCalled, "SurfaceRunInspector onBack callback must be invoked on exit")
+    }
+
+    @MainActor
+    func testPD2_TransitRevealSheet_DynamicDetentsAndDockPill() {
+        XCTAssertEqual(
+            TransitRevealSheet.inspectionPeekDetent,
+            .fraction(0.12),
+            "Wave PD.2: inspectionPeekDetent must be .fraction(0.12)"
+        )
+        
+        let arr = SpatialDatabaseManager.ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 4)
+        let sheet = TransitRevealSheet(
+            stopId: "631",
+            initialInspectingArrival: arr,
+            initialDetent: TransitRevealSheet.inspectionPeekDetent
+        )
+        let hosting = UIHostingController(rootView: sheet)
+        XCTAssertNotNil(hosting.view)
+        
+        let dockPill = sheet.compactInspectionDockPill(for: arr)
+        let pillHosting = UIHostingController(rootView: dockPill)
+        XCTAssertNotNil(pillHosting.view)
+    }
+
+    func testPD2_TransitRevealSheet_SourceHasPresentationBackgroundInteraction() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let sheetFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/TransitRevealSheet.swift")
+        let content = try String(contentsOf: sheetFile, encoding: .utf8)
+        
+        XCTAssertTrue(
+            content.contains(".presentationBackgroundInteraction"),
+            "Wave PD.2 Violation: TransitRevealSheet must configure .presentationBackgroundInteraction"
+        )
+        XCTAssertTrue(
+            content.contains("inspectionPeekDetent"),
+            "Wave PD.2 Violation: TransitRevealSheet must declare inspectionPeekDetent"
+        )
+    }
 }
