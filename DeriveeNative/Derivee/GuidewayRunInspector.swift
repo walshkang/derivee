@@ -87,7 +87,7 @@ public struct GuidewayRunInspector: View {
                 Spacer()
                 
                 Button {
-                    dismiss()
+                    (onBack ?? { dismiss() })()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 20))
@@ -613,9 +613,6 @@ public struct GuidewayRunInspector: View {
                     stopLadder.first?.coordinate
         if let coord = coord {
             onFocusMap?(coord)
-            dismiss()
-        } else {
-            dismiss()
         }
     }
     

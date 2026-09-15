@@ -42,6 +42,10 @@ struct TransitRevealSheet: View {
     var onClearRouteInspection: (() -> Void)? = nil
     @State private var pollProgress: Double = 0.0
     @State private var pollGeneration: Int = 0
+    // Wave PD.2: 3-Detent Persistent Dock Peek Detent (~90pt)
+    public static let inspectionPeekDetent: PresentationDetent = .fraction(0.12)
+    
+    @State internal var selectedDetent: PresentationDetent
     @State private var inspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil
     @State private var reliabilityTiers: [String: LineReliabilityTier] = [:]
     @State private var availableFloors: [StationFloor] = []
@@ -58,6 +62,7 @@ struct TransitRevealSheet: View {
         initialAvailableFloors: [StationFloor] = [],
         initialSelectedFloor: StationFloor? = nil,
         initialInspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
+        initialDetent: PresentationDetent = .medium,
         referenceDate: Date? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
@@ -73,6 +78,7 @@ struct TransitRevealSheet: View {
         self._availableFloors = State(initialValue: initialAvailableFloors)
         self._selectedFloor = State(initialValue: initialSelectedFloor)
         self._inspectingArrival = State(initialValue: initialInspectingArrival)
+        self._selectedDetent = State(initialValue: initialDetent)
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
         self.referenceDate = referenceDate
         self.onFocusMap = onFocusMap
@@ -208,11 +214,16 @@ struct TransitRevealSheet: View {
     var body: some View {
         Group {
             if let arr = inspectingArrival {
-                inspectorView(for: arr)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .trailing)
-                    ))
+                if selectedDetent == Self.inspectionPeekDetent {
+                    compactInspectionDockPill(for: arr)
+                        .transition(.opacity)
+                } else {
+                    inspectorView(for: arr)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing),
+                            removal: .move(edge: .trailing)
+                        ))
+                }
             } else {
                 stationOverview
                     .transition(.asymmetric(
@@ -222,7 +233,14 @@ struct TransitRevealSheet: View {
             }
         }
         .animation(.snappy(duration: 0.28, extraBounce: 0.0), value: inspectingArrival?.id)
-        .presentationDetents([.medium, .large])
+        .animation(.easeInOut(duration: 0.2), value: selectedDetent)
+        .presentationDetents(
+            inspectingArrival != nil ? [Self.inspectionPeekDetent, .medium, .large] : [.medium, .large],
+            selection: $selectedDetent
+        )
+        .presentationBackgroundInteraction(
+            inspectingArrival != nil ? .enabled(upThrough: Self.inspectionPeekDetent) : .disabled
+        )
         .presentationDragIndicator(.visible)
         .presentationContentInteraction(.scrolls)
         .transitSheetGlassBackground()
@@ -246,6 +264,12 @@ struct TransitRevealSheet: View {
         }
         .onChange(of: stopId) { _, _ in
             inspectingArrival = nil
+            selectedDetent = .medium
+        }
+        .onChange(of: inspectingArrival?.id) { _, newId in
+            if newId == nil && selectedDetent == Self.inspectionPeekDetent {
+                selectedDetent = .medium
+            }
         }
         .onChange(of: selectedDirection) { _, newDir in
             Task {
@@ -388,6 +412,7 @@ struct TransitRevealSheet: View {
                                 onInspectArrival: { arrival in
                                     withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
                                         inspectingArrival = arrival
+                                        selectedDetent = .medium
                                     }
                                 }
                             )
@@ -448,9 +473,16 @@ struct TransitRevealSheet: View {
                 onBack: {
                     withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
                         inspectingArrival = nil
+                        selectedDetent = .medium
+                        onClearRouteInspection?()
                     }
                 },
-                onFocusMap: onFocusMap,
+                onFocusMap: { coord in
+                    onFocusMap?(coord)
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        selectedDetent = Self.inspectionPeekDetent
+                    }
+                },
                 onInspectRoute: onInspectRoute,
                 onClearRouteInspection: onClearRouteInspection
             )
@@ -465,12 +497,90 @@ struct TransitRevealSheet: View {
                 onBack: {
                     withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
                         inspectingArrival = nil
+                        selectedDetent = .medium
+                        onClearRouteInspection?()
                     }
                 },
-                onFocusMap: onFocusMap,
+                onFocusMap: { coord in
+                    onFocusMap?(coord)
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        selectedDetent = Self.inspectionPeekDetent
+                    }
+                },
                 onInspectRoute: onInspectRoute,
                 onClearRouteInspection: onClearRouteInspection
             )
+        }
+    }
+    
+    // MARK: - Wave PD.2: Compact Interactive Inspection Dock Pill
+    
+    @ViewBuilder
+    internal func compactInspectionDockPill(for arr: SpatialDatabaseManager.ArrivalInfo) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            // [Route Badge]
+            TransitRouteBadge(routeId: arr.line, size: .compact)
+            
+            // [Destination] • [ETA]
+            HStack(spacing: 5) {
+                Text(arr.destination)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                Text("•")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundColor(.secondary)
+                
+                Text(arr.minutes == 0 ? "Boarding" : "\(arr.minutes) min")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundColor(Color(hex: "#FFB300"))
+            }
+            .lineLimit(1)
+            
+            Spacer(minLength: 4)
+            
+            // [^ Tap to Expand]
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    selectedDetent = .medium
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Tap to Expand")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(Color(hex: "#FFB300").opacity(0.15))
+                .foregroundColor(Color(hex: "#D97706"))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            
+            // Tapping (X) exits inspection back to station departures
+            Button {
+                withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
+                    inspectingArrival = nil
+                    selectedDetent = .medium
+                    onClearRouteInspection?()
+                }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                selectedDetent = .medium
+            }
         }
     }
     

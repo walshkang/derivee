@@ -159,7 +159,7 @@ public struct SurfaceRunInspector: View {
                 Spacer()
                 
                 Button {
-                    dismiss()
+                    (onBack ?? { dismiss() })()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 20))
@@ -664,9 +664,6 @@ public struct SurfaceRunInspector: View {
                     stopLadder.first?.coordinate
         if let coord = coord {
             onFocusMap?(coord)
-            dismiss()
-        } else {
-            dismiss()
         }
     }
     

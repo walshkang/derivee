@@ -310,10 +310,6 @@ struct ContentView: View {
                                 activeFloorLevel = floor.ordinal
                             }
                         )
-                            .presentationDetents([.medium, .large])
-                            .presentationDragIndicator(.visible)
-                            .presentationContentInteraction(.scrolls)
-                            .transitSheetGlassBackground()
                     }
                 }
                 .sheet(isPresented: $showSearchSheet) {
