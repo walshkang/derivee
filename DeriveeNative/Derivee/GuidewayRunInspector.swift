@@ -632,10 +632,14 @@ public struct GuidewayRunInspector: View {
                             }
                         }
                         
-                        // Connecting Lines Badges
+                        // Connecting Lines Badges (Wave PD.9: Transfer Route Disambiguation)
                         if !stop.transferRoutes.isEmpty {
-                            HStack(spacing: 3.5) {
-                                ForEach(stop.transferRoutes.prefix(5), id: \.self) { rId in
+                            HStack(alignment: .center, spacing: 3.5) {
+                                Text("⇄")
+                                    .font(.system(size: 9.5, weight: .bold))
+                                    .foregroundColor(.secondary.opacity(0.75))
+                                    .accessibilityHidden(true)
+                                ForEach(stop.transferRoutes.prefix(7), id: \.self) { rId in
                                     TransferRouteBadge(routeId: rId)
                                 }
                             }

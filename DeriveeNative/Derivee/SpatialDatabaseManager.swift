@@ -2712,11 +2712,71 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     
                     let currentIndex = resolvedIndex ?? 0
                     
+                    // Wave PD.9: Multi-Complex Station Transfer Resolution
+                    let hasComplexTables = (try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(complexes)")) != nil &&
+                                          (try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(stop_resolution)")) != nil
+                    
+                    var complexRoutesMap: [String: String] = [:]
+                    
+                    if hasComplexTables && !uniqueRows.isEmpty {
+                        var stopIdSet = Set<String>()
+                        for r in uniqueRows {
+                            if let sId = r["stop_id"] as? String, !sId.isEmpty {
+                                stopIdSet.insert(sId)
+                                let base = sId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
+                                if !base.isEmpty { stopIdSet.insert(base) }
+                            }
+                            if let pId = r["parent_station"] as? String, !pId.isEmpty {
+                                stopIdSet.insert(pId)
+                                let base = pId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
+                                if !base.isEmpty { stopIdSet.insert(base) }
+                            }
+                        }
+                        
+                        let candidateList = Array(stopIdSet)
+                        if !candidateList.isEmpty {
+                            let inClause = candidateList.map { _ in "?" }.joined(separator: ",")
+                            let complexSql = """
+                                WITH TargetComplexes AS (
+                                    SELECT DISTINCT sr.complex_id
+                                    FROM transit.stop_resolution sr
+                                    WHERE sr.child_stop_id IN (\(inClause)) OR sr.parent_station_id IN (\(inClause))
+                                )
+                                SELECT 
+                                    sr_map.parent_station_id,
+                                    sr_map.child_stop_id,
+                                    GROUP_CONCAT(c.routes, ',') AS aggregated_routes
+                                FROM TargetComplexes tc
+                                JOIN transit.stop_resolution sr_map ON sr_map.complex_id = tc.complex_id
+                                JOIN transit.stop_resolution sr_all ON sr_all.complex_id = tc.complex_id
+                                JOIN transit.stops c ON (c.stop_id = sr_all.child_stop_id OR c.stop_id = sr_all.parent_station_id)
+                                WHERE c.routes IS NOT NULL AND c.routes != ''
+                                GROUP BY sr_map.parent_station_id, sr_map.child_stop_id
+                            """
+                            let queryArgs = StatementArguments(candidateList + candidateList)
+                            if let complexRows = try? Row.fetchAll(db, sql: complexSql, arguments: queryArgs) {
+                                for cr in complexRows {
+                                    let pId = cr["parent_station_id"] as? String ?? ""
+                                    let cId = cr["child_stop_id"] as? String ?? ""
+                                    let routes = cr["aggregated_routes"] as? String ?? ""
+                                    if !pId.isEmpty {
+                                        complexRoutesMap[pId] = routes
+                                    }
+                                    if !cId.isEmpty {
+                                        complexRoutesMap[cId] = routes
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
                     return uniqueRows.enumerated().map { idx, row in
                         let sId: String = row["stop_id"]
                         let sName: String = self.sanitizeStopName(row["stop_name"])
                         let lat: Double = row["stop_lat"]
                         let lon: Double = row["stop_lon"]
+                        let pId: String? = row["parent_station"]
+                        let baseId = sId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
                         let rStr: String? = row["routes"]
                         
                         let isPassed = idx < currentIndex
@@ -2732,8 +2792,19 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                             eta = currentArrivalMinutes + (idx - currentIndex) * 2
                         }
                         
-                        let transfers = StationBulletRenderer.parseAndNormalizeRoutes(rStr ?? "")
-                            .filter { $0 != routeId.uppercased() && $0 != lookupRouteId.uppercased() }
+                        let rawRoutes = complexRoutesMap[sId]
+                            ?? (pId != nil ? complexRoutesMap[pId!] : nil)
+                            ?? complexRoutesMap[baseId]
+                            ?? rStr
+                            ?? ""
+                        
+                        let cleanRoute = routeId.uppercased().replacingOccurrences(of: "-SBS", with: "")
+                        var transfers = StationBulletRenderer.parseAndNormalizeRoutes(rawRoutes)
+                            .filter { $0 != routeId.uppercased() && $0 != lookupRouteId.uppercased() && $0 != cleanRoute }
+                        
+                        if isPatternRows {
+                            transfers = transfers.filter { !TransitRouteData.isBusRoute($0) }
+                        }
                         
                         return TrackStop(
                             id: "\(sId)_\(idx)",
@@ -2751,14 +2822,36 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 }
                 
                 // Fallback when route has no stops in DB: Anchor strictly to tapped stop's actual coordinate
-                let targetStopSql = "SELECT stop_id, stop_name, stop_lat, stop_lon, routes FROM transit.stops WHERE stop_id = ? LIMIT 1"
+                let targetStopSql = "SELECT stop_id, stop_name, stop_lat, stop_lon, routes, parent_station FROM transit.stops WHERE stop_id = ? LIMIT 1"
                 if let targetRow = try? Row.fetchOne(db, sql: targetStopSql, arguments: [currentStopId]),
                    let lat = targetRow["stop_lat"] as? Double,
                    let lon = targetRow["stop_lon"] as? Double {
                     let sName = self.sanitizeStopName(targetRow["stop_name"] as? String ?? currentStopId)
                     let rStr = targetRow["routes"] as? String ?? ""
-                    let transfers = StationBulletRenderer.parseAndNormalizeRoutes(rStr)
-                        .filter { $0 != routeId.uppercased() }
+                    let pId = targetRow["parent_station"] as? String
+                    let baseStop = currentStopId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
+                    
+                    var aggregatedRoutes = rStr
+                    let hasComplexTables = (try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(complexes)")) != nil &&
+                                          (try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(stop_resolution)")) != nil
+                    if hasComplexTables {
+                        let complexQuery = """
+                            SELECT GROUP_CONCAT(c.routes, ',') AS aggregated_routes
+                            FROM transit.stop_resolution sr_self
+                            JOIN transit.stop_resolution sr_all ON sr_all.complex_id = sr_self.complex_id
+                            JOIN transit.stops c ON (c.stop_id = sr_all.child_stop_id OR c.stop_id = sr_all.parent_station_id)
+                            WHERE (sr_self.child_stop_id = ? OR sr_self.parent_station_id = ? OR sr_self.child_stop_id = ? OR sr_self.parent_station_id = ?)
+                              AND c.routes IS NOT NULL AND c.routes != ''
+                        """
+                        if let cxRow = try? Row.fetchOne(db, sql: complexQuery, arguments: [currentStopId, currentStopId, baseStop, pId ?? baseStop]),
+                           let cxRoutes = cxRow["aggregated_routes"] as? String, !cxRoutes.isEmpty {
+                            aggregatedRoutes = cxRoutes
+                        }
+                    }
+                    
+                    let cleanRoute = routeId.uppercased().replacingOccurrences(of: "-SBS", with: "")
+                    let transfers = StationBulletRenderer.parseAndNormalizeRoutes(aggregatedRoutes)
+                        .filter { $0 != routeId.uppercased() && $0 != lookupRouteId.uppercased() && $0 != cleanRoute }
                     return [
                         TrackStop(
                             id: "\(currentStopId)_0",

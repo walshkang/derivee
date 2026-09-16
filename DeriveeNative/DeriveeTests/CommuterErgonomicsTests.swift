@@ -384,6 +384,10 @@ final class CommuterErgonomicsTests: XCTestCase {
         // Assert transfer routes use adaptive TransferRouteBadge instead of hardcoded 14x14 Circle()
         XCTAssertTrue(guidewayContent.contains("TransferRouteBadge(routeId: rId)"), "GuidewayRunInspector must use TransferRouteBadge for connecting lines")
         XCTAssertTrue(surfaceContent.contains("TransferRouteBadge(routeId: rId)"), "SurfaceRunInspector must use TransferRouteBadge for connecting lines")
+        
+        // Assert transfer routes are disambiguated with ⇄ glyph prefix (Wave PD.9)
+        XCTAssertTrue(guidewayContent.contains("Text(\"⇄\")"), "GuidewayRunInspector must prefix transfer routes with ⇄ glyph")
+        XCTAssertTrue(surfaceContent.contains("Text(\"⇄\")"), "SurfaceRunInspector must prefix transfer routes with ⇄ glyph")
     }
 
     func testFC4_TransitRouteBadge_DiamondExpressBadgeProperties() {
@@ -421,6 +425,85 @@ final class CommuterErgonomicsTests: XCTestCase {
         XCTAssertFalse(path.isEmpty, "DiamondShape must produce a non-empty path")
         XCTAssertEqual(path.boundingRect.width, 30, accuracy: 0.01)
         XCTAssertEqual(path.boundingRect.height, 30, accuracy: 0.01)
+    }
+
+    // MARK: - Wave PD.9: Transfer Route Disambiguation Glyphs & Multi-Complex Resolution
+    
+    func testFC4_TransferRouteDisambiguationGlyphsAndMultiComplexResolution() async throws {
+        // 1. L Train Ladder: Verify multi-complex resolution at Union Sq (602), Lorimer (629), Myrtle-Wyckoff (630), 8 Av (601)
+        let lLadder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "L",
+            directionId: 0,
+            currentStopId: "L03",
+            currentArrivalMinutes: 3
+        )
+        XCTAssertFalse(lLadder.isEmpty, "L train ladder must not be empty")
+        
+        // 14 St-Union Sq (L03) must aggregate 4, 5, 6, 6X, N, Q, R, W and exclude L
+        let unionSq = lLadder.first { $0.stopId.contains("L03") || $0.stopName.contains("Union Sq") }
+        XCTAssertNotNil(unionSq, "14 St-Union Sq must exist on L train ladder")
+        let unionTransfers = unionSq?.transferRoutes ?? []
+        XCTAssertTrue(unionTransfers.contains("4") || unionTransfers.contains("5") || unionTransfers.contains("6"), "Union Sq must contain 4/5/6 transfers")
+        XCTAssertTrue(unionTransfers.contains("N") || unionTransfers.contains("Q") || unionTransfers.contains("R") || unionTransfers.contains("W"), "Union Sq must contain N/Q/R/W transfers")
+        XCTAssertFalse(unionTransfers.contains("L"), "Union Sq on L train must NOT transfer to L itself")
+        
+        // Lorimer St (L10) must aggregate G transfer from complex 629
+        let lorimerL = lLadder.first { $0.stopId.contains("L10") || $0.stopName == "Lorimer St" }
+        XCTAssertNotNil(lorimerL, "Lorimer St must exist on L train ladder")
+        XCTAssertTrue(lorimerL?.transferRoutes.contains("G") == true, "Lorimer St on L train must resolve G train transfer")
+        XCTAssertFalse(lorimerL?.transferRoutes.contains("L") == true, "Lorimer St on L train must NOT transfer to L itself")
+        
+        // Myrtle-Wyckoff Avs (L17) must aggregate M transfer from complex 630
+        let myrtleL = lLadder.first { $0.stopId.contains("L17") || $0.stopName.contains("Myrtle-Wyckoff") }
+        XCTAssertNotNil(myrtleL, "Myrtle-Wyckoff must exist on L train ladder")
+        XCTAssertTrue(myrtleL?.transferRoutes.contains("M") == true, "Myrtle-Wyckoff on L train must resolve M train transfer")
+        
+        // 8 Av (L01) must aggregate A, C, E transfers
+        let eighthAv = lLadder.first { $0.stopId.contains("L01") || $0.stopName == "8 Av" }
+        XCTAssertNotNil(eighthAv, "8 Av must exist on L train ladder")
+        let eighthTransfers = eighthAv?.transferRoutes ?? []
+        XCTAssertTrue(eighthTransfers.contains("A") || eighthTransfers.contains("C") || eighthTransfers.contains("E"), "8 Av must resolve A/C/E transfers")
+        
+        // 2. M Train Ladder: Verify Myrtle-Wyckoff (L transfer) and Hewes St (J transfer)
+        let mLadder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "M",
+            directionId: 0,
+            currentStopId: "M08",
+            currentArrivalMinutes: 2
+        )
+        XCTAssertFalse(mLadder.isEmpty, "M train ladder must not be empty")
+        
+        let myrtleM = mLadder.first { $0.stopId.contains("M08") || $0.stopName.contains("Myrtle-Wyckoff") }
+        XCTAssertNotNil(myrtleM, "Myrtle-Wyckoff must exist on M train ladder")
+        XCTAssertTrue(myrtleM?.transferRoutes.contains("L") == true, "Myrtle-Wyckoff on M train must resolve L train transfer")
+        XCTAssertFalse(myrtleM?.transferRoutes.contains("M") == true, "Myrtle-Wyckoff on M train must NOT transfer to M itself")
+        
+        let hewesM = mLadder.first { $0.stopId.contains("M14") || $0.stopName.contains("Hewes") }
+        XCTAssertNotNil(hewesM, "Hewes St must exist on M train ladder")
+        XCTAssertTrue(hewesM?.transferRoutes.contains("J") == true, "Hewes St on M train must resolve J train transfer")
+        
+        // 3. Penn Station (128) on 1 Train: Must aggregate 2, 3 and A, C, E from Regional Hub complex 600001
+        let oneLadder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "1",
+            directionId: 0,
+            currentStopId: "128",
+            currentArrivalMinutes: 4
+        )
+        let penn1 = oneLadder.first { $0.stopId.contains("128") || $0.stopName.contains("Penn Station") }
+        XCTAssertNotNil(penn1, "34 St-Penn Station must exist on 1 train ladder")
+        let pennTransfers = penn1?.transferRoutes ?? []
+        XCTAssertTrue(pennTransfers.contains("2") || pennTransfers.contains("3"), "Penn Station must have 2/3 transfers")
+        XCTAssertTrue(pennTransfers.contains("A") || pennTransfers.contains("C") || pennTransfers.contains("E"), "Penn Station must have A/C/E transfers from complex")
+        
+        // 4. Verify canonical ordering across all stops in ladders
+        for stop in lLadder {
+            XCTAssertEqual(stop.transferRoutes, TransitRouteData.sortCanonical(stop.transferRoutes),
+                           "Stop \(stop.stopName) transferRoutes must be strictly sorted in canonical MTA order")
+        }
+        for stop in mLadder {
+            XCTAssertEqual(stop.transferRoutes, TransitRouteData.sortCanonical(stop.transferRoutes),
+                           "Stop \(stop.stopName) transferRoutes must be strictly sorted in canonical MTA order")
+        }
     }
 
     // MARK: - 5. FC-5: Zero Nested Sheet Stacking
