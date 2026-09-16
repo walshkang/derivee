@@ -1923,7 +1923,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         /// Formats delay seconds into commuter-facing historical departure outcome string.
         public static func formatHistoricalOutcome(delaySeconds: Int?) -> String {
             guard let delaySeconds = delaySeconds else { return "Departed" }
-            if delaySeconds <= 60 && delaySeconds >= -60 {
+            if delaySeconds > -60 && delaySeconds <= 60 {
                 return "Departed on time"
             } else if delaySeconds > 60 {
                 let mins = max(1, delaySeconds / 60)
