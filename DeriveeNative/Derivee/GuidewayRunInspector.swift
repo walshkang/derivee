@@ -587,13 +587,15 @@ public struct GuidewayRunInspector: View {
             } label: {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(stop.stopName)
                                 .font(.system(size: (stop.isCurrent || stop.isVehicleHere) ? 14.5 : 13.5,
                                               weight: (stop.isCurrent || stop.isVehicleHere) ? .bold : .medium,
                                               design: .rounded))
                                 .foregroundColor(stop.isPassed ? .secondary : .primary)
-                                .lineLimit(1)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.85)
+                                .fixedSize(horizontal: false, vertical: true)
                             
                             if stop.isVehicleHere && !stop.isCurrent {
                                 HStack(spacing: 3) {
@@ -602,27 +604,27 @@ public struct GuidewayRunInspector: View {
                                         .frame(width: 4, height: 4)
                                         .opacity(isPulsing ? 1.0 : 0.3)
                                     Text("TRAIN HERE")
-                                        .font(.system(size: 8.5, weight: .black, design: .monospaced))
+                                        .font(.system(size: 8.0, weight: .black, design: .monospaced))
                                 }
-                                .padding(.horizontal, 5)
+                                .padding(.horizontal, 4)
                                 .padding(.vertical, 1.5)
                                 .background(lineInfo.color)
                                 .foregroundColor(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 3.5))
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
                             }
                             
                             if stop.isCurrent {
                                 Text("YOU ARE HERE")
-                                    .font(.system(size: 8.5, weight: .black, design: .monospaced))
-                                    .padding(.horizontal, 4)
+                                    .font(.system(size: 8.0, weight: .black, design: .monospaced))
+                                    .padding(.horizontal, 3.5)
                                     .padding(.vertical, 1.5)
                                     .background(Color(hex: "#FFB300"))
                                     .foregroundColor(.black)
                                     .clipShape(RoundedRectangle(cornerRadius: 3))
                             } else if isFirst && arrival.isHoldingStation {
                                 Text("HELD AT TERMINUS")
-                                    .font(.system(size: 8.5, weight: .black, design: .monospaced))
-                                    .padding(.horizontal, 4)
+                                    .font(.system(size: 8.0, weight: .black, design: .monospaced))
+                                    .padding(.horizontal, 3.5)
                                     .padding(.vertical, 1.5)
                                     .background(Color(hex: "#FFB300").opacity(0.2))
                                     .foregroundColor(Color(hex: "#D97706"))
@@ -632,15 +634,9 @@ public struct GuidewayRunInspector: View {
                         
                         // Connecting Lines Badges
                         if !stop.transferRoutes.isEmpty {
-                            HStack(spacing: 3) {
+                            HStack(spacing: 3.5) {
                                 ForEach(stop.transferRoutes.prefix(5), id: \.self) { rId in
-                                    let tInfo = TransitRouteData.lineInfo(for: rId)
-                                    Text(rId)
-                                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                                        .foregroundColor(Color(hex: tInfo.textColorHex))
-                                        .frame(width: 14, height: 14)
-                                        .background(tInfo.color)
-                                        .clipShape(Circle())
+                                    TransferRouteBadge(routeId: rId)
                                 }
                             }
                             .padding(.top, 1)

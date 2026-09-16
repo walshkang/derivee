@@ -34,6 +34,30 @@ public struct TransitRouteData {
         public var uiColor: UIColor {
             UIColor(hex: colorHex)
         }
+        
+        /// Indicates whether this subway/heavy-rail line is an express variant rendered with an authentic MTA diamond bullet (<6>, <7>, <FX>).
+        public var isDiamond: Bool {
+            modalClass == .subway && ["6X", "7X", "FX"].contains(routeId.uppercased())
+        }
+        
+        /// The glyph rendered inside the bullet (e.g., "6" for "6X", "7" for "7X", "F" for "FX").
+        public var bulletGlyph: String {
+            if isDiamond {
+                let upper = routeId.uppercased()
+                if upper.hasSuffix("X") {
+                    return String(upper.dropLast())
+                }
+            }
+            return name
+        }
+        
+        /// Commuter accessibility label.
+        public var accessibilityLabel: String {
+            if isDiamond {
+                return "\(bulletGlyph) Express"
+            }
+            return name
+        }
     }
     
     public static func lineInfo(for routeId: String) -> LineInfo {

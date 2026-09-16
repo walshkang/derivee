@@ -367,6 +367,61 @@ final class CommuterErgonomicsTests: XCTestCase {
             "HourRowView must specify .fixedSize for vertical dynamic expansion"
         )
     }
+    
+    func testFC4_SourceCodeGuardrail_StopLadderNoEllipsisClippingAndAdaptiveTransferBadges() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let guidewayFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/GuidewayRunInspector.swift")
+        let surfaceFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/SurfaceRunInspector.swift")
+        
+        let guidewayContent = try String(contentsOf: guidewayFile, encoding: .utf8)
+        let surfaceContent = try String(contentsOf: surfaceFile, encoding: .utf8)
+        
+        // Assert stop names wrap cleanly with .lineLimit(2)
+        XCTAssertTrue(guidewayContent.contains(".lineLimit(2)"), "GuidewayRunInspector must allow compound station names to wrap with .lineLimit(2)")
+        XCTAssertTrue(surfaceContent.contains(".lineLimit(2)"), "SurfaceRunInspector must allow compound station names to wrap with .lineLimit(2)")
+        
+        // Assert transfer routes use adaptive TransferRouteBadge instead of hardcoded 14x14 Circle()
+        XCTAssertTrue(guidewayContent.contains("TransferRouteBadge(routeId: rId)"), "GuidewayRunInspector must use TransferRouteBadge for connecting lines")
+        XCTAssertTrue(surfaceContent.contains("TransferRouteBadge(routeId: rId)"), "SurfaceRunInspector must use TransferRouteBadge for connecting lines")
+    }
+
+    func testFC4_TransitRouteBadge_DiamondExpressBadgeProperties() {
+        let info6X = TransitRouteData.lineInfo(for: "6X")
+        XCTAssertTrue(info6X.isDiamond, "6X must be classified as a diamond express line")
+        XCTAssertEqual(info6X.bulletGlyph, "6", "6X diamond badge must render root glyph '6'")
+        XCTAssertEqual(info6X.accessibilityLabel, "6 Express")
+        
+        let info7X = TransitRouteData.lineInfo(for: "7X")
+        XCTAssertTrue(info7X.isDiamond, "7X must be classified as a diamond express line")
+        XCTAssertEqual(info7X.bulletGlyph, "7", "7X diamond badge must render root glyph '7'")
+        XCTAssertEqual(info7X.accessibilityLabel, "7 Express")
+        
+        let infoFX = TransitRouteData.lineInfo(for: "FX")
+        XCTAssertTrue(infoFX.isDiamond, "FX must be classified as a diamond express line")
+        XCTAssertEqual(infoFX.bulletGlyph, "F", "FX diamond badge must render root glyph 'F'")
+        XCTAssertEqual(infoFX.accessibilityLabel, "F Express")
+        
+        // Non-diamond lines retain standard circular badges
+        let info6 = TransitRouteData.lineInfo(for: "6")
+        XCTAssertFalse(info6.isDiamond, "Local 6 must NOT be a diamond")
+        XCTAssertEqual(info6.bulletGlyph, "6")
+        
+        let infoA = TransitRouteData.lineInfo(for: "A")
+        XCTAssertFalse(infoA.isDiamond, "A train branches must NOT be diamonds (canonical MTA circle)")
+        XCTAssertEqual(infoA.bulletGlyph, "A")
+        
+        let infoBus = TransitRouteData.lineInfo(for: "B62")
+        XCTAssertFalse(infoBus.isDiamond, "B62 bus must NOT be a diamond")
+        XCTAssertEqual(infoBus.bulletGlyph, "B62")
+        
+        // Verify DiamondShape produces a valid 4-vertex closed path
+        let diamond = DiamondShape()
+        let path = diamond.path(in: CGRect(x: 0, y: 0, width: 30, height: 30))
+        XCTAssertFalse(path.isEmpty, "DiamondShape must produce a non-empty path")
+        XCTAssertEqual(path.boundingRect.width, 30, accuracy: 0.01)
+        XCTAssertEqual(path.boundingRect.height, 30, accuracy: 0.01)
+    }
 
     // MARK: - 5. FC-5: Zero Nested Sheet Stacking
 

@@ -659,13 +659,15 @@ public struct SurfaceRunInspector: View {
             } label: {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(stop.stopName)
                                 .font(.system(size: (stop.isCurrent || stop.isVehicleHere) ? 14.5 : 13.5,
                                               weight: (stop.isCurrent || stop.isVehicleHere) ? .bold : .medium,
                                               design: .rounded))
                                 .foregroundColor(stop.isPassed ? .secondary : .primary)
-                                .lineLimit(1)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.85)
+                                .fixedSize(horizontal: false, vertical: true)
                             
                             if stop.isVehicleHere && !stop.isCurrent {
                                 HStack(spacing: 3) {
@@ -675,19 +677,19 @@ public struct SurfaceRunInspector: View {
                                         .opacity(isPulsing ? 1.0 : 0.3)
                                     let badgeNoun = routeConfig.modalClass == .ferry ? "FERRY HERE" : "BUS HERE"
                                     Text(badgeNoun)
-                                        .font(.system(size: 8.5, weight: .black, design: .monospaced))
+                                        .font(.system(size: 8.0, weight: .black, design: .monospaced))
                                 }
-                                .padding(.horizontal, 5)
+                                .padding(.horizontal, 4)
                                 .padding(.vertical, 1.5)
                                 .background(lineInfo.color)
                                 .foregroundColor(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 3.5))
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
                             }
                             
                             if stop.isCurrent {
                                 Text("YOU ARE HERE")
-                                    .font(.system(size: 8.5, weight: .black, design: .monospaced))
-                                    .padding(.horizontal, 4)
+                                    .font(.system(size: 8.0, weight: .black, design: .monospaced))
+                                    .padding(.horizontal, 3.5)
                                     .padding(.vertical, 1.5)
                                     .background(Color(hex: "#FFB300"))
                                     .foregroundColor(.black)
@@ -697,15 +699,9 @@ public struct SurfaceRunInspector: View {
                         
                         // Connecting Lines Badges
                         if !stop.transferRoutes.isEmpty {
-                            HStack(spacing: 3) {
+                            HStack(spacing: 3.5) {
                                 ForEach(stop.transferRoutes.prefix(5), id: \.self) { rId in
-                                    let tInfo = TransitRouteData.lineInfo(for: rId)
-                                    Text(rId)
-                                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                                        .foregroundColor(Color(hex: tInfo.textColorHex))
-                                        .frame(width: 14, height: 14)
-                                        .background(tInfo.color)
-                                        .clipShape(Circle())
+                                    TransferRouteBadge(routeId: rId)
                                 }
                             }
                             .padding(.top, 1)
