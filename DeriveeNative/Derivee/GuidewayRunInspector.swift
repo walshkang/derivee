@@ -24,6 +24,7 @@ public struct GuidewayRunInspector: View {
     @State private var stopLadder: [TrackStop] = []
     @State private var isLoadingLadder: Bool = true
     @State private var isPassedStopsExpanded: Bool = false
+    @State private var isApproachingStopsExpanded: Bool = false
     @State private var crowdEstimate: CrowdDensityEstimate = CrowdDensityEstimate(level: .moderate, isLiveSensors: false)
     @State private var activeDisruption: String? = nil
     @State private var isDisruptionDismissed: Bool = false
@@ -130,17 +131,27 @@ public struct GuidewayRunInspector: View {
                 .scrollBounceBehavior(.basedOnSize)
                 .onChange(of: isLoadingLadder) { _, loading in
                     if !loading {
+                        let vehicleStop = stopLadder.first(where: { $0.isVehicleHere })
+                        let currentStop = stopLadder.first(where: { $0.isCurrent })
+                        
+                        let vehicleIdx = stopLadder.firstIndex(where: { $0.isVehicleHere }) ?? (stopLadder.firstIndex(where: { $0.isCurrent }) ?? 0)
+                        let currentIdx = stopLadder.firstIndex(where: { $0.isCurrent }) ?? 0
+                        let stopsAway = currentIdx - vehicleIdx
+                        
                         let targetId: String? = {
-                            if let vehicleStop = stopLadder.first(where: { $0.isVehicleHere }) {
+                            if stopsAway > 4, let currentStop = currentStop {
+                                return "ACTIVE_STATION_\(currentStop.id)"
+                            } else if let vehicleStop = vehicleStop {
                                 return "VEHICLE_STOP_\(vehicleStop.id)"
-                            } else if let currentStop = stopLadder.first(where: { $0.isCurrent }) {
+                            } else if let currentStop = currentStop {
                                 return "ACTIVE_STATION_\(currentStop.id)"
                             }
                             return nil
                         }()
                         if let id = targetId {
+                            let anchor: UnitPoint = (stopsAway > 4) ? .center : .top
                             withAnimation(.easeInOut(duration: 0.35)) {
-                                scrollProxy.scrollTo(id, anchor: .top)
+                                scrollProxy.scrollTo(id, anchor: anchor)
                             }
                         }
                     }
@@ -368,6 +379,11 @@ public struct GuidewayRunInspector: View {
                 let approachingAndUpcomingStops = stopLadder.filter { !$0.isPassed }
                 let hasEarlierStops = !earlierStops.isEmpty
                 
+                let vehicleIdx = stopLadder.firstIndex(where: { $0.isVehicleHere }) ?? (stopLadder.firstIndex(where: { $0.isCurrent }) ?? 0)
+                let currentIdx = stopLadder.firstIndex(where: { $0.isCurrent }) ?? 0
+                let stopsAway = currentIdx - vehicleIdx
+                let hasDistantConsist = stopsAway > 4
+                
                 VStack(spacing: 0) {
                     if hasEarlierStops {
                         // Collapsed Accordion Header / Toggle for Earlier Stops (Wave PD.3)
@@ -415,12 +431,75 @@ public struct GuidewayRunInspector: View {
                         }
                     }
                     
-                    // Approaching & Upcoming stops (starts at live oncoming train's current stop)
-                    ForEach(Array(approachingAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
-                        let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded) && index == 0
-                        let isLastInBlock = index == approachingAndUpcomingStops.count - 1
-                        renderLadderNode(stop: stop, isFirst: isFirstInBlock, isLast: isLastInBlock)
-                            .id(stop.isVehicleHere ? "VEHICLE_STOP_\(stop.id)" : (stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id))
+                    if hasDistantConsist, let vehicleStop = stopLadder.indices.contains(vehicleIdx) ? stopLadder[vehicleIdx] : nil {
+                        let intermediateApproachingStops = stopLadder.enumerated().filter { idx, _ in idx > vehicleIdx && idx < currentIdx }.map(\.element)
+                        let activeAndUpcomingStops = stopLadder.enumerated().filter { idx, _ in idx >= currentIdx }.map(\.element)
+                        let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded)
+                        
+                        // 1. Live Oncoming Vehicle Stop
+                        renderLadderNode(stop: vehicleStop, isFirst: isFirstInBlock, isLast: false)
+                            .id("VEHICLE_STOP_\(vehicleStop.id)")
+                        
+                        // 2. Expandable Accordion for Distant Approaching Stops (Wave PD.7)
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.22)) {
+                                isApproachingStopsExpanded.toggle()
+                            }
+                        } label: {
+                            HStack(alignment: .center, spacing: 14) {
+                                // Continuous Track Stem indicator in route color
+                                VStack(spacing: 0) {
+                                    Rectangle()
+                                        .fill(lineInfo.color)
+                                        .frame(width: 4, height: 6)
+                                    Circle()
+                                        .fill(lineInfo.color.opacity(0.6))
+                                        .frame(width: 8, height: 8)
+                                    Rectangle()
+                                        .fill(lineInfo.color)
+                                        .frame(width: 4, height: 6)
+                                }
+                                .frame(width: 24)
+                                
+                                let count = intermediateApproachingStops.count
+                                let noun = count == 1 ? "approaching stop" : "approaching stops"
+                                Text("\(count) \(noun)")
+                                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.primary)
+                                
+                                Image(systemName: isApproachingStopsExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                            }
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        
+                        // 3. Intermediate stops when expanded
+                        if isApproachingStopsExpanded {
+                            ForEach(intermediateApproachingStops) { stop in
+                                renderLadderNode(stop: stop, isFirst: false, isLast: false)
+                                    .id(stop.id)
+                            }
+                        }
+                        
+                        // 4. Commuter station and upcoming stops
+                        ForEach(Array(activeAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
+                            let isLastInBlock = index == activeAndUpcomingStops.count - 1
+                            renderLadderNode(stop: stop, isFirst: false, isLast: isLastInBlock)
+                                .id(stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id)
+                        }
+                    } else {
+                        // Standard / Close-range Approaching & Upcoming stops (starts at live oncoming train's current stop)
+                        ForEach(Array(approachingAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
+                            let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded) && index == 0
+                            let isLastInBlock = index == approachingAndUpcomingStops.count - 1
+                            renderLadderNode(stop: stop, isFirst: isFirstInBlock, isLast: isLastInBlock)
+                                .id(stop.isVehicleHere ? "VEHICLE_STOP_\(stop.id)" : (stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id))
+                        }
                     }
                 }
                 .padding(.vertical, 10)

@@ -1121,13 +1121,15 @@ public final class TransitRealtimeService: @unchecked Sendable {
         // Returns currentIndex so ladder starts at commuter station
         return currentIndex
     }
-    
     /// Re-evaluates stop progression states based on the live oncoming vehicle position:
     /// - Marks `isVehicleHere = true` at the vehicle's current stop.
     /// - Truncates/marks `isPassed = true` ONLY for stops strictly prior to the live vehicle (`idx < vehicleStopIndex`).
     /// - Intermediate stops between live train and commuter station (`vehicleStopIndex < idx < currentIndex`)
     ///   are marked active approaching (`isPassed = false`, `isCurrent = false`, `isVehicleHere = false`).
-    /// - Commuter stop (`idx == currentIndex`) preserves `isCurrent = true`.
+    /// - Computes progressive countdown ETAs for intermediate approaching stops:
+    ///   `eta_i = max(1, arrival.minutes - (currentIdx - idx) * 2)`.
+    /// - Commuter stop (`idx == currentIndex`) preserves `isCurrent = true` and `estimatedMinutes = arrival.minutes`.
+    /// - Downstream stops (`idx > currentIndex`) preserve or expand forward arrival minutes.
     public func annotateLadderWithVehicle(
         ladder: [TrackStop],
         arrival: SpatialDatabaseManager.ArrivalInfo
@@ -1143,6 +1145,18 @@ public final class TransitRealtimeService: @unchecked Sendable {
             let isPassed = idx < vehicleIdx
             let isCurrent = (idx == currentIdx)
             
+            let eta: Int?
+            if isPassed {
+                eta = nil
+            } else if isCurrent {
+                eta = arrival.minutes
+            } else if idx > currentIdx {
+                eta = stop.estimatedMinutes ?? (arrival.minutes + (idx - currentIdx) * 2)
+            } else {
+                // Vehicle stop or intermediate approaching stop (vehicleIdx <= idx < currentIdx)
+                eta = max(1, arrival.minutes - (currentIdx - idx) * 2)
+            }
+            
             return TrackStop(
                 id: stop.id,
                 stopId: stop.stopId,
@@ -1152,10 +1166,11 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 isPassed: isPassed,
                 isCurrent: isCurrent,
                 isTerminus: stop.isTerminus,
-                estimatedMinutes: stop.estimatedMinutes,
+                estimatedMinutes: eta,
                 transferRoutes: stop.transferRoutes,
                 isVehicleHere: isVehicleHere
             )
         }
     }
 }
+

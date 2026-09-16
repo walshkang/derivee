@@ -821,4 +821,70 @@ final class CommuterErgonomicsTests: XCTestCase {
         XCTAssertTrue(mapContent.contains("MLNAltitudeForZoomLevel"), "MapView must use MLNAltitudeForZoomLevel for camera altitude calculation")
         XCTAssertTrue(mapContent.contains("14.5") && mapContent.contains("15.5"), "MapView must clamp camera zoom to z in [14.5, 15.5]")
     }
+
+    // MARK: - Wave PD.7: Approaching Stops Progressive ETAs & Distant Consist Viewport Anchoring
+
+    func testWavePD7_ProgressiveApproachingETAs_IntermediateStopsAnnotated() {
+        let dummyLadder = makePD3TestLadder()
+        
+        // 1. Consist 2 stops away (Graham Av -> Bedford Av), minutes: 4
+        let arrival2Stops = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 4, distanceDescription: "2 stops away • Approaching Lorimer St"
+        )
+        let annotated2 = TransitRealtimeService.shared.annotateLadderWithVehicle(ladder: dummyLadder, arrival: arrival2Stops)
+        
+        // Lorimer St (index 13) is intermediate approaching stop
+        XCTAssertEqual(annotated2[13].stopName, "Lorimer St")
+        XCTAssertEqual(annotated2[13].estimatedMinutes, 2, "Intermediate approaching stop must receive progressive countdown ETA (4 - 1*2 = 2m)")
+        XCTAssertFalse(annotated2[13].isPassed)
+        XCTAssertFalse(annotated2[13].isCurrent)
+        XCTAssertFalse(annotated2[13].isVehicleHere)
+        
+        // Bedford Av (index 14) is commuter station
+        XCTAssertEqual(annotated2[14].stopName, "Bedford Av")
+        XCTAssertEqual(annotated2[14].estimatedMinutes, 4, "Active commuter station must receive arrival.minutes")
+        XCTAssertTrue(annotated2[14].isCurrent)
+        
+        // 2. Consist 4 stops away (Morgan Av index 10 -> Bedford Av index 14), minutes: 10
+        let arrival4Stops = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 10, distanceDescription: "4 stops away"
+        )
+        let annotated4 = TransitRealtimeService.shared.annotateLadderWithVehicle(ladder: dummyLadder, arrival: arrival4Stops)
+        
+        XCTAssertEqual(annotated4[10].isVehicleHere, true, "Stop 10 must be live vehicle stop")
+        XCTAssertEqual(annotated4[11].estimatedMinutes, 4, "Stop 11 (3 stops from commuter) ETA: 10 - 3*2 = 4m")
+        XCTAssertEqual(annotated4[12].estimatedMinutes, 6, "Stop 12 (2 stops from commuter) ETA: 10 - 2*2 = 6m")
+        XCTAssertEqual(annotated4[13].estimatedMinutes, 8, "Stop 13 (1 stop from commuter) ETA: 10 - 1*2 = 8m")
+        XCTAssertEqual(annotated4[14].estimatedMinutes, 10, "Stop 14 (commuter station) ETA: 10m")
+        
+        // 3. Lower bound clamping at 1m: arrival.minutes = 1, 2 stops away
+        let arrivalImminent = SpatialDatabaseManager.ArrivalInfo(
+            line: "L", destination: "8 Av", minutes: 1, distanceDescription: "2 stops away"
+        )
+        let annotatedImm = TransitRealtimeService.shared.annotateLadderWithVehicle(ladder: dummyLadder, arrival: arrivalImminent)
+        XCTAssertEqual(annotatedImm[13].estimatedMinutes, 1, "Approaching stop ETA must clamp to >= 1m, never 0 or negative")
+    }
+
+    func testWavePD7_DistantConsist_SourceCodeVerification() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        
+        // GuidewayRunInspector verification
+        let guidewayContent = try String(contentsOf: deriveeDir.appendingPathComponent("GuidewayRunInspector.swift"), encoding: .utf8)
+        XCTAssertTrue(guidewayContent.contains("stopsAway > 4"), "GuidewayRunInspector must evaluate stopsAway > 4 for distant consist handling")
+        XCTAssertTrue(guidewayContent.contains("isApproachingStopsExpanded"), "GuidewayRunInspector must maintain isApproachingStopsExpanded state")
+        XCTAssertTrue(guidewayContent.contains("anchor: anchor"), "GuidewayRunInspector must use dynamic anchor for scroll proxy")
+        XCTAssertTrue(guidewayContent.contains("approaching stop"), "GuidewayRunInspector must render approaching stop accordion toggle")
+        XCTAssertTrue(guidewayContent.contains(".center"), "GuidewayRunInspector must support .center anchor for ACTIVE_STATION")
+        
+        // SurfaceRunInspector verification
+        let surfaceContent = try String(contentsOf: deriveeDir.appendingPathComponent("SurfaceRunInspector.swift"), encoding: .utf8)
+        XCTAssertTrue(surfaceContent.contains("stopsAway > 4"), "SurfaceRunInspector must evaluate stopsAway > 4 for distant consist handling")
+        XCTAssertTrue(surfaceContent.contains("isApproachingStopsExpanded"), "SurfaceRunInspector must maintain isApproachingStopsExpanded state")
+        XCTAssertTrue(surfaceContent.contains("anchor: anchor"), "SurfaceRunInspector must use dynamic anchor for scroll proxy")
+        XCTAssertTrue(surfaceContent.contains("approaching "), "SurfaceRunInspector must render approaching stop accordion toggle")
+        XCTAssertTrue(surfaceContent.contains(".center"), "SurfaceRunInspector must support .center anchor for ACTIVE_STATION")
+    }
 }
+
