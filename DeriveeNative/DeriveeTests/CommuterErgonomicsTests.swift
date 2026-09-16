@@ -1024,5 +1024,147 @@ final class CommuterErgonomicsTests: XCTestCase {
         XCTAssertTrue(surfaceContent.contains("approaching "), "SurfaceRunInspector must render approaching stop accordion toggle")
         XCTAssertTrue(surfaceContent.contains(".center"), "SurfaceRunInspector must support .center anchor for ACTIVE_STATION")
     }
+
+    // MARK: - 7. FC-7: Zero Detent-Coupled State Wipes (Wave PE.1 Forward-Looking Invariant)
+
+    func testFC7_GuidewayInspector_OnDisappearDoesNotCallClearRouteInspection() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("GuidewayRunInspector.swift"), encoding: .utf8)
+        let lines = content.components(separatedBy: .newlines)
+        var foundAntipattern = false
+        for (i, line) in lines.enumerated() {
+            if line.contains(".onDisappear") {
+                let window = lines[i..<min(i + 6, lines.count)].joined(separator: "\n")
+                if window.contains("onClearRouteInspection") {
+                    foundAntipattern = true
+                    break
+                }
+            }
+        }
+        XCTAssertFalse(foundAntipattern, "GuidewayRunInspector must not call onClearRouteInspection in .onDisappear — detent changes trigger .onDisappear and wipe map telemetry (FC-7)")
+    }
+
+    func testFC7_SurfaceInspector_OnDisappearDoesNotCallClearRouteInspection() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("SurfaceRunInspector.swift"), encoding: .utf8)
+        let lines = content.components(separatedBy: .newlines)
+        var foundAntipattern = false
+        for (i, line) in lines.enumerated() {
+            if line.contains(".onDisappear") {
+                let window = lines[i..<min(i + 6, lines.count)].joined(separator: "\n")
+                if window.contains("onClearRouteInspection") {
+                    foundAntipattern = true
+                    break
+                }
+            }
+        }
+        XCTAssertFalse(foundAntipattern, "SurfaceRunInspector must not call onClearRouteInspection in .onDisappear — detent changes trigger .onDisappear and wipe map telemetry (FC-7)")
+    }
+
+    func testFC7_TransitRevealSheet_OnDisappearDoesNotCallClearRouteInspection() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("TransitRevealSheet.swift"), encoding: .utf8)
+        let lines = content.components(separatedBy: .newlines)
+        var foundAntipattern = false
+        for (i, line) in lines.enumerated() {
+            if line.contains(".onDisappear") {
+                let window = lines[i..<min(i + 6, lines.count)].joined(separator: "\n")
+                if window.contains("onClearRouteInspection") {
+                    foundAntipattern = true
+                    break
+                }
+            }
+        }
+        XCTAssertFalse(foundAntipattern, "TransitRevealSheet must not call onClearRouteInspection in .onDisappear — sheet detent changes must not wipe active inspection (FC-7)")
+    }
+
+    // MARK: - 8. FC-8: Interaction Path Completeness (Wave PE.5 Forward-Looking Invariant)
+
+    func testFC8_DepartureMatrixView_PillsHaveInspectHandler() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("DepartureMatrixView.swift"), encoding: .utf8)
+        XCTAssertTrue(content.contains("onInspectDeparture"), "DepartureMatrixView must expose an onInspectDeparture callback for tapping departure pills (FC-8)")
+    }
+
+    func testFC8_LiveArrivalsCarousel_RowsHaveTapAction() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("TransitRevealSheet.swift"), encoding: .utf8)
+        XCTAssertTrue(content.contains("onInspectArrival(arrival)"), "LiveArrivalsCarousel must wire arrival rows to onInspectArrival tap action (FC-8)")
+    }
+
+    func testFC8_BusStopArrivalRows_HaveTapAction() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("TransitRevealSheet.swift"), encoding: .utf8)
+        XCTAssertTrue(content.contains("onInspectArrival"), "TransitRevealSheet must wire arrival inspection callback across all transit modes including buses (FC-8)")
+    }
+
+    // MARK: - 9. FC-9: Viewport-Aware Camera Geometry (Wave PE.2 Forward-Looking Invariant)
+
+    func testFC9_FrameRouteAndStation_AcceptsDetentParameter() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("MapView.swift"), encoding: .utf8)
+        let acceptsDetent = content.contains("sheetHeight") || content.contains("activeDetent") || content.contains("sheetFraction")
+        XCTAssertTrue(acceptsDetent, "MapView.frameRouteAndStation must accept a sheet height or detent parameter for dynamic clearance (FC-9)")
+    }
+
+    func testFC9_FrameRouteAndStation_ZoomLowerBoundAllowsWideFraming() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("MapView.swift"), encoding: .utf8)
+        let hasRelaxedZoom = content.contains("13.0") || content.contains("13.5")
+        XCTAssertTrue(hasRelaxedZoom, "MapView.frameRouteAndStation must allow zoom level down to <= 13.5 to frame approaching vehicles (FC-9)")
+    }
+
+    func testFC9_FrameRouteAndStation_BottomPaddingIsDynamic() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("MapView.swift"), encoding: .utf8)
+        XCTAssertFalse(content.contains("max(340.0,"), "MapView.frameRouteAndStation must derive bottomPadding dynamically from sheet height, not hardcoded 340.0 (FC-9)")
+    }
+
+    // MARK: - 10. FC-10: Mode-Adaptive Visual State (Wave PE.3 Forward-Looking Invariant)
+
+    func testFC10_ContentView_FogOpacityAdaptsOnInspection() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("ContentView.swift"), encoding: .utf8)
+        let adaptsFog = content.contains("transitFogOpacity") || content.contains("inspectingArrival != nil")
+        XCTAssertTrue(adaptsFog, "ContentView must dynamically reduce fogOpacity during active route inspection (FC-10)")
+    }
+
+    func testFC10_FogOpacity_TransitInspectionUsesReducedValue() {
+        XCTAssertLessThan(
+            MapCustomizationDefaults.transitFogOpacity,
+            MapCustomizationDefaults.defaultFogOpacity,
+            "transitFogOpacity (0.40) must be lower than defaultFogOpacity (0.85) to illuminate street grid during inspection (FC-10)"
+        )
+        XCTAssertEqual(MapCustomizationDefaults.transitFogOpacity, 0.40, accuracy: 0.01)
+        XCTAssertEqual(MapCustomizationDefaults.defaultFogOpacity, 0.85, accuracy: 0.01)
+    }
+
+    func testFC10_ContentView_FogOpacityRestoresOnInspectionExit() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let content = try String(contentsOf: deriveeDir.appendingPathComponent("ContentView.swift"), encoding: .utf8)
+        XCTAssertTrue(content.contains("AppStorageKeys.fogOpacity"), "ContentView must retain user baseline fogOpacity for clean restoration upon inspection exit (FC-10)")
+    }
 }
 

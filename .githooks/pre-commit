@@ -3,7 +3,7 @@ set -e
 
 # ==============================================================================
 # Dérivée Local Ergonomic Bouncer: Pre-Commit Gate (<0.2s)
-# Validates staged Swift code against First-Click Invariants (FC-1 to FC-6).
+# Validates staged Swift code against First-Click Invariants (FC-1 to FC-10).
 # Bypass for emergencies only: git commit --no-verify
 # ==============================================================================
 
@@ -41,6 +41,16 @@ for FILE in $STAGED_SWIFT; do
             echo "❌ [FC-4 Violation] in $FILE:"
             echo "   Hardcoded .frame(height: Self.defaultRowHeight) clamps dynamic wrapping departures."
             echo "   Use .fixedSize(horizontal: false, vertical: true) for dynamic vertical expansion."
+            ERRORS=$((ERRORS + 1))
+        fi
+    fi
+
+    # FC-7: Zero detent-coupled state wipes (onClearRouteInspection inside .onDisappear)
+    if [ "$FILE" = "DeriveeNative/Derivee/GuidewayRunInspector.swift" ] || [ "$FILE" = "DeriveeNative/Derivee/SurfaceRunInspector.swift" ]; then
+        if git show :"$FILE" | grep -A 3 -n '\.onDisappear' | grep 'onClearRouteInspection' > /dev/null 2>&1; then
+            echo "❌ [FC-7 Violation] in $FILE:"
+            echo "   onClearRouteInspection inside .onDisappear wipes map route telemetry on detent changes."
+            echo "   Teardown must be gated strictly on explicit commuter exit intent (see DERIVEE_INVARIANTS.md FC-7)."
             ERRORS=$((ERRORS + 1))
         fi
     fi
