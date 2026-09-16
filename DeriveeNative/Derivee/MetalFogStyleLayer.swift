@@ -37,10 +37,31 @@ public final class MetalFogStyleLayer: MLNCustomStyleLayer, @unchecked Sendable 
     
     public var fogSlateColor = simd_float4(0.1098, 0.1098, 0.1176, 1.0) // #1C1C1E
     public var electricAmberColor = simd_float4(1.0, 0.7020, 0.0, 1.0)  // #FFB300
-    public var fogOpacity: Float = 0.85
+    public var targetFogOpacity: Float = 0.85
+    public private(set) var isAnimatingOpacity: Bool = false
+    
+    public var fogOpacity: Float = 0.85 {
+        didSet {
+            if !isAnimatingOpacity {
+                targetFogOpacity = fogOpacity
+            }
+        }
+    }
     public var outerGlowWidth: Float = 0.06
     public var innerGlowWidth: Float = 0.04
     public var threshold: Float = 0.5
+    
+    /// Sets target master fog opacity with optional 120 FPS ease-out transition (Wave PE.3).
+    public func setTargetFogOpacity(_ target: Float, animated: Bool = true) {
+        targetFogOpacity = target
+        if !animated {
+            fogOpacity = target
+            isAnimatingOpacity = false
+        } else {
+            isAnimatingOpacity = true
+        }
+        setNeedsDisplay()
+    }
     
     // MARK: - Initializers
     
@@ -91,6 +112,18 @@ public final class MetalFogStyleLayer: MLNCustomStyleLayer, @unchecked Sendable 
         // 2. Advance uniform buffer ring index
         uniformBufferIndex = (uniformBufferIndex + 1) % uniformBufferCount
         let currentUniformBuffer = uniformBuffers[uniformBufferIndex]
+        
+        // Advance smooth opacity animation if active (Wave PE.3 - Doc 08 & Doc 09)
+        if isAnimatingOpacity {
+            if abs(fogOpacity - targetFogOpacity) > 0.002 {
+                let delta = (targetFogOpacity - fogOpacity) * 0.15
+                fogOpacity += delta
+                self.setNeedsDisplay()
+            } else {
+                fogOpacity = targetFogOpacity
+                isAnimatingOpacity = false
+            }
+        }
         
         // 3. Populate uniform parameters
         var uniforms = MetalFogUniforms(

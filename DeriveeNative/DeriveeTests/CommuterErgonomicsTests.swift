@@ -1114,10 +1114,9 @@ final class CommuterErgonomicsTests: XCTestCase {
         XCTAssertTrue(surfaceContent.contains("onClearRouteInspection?()") && surfaceContent.contains("dismiss()"), "SurfaceRunInspector close button must invoke onClearRouteInspection when standalone (FC-7)")
     }
 
-    // MARK: - 8. FC-8: Interaction Path Completeness (Wave PE.5 Forward-Looking Invariant)
+    // MARK: - 8. FC-8: Interaction Path Completeness (Wave PE.5 Invariant)
 
     func testFC8_DepartureMatrixView_PillsHaveInspectHandler() throws {
-        throw XCTSkip("Wave PE.5 forward-looking invariant: Full Timetable Run Inspection")
         let filePath = #filePath
         let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
         let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
@@ -1126,7 +1125,6 @@ final class CommuterErgonomicsTests: XCTestCase {
     }
 
     func testFC8_LiveArrivalsCarousel_RowsHaveTapAction() throws {
-        throw XCTSkip("Wave PE.5 forward-looking invariant: Full Timetable Run Inspection")
         let filePath = #filePath
         let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
         let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
@@ -1135,7 +1133,6 @@ final class CommuterErgonomicsTests: XCTestCase {
     }
 
     func testFC8_BusStopArrivalRows_HaveTapAction() throws {
-        throw XCTSkip("Wave PE.5 forward-looking invariant: Full Timetable Run Inspection")
         let filePath = #filePath
         let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
         let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
@@ -1171,10 +1168,9 @@ final class CommuterErgonomicsTests: XCTestCase {
         XCTAssertFalse(content.contains("max(340.0,"), "MapView.frameRouteAndStation must derive bottomPadding dynamically from sheet height, not hardcoded 340.0 (FC-9)")
     }
 
-    // MARK: - 10. FC-10: Mode-Adaptive Visual State (Wave PE.3 Forward-Looking Invariant)
+    // MARK: - 10. FC-10: Mode-Adaptive Visual State (Wave PE.3 Invariant)
 
     func testFC10_ContentView_FogOpacityAdaptsOnInspection() throws {
-        throw XCTSkip("Wave PE.3 forward-looking invariant: Adaptive Transit Fog Illumination")
         let filePath = #filePath
         let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
         let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
@@ -1194,7 +1190,6 @@ final class CommuterErgonomicsTests: XCTestCase {
     }
 
     func testFC10_ContentView_FogOpacityRestoresOnInspectionExit() throws {
-        throw XCTSkip("Wave PE.3 forward-looking invariant: Adaptive Transit Fog Illumination")
         let filePath = #filePath
         let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
         let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")

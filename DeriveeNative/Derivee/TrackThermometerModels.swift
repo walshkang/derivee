@@ -17,6 +17,7 @@ public struct TrackStop: Identifiable, Sendable, Equatable, Hashable {
     public let estimatedMinutes: Int?
     public let transferRoutes: [String]
     public let isVehicleHere: Bool
+    public let scheduledWallTime: String?
     
     public init(
         id: String? = nil,
@@ -29,7 +30,8 @@ public struct TrackStop: Identifiable, Sendable, Equatable, Hashable {
         isTerminus: Bool = false,
         estimatedMinutes: Int? = nil,
         transferRoutes: [String] = [],
-        isVehicleHere: Bool = false
+        isVehicleHere: Bool = false,
+        scheduledWallTime: String? = nil
     ) {
         self.id = id ?? "\(stopId)_\(sequenceIndex)"
         self.stopId = stopId
@@ -42,6 +44,7 @@ public struct TrackStop: Identifiable, Sendable, Equatable, Hashable {
         self.estimatedMinutes = estimatedMinutes
         self.transferRoutes = transferRoutes
         self.isVehicleHere = isVehicleHere
+        self.scheduledWallTime = scheduledWallTime
     }
     
     public static func == (lhs: TrackStop, rhs: TrackStop) -> Bool {
@@ -53,7 +56,8 @@ public struct TrackStop: Identifiable, Sendable, Equatable, Hashable {
         lhs.isTerminus == rhs.isTerminus &&
         lhs.estimatedMinutes == rhs.estimatedMinutes &&
         lhs.transferRoutes == rhs.transferRoutes &&
-        lhs.isVehicleHere == rhs.isVehicleHere
+        lhs.isVehicleHere == rhs.isVehicleHere &&
+        lhs.scheduledWallTime == rhs.scheduledWallTime
     }
     
     public func hash(into hasher: inout Hasher) {
@@ -65,6 +69,7 @@ public struct TrackStop: Identifiable, Sendable, Equatable, Hashable {
         hasher.combine(isTerminus)
         hasher.combine(estimatedMinutes)
         hasher.combine(isVehicleHere)
+        hasher.combine(scheduledWallTime)
     }
 }
 

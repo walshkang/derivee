@@ -480,7 +480,13 @@ struct TransitRevealSheet: View {
                                 isHistoricalFallback: isHistoricalFallback,
                                 isObservedReplay: isObservedReplay,
                                 scheduleValidity: CameraBounds.activeConfig.transit?.scheduleValidity,
-                                referenceDate: referenceDate
+                                referenceDate: referenceDate,
+                                onInspectDeparture: { arrival in
+                                    withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
+                                        inspectingArrival = arrival
+                                        selectedDetent = .medium
+                                    }
+                                }
                             )
                         }
                     }

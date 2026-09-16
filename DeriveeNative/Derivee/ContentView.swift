@@ -57,6 +57,22 @@ struct ContentView: View {
         SubwayStationMarkerStyle(rawValue: storedStationMarkerStyle) ?? .exploredOnly
     }
     
+    /// True when the user is actively inspecting a station or train/bus corridor (Wave PE.3 - FC-10).
+    private var isTransitInspecting: Bool {
+        (showTransitSheet && selectedTransitStop != nil) || activeRouteInspection != nil
+    }
+    
+    /// Mode-adaptive master fog opacity (Wave PE.3).
+    /// Automatically attenuates ambient fog from baseline down to `MapCustomizationDefaults.transitFogOpacity` (0.40)
+    /// during station or active corridor inspection, revealing street grids, parks, and water in Light Mode parchment (#F9F9F6).
+    /// Retains user baseline `AppStorageKeys.fogOpacity` for smooth restoration upon inspection exit.
+    private var effectiveFogOpacity: Double {
+        if isTransitInspecting {
+            return min(fogOpacity, MapCustomizationDefaults.transitFogOpacity)
+        }
+        return fogOpacity
+    }
+    
     var body: some View {
         Group {
             if isCheckingHydration {
@@ -90,7 +106,7 @@ struct ContentView: View {
                             currentUserLocation: $currentUserLocation,
                             transientHexShape: spatialStore.transientHexShape,
                             selectedTheme: currentTheme,
-                            fogOpacity: fogOpacity,
+                            fogOpacity: effectiveFogOpacity,
                             showBoundaryBorders: showBoundaryBorders,
                             showSubwayThoroughfares: showSubwayThoroughfares,
                             subwayStationMarkerStyle: stationMarkerStyle,

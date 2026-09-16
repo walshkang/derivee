@@ -1815,7 +1815,48 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let vehicleCoordinate: CLLocationCoordinate2D?
         public let vehicleBearing: Double?
         public let track: String?
+        public let isHistoricalEvent: Bool
+        public let historicalDelaySeconds: Int?
         
+        public init(
+            id: UUID = UUID(),
+            line: String,
+            destination: String,
+            minutes: Int,
+            direction: String? = nil,
+            distanceDescription: String? = nil,
+            arrivalDate: Date = Date(),
+            tripId: String? = nil,
+            scheduleRelationship: ScheduleRelationship = .scheduled,
+            isHoldingStation: Bool = false,
+            progressLambda: Double = 0.0,
+            isAssigned: Bool = false,
+            vehicleCoordinate: CLLocationCoordinate2D? = nil,
+            vehicleBearing: Double? = nil,
+            track: String? = nil,
+            isHistoricalEvent: Bool = false,
+            historicalDelaySeconds: Int? = nil
+        ) {
+            self.id = id
+            self.line = line
+            self.destination = destination
+            self.minutes = minutes
+            self.direction = direction
+            self.distanceDescription = distanceDescription
+            self.arrivalDate = arrivalDate
+            self.tripId = tripId
+            self.scheduleRelationship = scheduleRelationship
+            self.isHoldingStation = isHoldingStation
+            self.progressLambda = progressLambda
+            self.isAssigned = isAssigned
+            self.vehicleCoordinate = vehicleCoordinate
+            self.vehicleBearing = vehicleBearing
+            self.track = track
+            self.isHistoricalEvent = isHistoricalEvent
+            self.historicalDelaySeconds = historicalDelaySeconds
+        }
+        
+        /// Backward-compatible initializer overload for symbol stability across incremental builds.
         public init(
             id: UUID = UUID(),
             line: String,
@@ -1833,21 +1874,68 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             vehicleBearing: Double? = nil,
             track: String? = nil
         ) {
-            self.id = id
-            self.line = line
-            self.destination = destination
-            self.minutes = minutes
-            self.direction = direction
-            self.distanceDescription = distanceDescription
-            self.arrivalDate = arrivalDate
-            self.tripId = tripId
-            self.scheduleRelationship = scheduleRelationship
-            self.isHoldingStation = isHoldingStation
-            self.progressLambda = progressLambda
-            self.isAssigned = isAssigned
-            self.vehicleCoordinate = vehicleCoordinate
-            self.vehicleBearing = vehicleBearing
-            self.track = track
+            self.init(
+                id: id,
+                line: line,
+                destination: destination,
+                minutes: minutes,
+                direction: direction,
+                distanceDescription: distanceDescription,
+                arrivalDate: arrivalDate,
+                tripId: tripId,
+                scheduleRelationship: scheduleRelationship,
+                isHoldingStation: isHoldingStation,
+                progressLambda: progressLambda,
+                isAssigned: isAssigned,
+                vehicleCoordinate: vehicleCoordinate,
+                vehicleBearing: vehicleBearing,
+                track: track,
+                isHistoricalEvent: false,
+                historicalDelaySeconds: nil
+            )
+        }
+        
+        public enum RunInspectionMode: Sendable, Equatable {
+            case liveRun
+            case scheduledRun
+            case historicalReplay
+            
+            public var isHistoricalReplay: Bool {
+                self == .historicalReplay
+            }
+        }
+        
+        public var inspectionMode: RunInspectionMode {
+            if isHistoricalEvent || (distanceDescription?.contains("Departed") == true) {
+                return .historicalReplay
+            } else if isAssigned || vehicleCoordinate != nil || (distanceDescription != "Scheduled" && minutes <= 45 && !isDwellingAtOrigin && arrivalDate.timeIntervalSinceNow >= -180) {
+                return .liveRun
+            } else {
+                return .scheduledRun
+            }
+        }
+        
+        /// True if the consist is dwelling at the origin terminal or held at the terminal platform.
+        public var isDwellingAtOrigin: Bool {
+            distanceDescription == "At Terminus" || isHoldingStation
+        }
+        
+        /// Formats delay seconds into commuter-facing historical departure outcome string.
+        public static func formatHistoricalOutcome(delaySeconds: Int?) -> String {
+            guard let delaySeconds = delaySeconds else { return "Departed" }
+            if delaySeconds <= 60 && delaySeconds >= -60 {
+                return "Departed on time"
+            } else if delaySeconds > 60 {
+                let mins = max(1, delaySeconds / 60)
+                return "Departed +\(mins)m late"
+            } else {
+                let mins = max(1, abs(delaySeconds) / 60)
+                return "Departed -\(mins)m early"
+            }
+        }
+        
+        public func formatHistoricalOutcome(delaySeconds: Int?) -> String {
+            Self.formatHistoricalOutcome(delaySeconds: delaySeconds)
         }
         
         /// Direction ID (0 or 1) inferred from the direction label.
@@ -2539,8 +2627,17 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         directionId: Int,
         currentStopId: String,
         currentArrivalMinutes: Int = 0,
-        tappedCoordinate: CLLocationCoordinate2D? = nil
+        tappedCoordinate: CLLocationCoordinate2D? = nil,
+        referenceDepartureDate: Date? = nil
     ) async throws -> [TrackStop] {
+        let timeFormatter: DateFormatter? = {
+            guard referenceDepartureDate != nil else { return nil }
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+            return formatter
+        }()
+        
         return try await dbWriter.read { db in
             do {
                 try self.ensureTransitAttached(in: db)
@@ -2806,6 +2903,12 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                             transfers = transfers.filter { !TransitRouteData.isBusRoute($0) }
                         }
                         
+                        let wallTime: String? = {
+                            guard let refDate = referenceDepartureDate, let tf = timeFormatter else { return nil }
+                            let stopDate = refDate.addingTimeInterval(Double((idx - currentIndex) * 120))
+                            return tf.string(from: stopDate)
+                        }()
+                        
                         return TrackStop(
                             id: "\(sId)_\(idx)",
                             stopId: sId,
@@ -2816,7 +2919,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                             isCurrent: isCurrent,
                             isTerminus: isTerminus,
                             estimatedMinutes: eta,
-                            transferRoutes: transfers
+                            transferRoutes: transfers,
+                            scheduledWallTime: wallTime
                         )
                     }
                 }
@@ -2852,6 +2956,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     let cleanRoute = routeId.uppercased().replacingOccurrences(of: "-SBS", with: "")
                     let transfers = StationBulletRenderer.parseAndNormalizeRoutes(aggregatedRoutes)
                         .filter { $0 != routeId.uppercased() && $0 != lookupRouteId.uppercased() && $0 != cleanRoute }
+                    let wallTime = referenceDepartureDate.flatMap { timeFormatter?.string(from: $0) }
                     return [
                         TrackStop(
                             id: "\(currentStopId)_0",
@@ -2863,7 +2968,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                             isCurrent: true,
                             isTerminus: true,
                             estimatedMinutes: currentArrivalMinutes,
-                            transferRoutes: transfers
+                            transferRoutes: transfers,
+                            scheduledWallTime: wallTime
                         )
                     ]
                 }
@@ -2872,6 +2978,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             }
             
             if let coord = tappedCoordinate {
+                let wallTime = referenceDepartureDate.flatMap { timeFormatter?.string(from: $0) }
                 return [
                     TrackStop(
                         id: "\(currentStopId)_0",
@@ -2883,7 +2990,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         isCurrent: true,
                         isTerminus: true,
                         estimatedMinutes: currentArrivalMinutes,
-                        transferRoutes: []
+                        transferRoutes: [],
+                        scheduledWallTime: wallTime
                     )
                 ]
             }

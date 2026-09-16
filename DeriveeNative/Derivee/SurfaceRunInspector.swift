@@ -148,6 +148,10 @@ public struct SurfaceRunInspector: View {
         routeConfig.modalClass == .ferry
     }
     
+    private var inspectionMode: SpatialDatabaseManager.ArrivalInfo.RunInspectionMode {
+        arrival.inspectionMode
+    }
+    
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Pinned Navigation Header
@@ -273,7 +277,7 @@ public struct SurfaceRunInspector: View {
                             .foregroundColor(.primary)
                             .lineLimit(1)
                         
-                        if arrival.minutes == 0 {
+                        if inspectionMode == .liveRun && arrival.minutes == 0 {
                             let trackSuffix = arrival.formattedTrack.map { " (\($0))" } ?? ""
                             Text("• Boarding\(trackSuffix)")
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
@@ -291,37 +295,70 @@ public struct SurfaceRunInspector: View {
                 
                 Spacer()
                 
-                // Arrival Countdown & Imminence Pill
+                // Mode-Aware Arrival Countdown & Imminence Pill
                 VStack(alignment: .trailing, spacing: 2) {
-                    if arrival.minutes == 0 {
+                    switch inspectionMode {
+                    case .historicalReplay:
+                        let timeStr = DateFormatter.localizedString(from: arrival.arrivalDate, dateStyle: .none, timeStyle: .short)
+                        Text(timeStr)
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
+                            .foregroundColor(.secondary)
                         HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color(hex: "#FFB300"))
-                                .frame(width: 6, height: 6)
-                                .opacity(isPulsing ? 1.0 : 0.3)
-                            Text("BOARDING")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(Color(hex: "#FFB300"))
+                            Text("DEPARTED")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(.secondary)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(hex: "#FFB300").opacity(0.12))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.12))
                         .clipShape(Capsule())
-                    } else {
-                        HStack(alignment: .firstTextBaseline, spacing: 2) {
-                            Text("\(arrival.minutes)")
-                                .font(.system(size: 26, weight: .black, design: .monospaced))
-                                .foregroundColor(.primary)
-                            Text("min")
-                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        
+                    case .scheduledRun:
+                        let timeStr = DateFormatter.localizedString(from: arrival.arrivalDate, dateStyle: .none, timeStyle: .short)
+                        Text(timeStr)
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
+                            .foregroundColor(.primary)
+                        HStack(spacing: 4) {
+                            Text("SCHEDULED")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
                                 .foregroundColor(.secondary)
                         }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Capsule())
                         
-                        // Stops away countdown is displayed for Bus, suppressed for Ferry (§10.6.1)
-                        if routeConfig.displaysStopsAwayCountdown, let dist = arrival.distanceDescription, !dist.isEmpty, dist.lowercased() != "boarding" {
-                            Text(dist)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.secondary)
+                    case .liveRun:
+                        if arrival.minutes == 0 {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color(hex: "#FFB300"))
+                                    .frame(width: 6, height: 6)
+                                    .opacity(isPulsing ? 1.0 : 0.3)
+                                Text("BOARDING")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(Color(hex: "#FFB300"))
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color(hex: "#FFB300").opacity(0.12))
+                            .clipShape(Capsule())
+                        } else {
+                            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                Text("\(arrival.minutes)")
+                                    .font(.system(size: 26, weight: .black, design: .monospaced))
+                                    .foregroundColor(.primary)
+                                Text("min")
+                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            // Stops away countdown is displayed for Bus, suppressed for Ferry (§10.6.1)
+                            if routeConfig.displaysStopsAwayCountdown, let dist = arrival.distanceDescription, !dist.isEmpty, dist.lowercased() != "boarding" {
+                                Text(dist)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
                 }
@@ -329,21 +366,54 @@ public struct SurfaceRunInspector: View {
             
             // Commuter Context & Action Bar (Invariants FC-2 & FC-3)
             HStack(spacing: 8) {
-                // Vehicle Proximity Pill
-                let proximity = arrival.proximityContext(ladder: stopLadder, currentStopName: currentStopName)
-                HStack(spacing: 5) {
-                    Image(systemName: isFerry ? "ferry.fill" : "bus.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(lineInfo.color)
-                    Text(proximity)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
+                switch inspectionMode {
+                case .historicalReplay:
+                    let outcome = SpatialDatabaseManager.ArrivalInfo.formatHistoricalOutcome(delaySeconds: arrival.historicalDelaySeconds ?? 0)
+                    HStack(spacing: 5) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Text(outcome)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    
+                case .scheduledRun:
+                    HStack(spacing: 5) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(activeDisruption != nil ? Color(hex: "#D97706") : lineInfo.color)
+                        Text(activeDisruption != nil ? "Delays Reported" : "Timetable Run")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(activeDisruption != nil ? Color(hex: "#D97706") : .primary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(activeDisruption != nil ? Color(hex: "#FFB300").opacity(0.15) : Color.primary.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    
+                case .liveRun:
+                    let proximity = arrival.proximityContext(ladder: stopLadder, currentStopName: currentStopName)
+                    HStack(spacing: 5) {
+                        Image(systemName: isFerry ? "ferry.fill" : "bus.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(lineInfo.color)
+                        Text(proximity)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.primary.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 
                 // Follow-On Departure Imminence
                 if let nextArr = followOnArrival {
@@ -362,6 +432,37 @@ public struct SurfaceRunInspector: View {
                     .padding(.vertical, 4)
                     .background(Color.primary.opacity(0.04))
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                
+                // Station Hold / Origin Dwell (if active)
+                if inspectionMode == .liveRun {
+                    if arrival.isHoldingStation {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(Color(hex: "#D97706"))
+                            Text("STATION HOLD")
+                                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                                .foregroundColor(Color(hex: "#D97706"))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color(hex: "#FFB300").opacity(0.18))
+                        .clipShape(Capsule())
+                    } else if arrival.isDwellingAtOrigin {
+                        HStack(spacing: 4) {
+                            Image(systemName: isFerry ? "ferry.fill" : "bus.fill")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(Color(hex: "#D97706"))
+                            Text("AT TERMINUS")
+                                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                                .foregroundColor(Color(hex: "#D97706"))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color(hex: "#FFB300").opacity(0.14))
+                        .clipShape(Capsule())
+                    }
                 }
                 
                 // 5. Signal: Crowding Micro-Badge
@@ -459,7 +560,14 @@ public struct SurfaceRunInspector: View {
                 let hasDistantConsist = stopsAway > 4
                 
                 VStack(spacing: 0) {
-                    if hasEarlierStops {
+                    if inspectionMode.isHistoricalReplay {
+                        // Full chronological journey for Historical Replay
+                        ForEach(Array(stopLadder.enumerated()), id: \.element.id) { index, stop in
+                            let isLastInBlock = index == stopLadder.count - 1
+                            renderLadderNode(stop: stop, isFirst: index == 0, isLast: isLastInBlock)
+                                .id(stop.id)
+                        }
+                    } else if hasEarlierStops {
                         // Collapsed Accordion Header / Toggle for Earlier Stops (Wave PD.3)
                         Button {
                             withAnimation(.easeInOut(duration: 0.22)) {
@@ -505,74 +613,76 @@ public struct SurfaceRunInspector: View {
                         }
                     }
                     
-                    if hasDistantConsist, let vehicleStop = stopLadder.indices.contains(vehicleIdx) ? stopLadder[vehicleIdx] : nil {
-                        let intermediateApproachingStops = stopLadder.enumerated().filter { idx, _ in idx > vehicleIdx && idx < currentIdx }.map(\.element)
-                        let activeAndUpcomingStops = stopLadder.enumerated().filter { idx, _ in idx >= currentIdx }.map(\.element)
-                        let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded)
-                        
-                        // 1. Live Oncoming Vehicle Stop
-                        renderLadderNode(stop: vehicleStop, isFirst: isFirstInBlock, isLast: false)
-                            .id("VEHICLE_STOP_\(vehicleStop.id)")
-                        
-                        // 2. Expandable Accordion for Distant Approaching Stops (Wave PD.7)
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.22)) {
-                                isApproachingStopsExpanded.toggle()
-                            }
-                        } label: {
-                            HStack(alignment: .center, spacing: 14) {
-                                // Continuous Track Stem indicator in route color
-                                VStack(spacing: 0) {
-                                    Rectangle()
-                                        .fill(lineInfo.color)
-                                        .frame(width: 4, height: 6)
-                                    Circle()
-                                        .fill(lineInfo.color.opacity(0.6))
-                                        .frame(width: 8, height: 8)
-                                    Rectangle()
-                                        .fill(lineInfo.color)
-                                        .frame(width: 4, height: 6)
+                    if inspectionMode != .historicalReplay {
+                        if hasDistantConsist, let vehicleStop = stopLadder.indices.contains(vehicleIdx) ? stopLadder[vehicleIdx] : nil {
+                            let intermediateApproachingStops = stopLadder.enumerated().filter { idx, _ in idx > vehicleIdx && idx < currentIdx }.map(\.element)
+                            let activeAndUpcomingStops = stopLadder.enumerated().filter { idx, _ in idx >= currentIdx }.map(\.element)
+                            let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded)
+                            
+                            // 1. Live Oncoming Vehicle Stop
+                            renderLadderNode(stop: vehicleStop, isFirst: isFirstInBlock, isLast: false)
+                                .id("VEHICLE_STOP_\(vehicleStop.id)")
+                            
+                            // 2. Expandable Accordion for Distant Approaching Stops (Wave PD.7)
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    isApproachingStopsExpanded.toggle()
                                 }
-                                .frame(width: 24)
-                                
-                                let count = intermediateApproachingStops.count
-                                let noun = routeConfig.stopLabelNoun.lowercased()
-                                Text("\(count) approaching \(noun)\(count == 1 ? "" : "s")")
-                                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                                    .foregroundColor(.primary)
-                                
-                                Image(systemName: isApproachingStopsExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.secondary)
-                                
-                                Spacer()
+                            } label: {
+                                HStack(alignment: .center, spacing: 14) {
+                                    // Continuous Track Stem indicator in route color
+                                    VStack(spacing: 0) {
+                                        Rectangle()
+                                            .fill(lineInfo.color)
+                                            .frame(width: 4, height: 6)
+                                        Circle()
+                                            .fill(lineInfo.color.opacity(0.6))
+                                            .frame(width: 8, height: 8)
+                                        Rectangle()
+                                            .fill(lineInfo.color)
+                                            .frame(width: 4, height: 6)
+                                    }
+                                    .frame(width: 24)
+                                    
+                                    let count = intermediateApproachingStops.count
+                                    let noun = routeConfig.stopLabelNoun.lowercased()
+                                    Text("\(count) approaching \(noun)\(count == 1 ? "" : "s")")
+                                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.primary)
+                                    
+                                    Image(systemName: isApproachingStopsExpanded ? "chevron.up" : "chevron.down")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Spacer()
+                                }
+                                .padding(.vertical, 6)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.vertical, 6)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        
-                        // 3. Intermediate stops when expanded
-                        if isApproachingStopsExpanded {
-                            ForEach(intermediateApproachingStops) { stop in
-                                renderLadderNode(stop: stop, isFirst: false, isLast: false)
-                                    .id(stop.id)
+                            .buttonStyle(.plain)
+                            
+                            // 3. Intermediate stops when expanded
+                            if isApproachingStopsExpanded {
+                                ForEach(intermediateApproachingStops) { stop in
+                                    renderLadderNode(stop: stop, isFirst: false, isLast: false)
+                                        .id(stop.id)
+                                }
                             }
-                        }
-                        
-                        // 4. Commuter station and upcoming stops
-                        ForEach(Array(activeAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
-                            let isLastInBlock = index == activeAndUpcomingStops.count - 1
-                            renderLadderNode(stop: stop, isFirst: false, isLast: isLastInBlock)
-                                .id(stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id)
-                        }
-                    } else {
-                        // Standard / Close-range Active & Upcoming stops (starts at live oncoming vehicle's current stop)
-                        ForEach(Array(approachingAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
-                            let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded) && index == 0
-                            let isLastInBlock = index == approachingAndUpcomingStops.count - 1
-                            renderLadderNode(stop: stop, isFirst: isFirstInBlock, isLast: isLastInBlock)
-                                .id(stop.isVehicleHere ? "VEHICLE_STOP_\(stop.id)" : (stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id))
+                            
+                            // 4. Commuter station and upcoming stops
+                            ForEach(Array(activeAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
+                                let isLastInBlock = index == activeAndUpcomingStops.count - 1
+                                renderLadderNode(stop: stop, isFirst: false, isLast: isLastInBlock)
+                                    .id(stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id)
+                            }
+                        } else {
+                            // Standard / Close-range Active & Upcoming stops (starts at live oncoming vehicle's current stop)
+                            ForEach(Array(approachingAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
+                                let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded) && index == 0
+                                let isLastInBlock = index == approachingAndUpcomingStops.count - 1
+                                renderLadderNode(stop: stop, isFirst: isFirstInBlock, isLast: isLastInBlock)
+                                    .id(stop.isVehicleHere ? "VEHICLE_STOP_\(stop.id)" : (stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id))
+                            }
                         }
                     }
                 }
@@ -696,6 +806,14 @@ public struct SurfaceRunInspector: View {
                                     .background(Color(hex: "#FFB300"))
                                     .foregroundColor(.black)
                                     .clipShape(RoundedRectangle(cornerRadius: 3))
+                            } else if isFirst && arrival.isHoldingStation {
+                                Text("HELD AT TERMINUS")
+                                    .font(.system(size: 8.0, weight: .black, design: .monospaced))
+                                    .padding(.horizontal, 3.5)
+                                    .padding(.vertical, 1.5)
+                                    .background(Color(hex: "#FFB300").opacity(0.2))
+                                    .foregroundColor(Color(hex: "#D97706"))
+                                    .clipShape(RoundedRectangle(cornerRadius: 3))
                             }
                         }
                         
@@ -716,25 +834,42 @@ public struct SurfaceRunInspector: View {
                     
                     Spacer()
                     
-                    // ETA Indicator
-                    if stop.isVehicleHere && !stop.isCurrent {
-                        Text("Live")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundColor(lineInfo.color)
-                    } else if let eta = stop.estimatedMinutes {
-                        if eta == 0 {
-                            Text("Now")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(Color(hex: "#FFB300"))
-                        } else {
+                    // Mode-Aware ETA Indicator
+                    if inspectionMode.isHistoricalReplay {
+                        Text(stop.isCurrent ? "Departed" : "Passed")
+                            .font(.system(size: 10, weight: .regular, design: .monospaced))
+                            .foregroundColor(.secondary.opacity(0.7))
+                    } else if inspectionMode == .scheduledRun {
+                        if let wallTime = stop.scheduledWallTime {
+                            Text(wallTime)
+                                .font(.system(size: 11, weight: stop.isCurrent ? .bold : .medium, design: .monospaced))
+                                .foregroundColor(stop.isCurrent ? Color(hex: "#FFB300") : .secondary)
+                        } else if let eta = stop.estimatedMinutes {
                             Text("+\(eta)m")
                                 .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
                                 .foregroundColor(stop.isCurrent ? Color(hex: "#FFB300") : .secondary)
                         }
-                    } else if stop.isPassed {
-                        Text("Passed")
-                            .font(.system(size: 10, weight: .regular, design: .monospaced))
-                            .foregroundColor(.secondary.opacity(0.7))
+                    } else {
+                        // .liveRun
+                        if stop.isVehicleHere && !stop.isCurrent {
+                            Text("Live")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(lineInfo.color)
+                        } else if let eta = stop.estimatedMinutes {
+                            if eta == 0 {
+                                Text("Now")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(Color(hex: "#FFB300"))
+                            } else {
+                                Text("+\(eta)m")
+                                    .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(stop.isCurrent ? Color(hex: "#FFB300") : .secondary)
+                            }
+                        } else if stop.isPassed {
+                            Text("Passed")
+                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
                     }
                 }
                 .contentShape(Rectangle())
@@ -844,12 +979,60 @@ public struct SurfaceRunInspector: View {
                 directionId: directionId,
                 currentStopId: currentStopId,
                 currentArrivalMinutes: arrival.minutes,
-                tappedCoordinate: currentStopCoordinate
+                tappedCoordinate: currentStopCoordinate,
+                referenceDepartureDate: arrival.arrivalDate
             )
-            let ladder = TransitRealtimeService.shared.annotateLadderWithVehicle(
-                ladder: rawLadder,
-                arrival: arrival
-            )
+            
+            let ladder: [TrackStop]
+            let vehicleLoc: (coordinate: CLLocationCoordinate2D, bearing: Double?)?
+            
+            switch inspectionMode {
+            case .liveRun:
+                ladder = TransitRealtimeService.shared.annotateLadderWithVehicle(
+                    ladder: rawLadder,
+                    arrival: arrival
+                )
+                vehicleLoc = TransitRealtimeService.shared.resolveVehicleLocation(
+                    arrival: arrival,
+                    ladder: ladder
+                )
+            case .historicalReplay:
+                ladder = rawLadder.map { s in
+                    TrackStop(
+                        id: s.id,
+                        stopId: s.stopId,
+                        stopName: s.stopName,
+                        coordinate: s.coordinate,
+                        sequenceIndex: s.sequenceIndex,
+                        isPassed: true,
+                        isCurrent: s.isCurrent,
+                        isTerminus: s.isTerminus,
+                        estimatedMinutes: nil,
+                        transferRoutes: s.transferRoutes,
+                        isVehicleHere: false,
+                        scheduledWallTime: s.scheduledWallTime
+                    )
+                }
+                vehicleLoc = nil
+            case .scheduledRun:
+                ladder = rawLadder.map { s in
+                    TrackStop(
+                        id: s.id,
+                        stopId: s.stopId,
+                        stopName: s.stopName,
+                        coordinate: s.coordinate,
+                        sequenceIndex: s.sequenceIndex,
+                        isPassed: false,
+                        isCurrent: s.isCurrent,
+                        isTerminus: s.isTerminus,
+                        estimatedMinutes: s.estimatedMinutes,
+                        transferRoutes: s.transferRoutes,
+                        isVehicleHere: false,
+                        scheduledWallTime: s.scheduledWallTime
+                    )
+                }
+                vehicleLoc = nil
+            }
             
             var stationCoord = ladder.first(where: { $0.isCurrent })?.coordinate ??
                                currentStopCoordinate ??
@@ -864,11 +1047,6 @@ public struct SurfaceRunInspector: View {
                 fallbackStops: ladder.map(\.coordinate)
             )
             
-            let vehicleLoc = TransitRealtimeService.shared.resolveVehicleLocation(
-                arrival: arrival,
-                ladder: ladder
-            )
-            
             if let validStationCoord = stationCoord {
                 let command = RouteInspectionCommand(
                     routeId: arrival.line,
@@ -879,9 +1057,9 @@ public struct SurfaceRunInspector: View {
                     coordinates: polyline,
                     stationCoordinate: validStationCoord,
                     shouldFrameCamera: true,
-                    vehicleCoordinate: vehicleLoc?.coordinate,
-                    vehicleBearing: vehicleLoc?.bearing,
-                    vehicleStatus: arrival.distanceDescription
+                    vehicleCoordinate: (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil,
+                    vehicleBearing: (inspectionMode == .liveRun) ? vehicleLoc?.bearing : nil,
+                    vehicleStatus: (inspectionMode == .liveRun) ? arrival.distanceDescription : (inspectionMode.isHistoricalReplay ? "Historical" : "Scheduled")
                 )
                 
                 await MainActor.run {

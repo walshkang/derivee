@@ -641,5 +641,241 @@ final class RunInspectorTests: XCTestCase {
         let standaloneHosting = UIHostingController(rootView: standaloneSurface)
         XCTAssertNotNil(standaloneHosting.view)
     }
+
+    // MARK: - Wave PE.5 Full Timetable Run Inspection & Terminus Delay Gating Tests
+
+    func testArrivalInfo_InspectionMode_Classification() {
+        // 1. Live Run
+        let liveArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "N",
+            destination: "Astoria-Ditmars Blvd",
+            minutes: 5,
+            direction: "Uptown",
+            distanceDescription: "2 stops away",
+            isAssigned: true
+        )
+        XCTAssertEqual(liveArrival.inspectionMode, .liveRun)
+
+        // 2. Scheduled Run
+        let scheduledArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "N",
+            destination: "Astoria-Ditmars Blvd",
+            minutes: 90,
+            direction: "Uptown",
+            distanceDescription: "Scheduled",
+            arrivalDate: Date().addingTimeInterval(5400),
+            isAssigned: false
+        )
+        XCTAssertEqual(scheduledArrival.inspectionMode, .scheduledRun)
+
+        // 3. Historical Replay via isHistoricalEvent flag
+        let historicalFlagged = SpatialDatabaseManager.ArrivalInfo(
+            line: "N",
+            destination: "Astoria-Ditmars Blvd",
+            minutes: -10,
+            direction: "Uptown",
+            distanceDescription: "Departed",
+            arrivalDate: Date().addingTimeInterval(-600),
+            isHistoricalEvent: true,
+            historicalDelaySeconds: 120
+        )
+        XCTAssertEqual(historicalFlagged.inspectionMode, .historicalReplay)
+
+        // 4. Historical Replay via distanceDescription
+        let historicalDesc = SpatialDatabaseManager.ArrivalInfo(
+            line: "N",
+            destination: "Astoria-Ditmars Blvd",
+            minutes: -5,
+            direction: "Uptown",
+            distanceDescription: "Departed +3m late",
+            arrivalDate: Date().addingTimeInterval(-300)
+        )
+        XCTAssertEqual(historicalDesc.inspectionMode, .historicalReplay)
+    }
+
+    func testArrivalInfo_TerminusDelayGating() {
+        let dwellingArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 1,
+            direction: "Uptown",
+            distanceDescription: "At Terminus",
+            isAssigned: true
+        )
+        XCTAssertTrue(dwellingArrival.isDwellingAtOrigin)
+
+        let holdingArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 0,
+            direction: "Uptown",
+            distanceDescription: "Boarding",
+            isHoldingStation: true
+        )
+        XCTAssertTrue(holdingArrival.isDwellingAtOrigin)
+
+        let enRouteArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 4,
+            direction: "Uptown",
+            distanceDescription: "3 stops away",
+            isAssigned: true
+        )
+        XCTAssertFalse(enRouteArrival.isDwellingAtOrigin)
+    }
+
+    func testArrivalInfo_HistoricalOutcomeFormatting() {
+        let info = SpatialDatabaseManager.ArrivalInfo(
+            line: "1",
+            destination: "Van Cortlandt Park-242 St",
+            minutes: 0,
+            direction: "Uptown"
+        )
+        XCTAssertEqual(info.formatHistoricalOutcome(delaySeconds: 120), "Departed +2m late")
+        XCTAssertEqual(info.formatHistoricalOutcome(delaySeconds: 0), "Departed on time")
+        XCTAssertEqual(info.formatHistoricalOutcome(delaySeconds: 20), "Departed on time")
+        XCTAssertEqual(info.formatHistoricalOutcome(delaySeconds: -60), "Departed -1m early")
+        XCTAssertEqual(info.formatHistoricalOutcome(delaySeconds: nil), "Departed")
+    }
+
+    func testTrackStop_ScheduledWallTime_Initialization() {
+        let stop = TrackStop(
+            id: "stop_1",
+            stopId: "101N",
+            stopName: "Van Cortlandt Park",
+            coordinate: CLLocationCoordinate2D(latitude: 40.889, longitude: -73.898),
+            sequenceIndex: 0,
+            isPassed: false,
+            isCurrent: true,
+            isTerminus: true,
+            estimatedMinutes: 0,
+            transferRoutes: ["Bx9"],
+            isVehicleHere: false,
+            scheduledWallTime: "2:45 PM"
+        )
+        XCTAssertEqual(stop.scheduledWallTime, "2:45 PM")
+        XCTAssertTrue(stop.isCurrent)
+        XCTAssertEqual(stop.stopId, "101N")
+    }
+
+    func testDepartureMatrixView_ResolveArrivalInfo_Synthesis() {
+        let now = Date()
+        let cal = Calendar.current
+        let currentHour = cal.component(.hour, from: now)
+        let matrix = DepartureMatrixView(
+            records: [],
+            routeId: "Q",
+            stopId: "stop_123"
+        )
+
+        // Historical pill (< currentHour)
+        let pastHour = (currentHour + 23) % 24
+        let pastPill = SpatialDatabaseManager.DeparturePillRecord(
+            id: "past_1",
+            tripId: "trip_past",
+            routeId: "Q",
+            destination: "96 St",
+            minute: 15,
+            delaySeconds: 120,
+            isPast: true,
+            isHistoricalEvent: true,
+            historicalDelaySeconds: 120
+        )
+        let pastArrival = matrix.resolveArrivalInfo(for: pastPill, inHour: pastHour, at: now)
+        XCTAssertEqual(pastArrival.line, "Q")
+        XCTAssertEqual(pastArrival.destination, "96 St")
+        XCTAssertTrue(pastArrival.isHistoricalEvent)
+        XCTAssertTrue(pastArrival.inspectionMode.isHistoricalReplay)
+
+        // Future scheduled pill (> currentHour)
+        let futureHour = (currentHour + 2) % 24
+        let futurePill = SpatialDatabaseManager.DeparturePillRecord(
+            id: "future_1",
+            tripId: "trip_future",
+            routeId: "Q",
+            destination: "96 St",
+            minute: 40
+        )
+        let futureArrival = matrix.resolveArrivalInfo(for: futurePill, inHour: futureHour, at: now)
+        XCTAssertEqual(futureArrival.line, "Q")
+        XCTAssertFalse(futureArrival.isHistoricalEvent)
+        XCTAssertEqual(futureArrival.distanceDescription, "Scheduled")
+        XCTAssertEqual(futureArrival.inspectionMode, SpatialDatabaseManager.ArrivalInfo.RunInspectionMode.scheduledRun)
+    }
+
+    @MainActor
+    func testDualModeInspectors_ViewConstruction_AllModes() {
+        // Guideway in all 3 modes
+        let liveSubway = SpatialDatabaseManager.ArrivalInfo(
+            line: "2",
+            destination: "Wakefield-241 St",
+            minutes: 4,
+            direction: "Uptown",
+            isAssigned: true
+        )
+        let scheduledSubway = SpatialDatabaseManager.ArrivalInfo(
+            line: "2",
+            destination: "Wakefield-241 St",
+            minutes: 45,
+            direction: "Uptown",
+            distanceDescription: "Scheduled",
+            arrivalDate: Date().addingTimeInterval(2700),
+            isAssigned: false
+        )
+        let historicalSubway = SpatialDatabaseManager.ArrivalInfo(
+            line: "2",
+            destination: "Wakefield-241 St",
+            minutes: -12,
+            direction: "Uptown",
+            distanceDescription: "Departed",
+            isHistoricalEvent: true,
+            historicalDelaySeconds: 60
+        )
+
+        let liveGuidewayView = GuidewayRunInspector(arrival: liveSubway, currentStopId: "220", currentStopName: "Times Sq")
+        let schedGuidewayView = GuidewayRunInspector(arrival: scheduledSubway, currentStopId: "220", currentStopName: "Times Sq")
+        let histGuidewayView = GuidewayRunInspector(arrival: historicalSubway, currentStopId: "220", currentStopName: "Times Sq")
+
+        XCTAssertNotNil(UIHostingController(rootView: liveGuidewayView).view)
+        XCTAssertNotNil(UIHostingController(rootView: schedGuidewayView).view)
+        XCTAssertNotNil(UIHostingController(rootView: histGuidewayView).view)
+
+        // Surface in all 3 modes
+        let liveBus = SpatialDatabaseManager.ArrivalInfo(
+            line: "M15",
+            destination: "East Harlem",
+            minutes: 6,
+            direction: "Uptown",
+            isAssigned: true
+        )
+        let scheduledBus = SpatialDatabaseManager.ArrivalInfo(
+            line: "M15",
+            destination: "East Harlem",
+            minutes: 50,
+            direction: "Uptown",
+            distanceDescription: "Scheduled",
+            arrivalDate: Date().addingTimeInterval(3000),
+            isAssigned: false
+        )
+        let historicalBus = SpatialDatabaseManager.ArrivalInfo(
+            line: "M15",
+            destination: "East Harlem",
+            minutes: -8,
+            direction: "Uptown",
+            distanceDescription: "Departed",
+            isHistoricalEvent: true,
+            historicalDelaySeconds: 0
+        )
+
+        let liveSurfaceView = SurfaceRunInspector(arrival: liveBus, currentStopId: "stop_1", currentStopName: "1st Ave & 42nd St", modalClass: .bus)
+        let schedSurfaceView = SurfaceRunInspector(arrival: scheduledBus, currentStopId: "stop_1", currentStopName: "1st Ave & 42nd St", modalClass: .bus)
+        let histSurfaceView = SurfaceRunInspector(arrival: historicalBus, currentStopId: "stop_1", currentStopName: "1st Ave & 42nd St", modalClass: .bus)
+
+        XCTAssertNotNil(UIHostingController(rootView: liveSurfaceView).view)
+        XCTAssertNotNil(UIHostingController(rootView: schedSurfaceView).view)
+        XCTAssertNotNil(UIHostingController(rootView: histSurfaceView).view)
+    }
 }
+
 

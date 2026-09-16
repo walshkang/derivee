@@ -457,7 +457,7 @@ struct MapView: UIViewRepresentable {
             BasemapThemeManager.applyTheme(initialTheme, in: style, animated: false)
             lastAppliedTheme = initialTheme
             
-            updateFogOpacity(parent.fogOpacity, in: style)
+            updateFogOpacity(parent.fogOpacity, in: style, animated: false)
             updateBoundaryBorders(parent.showBoundaryBorders, in: style)
             updateSubwayThoroughfares(show: parent.showSubwayThoroughfares, theme: initialTheme, in: style)
             updateSubwayStationBullets(style: parent.subwayStationMarkerStyle, theme: initialTheme, in: style)
@@ -942,13 +942,13 @@ struct MapView: UIViewRepresentable {
             }
         }
         
-        func updateFogOpacity(_ opacity: Double, in style: MLNStyle) {
+        func updateFogOpacity(_ opacity: Double, in style: MLNStyle, animated: Bool = true) {
             guard isMapStyleLoaded else { return }
             if parent.enableMetalFogEngine {
-                metalFogLayer?.fogOpacity = Float(opacity)
-                metalFogLayer?.setNeedsDisplay()
+                metalFogLayer?.setTargetFogOpacity(Float(opacity), animated: animated)
             } else if let fogLayer = style.layer(withIdentifier: fogLayerId) as? MLNFillStyleLayer {
-                fogLayer.fillOpacityTransition = MLNTransition(duration: 0, delay: 0)
+                let duration: TimeInterval = animated ? 0.35 : 0.0
+                fogLayer.fillOpacityTransition = MLNTransition(duration: duration, delay: 0)
                 fogLayer.fillOpacity = NSExpression(forConstantValue: opacity)
             }
         }
@@ -1138,7 +1138,10 @@ struct MapView: UIViewRepresentable {
                         newCasing.lineJoin = NSExpression(forConstantValue: "round")
                         newCasing.lineOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
                         
-                        if let busStops = style.layer(withIdentifier: nearbyBusStopsLayerId) {
+                        if let metalFog = style.layer(withIdentifier: MapCustomizationDefaults.metalFogLayerId) {
+                            // In MetalFogStyleLayer, ensure inspected corridor track geometry cuts cleanly through the fog layer with clear visual priority (Wave PE.3)
+                            style.insertLayer(newCasing, above: metalFog)
+                        } else if let busStops = style.layer(withIdentifier: nearbyBusStopsLayerId) {
                             style.insertLayer(newCasing, below: busStops)
                         } else if let lure = style.layer(withIdentifier: lureLayerId) {
                             style.insertLayer(newCasing, below: lure)

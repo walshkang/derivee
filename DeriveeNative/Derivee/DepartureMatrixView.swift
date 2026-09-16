@@ -11,6 +11,7 @@ struct DepartureMatrixView: View {
     let isHistoricalFallback: Bool
     let isObservedReplay: Bool
     let scheduleValidity: ScheduleValidity?
+    public var onInspectDeparture: ((SpatialDatabaseManager.ArrivalInfo) -> Void)? = nil
     
     static let defaultRowHeight: CGFloat = 56.0
     static let defaultHeaderHeight: CGFloat = 36.0
@@ -34,7 +35,8 @@ struct DepartureMatrixView: View {
         isHistoricalFallback: Bool = false,
         isObservedReplay: Bool = false,
         scheduleValidity: ScheduleValidity? = nil,
-        referenceDate: Date? = nil
+        referenceDate: Date? = nil,
+        onInspectDeparture: ((SpatialDatabaseManager.ArrivalInfo) -> Void)? = nil
     ) {
         self.records = records
         self.routeId = routeId
@@ -48,6 +50,7 @@ struct DepartureMatrixView: View {
         self.isObservedReplay = isObservedReplay
         self.scheduleValidity = scheduleValidity
         self.referenceDate = referenceDate
+        self.onInspectDeparture = onInspectDeparture
         self._selectedDirection = selectedDirection
         self._selectedDayOffset = selectedDayOffset
         
@@ -387,12 +390,23 @@ struct DepartureMatrixView: View {
                     } else {
                         modPill.scheduleRelationship = matchedArrival.scheduleRelationship
                         modPill.isLive = true
-                        modPill.liveDeltaMinutes = matchedArrival.minutes
                         modPill.isBoarding = (matchedArrival.minutes == 0)
                         
-                        let delayMin = signedMinuteDiff(from: tSched, to: tEst)
-                        if delayMin >= 3 {
-                            modPill.delaySeconds = delayMin * 60
+                        // Strict Terminus Delay Gating (Wave PE.5):
+                        // Suppress numerical delays on departure pills for unassigned trips or consists dwelling at origin
+                        let isDwellingOrUnassigned = !matchedArrival.isAssigned ||
+                            matchedArrival.distanceDescription == "At Terminus" ||
+                            matchedArrival.isHoldingStation
+                        
+                        if !isDwellingOrUnassigned {
+                            modPill.liveDeltaMinutes = matchedArrival.minutes
+                            let delayMin = signedMinuteDiff(from: tSched, to: tEst)
+                            if delayMin >= 3 {
+                                modPill.delaySeconds = delayMin * 60
+                            }
+                        } else {
+                            modPill.delaySeconds = nil
+                            modPill.liveDeltaMinutes = nil
                         }
                         
                         // Delay-aware liveness: remains active if arrival time is in future or within 30s boarding grace
@@ -455,6 +469,98 @@ struct DepartureMatrixView: View {
             }
             return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: sortedDeps)
         }
+    }
+    
+    /// Resolves a DeparturePillRecord into an ArrivalInfo for the single-sheet inspector stack (Wave PE.5).
+    func resolveArrivalInfo(for pill: SpatialDatabaseManager.DeparturePillRecord, inHour hour: Int, at date: Date) -> SpatialDatabaseManager.ArrivalInfo {
+        let calendar = Calendar.current
+        let targetDay = calendar.date(byAdding: .day, value: selectedDayOffset, to: date) ?? date
+        let departureDate = calendar.date(bySettingHour: hour, minute: pill.minute, second: 0, of: targetDay) ?? targetDay
+        let dirLabel = isBus ? busDirectionLabel(for: pill.directionId) : (baseDirectionNames.indices.contains(pill.directionId) ? baseDirectionNames[pill.directionId] : nil)
+        
+        // 1. Matched to active live consist
+        if selectedDayOffset == 0, let matched = liveArrivals.first(where: { arr in
+            (!pill.tripId.isEmpty && arr.tripId == pill.tripId) ||
+            (arr.line.uppercased() == pill.routeId.uppercased() && abs(signedMinuteDiff(from: hour * 60 + pill.minute, to: calendar.component(.hour, from: arr.arrivalDate) * 60 + calendar.component(.minute, from: arr.arrivalDate))) <= matchToleranceMinutes)
+        }) {
+            let isDwellingOrUnassigned = !matched.isAssigned || matched.distanceDescription == "At Terminus" || matched.isHoldingStation
+            let distanceDesc: String? = {
+                if matched.isHoldingStation {
+                    return "Held at Station"
+                } else if isDwellingOrUnassigned {
+                    return matched.distanceDescription ?? "At Terminus"
+                } else {
+                    return matched.distanceDescription
+                }
+            }()
+            
+            return SpatialDatabaseManager.ArrivalInfo(
+                id: matched.id,
+                line: matched.line,
+                destination: matched.destination,
+                minutes: isDwellingOrUnassigned ? max(0, Int(departureDate.timeIntervalSince(date) / 60)) : matched.minutes,
+                direction: matched.direction ?? dirLabel,
+                distanceDescription: distanceDesc,
+                arrivalDate: isDwellingOrUnassigned ? departureDate : matched.arrivalDate,
+                tripId: matched.tripId ?? pill.tripId,
+                scheduleRelationship: matched.scheduleRelationship,
+                isHoldingStation: matched.isHoldingStation,
+                progressLambda: matched.progressLambda,
+                isAssigned: matched.isAssigned,
+                vehicleCoordinate: isDwellingOrUnassigned ? nil : matched.vehicleCoordinate,
+                vehicleBearing: isDwellingOrUnassigned ? nil : matched.vehicleBearing,
+                track: matched.track,
+                isHistoricalEvent: false,
+                historicalDelaySeconds: nil
+            )
+        }
+        
+        // 2. Historical Replay (past day or recorded past departure)
+        if selectedDayOffset < 0 || pill.isHistoricalEvent || (pill.isPast && departureDate.timeIntervalSince(date) < -300) {
+            let delaySec = pill.historicalDelaySeconds ?? pill.delaySeconds ?? 0
+            let outcome = pill.isHistoricalEvent ? SpatialDatabaseManager.ArrivalInfo.formatHistoricalOutcome(delaySeconds: delaySec) : "Departed"
+            return SpatialDatabaseManager.ArrivalInfo(
+                id: UUID(),
+                line: pill.routeId,
+                destination: pill.destination,
+                minutes: 0,
+                direction: dirLabel,
+                distanceDescription: outcome,
+                arrivalDate: departureDate,
+                tripId: pill.tripId,
+                scheduleRelationship: pill.scheduleRelationship,
+                isHoldingStation: false,
+                progressLambda: 1.0,
+                isAssigned: false,
+                vehicleCoordinate: nil,
+                vehicleBearing: nil,
+                track: nil,
+                isHistoricalEvent: true,
+                historicalDelaySeconds: delaySec
+            )
+        }
+        
+        // 3. Scheduled Future Run
+        let minutesAway = max(0, Int(departureDate.timeIntervalSince(date) / 60))
+        return SpatialDatabaseManager.ArrivalInfo(
+            id: UUID(),
+            line: pill.routeId,
+            destination: pill.destination,
+            minutes: minutesAway,
+            direction: dirLabel,
+            distanceDescription: "Scheduled",
+            arrivalDate: departureDate,
+            tripId: pill.tripId,
+            scheduleRelationship: pill.scheduleRelationship,
+            isHoldingStation: false,
+            progressLambda: 0.0,
+            isAssigned: false,
+            vehicleCoordinate: nil,
+            vehicleBearing: nil,
+            track: nil,
+            isHistoricalEvent: false,
+            historicalDelaySeconds: nil
+        )
     }
     
     private var totalDeparturesCount: Int {
@@ -704,7 +810,11 @@ struct DepartureMatrixView: View {
                             showRouteBadge: showRouteBadge,
                             currentHour: selectedDayOffset == 0 ? currentHour : -1,
                             allScheduleDates: allTransitionDates,
-                            isStatic: referenceDate != nil
+                            isStatic: referenceDate != nil,
+                            onInspect: { pill in
+                                let arr = resolveArrivalInfo(for: pill, inHour: hourRec.hourOfDay, at: currentDate)
+                                onInspectDeparture?(arr)
+                            }
                         )
                         .id(hourRec.hourOfDay)
                         
@@ -858,6 +968,7 @@ private struct HourRowView: View {
     let currentHour: Int
     let allScheduleDates: [Date]
     let isStatic: Bool
+    var onInspect: ((SpatialDatabaseManager.DeparturePillRecord) -> Void)? = nil
     
     var body: some View {
         if isStatic {
@@ -908,7 +1019,10 @@ private struct HourRowView: View {
                             routeId: routeId,
                             showRouteBadge: showRouteBadge,
                             allScheduleDates: allScheduleDates,
-                            isStatic: isStatic
+                            isStatic: isStatic,
+                            onInspect: {
+                                onInspect?(pill)
+                            }
                         )
                     }
                 }
@@ -928,6 +1042,7 @@ private struct DeparturePillView: View {
     let showRouteBadge: Bool
     let allScheduleDates: [Date]
     let isStatic: Bool
+    var onInspect: (() -> Void)? = nil
     
     private var routeInfo: TransitRouteData.LineInfo {
         TransitRouteData.lineInfo(for: pill.routeId)
@@ -950,14 +1065,21 @@ private struct DeparturePillView: View {
     }
     
     var body: some View {
-        if isStatic {
-            pillContent(isPast: pill.isPast, isNext: pill.isNextDeparture)
-        } else {
-            TimelineView(.explicit(allScheduleDates)) { context in
-                let (isPast, isNext) = evaluateStatus(at: context.date)
-                pillContent(isPast: isPast, isNext: isNext)
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            onInspect?()
+        } label: {
+            if isStatic {
+                pillContent(isPast: pill.isPast, isNext: pill.isNextDeparture)
+            } else {
+                TimelineView(.explicit(allScheduleDates)) { context in
+                    let (isPast, isNext) = evaluateStatus(at: context.date)
+                    pillContent(isPast: isPast, isNext: isNext)
+                }
             }
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Inspect departure at \(String(format: "%02d:%02d", hour, pill.minute))")
     }
     
     private func evaluateStatus(at refDate: Date) -> (isPast: Bool, isNext: Bool) {
