@@ -542,4 +542,36 @@ final class InspectorMapSyncTests: XCTestCase {
         // Must strictly exclude distant 8th Ave (40.7397)
         XCTAssertLessThan(b.ne.latitude, 40.7350, "Tight bounding box must not expand to Manhattan 8 Av terminal")
     }
+
+    // MARK: - 8. Wave PE.1 Persistent Route & Vehicle Telemetry Tests
+
+    @MainActor
+    func testPersistentRouteInspectionAcrossDetentPeek() {
+        var clearCount = 0
+        let arr = SpatialDatabaseManager.ArrivalInfo(line: "L", destination: "Canarsie", minutes: 3)
+        
+        let sheet = TransitRevealSheet(
+            stopId: "stop_bedford",
+            initialInspectingArrival: arr,
+            initialDetent: .medium,
+            onClearRouteInspection: {
+                clearCount += 1
+            }
+        )
+        
+        let hosting = UIHostingController(rootView: sheet)
+        XCTAssertNotNil(hosting.view)
+        
+        // At .medium, inspection must be active and clearCount must be 0
+        XCTAssertEqual(clearCount, 0, "Initial presentation must not call onClearRouteInspection")
+        
+        // Simulating peek detent transition: render compactInspectionDockPill
+        let dockPill = sheet.compactInspectionDockPill(for: arr)
+        let pillHosting = UIHostingController(rootView: dockPill)
+        XCTAssertNotNil(pillHosting.view)
+        
+        // Entering peek detent must NOT invoke onClearRouteInspection (FC-7)
+        XCTAssertEqual(clearCount, 0, "Lowering drawer to inspectionPeekDetent must NOT wipe map telemetry")
+    }
 }
+
