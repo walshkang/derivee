@@ -214,16 +214,20 @@ struct TransitRevealSheet: View {
     var body: some View {
         Group {
             if let arr = inspectingArrival {
-                if selectedDetent == Self.inspectionPeekDetent {
-                    compactInspectionDockPill(for: arr)
-                        .transition(.opacity)
-                } else {
+                ZStack(alignment: .top) {
                     inspectorView(for: arr)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .trailing),
-                            removal: .move(edge: .trailing)
-                        ))
+                        .opacity(selectedDetent == Self.inspectionPeekDetent ? 0 : 1)
+                        .allowsHitTesting(selectedDetent != Self.inspectionPeekDetent)
+                    
+                    if selectedDetent == Self.inspectionPeekDetent {
+                        compactInspectionDockPill(for: arr)
+                            .transition(.opacity)
+                    }
                 }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing),
+                    removal: .move(edge: .trailing)
+                ))
             } else {
                 stationOverview
                     .transition(.asymmetric(
@@ -256,15 +260,13 @@ struct TransitRevealSheet: View {
                 isLivePulsing = true
             }
         }
-        .onDisappear {
-            onClearRouteInspection?()
-        }
         .task(id: stopId) {
             await startPollingLifecycle()
         }
         .onChange(of: stopId) { _, _ in
             inspectingArrival = nil
             selectedDetent = .medium
+            onClearRouteInspection?()
         }
         .onChange(of: inspectingArrival?.id) { _, newId in
             if newId == nil && selectedDetent == Self.inspectionPeekDetent {

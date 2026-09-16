@@ -88,7 +88,12 @@ public struct GuidewayRunInspector: View {
                 Spacer()
                 
                 Button {
-                    (onBack ?? { dismiss() })()
+                    if let onBack = onBack {
+                        onBack()
+                    } else {
+                        onClearRouteInspection?()
+                        dismiss()
+                    }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 20))
@@ -165,9 +170,6 @@ public struct GuidewayRunInspector: View {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
-        }
-        .onDisappear {
-            onClearRouteInspection?()
         }
     }
     
