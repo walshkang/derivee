@@ -524,11 +524,11 @@ public final class TransitRealtimeService: @unchecked Sendable {
         if SubwayFeed.isBusRoute(line) {
             let dirId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
             let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : (isEastbound ? "Eastbound" : (isWestbound ? "Westbound" : nil)))
-            let dest = resolveDestination(tripUpdate: tripUpdate, line: line, stopId: stopId)
-            if !dest.isEmpty && !dest.contains(" - Northbound") && !dest.contains(" - Southbound") {
-                return "To \(dest)"
+            let busDest = Self.resolveBusDestination(routeId: line, directionId: dirId, directionHint: hint)
+            if !busDest.direction.isEmpty {
+                return busDest.direction
             }
-            return Self.resolveBusDestination(routeId: line, directionId: dirId, directionHint: hint).direction
+            return Self.resolveBusDirectionVector(routeId: line, directionId: dirId, directionHint: hint, stopId: stopId)
         }
         
         switch line.uppercased() {
@@ -607,6 +607,81 @@ public final class TransitRealtimeService: @unchecked Sendable {
             }
         }
         return alerts
+    }
+    
+    public static func resolveBusDirectionVector(
+        routeId: String,
+        directionId: Int? = nil,
+        directionHint: String? = nil,
+        stopId: String? = nil,
+        stopName: String? = nil
+    ) -> String {
+        let cleanRoute = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // 1. Direct hint or stopId suffix evaluation
+        if let stop = stopId?.uppercased() {
+            if stop.hasSuffix("N") { return "Northbound" }
+            if stop.hasSuffix("S") { return "Southbound" }
+            if stop.hasSuffix("E") { return "Eastbound" }
+            if stop.hasSuffix("W") { return "Westbound" }
+        }
+        if let hint = directionHint?.uppercased() {
+            if hint.contains("NORTH") || hint.contains("NB") || hint.contains("UPTOWN") { return "Northbound" }
+            if hint.contains("SOUTH") || hint.contains("SB") || hint.contains("DOWNTOWN") { return "Southbound" }
+            if hint.contains("EAST") || hint.contains("EB") { return "Eastbound" }
+            if hint.contains("WEST") || hint.contains("WB") { return "Westbound" }
+            if hint.contains("INBOUND") { return "Inbound" }
+            if hint.contains("OUTBOUND") { return "Outbound" }
+        }
+        if let name = stopName?.uppercased() {
+            if name.contains("(NB)") || name.hasSuffix(" NB") || name.contains("KENT AV") || name.contains("NORTHBOUND") { return "Northbound" }
+            if name.contains("(SB)") || name.hasSuffix(" SB") || name.contains("WYTHE AV") || name.contains("SOUTHBOUND") { return "Southbound" }
+            if name.contains("EASTBOUND") || name.contains("(EB)") { return "Eastbound" }
+            if name.contains("WESTBOUND") || name.contains("(WB)") { return "Westbound" }
+        }
+        
+        let isDir0 = (directionId == nil || directionId == 0)
+        
+        // 2. Express bus routes: Inbound to Manhattan / Outbound to outer boroughs
+        if cleanRoute.hasPrefix("BM") {
+            return isDir0 ? "Inbound (Manhattan)" : "Outbound (Brooklyn)"
+        }
+        if cleanRoute.hasPrefix("QM") {
+            return isDir0 ? "Inbound (Manhattan)" : "Outbound (Queens)"
+        }
+        if cleanRoute.hasPrefix("BXM") {
+            return isDir0 ? "Inbound (Manhattan)" : "Outbound (Bronx)"
+        }
+        if cleanRoute.hasPrefix("SIM") {
+            return isDir0 ? "Inbound (Manhattan)" : "Outbound (Staten Island)"
+        }
+        
+        // 3. Staten Island local routes (S-prefix)
+        if cleanRoute.hasPrefix("S") && !cleanRoute.hasPrefix("SBS") {
+            return isDir0 ? "Inbound (St George)" : "Outbound"
+        }
+        
+        // 4. Known Manhattan crosstown routes
+        let crosstownRoutes: Set<String> = [
+            "M14A", "M14A-SBS", "M14D", "M14D-SBS",
+            "M23", "M23-SBS", "M34", "M34-SBS", "M34A", "M34A-SBS",
+            "M42", "M50", "M57", "M66", "M72", "M79", "M79-SBS",
+            "M86", "M86-SBS", "M96", "M116", "M125"
+        ]
+        if crosstownRoutes.contains(cleanRoute) {
+            return isDir0 ? "Eastbound" : "Westbound"
+        }
+        
+        // 5. Interborough & borough-target routes
+        if cleanRoute == "Q54" || cleanRoute == "Q59" {
+            return isDir0 ? "Queens-bound" : "Brooklyn-bound"
+        }
+        if cleanRoute == "B32" || cleanRoute == "B24" || cleanRoute == "B62" {
+            return isDir0 ? "Northbound & Queens" : "Southbound & Brooklyn"
+        }
+        
+        // 6. General fallback based on directionId (0 = Northbound, 1 = Southbound)
+        return isDir0 ? "Northbound" : "Southbound"
     }
     
     public static func resolveBusDestination(routeId: String, directionId: Int? = nil, directionHint: String? = nil, stopName: String? = nil) -> (destination: String, direction: String) {
@@ -793,14 +868,14 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 : ("Staten Island Mall", "Southbound & Staten Island")
         default:
             let effectiveDir = isNorthOrUptown ? 0 : 1
+            let dirVector = resolveBusDirectionVector(routeId: cleanRoute, directionId: effectiveDir, directionHint: directionHint, stopName: stopName)
             if let rd = SpatialDatabaseManager.shared.resolveRouteDirection(routeId: cleanRoute, directionId: effectiveDir), !rd.headsign.isEmpty {
-                return (rd.headsign, "To \(rd.headsign)")
+                return (rd.headsign, dirVector)
             }
             if let extrema = SpatialDatabaseManager.shared.resolveCorridorExtrema(routeId: cleanRoute, directionId: effectiveDir), !extrema.isEmpty {
-                return (extrema, "To \(extrema)")
+                return (extrema, dirVector)
             }
-            let dirStr = isNorthOrUptown ? "Northbound" : "Southbound"
-            return ("\(cleanRoute) - \(dirStr)", "To \(cleanRoute) - \(dirStr)")
+            return ("\(cleanRoute) - \(dirVector)", dirVector)
         }
     }
     

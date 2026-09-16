@@ -54,11 +54,11 @@ final class HeadsignEngineTests: XCTestCase {
         // resolveBusDestination Tier 2 integration
         let bus0 = TransitRealtimeService.resolveBusDestination(routeId: "S51", directionId: 0)
         XCTAssertEqual(bus0.destination, "St George Ferry")
-        XCTAssertEqual(bus0.direction, "To St George Ferry")
+        XCTAssertEqual(bus0.direction, "Inbound (St George)")
         
         let bus1 = TransitRealtimeService.resolveBusDestination(routeId: "S51", directionId: 1)
         XCTAssertEqual(bus1.destination, "Midland Beach")
-        XCTAssertEqual(bus1.direction, "To Midland Beach")
+        XCTAssertEqual(bus1.direction, "Outbound")
     }
     
     // MARK: - Tier 3: Spatial Corridor Extrema Fallback
@@ -94,18 +94,21 @@ final class HeadsignEngineTests: XCTestCase {
             stopId: "200099"
         )
         
-        XCTAssertEqual(dirLabel, "To Midland Av & Kiswick St")
+        XCTAssertEqual(dirLabel, "Inbound (St George)")
         XCTAssertFalse(dirLabel.contains("Uptown"))
         XCTAssertFalse(dirLabel.contains("Downtown"))
+        XCTAssertFalse(dirLabel.contains("To "))
         
         // Unlisted / Tier 2 surface bus route
         let s40Dir0 = TransitRealtimeService.resolveBusDestination(routeId: "S40", directionId: 0)
-        XCTAssertEqual(s40Dir0.direction, "To St George Ferry")
+        XCTAssertEqual(s40Dir0.direction, "Inbound (St George)")
         XCTAssertFalse(s40Dir0.direction.contains("Uptown"))
+        XCTAssertFalse(s40Dir0.direction.contains("To "))
         
         let s40Dir1 = TransitRealtimeService.resolveBusDestination(routeId: "S40", directionId: 1)
-        XCTAssertEqual(s40Dir1.direction, "To Matrix Global Park")
+        XCTAssertEqual(s40Dir1.direction, "Outbound")
         XCTAssertFalse(s40Dir1.direction.contains("Downtown"))
+        XCTAssertFalse(s40Dir1.direction.contains("To "))
     }
     
     // MARK: - Corridor Note Deduplication

@@ -40,6 +40,7 @@ struct TransitRevealSheet: View {
     var onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
     var onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil
     var onClearRouteInspection: (() -> Void)? = nil
+    var onDetentChange: ((PresentationDetent) -> Void)? = nil
     @State private var pollProgress: Double = 0.0
     @State private var pollGeneration: Int = 0
     // Wave PD.2: 3-Detent Persistent Dock Peek Detent (~90pt)
@@ -51,6 +52,11 @@ struct TransitRevealSheet: View {
     @State private var availableFloors: [StationFloor] = []
     @State private var selectedFloor: StationFloor? = nil
     var onSelectFloor: ((StationFloor) -> Void)? = nil
+    @State internal var selectedBusRouteFilter: String? = nil
+    
+    var isBusStop: Bool {
+        stopDetails?.modalClass == .bus || stopId.hasPrefix("BUS_") || (stopDetails?.routeType == 3)
+    }
     
     init(
         stopId: String,
@@ -63,11 +69,13 @@ struct TransitRevealSheet: View {
         initialSelectedFloor: StationFloor? = nil,
         initialInspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
         initialDetent: PresentationDetent = .medium,
+        initialBusRouteFilter: String? = nil,
         referenceDate: Date? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
         onClearRouteInspection: (() -> Void)? = nil,
-        onSelectFloor: ((StationFloor) -> Void)? = nil
+        onSelectFloor: ((StationFloor) -> Void)? = nil,
+        onDetentChange: ((PresentationDetent) -> Void)? = nil
     ) {
         self.stopId = stopId
         self._stopDetails = State(initialValue: initialDetails)
@@ -79,12 +87,14 @@ struct TransitRevealSheet: View {
         self._selectedFloor = State(initialValue: initialSelectedFloor)
         self._inspectingArrival = State(initialValue: initialInspectingArrival)
         self._selectedDetent = State(initialValue: initialDetent)
+        self._selectedBusRouteFilter = State(initialValue: initialBusRouteFilter)
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
         self.referenceDate = referenceDate
         self.onFocusMap = onFocusMap
         self.onInspectRoute = onInspectRoute
         self.onClearRouteInspection = onClearRouteInspection
         self.onSelectFloor = onSelectFloor
+        self.onDetentChange = onDetentChange
     }
     
     var displayedArrivals: [SpatialDatabaseManager.ArrivalInfo] {
@@ -94,7 +104,29 @@ struct TransitRevealSheet: View {
         return stopDetails?.arrivals ?? []
     }
     
+    func filteredBusArrivals(for routeFilter: String?) -> [SpatialDatabaseManager.ArrivalInfo] {
+        let all = displayedArrivals
+        let filtered: [SpatialDatabaseManager.ArrivalInfo] = {
+            if let filter = routeFilter, filter != "ALL" {
+                return all.filter { $0.line.uppercased() == filter.uppercased() }
+            }
+            return all
+        }()
+        return filtered.sorted {
+            if $0.minutes != $1.minutes {
+                return $0.minutes < $1.minutes
+            }
+            return $0.arrivalDate < $1.arrivalDate
+        }
+    }
+    
+    var unifiedBusArrivals: [SpatialDatabaseManager.ArrivalInfo] {
+        filteredBusArrivals(for: selectedBusRouteFilter)
+    }
+    
     var groupedArrivals: [DirectionalArrivalGroup] {
+        // When viewing a bus stop, eliminate subway-style bi-directional grouping
+        guard !isBusStop else { return [] }
         let all = displayedArrivals
         guard !all.isEmpty else { return [] }
         
@@ -256,9 +288,13 @@ struct TransitRevealSheet: View {
                 .transitSheetGlassBackground()
         }
         .onAppear {
+            onDetentChange?(selectedDetent)
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 isLivePulsing = true
             }
+        }
+        .onChange(of: selectedDetent) { _, newDetent in
+            onDetentChange?(newDetent)
         }
         .task(id: stopId) {
             await startPollingLifecycle()
@@ -402,9 +438,14 @@ struct TransitRevealSheet: View {
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 10) {
                         if selectedTab == .liveArrivals {
-                            // Real-time Arrivals Organized by Direction
+                            // Real-time Arrivals Organized by Direction (Subway) or Unified Chronological Stream (Bus)
                             LiveArrivalsCarousel(
                                 groupedArrivals: groupedArrivals,
+                                busArrivals: unifiedBusArrivals,
+                                isBus: isBusStop,
+                                routeIds: details.routeIds,
+                                selectedRouteFilter: $selectedBusRouteFilter,
+                                totalBusArrivalsCount: displayedArrivals.count,
                                 isLiveActive: isLiveActive,
                                 isLivePulsing: isLivePulsing,
                                 isRefreshing: isRefreshing,
@@ -961,6 +1002,11 @@ private struct TransitSheetSkeletonView: View {
 
 struct LiveArrivalsCarousel: View {
     let groupedArrivals: [TransitRevealSheet.DirectionalArrivalGroup]
+    var busArrivals: [SpatialDatabaseManager.ArrivalInfo] = []
+    var isBus: Bool = false
+    var routeIds: [String] = []
+    @Binding var selectedRouteFilter: String?
+    var totalBusArrivalsCount: Int = 0
     let isLiveActive: Bool
     let isLivePulsing: Bool
     let isRefreshing: Bool
@@ -968,6 +1014,149 @@ struct LiveArrivalsCarousel: View {
     var reliabilityResolver: ((SpatialDatabaseManager.ArrivalInfo) -> LineReliabilityTier?)? = nil
     let onRefresh: () -> Void
     let onInspectArrival: (SpatialDatabaseManager.ArrivalInfo) -> Void
+    
+    init(
+        groupedArrivals: [TransitRevealSheet.DirectionalArrivalGroup],
+        busArrivals: [SpatialDatabaseManager.ArrivalInfo] = [],
+        isBus: Bool = false,
+        routeIds: [String] = [],
+        selectedRouteFilter: Binding<String?> = .constant(nil),
+        totalBusArrivalsCount: Int = 0,
+        isLiveActive: Bool,
+        isLivePulsing: Bool,
+        isRefreshing: Bool,
+        pollProgress: Double,
+        reliabilityResolver: ((SpatialDatabaseManager.ArrivalInfo) -> LineReliabilityTier?)? = nil,
+        onRefresh: @escaping () -> Void,
+        onInspectArrival: @escaping (SpatialDatabaseManager.ArrivalInfo) -> Void
+    ) {
+        self.groupedArrivals = groupedArrivals
+        self.busArrivals = busArrivals
+        self.isBus = isBus
+        self.routeIds = routeIds
+        self._selectedRouteFilter = selectedRouteFilter
+        self.totalBusArrivalsCount = totalBusArrivalsCount
+        self.isLiveActive = isLiveActive
+        self.isLivePulsing = isLivePulsing
+        self.isRefreshing = isRefreshing
+        self.pollProgress = pollProgress
+        self.reliabilityResolver = reliabilityResolver
+        self.onRefresh = onRefresh
+        self.onInspectArrival = onInspectArrival
+    }
+    
+    @ViewBuilder
+    private func arrivalRow(for arrival: SpatialDatabaseManager.ArrivalInfo) -> some View {
+        Button {
+            onInspectArrival(arrival)
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
+                TransitRouteBadge(routeId: arrival.line, lineInfo: arrivalInfo, size: .compact)
+                
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Text(arrival.destination)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        
+                        if arrival.destination.contains("Short Turn") || arrival.destination.contains("Local") {
+                            Text("ALERT")
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .padding(.horizontal, 3)
+                                .padding(.vertical, 1)
+                                .background(Color(hex: "#FF9500"))
+                                .foregroundColor(.white)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    
+                    HStack(alignment: .center, spacing: 6) {
+                        let displayDist: String? = {
+                            if arrival.minutes == 0 {
+                                // Invariant FC-3: Suppress redundant "Boarding" text when BOARDING capsule is rendered
+                                if let trk = arrival.formattedTrack {
+                                    return trk
+                                }
+                                if let dist = arrival.distanceDescription, !dist.localizedCaseInsensitiveContains("boarding") {
+                                    return dist
+                                }
+                                return nil
+                            } else {
+                                if let dist = arrival.distanceDescription, !dist.isEmpty {
+                                    if let trk = arrival.formattedTrack {
+                                        return "\(dist) • \(trk)"
+                                    }
+                                    return dist
+                                } else if let trk = arrival.formattedTrack {
+                                    return trk
+                                }
+                                return nil
+                            }
+                        }()
+                        
+                        if let distText = displayDist {
+                            Text(distText)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        
+                        if let tier = reliabilityResolver?(arrival) {
+                            RouteReliabilityBadge(tier: tier)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                if arrival.isHoldingStation {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(Color(hex: "#D97706"))
+                        Text("HELD")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#D97706"))
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color(hex: "#FFB300").opacity(0.18))
+                    .clipShape(Capsule())
+                } else if arrival.minutes == 0 {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(hex: "#FFB300"))
+                            .frame(width: 5, height: 5)
+                            .opacity(isLivePulsing ? 1.0 : 0.35)
+                            .shadow(color: Color(hex: "#FFB300").opacity(0.8), radius: 2)
+                        Text("BOARDING")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#FFB300"))
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color(hex: "#FFB300").opacity(0.12))
+                    .clipShape(Capsule())
+                } else {
+                    HStack(spacing: 3) {
+                        Text("\(arrival.minutes)")
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundColor(.primary)
+                        Text("min")
+                            .font(.system(size: 12, weight: .regular, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 2.5)
+            .padding(.horizontal, 4)
+        }
+        .buttonStyle(.plain)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -988,169 +1177,141 @@ struct LiveArrivalsCarousel: View {
                 }
             }
             
-            if groupedArrivals.isEmpty {
-                Text("No scheduled arrivals in the next 30 minutes")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.vertical, 6)
-            } else {
-                ForEach(groupedArrivals) { group in
-                    VStack(alignment: .leading, spacing: 4) {
-                        // Direction Section Header
-                        HStack(alignment: .center, spacing: 6) {
-                            Image(systemName: group.iconName)
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(Color(hex: "#FFB300"))
-                            
-                            Text(group.directionName.uppercased())
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.primary)
-                            
-                            if let corridor = group.corridorSubtitle {
-                                Text("• \(corridor)")
-                                    .font(.system(size: 10, weight: .regular))
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                            }
-                            
-                            Spacer()
-                            
-                            if let nextMin = group.arrivals.first?.minutes {
-                                HStack(spacing: 2) {
-                                    Text("Next")
-                                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                        .foregroundColor(.secondary)
-                                    Text("\(nextMin)m")
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                        .foregroundColor(Color(hex: "#FFB300"))
+            if isBus {
+                // Wave PE.4: Multi-Route Bus Hub Filter Chips
+                if routeIds.count > 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            Button {
+                                let generator = UIImpactFeedbackGenerator(style: .light)
+                                generator.prepare()
+                                generator.impactOccurred()
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    selectedRouteFilter = nil
                                 }
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Color(hex: "#FFB300").opacity(0.1))
-                                .clipShape(Capsule())
+                            } label: {
+                                let isAllSelected = (selectedRouteFilter == nil || selectedRouteFilter == "ALL")
+                                Text("All (\(totalBusArrivalsCount))")
+                                    .font(.system(size: 11, weight: isAllSelected ? .bold : .medium, design: .rounded))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(
+                                        Capsule()
+                                            .fill(isAllSelected ? Color(hex: "#FFB300").opacity(0.2) : Color.primary.opacity(0.05))
+                                    )
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(isAllSelected ? Color(hex: "#FFB300") : Color.primary.opacity(0.08), lineWidth: 1)
+                                    )
+                                    .foregroundColor(isAllSelected ? .primary : .secondary)
                             }
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3.5)
-                        .background(Color.primary.opacity(0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        
-                        // Arrival Rows within Direction
-                        VStack(spacing: 2) {
-                            ForEach(group.arrivals) { arrival in
+                            .buttonStyle(.plain)
+                            
+                            ForEach(routeIds, id: \.self) { rId in
+                                let rInfo = TransitRouteData.lineInfo(for: rId)
+                                let isSelected = (selectedRouteFilter?.uppercased() == rId.uppercased())
                                 Button {
-                                    onInspectArrival(arrival)
-                                } label: {
-                                    HStack(alignment: .center, spacing: 10) {
-                                        let arrivalInfo = TransitRouteData.lineInfo(for: arrival.line)
-                                        TransitRouteBadge(routeId: arrival.line, lineInfo: arrivalInfo, size: .compact)
-                                        
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            HStack(spacing: 4) {
-                                                Text(arrival.destination)
-                                                    .font(.subheadline)
-                                                    .fontWeight(.medium)
-                                                    .foregroundColor(.primary)
-                                                    .lineLimit(1)
-                                                
-                                                if arrival.destination.contains("Short Turn") || arrival.destination.contains("Local") {
-                                                    Text("ALERT")
-                                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                                        .padding(.horizontal, 3)
-                                                        .padding(.vertical, 1)
-                                                        .background(Color(hex: "#FF9500"))
-                                                        .foregroundColor(.white)
-                                                        .clipShape(Capsule())
-                                                }
-                                            }
-                                            
-                                            HStack(alignment: .center, spacing: 6) {
-                                                let displayDist: String? = {
-                                                    if arrival.minutes == 0 {
-                                                        // Invariant FC-3: Suppress redundant "Boarding" text when BOARDING capsule is rendered
-                                                        if let trk = arrival.formattedTrack {
-                                                            return trk
-                                                        }
-                                                        if let dist = arrival.distanceDescription, !dist.localizedCaseInsensitiveContains("boarding") {
-                                                            return dist
-                                                        }
-                                                        return nil
-                                                    } else {
-                                                        if let dist = arrival.distanceDescription, !dist.isEmpty {
-                                                            if let trk = arrival.formattedTrack {
-                                                                return "\(dist) • \(trk)"
-                                                            }
-                                                            return dist
-                                                        } else if let trk = arrival.formattedTrack {
-                                                            return trk
-                                                        }
-                                                        return nil
-                                                    }
-                                                }()
-                                                
-                                                if let distText = displayDist {
-                                                    Text(distText)
-                                                        .font(.caption2)
-                                                        .foregroundColor(.secondary)
-                                                        .lineLimit(1)
-                                                }
-                                                
-                                                if let tier = reliabilityResolver?(arrival) {
-                                                    RouteReliabilityBadge(tier: tier)
-                                                }
-                                            }
-                                        }
-                                        
-                                        Spacer()
-                                        
-                                        if arrival.isHoldingStation {
-                                            HStack(spacing: 4) {
-                                                Image(systemName: "exclamationmark.triangle.fill")
-                                                    .font(.system(size: 9, weight: .bold))
-                                                    .foregroundColor(Color(hex: "#D97706"))
-                                                Text("HELD")
-                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                                    .foregroundColor(Color(hex: "#D97706"))
-                                            }
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 3)
-                                            .background(Color(hex: "#FFB300").opacity(0.18))
-                                            .clipShape(Capsule())
-                                        } else if arrival.minutes == 0 {
-                                            HStack(spacing: 4) {
-                                                Circle()
-                                                    .fill(Color(hex: "#FFB300"))
-                                                    .frame(width: 5, height: 5)
-                                                    .opacity(isLivePulsing ? 1.0 : 0.35)
-                                                    .shadow(color: Color(hex: "#FFB300").opacity(0.8), radius: 2)
-                                                Text("BOARDING")
-                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                                    .foregroundColor(Color(hex: "#FFB300"))
-                                            }
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 3)
-                                            .background(Color(hex: "#FFB300").opacity(0.12))
-                                            .clipShape(Capsule())
-                                        } else {
-                                            HStack(spacing: 3) {
-                                                Text("\(arrival.minutes)")
-                                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                                    .foregroundColor(.primary)
-                                                Text("min")
-                                                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                                    .foregroundColor(.secondary)
-                                            }
-                                        }
+                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                    generator.prepare()
+                                    generator.impactOccurred()
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        selectedRouteFilter = rId
                                     }
-                                    .contentShape(Rectangle())
-                                    .padding(.vertical, 2.5)
-                                    .padding(.horizontal, 4)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        TransitRouteBadge(routeId: rId, lineInfo: rInfo, size: .filter, isSelected: isSelected)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(
+                                        Capsule()
+                                            .fill(isSelected ? rInfo.color.opacity(0.18) : Color.primary.opacity(0.05))
+                                    )
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(isSelected ? rInfo.color : Color.primary.opacity(0.08), lineWidth: 1)
+                                    )
+                                    .foregroundColor(isSelected ? .primary : .secondary)
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
+                        .padding(.vertical, 2)
                     }
-                    .padding(.bottom, 3)
+                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                }
+                
+                // Unified Chronological Stream (Strictly sorted by ETA, displaying terminal branch variants/short-turns)
+                if busArrivals.isEmpty {
+                    Text("No scheduled arrivals in the next 30 minutes")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.vertical, 6)
+                } else {
+                    VStack(spacing: 2) {
+                        ForEach(busArrivals) { arrival in
+                            arrivalRow(for: arrival)
+                        }
+                    }
+                }
+            } else {
+                // Fixed Guideway / Subway Directional Partitioning
+                if groupedArrivals.isEmpty {
+                    Text("No scheduled arrivals in the next 30 minutes")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.vertical, 6)
+                } else {
+                    ForEach(groupedArrivals) { group in
+                        VStack(alignment: .leading, spacing: 4) {
+                            // Direction Section Header
+                            HStack(alignment: .center, spacing: 6) {
+                                Image(systemName: group.iconName)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(Color(hex: "#FFB300"))
+                                
+                                Text(group.directionName.uppercased())
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.primary)
+                                
+                                if let corridor = group.corridorSubtitle {
+                                    Text("• \(corridor)")
+                                        .font(.system(size: 10, weight: .regular))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                                
+                                Spacer()
+                                
+                                if let nextMin = group.arrivals.first?.minutes {
+                                    HStack(spacing: 2) {
+                                        Text("Next")
+                                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                            .foregroundColor(.secondary)
+                                        Text("\(nextMin)m")
+                                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                            .foregroundColor(Color(hex: "#FFB300"))
+                                    }
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(Color(hex: "#FFB300").opacity(0.1))
+                                    .clipShape(Capsule())
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3.5)
+                        .background(Color.primary.opacity(0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            
+                            // Arrival Rows within Direction
+                            VStack(spacing: 2) {
+                                ForEach(group.arrivals) { arrival in
+                                    arrivalRow(for: arrival)
+                                }
+                            }
+                        }
+                        .padding(.bottom, 3)
+                    }
                 }
             }
         }

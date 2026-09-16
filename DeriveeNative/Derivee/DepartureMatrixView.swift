@@ -75,9 +75,23 @@ struct DepartureMatrixView: View {
         isBus ? 15 : 10
     }
     
+    private var activeRouteId: String {
+        (selectedRouteFilter != "ALL" && !selectedRouteFilter.isEmpty) ? selectedRouteFilter : routeId
+    }
+    
+    private func busDirectionLabel(for dir: Int) -> String {
+        let stopName = SpatialDatabaseManager.shared.resolveStopName(for: stopId)
+        let resolved = TransitRealtimeService.resolveBusDestination(routeId: activeRouteId, directionId: dir, stopName: stopName)
+        let cleanDest = resolved.destination.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanDest.isEmpty && !cleanDest.hasPrefix(activeRouteId) {
+            return "\(resolved.direction) to \(cleanDest)"
+        }
+        return resolved.direction
+    }
+    
     private var baseDirectionNames: [String] {
         if isBus {
-            return ["Northbound / Inbound", "Southbound / Outbound"]
+            return [busDirectionLabel(for: 0), busDirectionLabel(for: 1)]
         }
         switch routeId.uppercased() {
         case "L":
@@ -505,44 +519,79 @@ struct DepartureMatrixView: View {
             
             // Direction Selector, Route Filter & Metric Bar
             VStack(spacing: 8) {
-                // Direction Selector Segmented Control
-                HStack(spacing: 0) {
-                    ForEach([0, 1], id: \.self) { dir in
-                        let isAvailable = availableDirections.contains(dir)
-                        let isSelected = selectedDirection == dir
-                        let label = directionLabel(for: dir)
+                // Direction Selector Segmented Control (or Single-Direction Pill for One-Way Curbs)
+                if isBus && availableDirections.count == 1, let singleDir = availableDirections.first {
+                    HStack(spacing: 8) {
+                        Image(systemName: singleDir == 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Color(hex: "#FFB300"))
                         
-                        Button {
-                            if isAvailable {
-                                withAnimation(.easeInOut(duration: 0.15)) {
-                                    selectedDirection = dir
-                                }
-                            }
-                        } label: {
-                            Text(label)
-                                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 7)
-                                .padding(.horizontal, 4)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 7)
-                                        .fill(isSelected ? Color(uiColor: .systemBackground) : Color.clear)
-                                        .shadow(color: isSelected ? Color.black.opacity(0.12) : Color.clear, radius: 2, y: 1)
-                                )
-                                .foregroundColor(isSelected ? .primary : (isAvailable ? .secondary : .secondary.opacity(0.6)))
-                                .opacity(isAvailable ? 1.0 : 0.35)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!isAvailable)
+                        Text("Serving \(busDirectionLabel(for: singleDir))")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        
+                        Spacer()
+                        
+                        Text("One-Way Curb")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.12))
+                            .foregroundColor(.secondary)
+                            .clipShape(Capsule())
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(uiColor: .secondarySystemFill))
+                    )
+                    .onAppear {
+                        if selectedDirection != singleDir {
+                            selectedDirection = singleDir
+                        }
+                    }
+                } else {
+                    HStack(spacing: 0) {
+                        ForEach([0, 1], id: \.self) { dir in
+                            let isAvailable = availableDirections.contains(dir)
+                            let isSelected = selectedDirection == dir
+                            let label = isBus ? busDirectionLabel(for: dir) : directionLabel(for: dir)
+                            
+                            Button {
+                                if isAvailable {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        selectedDirection = dir
+                                    }
+                                }
+                            } label: {
+                                Text(label)
+                                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.75)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 7)
+                                    .padding(.horizontal, 4)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 7)
+                                            .fill(isSelected ? Color(uiColor: .systemBackground) : Color.clear)
+                                            .shadow(color: isSelected ? Color.black.opacity(0.12) : Color.clear, radius: 2, y: 1)
+                                    )
+                                    .foregroundColor(isSelected ? .primary : (isAvailable ? .secondary : .secondary.opacity(0.6)))
+                                    .opacity(isAvailable ? 1.0 : 0.35)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!isAvailable)
+                        }
+                    }
+                    .padding(2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(uiColor: .secondarySystemFill))
+                    )
                 }
-                .padding(2)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(uiColor: .secondarySystemFill))
-                )
                 
                 // Horizontal Route Filter Strip (for co-located / multi-route lines)
                 if routeIds.count > 1 {
