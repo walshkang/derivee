@@ -1143,10 +1143,9 @@ final class CommuterErgonomicsTests: XCTestCase {
         XCTAssertTrue(content.contains("onInspectArrival"), "TransitRevealSheet must wire arrival inspection callback across all transit modes including buses (FC-8)")
     }
 
-    // MARK: - 9. FC-9: Viewport-Aware Camera Geometry (Wave PE.2 Forward-Looking Invariant)
+    // MARK: - 9. FC-9: Viewport-Aware Camera Geometry (Wave PE.2 Invariant)
 
     func testFC9_FrameRouteAndStation_AcceptsDetentParameter() throws {
-        throw XCTSkip("Wave PE.2 forward-looking invariant: Detent-Aware Dynamic Camera Viewport Framing")
         let filePath = #filePath
         let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
         let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
@@ -1156,7 +1155,6 @@ final class CommuterErgonomicsTests: XCTestCase {
     }
 
     func testFC9_FrameRouteAndStation_ZoomLowerBoundAllowsWideFraming() throws {
-        throw XCTSkip("Wave PE.2 forward-looking invariant: Detent-Aware Dynamic Camera Viewport Framing")
         let filePath = #filePath
         let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
         let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
@@ -1166,7 +1164,6 @@ final class CommuterErgonomicsTests: XCTestCase {
     }
 
     func testFC9_FrameRouteAndStation_BottomPaddingIsDynamic() throws {
-        throw XCTSkip("Wave PE.2 forward-looking invariant: Detent-Aware Dynamic Camera Viewport Framing")
         let filePath = #filePath
         let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
         let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")

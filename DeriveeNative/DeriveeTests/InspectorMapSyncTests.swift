@@ -573,5 +573,75 @@ final class InspectorMapSyncTests: XCTestCase {
         // Entering peek detent must NOT invoke onClearRouteInspection (FC-7)
         XCTAssertEqual(clearCount, 0, "Lowering drawer to inspectionPeekDetent must NOT wipe map telemetry")
     }
+
+    // MARK: - 9. Wave PE.2 Detent-Aware Dynamic Camera Viewport Framing Tests
+
+    @MainActor
+    func testPE2_TransitRevealSheet_NotifiesDetentChanges() {
+        var recordedDetent: PresentationDetent? = nil
+        let arr = SpatialDatabaseManager.ArrivalInfo(line: "L", destination: "Canarsie", minutes: 4)
+        
+        let sheet = TransitRevealSheet(
+            stopId: "stop_bedford",
+            initialInspectingArrival: arr,
+            initialDetent: TransitRevealSheet.inspectionPeekDetent,
+            onDetentChange: { detent in
+                recordedDetent = detent
+            }
+        )
+        
+        let hosting = UIHostingController(rootView: sheet)
+        XCTAssertNotNil(hosting.view)
+        
+        // On appear, initialDetent (.fraction(0.12)) must be notified to parent
+        XCTAssertEqual(
+            recordedDetent,
+            TransitRevealSheet.inspectionPeekDetent,
+            "TransitRevealSheet must report its active detent via onDetentChange"
+        )
+    }
+
+    func testPE2_WideApproachBoundingBox_PreservesIntermediateCurvature() {
+        // Commuter station: Bedford Av L
+        let station = CLLocationCoordinate2D(latitude: 40.7173, longitude: -73.9566)
+        // Oncoming train: Bushwick Av-Aberdeen St (distant consist ~5km away)
+        let distantVehicle = CLLocationCoordinate2D(latitude: 40.6780, longitude: -73.9050)
+        
+        let intermediateCurvature = [
+            CLLocationCoordinate2D(latitude: 40.7173, longitude: -73.9566), // Bedford Av
+            CLLocationCoordinate2D(latitude: 40.7145, longitude: -73.9440), // Graham Av
+            CLLocationCoordinate2D(latitude: 40.7115, longitude: -73.9350), // Grand St
+            CLLocationCoordinate2D(latitude: 40.7070, longitude: -73.9210), // Montrose Av
+            CLLocationCoordinate2D(latitude: 40.7000, longitude: -73.9100), // Jefferson St
+            CLLocationCoordinate2D(latitude: 40.6780, longitude: -73.9050)  // Bushwick Av-Aberdeen St
+        ]
+        
+        let cmd = RouteInspectionCommand(
+            routeId: "L",
+            lineName: "14th Street-Canarsie Local",
+            agencyColorHex: "#A7A9AC",
+            modalClass: .subway,
+            coordinates: intermediateCurvature,
+            stationCoordinate: station,
+            vehicleCoordinate: distantVehicle
+        )
+        
+        let bounds = cmd.computedBoundingBox(tightVehicleBounding: true)
+        XCTAssertNotNil(bounds, "Distant consist bounding box must be computable")
+        guard let b = bounds else { return }
+        
+        // Bounding box must enclose the entire span
+        XCTAssertLessThanOrEqual(b.sw.latitude, distantVehicle.latitude)
+        XCTAssertGreaterThanOrEqual(b.ne.latitude, station.latitude)
+        XCTAssertLessThanOrEqual(b.sw.longitude, min(station.longitude, distantVehicle.longitude))
+        XCTAssertGreaterThanOrEqual(b.ne.longitude, max(station.longitude, distantVehicle.longitude))
+        
+        // Longitudinal and latitudinal spans must be within long approach scale (allowing z in [13.0, 15.5])
+        let latSpan = b.ne.latitude - b.sw.latitude
+        let lonSpan = b.ne.longitude - b.sw.longitude
+        XCTAssertGreaterThan(latSpan, 0.03, "Distant approach span must exceed tight station radius")
+        XCTAssertLessThan(latSpan, 0.20, "Distant approach span must remain within city corridor limits")
+        XCTAssertGreaterThan(lonSpan, 0.03, "Distant approach span must span corridor longitude")
+    }
 }
 

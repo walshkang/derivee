@@ -26,6 +26,8 @@ struct MapView: UIViewRepresentable {
     var nearbyBusStops: [SpatialDatabaseManager.NearbyBusStop] = []
     var activeSignalCoordinate: CLLocationCoordinate2D? = nil
     var activeInspectionCommand: RouteInspectionCommand? = nil
+    var activeSheetDetent: PresentationDetent? = nil
+    var activeSheetHeight: CGFloat? = nil
     var activeCorridorTelemetry: Data? = nil
     var activeFloorLevel: Int? = nil
     var onAmbientMapTap: (() -> Void)? = nil
@@ -92,7 +94,12 @@ struct MapView: UIViewRepresentable {
         context.coordinator.updateTransientHex(shape: transientHexShape, in: uiView)
         context.coordinator.updateTransientPulse(at: spatialStore.newlyUnlockedHexLocation, in: uiView)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
-        context.coordinator.updateRouteInspection(activeInspectionCommand, in: uiView)
+        context.coordinator.updateRouteInspection(
+            activeInspectionCommand,
+            activeDetent: activeSheetDetent,
+            sheetHeight: activeSheetHeight,
+            in: uiView
+        )
         
         // Wave R.3: Real-Time Corridor Pulse Vehicle & Bunching Telemetry
         if let telemetry = activeCorridorTelemetry {
@@ -194,6 +201,8 @@ struct MapView: UIViewRepresentable {
         var lastAppliedTheme: BasemapTheme?
         var lastAppliedCitySlug: String? = nil
         var lastAppliedInspectionCommandId: UUID? = nil
+        var lastAppliedInspectionCommand: RouteInspectionCommand? = nil
+        var lastAppliedInspectionDetent: PresentationDetent? = nil
         
         var lureTimer: Timer?
         var isLurePulsed: Bool = false
@@ -1089,7 +1098,12 @@ struct MapView: UIViewRepresentable {
         
         /// Updates the Layer 4 Ephemeral Route Inspection polyline and casing through the fog.
         /// Dispatched from Run Inspectors via closure-based map commands.
-        func updateRouteInspection(_ command: RouteInspectionCommand?, in mapView: MLNMapView) {
+        func updateRouteInspection(
+            _ command: RouteInspectionCommand?,
+            activeDetent: PresentationDetent? = nil,
+            sheetHeight: CGFloat? = nil,
+            in mapView: MLNMapView
+        ) {
             guard let style = mapView.style else { return }
             
             if let cmd = command {
@@ -1279,6 +1293,22 @@ struct MapView: UIViewRepresentable {
                             coordinates: cmd.coordinates,
                             station: cmd.stationCoordinate,
                             vehicleCoordinate: cmd.vehicleCoordinate,
+                            activeDetent: activeDetent,
+                            sheetHeight: sheetHeight,
+                            in: mapView,
+                            animated: true
+                        )
+                    }
+                } else if lastAppliedInspectionDetent != activeDetent, let activeCmd = lastAppliedInspectionCommand {
+                    // Detent transition while route inspection remains active (Wave PE.2)
+                    lastAppliedInspectionDetent = activeDetent
+                    if activeCmd.shouldFrameCamera {
+                        frameRouteAndStation(
+                            coordinates: activeCmd.coordinates,
+                            station: activeCmd.stationCoordinate,
+                            vehicleCoordinate: activeCmd.vehicleCoordinate,
+                            activeDetent: activeDetent,
+                            sheetHeight: sheetHeight,
                             in: mapView,
                             animated: true
                         )
@@ -1287,6 +1317,8 @@ struct MapView: UIViewRepresentable {
             } else {
                 if lastAppliedInspectionCommandId != nil {
                     lastAppliedInspectionCommandId = nil
+                    lastAppliedInspectionCommand = nil
+                    lastAppliedInspectionDetent = nil
                     
                     if let casingLayer = style.layer(withIdentifier: ephemeralRouteCasingLayerId) as? MLNLineStyleLayer {
                         casingLayer.lineOpacity = NSExpression(forConstantValue: 0.0)
@@ -1320,12 +1352,14 @@ struct MapView: UIViewRepresentable {
         
         /// Smoothly pans and zooms the camera to frame the user's station and the active route polyline,
         /// accounting for the bottom-sheet presentation detent in edge padding.
-        /// Clamps zoom level strictly to z in [14.5, 15.5] with tight vehicle-station bounding (Wave PD.3).
+        /// Clamps zoom level strictly to z in [13.0, 15.5] with tight vehicle-station bounding (Wave PE.2).
         /// Camera Safety Invariant (Wave PB.3): Filters out errant coordinates (>45km / 0.4° lat from station).
         func frameRouteAndStation(
             coordinates: [CLLocationCoordinate2D],
             station: CLLocationCoordinate2D,
             vehicleCoordinate: CLLocationCoordinate2D? = nil,
+            activeDetent: PresentationDetent? = nil,
+            sheetHeight: CGFloat? = nil,
             in mapView: MLNMapView,
             animated: Bool = true
         ) {
@@ -1386,13 +1420,27 @@ struct MapView: UIViewRepresentable {
                 ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon)
             )
             
-            // Asymmetric edge padding tailored to bottom-sheet detents (.fraction(0.40))
-            let bottomPadding = max(340.0, mapView.bounds.height * 0.42)
+            // Asymmetric edge padding dynamically tailored to active sheet detent (Wave PE.2)
+            let viewHeight = (mapView.bounds.height > 0) ? mapView.bounds.height : 852.0
+            let bottomPadding: CGFloat
+            if let customHeight = sheetHeight, customHeight > 0 {
+                bottomPadding = customHeight + 16.0
+            } else if let detent = activeDetent {
+                if detent == TransitRevealSheet.inspectionPeekDetent || detent == .fraction(0.12) || detent == NavigationSheetDetent.peek.presentationDetent {
+                    bottomPadding = max(110.0, viewHeight * 0.12 + 16.0)
+                } else if detent == .large || detent == NavigationSheetDetent.expanded.presentationDetent {
+                    bottomPadding = max(400.0, viewHeight * 0.75)
+                } else {
+                    bottomPadding = max(360.0, viewHeight * 0.42)
+                }
+            } else {
+                bottomPadding = max(360.0, viewHeight * 0.42)
+            }
             let edgePadding = UIEdgeInsets(top: 80, left: 40, bottom: bottomPadding, right: 40)
             
             let targetCamera = mapView.cameraThatFitsCoordinateBounds(bounds, edgePadding: edgePadding)
             
-            // Clamp camera zoom level to z in [14.5, 15.5] (Wave PD.3)
+            // Clamp camera zoom level to z in [13.0, 15.5] (Wave PE.2)
             let viewportSize = (mapView.bounds.size.width > 0 && mapView.bounds.size.height > 0)
                 ? mapView.bounds.size
                 : CGSize(width: 393, height: 852)
@@ -1402,7 +1450,7 @@ struct MapView: UIViewRepresentable {
                 targetCamera.centerCoordinate.latitude,
                 viewportSize
             )
-            let clampedZoom = min(max(rawZoom, 14.5), 15.5)
+            let clampedZoom = min(max(rawZoom, 13.0), 15.5)
             let clampedAltitude = MLNAltitudeForZoomLevel(
                 clampedZoom,
                 0.0,
