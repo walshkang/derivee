@@ -39,6 +39,58 @@ final class StationTransitionTests: XCTestCase {
         XCTAssertTrue(radiusFormat.contains("mgl_interpolate") || radiusFormat.contains("6") && radiusFormat.contains("3"))
         XCTAssertTrue(strokeOpacityFormat.contains("mgl_interpolate") || strokeOpacityFormat.contains("15") && strokeOpacityFormat.contains("16"))
         XCTAssertTrue(smartZoomFormat.contains("mgl_interpolate") || smartZoomFormat.contains("15") && smartZoomFormat.contains("16"))
+        
+        // Wave PD.6: Lower zoom stops at z <= 11.5
+        XCTAssertTrue(opacityFormat.contains("11.5"), "Bullet opacity must include lower zoom cutoff stop at 11.5")
+        XCTAssertTrue(radiusFormat.contains("11.5"), "Bullet radius must include lower zoom cutoff stop at 11.5")
+        XCTAssertTrue(strokeOpacityFormat.contains("11.5"), "Bullet stroke opacity must include lower zoom cutoff stop at 11.5")
+    }
+    
+    func testStationMacroBulletZoomDecluttering() {
+        // 1. Minimum zoom level configuration (Wave PD.6)
+        XCTAssertEqual(StationTransitVisualizationManager.Config.bulletMinimumZoomLevel, 11.5)
+        
+        // 2. Exact stops validation in bulletRadiusExpression
+        let radiusExpr = StationTransitVisualizationManager.bulletRadiusExpression()
+        let radiusFormat = radiusExpr.description
+        XCTAssertTrue(radiusFormat.contains("11.5") && radiusFormat.contains("13") && radiusFormat.contains("15") && radiusFormat.contains("16"))
+        
+        if let stops = (radiusExpr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber] {
+            XCTAssertEqual(stops[11.5]?.doubleValue ?? -1, 0.0, accuracy: 0.01)
+            XCTAssertEqual(stops[13.0]?.doubleValue ?? -1, 3.0, accuracy: 0.01)
+            XCTAssertEqual(stops[15.0]?.doubleValue ?? -1, 6.0, accuracy: 0.01)
+            XCTAssertEqual(stops[16.0]?.doubleValue ?? -1, 3.0, accuracy: 0.01)
+        }
+        
+        // 3. Exact stops validation in bulletOpacityExpression
+        let opacityExpr = StationTransitVisualizationManager.bulletOpacityExpression()
+        let opacityFormat = opacityExpr.description
+        XCTAssertTrue(opacityFormat.contains("11.5") && opacityFormat.contains("13") && opacityFormat.contains("15") && opacityFormat.contains("16"))
+        
+        if let stops = (opacityExpr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber] {
+            XCTAssertEqual(stops[11.5]?.doubleValue ?? -1, 0.0, accuracy: 0.01)
+            XCTAssertEqual(stops[13.0]?.doubleValue ?? -1, 1.0, accuracy: 0.01)
+            XCTAssertEqual(stops[15.0]?.doubleValue ?? -1, 1.0, accuracy: 0.01)
+            XCTAssertEqual(stops[16.0]?.doubleValue ?? -1, 0.0, accuracy: 0.01)
+        }
+        
+        // 4. Exact stops validation in bulletStrokeOpacityExpression
+        let strokeOpacityExpr = StationTransitVisualizationManager.bulletStrokeOpacityExpression()
+        let strokeOpacityFormat = strokeOpacityExpr.description
+        XCTAssertTrue(strokeOpacityFormat.contains("11.5") && strokeOpacityFormat.contains("13") && strokeOpacityFormat.contains("15") && strokeOpacityFormat.contains("16"))
+        
+        if let stops = (strokeOpacityExpr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber] {
+            XCTAssertEqual(stops[11.5]?.doubleValue ?? -1, 0.0, accuracy: 0.01)
+            XCTAssertEqual(stops[13.0]?.doubleValue ?? -1, 1.0, accuracy: 0.01)
+            XCTAssertEqual(stops[15.0]?.doubleValue ?? -1, 1.0, accuracy: 0.01)
+            XCTAssertEqual(stops[16.0]?.doubleValue ?? -1, 0.0, accuracy: 0.01)
+        }
+        
+        // 5. Circle style layer minimumZoomLevel assignment
+        let bulletsSource = MLNShapeSource(identifier: "test-macro-bullets-source", features: [], options: nil)
+        let bulletsLayer = MLNCircleStyleLayer(identifier: StationTransitVisualizationManager.Config.bulletLayerId, source: bulletsSource)
+        bulletsLayer.minimumZoomLevel = StationTransitVisualizationManager.Config.bulletMinimumZoomLevel
+        XCTAssertEqual(bulletsLayer.minimumZoomLevel, 11.5)
     }
     
     func testFootprintAndPlatformIngressExpressions() {

@@ -678,6 +678,7 @@ struct MapView: UIViewRepresentable {
             bulletsLayer.circleRadius = StationTransitVisualizationManager.bulletRadiusExpression()
             bulletsLayer.circleStrokeColor = NSExpression(forConstantValue: bulletStrokeColor)
             bulletsLayer.circleStrokeWidth = NSExpression(forConstantValue: 1.0)
+            bulletsLayer.minimumZoomLevel = StationTransitVisualizationManager.Config.bulletMinimumZoomLevel
             bulletsLayer.circleOpacity = parent.subwayStationMarkerStyle == .allStations 
                 ? StationTransitVisualizationManager.bulletOpacityExpression() 
                 : NSExpression(forConstantValue: 0.0)
@@ -863,6 +864,7 @@ struct MapView: UIViewRepresentable {
                 bulletsLayer.circleStrokeOpacity = markerStyle == .allStations 
                     ? StationTransitVisualizationManager.bulletStrokeOpacityExpression() 
                     : NSExpression(forConstantValue: 0.0)
+                bulletsLayer.minimumZoomLevel = StationTransitVisualizationManager.Config.bulletMinimumZoomLevel
             }
             if let smartZoomLayer = style.layer(withIdentifier: smartZoomStationBulletsLayerId) as? MLNSymbolStyleLayer {
                 smartZoomLayer.iconOpacityTransition = MLNTransition(duration: 0, delay: 0)

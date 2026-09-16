@@ -34,6 +34,9 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
         public static let colorFootprintFill = "#292E38"
         public static let colorPlatformLine = "#FAB83D"
         public static let colorExitPortalPill = "#008542"
+        
+        /// Minimum zoom level for macro station bullets (Doc 20 & Wave PD.6)
+        public static let bulletMinimumZoomLevel: Float = 11.5
     }
     
     public init(mapView: MLNMapView? = nil) {
@@ -46,35 +49,35 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
         self.mapView = mapView
     }
     
-    // MARK: - Zoom Interpolation Expressions (Doc 20 §1 & §5)
+    // MARK: - Zoom Interpolation Expressions (Doc 20 §1 & §5, Wave PD.6)
     
-    /// Station Bullet Pin Opacity: Linear decay from 1.0 at z=15.0 to 0.0 at z=16.0.
+    /// Station Bullet Pin Opacity: 0.0 at z<=11.5, fades in to 1.0 at z=13.0, persists until z=15.0, linear decay to 0.0 at z=16.0.
     public static func bulletOpacityExpression() -> NSExpression {
         return NSExpression(
             forMLNInterpolating: .zoomLevelVariable,
             curveType: .linear,
             parameters: nil,
-            stops: NSExpression(forConstantValue: [15.0: 1.0, 16.0: 0.0])
+            stops: NSExpression(forConstantValue: [11.5: 0.0, 13.0: 1.0, 15.0: 1.0, 16.0: 0.0])
         )
     }
     
-    /// Station Bullet Radius Contraction: Linear contraction from 6.0pt at z=15.0 to 3.0pt at z=16.0.
+    /// Station Bullet Radius: 0.0pt at z<=11.5, expands to 3.0pt at z=13.0, 6.0pt at z=15.0, contracts to 3.0pt at z=16.0.
     public static func bulletRadiusExpression() -> NSExpression {
         return NSExpression(
             forMLNInterpolating: .zoomLevelVariable,
             curveType: .linear,
             parameters: nil,
-            stops: NSExpression(forConstantValue: [15.0: 6.0, 16.0: 3.0])
+            stops: NSExpression(forConstantValue: [11.5: 0.0, 13.0: 3.0, 15.0: 6.0, 16.0: 3.0])
         )
     }
     
-    /// Station Bullet Stroke Opacity: Linear decay from 1.0 at z=15.0 to 0.0 at z=16.0.
+    /// Station Bullet Stroke Opacity: 0.0 at z<=11.5, fades in to 1.0 at z=13.0, persists until z=15.0, linear decay to 0.0 at z=16.0.
     public static func bulletStrokeOpacityExpression() -> NSExpression {
         return NSExpression(
             forMLNInterpolating: .zoomLevelVariable,
             curveType: .linear,
             parameters: nil,
-            stops: NSExpression(forConstantValue: [15.0: 1.0, 16.0: 0.0])
+            stops: NSExpression(forConstantValue: [11.5: 0.0, 13.0: 1.0, 15.0: 1.0, 16.0: 0.0])
         )
     }
     
@@ -317,6 +320,7 @@ public final class StationTransitVisualizationManager: NSObject, @unchecked Send
             bulletsLayer.circleOpacity = Self.bulletOpacityExpression()
             bulletsLayer.circleRadius = Self.bulletRadiusExpression()
             bulletsLayer.circleStrokeOpacity = Self.bulletStrokeOpacityExpression()
+            bulletsLayer.minimumZoomLevel = Config.bulletMinimumZoomLevel
         }
         
         if let smartZoomLayer = style.layer(withIdentifier: Config.smartZoomBulletLayerId) as? MLNSymbolStyleLayer {
