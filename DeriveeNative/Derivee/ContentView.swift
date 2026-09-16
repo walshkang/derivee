@@ -43,6 +43,8 @@ struct ContentView: View {
     @State private var routeComparisonVM: RouteComparisonViewModel? = nil
     @State private var activeRouteInspection: RouteInspectionCommand? = nil
     @State private var activeFloorLevel: Int? = nil
+    @State private var showDriftControls: Bool = false
+    @State private var activeTransitSheetDetent: PresentationDetent = .medium
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
@@ -95,6 +97,7 @@ struct ContentView: View {
                             nearbyBusStops: nearbyBusStops,
                             activeSignalCoordinate: activeNavigationSession?.activeSignalCoordinate,
                             activeInspectionCommand: activeRouteInspection,
+                            activeSheetDetent: (showTransitSheet && selectedTransitStop != nil) ? activeTransitSheetDetent : nil,
                             activeFloorLevel: activeFloorLevel,
                             onAmbientMapTap: {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -125,9 +128,13 @@ struct ContentView: View {
                     .allowsHitTesting(false)
                     
                     VStack {
-                        HStack(alignment: .center, spacing: 12) {
+                        HStack(alignment: .center, spacing: 10) {
                             SearchCapsuleOverlay {
                                 showSearchSheet = true
+                            }
+                            
+                            AmbientDriftFAB(isTracking: trackingEngine.isTracking) {
+                                showDriftControls = true
                             }
                             
                             ProfileFAB {
@@ -290,6 +297,7 @@ struct ContentView: View {
                             selectedTransitStop = nil
                             activeRouteInspection = nil
                             activeFloorLevel = nil
+                            activeTransitSheetDetent = .medium
                         }
                     }
                 )) {
@@ -308,6 +316,9 @@ struct ContentView: View {
                             },
                             onSelectFloor: { floor in
                                 activeFloorLevel = floor.ordinal
+                            },
+                            onDetentChange: { detent in
+                                activeTransitSheetDetent = detent
                             }
                         )
                     }
@@ -438,6 +449,13 @@ struct ContentView: View {
                     .presentationDragIndicator(.visible)
                     .presentationContentInteraction(.scrolls)
                     .transitSheetGlassBackground()
+                }
+                .sheet(isPresented: $showDriftControls) {
+                    AmbientDriftControlCard(trackingEngine: trackingEngine)
+                        .presentationDetents([.height(290)])
+                        .presentationDragIndicator(.visible)
+                        .presentationContentInteraction(.scrolls)
+                        .transitSheetGlassBackground()
                 }
                 .onOpenURL { url in
                     guard url.scheme == "derivee" else { return }

@@ -77,6 +77,7 @@ final class AmbientTrackingEngine: ObservableObject {
     
     @Published var isTracking = false
     @Published var lastKnownLocation: CLLocation? = nil
+    @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     
     private let locationProvider: any LocationProvider
     private let databaseManager: SpatialDatabaseManager
@@ -92,6 +93,7 @@ final class AmbientTrackingEngine: ObservableObject {
         self.userDefaults = userDefaults
         let resolvedIPC = ipcService ?? AmbientTrackingIPCService(userDefaults: userDefaults)
         self.ipcService = resolvedIPC
+        self.authorizationStatus = locationManager.authorizationStatus
         
         if userDefaults.object(forKey: AppStorageKeys.isTrackingEnabled) == nil {
             self.isTrackingEnabled = true
@@ -269,6 +271,38 @@ final class AmbientTrackingEngine: ObservableObject {
     
     func requestPermissions() {
         locationManager.requestAlwaysAuthorization()
+        self.authorizationStatus = locationManager.authorizationStatus
+    }
+    
+    func requestLocationPermissionEscalation() {
+        let currentStatus = locationManager.authorizationStatus
+        logPipeline("📍 [AmbientTrackingEngine] requestLocationPermissionEscalation called. Current status: \(currentStatus.rawValue)")
+        switch currentStatus {
+        case .notDetermined, .authorizedWhenInUse:
+            locationManager.requestAlwaysAuthorization()
+        case .denied, .restricted:
+            if let url = URL(string: UIApplication.openSettingsURLString),
+               UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url)
+            }
+        case .authorizedAlways:
+            break
+        @unknown default:
+            locationManager.requestAlwaysAuthorization()
+        }
+        self.authorizationStatus = locationManager.authorizationStatus
+    }
+    
+    func toggleTracking() {
+        if isTracking {
+            isTrackingEnabled = false
+            Task {
+                await stopTracking()
+            }
+        } else {
+            isTrackingEnabled = true
+            startTracking()
+        }
     }
     
     func resumeTrackingIfNeeded() {
@@ -478,3 +512,18 @@ final class AmbientTrackingEngine: ObservableObject {
     }
 }
 
+private final class LocationDelegateProxy: NSObject, CLLocationManagerDelegate {
+    weak var engine: AmbientTrackingEngine?
+    
+    init(engine: AmbientTrackingEngine) {
+        self.engine = engine
+        super.init()
+    }
+    
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        Task { @MainActor [weak self] in
+            self?.engine?.authorizationStatus = status
+        }
+    }
+}
