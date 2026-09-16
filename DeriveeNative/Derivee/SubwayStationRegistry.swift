@@ -12,6 +12,26 @@ public enum SubwayStationRegistry {
         "2", "3", "4", "5", "A", "B", "D", "E", "Q", "6X", "7X", "FX"
     ]
     
+    // MARK: - Strictly Local Routes
+    
+    /// Routes that run strictly local service and never have scheduled express tracks.
+    /// Westbound/Northbound trains reporting Track 2 on two-track lines must never be classified as express.
+    public static let strictlyLocalRoutes: Set<String> = [
+        "L", "G", "1", "C", "M", "R", "W", "S", "SIR", "SI"
+    ]
+    
+    /// Returns true if the given route identifier runs strictly local service.
+    public static func isStrictlyLocal(_ route: String) -> Bool {
+        let clean = route.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if strictlyLocalRoutes.contains(clean) {
+            return true
+        }
+        if clean == "SI" && strictlyLocalRoutes.contains("SIR") {
+            return true
+        }
+        return false
+    }
+    
     // MARK: - Normalization
     
     /// Normalizes child stop IDs (e.g. "L08N", "STOP_401S", "BUS_101") into parent station IDs (e.g. "L08", "401", "101").

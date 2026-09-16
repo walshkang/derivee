@@ -137,10 +137,7 @@ struct MapView: UIViewRepresentable {
             }
         }
         
-        if context.coordinator.lastRecenterTrigger != recenterTrigger {
-            context.coordinator.lastRecenterTrigger = recenterTrigger
-            uiView.setUserTrackingMode(.followWithHeading, animated: true, completionHandler: nil)
-        }
+        context.coordinator.handleRecenterTrigger(recenterTrigger, on: uiView)
     }
     
     func makeCoordinator() -> Coordinator {
@@ -241,6 +238,17 @@ struct MapView: UIViewRepresentable {
             pulseTimer?.cancel()
             lureTimer?.invalidate()
             NotificationCenter.default.removeObserver(self)
+        }
+        
+        // MARK: - Wave PD.4: Pedestrian Recenter Zoom (WPD4-LOCAL-DEEXPRESS-RECENTER-ZOOM)
+        
+        /// Re-centers the viewport on the commuter's location, tracks heading, and explicitly
+        /// scales to z = 16.0 pedestrian street scale.
+        func handleRecenterTrigger(_ trigger: Bool, on targetMapView: MLNMapView, animated: Bool = true) {
+            guard lastRecenterTrigger != trigger else { return }
+            lastRecenterTrigger = trigger
+            targetMapView.setUserTrackingMode(.followWithHeading, animated: animated, completionHandler: nil)
+            targetMapView.setZoomLevel(16.0, animated: animated)
         }
         
         // MARK: - Wave L-D.3: Viewport Handshake & Fog Cache Invalidation

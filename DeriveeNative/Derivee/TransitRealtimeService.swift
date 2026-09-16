@@ -21,6 +21,9 @@ public struct TransitAlert: Identifiable, Sendable, Equatable {
 public final class TransitRealtimeService: @unchecked Sendable {
     public static let shared = TransitRealtimeService()
     
+    /// Routes that operate strictly local service and never have scheduled express tracks.
+    public static let strictlyLocalRoutes: Set<String> = SubwayStationRegistry.strictlyLocalRoutes
+    
     // MARK: - City Hot-Swap Teardown (Wave L-B.3)
     
     /// Pre-swap teardown for Coordinated Two-Phase Barrier:
@@ -924,8 +927,14 @@ public final class TransitRealtimeService: @unchecked Sendable {
         var isExpress = false
         var isPhysicalLocalOverride = false
         
+        let isStrictlyLocal = SubwayStationRegistry.isStrictlyLocal(cleanLine)
+        
         if observedTrack == "2" || observedTrack == "3" || observedTrack == "M" {
-            isExpress = true
+            if observedTrack == "2" && isStrictlyLocal {
+                isExpress = false
+            } else {
+                isExpress = true
+            }
         } else if observedTrack == "1" || observedTrack == "4" {
             if SubwayStationRegistry.defaultExpressRoutes.contains(cleanLine) {
                 isPhysicalLocalOverride = true

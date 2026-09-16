@@ -915,4 +915,80 @@ final class TransitRealtimeTests: XCTestCase {
         XCTAssertEqual(downstreamArrivals.count, 1)
         XCTAssertEqual(downstreamArrivals[0].distanceDescription, "Scheduled")
     }
+    
+    // MARK: - Wave PD.4: Strictly Local Route De-Expression (WPD4-LOCAL-DEEXPRESS-RECENTER-ZOOM)
+    
+    func testStrictlyLocalRoutesTrack2Deexpression() {
+        // Test that strictly local routes (L, G, 1, C, M, R, W, S, SIR, SI) reporting Track 2
+        // suppress " EXP" and maintain isExpress = false.
+        let localRoutes: [(route: String, terminalStop: String, expectedTerminal: String)] = [
+            ("L", "L01N", "8 Av"),
+            ("G", "G22N", "Court Sq"),
+            ("1", "142S", "South Ferry"),
+            ("C", "A09N", "168 St"),
+            ("M", "M01S", "Middle Village-Metropolitan Av"),
+            ("R", "G08N", "Forest Hills-71 Av"),
+            ("W", "R01N", "Astoria-Ditmars Blvd"),
+            ("SIR", "S31N", "St George"),
+            ("SI", "S31N", "St George")
+        ]
+        
+        for item in localRoutes {
+            var tripUpdate = TransitRealtime_TripUpdate()
+            var trip = TransitRealtime_TripDescriptor()
+            trip.routeID = item.route
+            tripUpdate.trip = trip
+            
+            var u1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+            u1.stopID = item.terminalStop
+            var nyctStop = TransitRealtime_NyctStopTimeUpdate()
+            nyctStop.actualTrack = "2" // Westbound / Northbound track on 2-track line
+            u1.TransitRealtime_nyctStopTimeUpdate = nyctStop
+            tripUpdate.stopTimeUpdate = [u1]
+            
+            let destination = TransitRealtimeService.shared.resolveDestination(
+                tripUpdate: tripUpdate,
+                line: item.route,
+                stopId: item.terminalStop,
+                matchingUpdate: u1
+            )
+            
+            let expectedDisplayLine = (item.route == "SI") ? "SIR" : item.route
+            let expectedLabel = "\(expectedDisplayLine) to \(item.expectedTerminal)"
+            XCTAssertEqual(destination, expectedLabel, "Route \(item.route) on Track 2 must never append ' EXP'")
+            XCTAssertFalse(destination.contains("EXP"), "Strictly local route \(item.route) must suppress EXP")
+            XCTAssertFalse(destination.contains("Local"), "Strictly local route \(item.route) is inherently local and should not append ' Local'")
+        }
+    }
+    
+    func testExpressRoutesTrack2And3Retention() {
+        // Verify that legitimate express lines (4, 6, A) continue to receive " EXP" on tracks 2, 3, or M
+        let expressCases: [(route: String, stopId: String, track: String, expected: String)] = [
+            ("4", "401N", "2", "4 to Woodlawn EXP"),
+            ("6", "601N", "3", "6 to Pelham Bay Park EXP"),
+            ("A", "A02N", "2", "A to Inwood-207 St EXP")
+        ]
+        
+        for item in expressCases {
+            var tripUpdate = TransitRealtime_TripUpdate()
+            var trip = TransitRealtime_TripDescriptor()
+            trip.routeID = item.route
+            tripUpdate.trip = trip
+            
+            var u1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+            u1.stopID = item.stopId
+            var nyctStop = TransitRealtime_NyctStopTimeUpdate()
+            nyctStop.actualTrack = item.track
+            u1.TransitRealtime_nyctStopTimeUpdate = nyctStop
+            tripUpdate.stopTimeUpdate = [u1]
+            
+            let destination = TransitRealtimeService.shared.resolveDestination(
+                tripUpdate: tripUpdate,
+                line: item.route,
+                stopId: item.stopId,
+                matchingUpdate: u1
+            )
+            XCTAssertEqual(destination, item.expected)
+        }
+    }
 }

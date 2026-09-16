@@ -105,4 +105,52 @@ final class OrientationClusterTests: XCTestCase {
         mapView.compassView.alpha = 0.0
         XCTAssertEqual(mapView.compassView.alpha, 0.0, "Auto-fade alpha must be preserved without forced KVO overrides")
     }
+    
+    // MARK: - Wave PD.4: Pedestrian Recenter Zoom (WPD4-LOCAL-DEEXPRESS-RECENTER-ZOOM)
+    
+    @MainActor
+    func testRecenterTriggerActivatesPedestrianZoomLevel() {
+        let mapView = MLNMapView(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        mapView.setCenter(CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060), zoomLevel: 12.0, animated: false)
+        XCTAssertEqual(mapView.zoomLevel, 12.0, accuracy: 0.1, "Initial zoom should be at regional scale")
+        
+        let spatialStore = SpatialStore()
+        let trackingEngine = AmbientTrackingEngine(locationProvider: MockLocationProvider())
+        var recenterTrigger = false
+        
+        let mapViewRepresentable = MapView(
+            trackingEngine: trackingEngine,
+            spatialStore: spatialStore,
+            fogShape: nil,
+            showTransitSheet: .constant(false),
+            selectedTransitStop: .constant(nil),
+            isCentered: .constant(true),
+            recenterTrigger: Binding(get: { recenterTrigger }, set: { recenterTrigger = $0 }),
+            userScreenPosition: .constant(nil),
+            targetCoordinate: .constant(nil),
+            currentUserLocation: .constant(nil),
+            transientHexShape: nil,
+            selectedTheme: .day,
+            fogOpacity: 0.94,
+            showBoundaryBorders: true,
+            showSubwayThoroughfares: true,
+            subwayStationMarkerStyle: .allStations,
+            nearbyBusStops: []
+        )
+        
+        let coordinator = mapViewRepresentable.makeCoordinator()
+        coordinator.mapView = mapView
+        XCTAssertEqual(coordinator.lastRecenterTrigger, false)
+        
+        // Trigger recenter activation
+        coordinator.handleRecenterTrigger(true, on: mapView, animated: false)
+        
+        XCTAssertEqual(coordinator.lastRecenterTrigger, true, "Coordinator must update lastRecenterTrigger to true")
+        XCTAssertEqual(mapView.userTrackingMode, .followWithHeading, "Recenter must set tracking mode to followWithHeading")
+        XCTAssertEqual(mapView.zoomLevel, 16.0, accuracy: 0.001, "Recenter trigger must set camera zoom to z = 16.0 pedestrian scale")
+        
+        // Triggering with the same value should be a no-op
+        coordinator.handleRecenterTrigger(true, on: mapView, animated: false)
+        XCTAssertEqual(coordinator.lastRecenterTrigger, true)
+    }
 }
