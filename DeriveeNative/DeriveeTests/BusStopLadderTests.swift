@@ -232,4 +232,190 @@ final class BusStopLadderTests: XCTestCase {
             XCTAssertFalse(current.isPassed)
         }
     }
+
+    // MARK: - 8. Wave PD.5: Surface Bus Corridor Progression & Map Sawtooth Elimination
+
+    func testB32NorthboundCorridorProgressionKentAv() async throws {
+        let ladder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "B32",
+            directionId: 0, // Northbound to Long Island City - Queens Plaza
+            currentStopId: "308667", // Kent Av & N 6 St
+            currentArrivalMinutes: 4
+        )
+
+        XCTAssertFalse(ladder.isEmpty, "B32 Northbound ladder must return real stops")
+        XCTAssertGreaterThan(ladder.count, 10, "B32 corridor should have substantial stops")
+
+        // 1. Current stop resolution at Kent Av & N 6 St
+        let currentStop = ladder.first(where: { $0.isCurrent })
+        XCTAssertNotNil(currentStop, "Current stop must be identified in stop ladder")
+        XCTAssertEqual(currentStop?.stopId, "308667")
+        XCTAssertEqual(currentStop?.stopName, "Kent Av & N 6 St")
+        XCTAssertEqual(currentStop?.estimatedMinutes, 4)
+
+        // 2. Must contain Northbound corridor stops along Kent Av
+        let stopNames = ladder.map(\.stopName)
+        XCTAssertTrue(stopNames.contains("Kent Av & S 6 St") || stopNames.contains("Kent Av & S 1 St"),
+                      "Must contain Kent Av South Williamsburg stops")
+        XCTAssertTrue(stopNames.contains("Kent Av & Metropolitan Av"), "Must contain Kent Av & Metropolitan Av")
+        XCTAssertTrue(stopNames.contains("Kent Av & N 6 St"), "Must contain Kent Av & N 6 St")
+        XCTAssertTrue(stopNames.contains("Kent Av & N 9 St"), "Must contain Kent Av & N 9 St")
+
+        // 3. ZERO Wythe Av stops in Northbound ladder (Wythe Av is Southbound only)
+        for stop in ladder {
+            XCTAssertFalse(stop.stopName.lowercased().contains("wythe av"),
+                           "Northbound B32 ladder must NOT contain Southbound Wythe Av stop: \(stop.stopName)")
+        }
+
+        // 4. ZERO 21 St stops in Northbound ladder (21 St is Southbound only)
+        for stop in ladder {
+            XCTAssertFalse(stop.stopName.lowercased().contains("21 st"),
+                           "Northbound B32 ladder must NOT contain Southbound 21 St stop: \(stop.stopName)")
+        }
+
+        // 5. In Queens, must use 11 St, NOT 21 St
+        XCTAssertTrue(stopNames.contains("11 St & 47 Av") || stopNames.contains("11 St & Jackson Av"),
+                      "Northbound B32 must contain 11 St stops in Long Island City")
+
+        // 6. Strict South-to-North monotonic progression
+        for i in 0..<(ladder.count - 1) {
+            let latA = ladder[i].coordinate.latitude
+            let latB = ladder[i + 1].coordinate.latitude
+            XCTAssertLessThanOrEqual(latA, latB + 0.001,
+                                     "Northbound progression must move South to North: stop \(ladder[i].stopName) (\(latA)) -> \(ladder[i+1].stopName) (\(latB))")
+        }
+    }
+
+    func testB32SouthboundCorridorProgressionWytheAv() async throws {
+        let ladder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "B32",
+            directionId: 1, // Southbound to Williamsburg Bridge Plaza
+            currentStopId: "308682", // Wythe Av & N 6 St
+            currentArrivalMinutes: 6
+        )
+
+        XCTAssertFalse(ladder.isEmpty, "B32 Southbound ladder must return real stops")
+        XCTAssertGreaterThan(ladder.count, 10, "B32 corridor should have substantial stops")
+
+        // 1. Current stop resolution at Wythe Av & N 6 St
+        let currentStop = ladder.first(where: { $0.isCurrent })
+        XCTAssertNotNil(currentStop, "Current stop must be identified in stop ladder")
+        XCTAssertEqual(currentStop?.stopId, "308682")
+        XCTAssertEqual(currentStop?.stopName, "Wythe Av & N 6 St")
+        XCTAssertEqual(currentStop?.estimatedMinutes, 6)
+
+        // 2. Must contain Southbound corridor stops along Wythe Av
+        let stopNames = ladder.map(\.stopName)
+        XCTAssertTrue(stopNames.contains("Wythe Av & N 12 St") || stopNames.contains("Wythe Av & N 9 St"),
+                      "Must contain Wythe Av North Williamsburg stops")
+        XCTAssertTrue(stopNames.contains("Wythe Av & N 6 St"), "Must contain Wythe Av & N 6 St")
+        XCTAssertTrue(stopNames.contains("Wythe Av & Metropolitan Av"), "Must contain Wythe Av & Metropolitan Av")
+        XCTAssertTrue(stopNames.contains("Wythe Av & Grand St") || stopNames.contains("Wythe Av & S 3 St"),
+                      "Must contain Wythe Av South Williamsburg stops")
+
+        // 3. ZERO Kent Av stops in Southbound ladder (Kent Av is Northbound only)
+        for stop in ladder {
+            XCTAssertFalse(stop.stopName.lowercased().contains("kent av"),
+                           "Southbound B32 ladder must NOT contain Northbound Kent Av stop: \(stop.stopName)")
+        }
+
+        // 4. ZERO 11 St stops in Southbound ladder (11 St is Northbound only)
+        for stop in ladder {
+            XCTAssertFalse(stop.stopName.lowercased().contains("11 st &") || stop.stopName.lowercased().hasPrefix("11 st"),
+                           "Southbound B32 ladder must NOT contain Northbound 11 St stop: \(stop.stopName)")
+        }
+
+        // 5. In Queens, must use 21 St / Jackson Av
+        XCTAssertTrue(stopNames.contains("21 St & 44 Dr") || stopNames.contains("21 St & 45 Rd") || stopNames.contains("Jackson Av & 47 Av"),
+                      "Southbound B32 must contain 21 St / Jackson Av stops in Long Island City")
+
+        // 6. Strict North-to-South monotonic progression
+        for i in 0..<(ladder.count - 1) {
+            let latA = ladder[i].coordinate.latitude
+            let latB = ladder[i + 1].coordinate.latitude
+            XCTAssertGreaterThanOrEqual(latA + 0.001, latB,
+                                        "Southbound progression must move North to South: stop \(ladder[i].stopName) (\(latA)) -> \(ladder[i+1].stopName) (\(latB))")
+        }
+    }
+
+    func testB32MapPolylineSawtoothElimination() async throws {
+        let nbLadder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "B32",
+            directionId: 0,
+            currentStopId: "308667"
+        )
+        let sbLadder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "B32",
+            directionId: 1,
+            currentStopId: "308682"
+        )
+
+        // Helper to check for lateral back-and-forth zig-zags between Kent Av and Wythe Av
+        // Kent Av lon is ~ -73.966 to -73.962; Wythe Av lon is ~ -73.965 to -73.957.
+        // A sawtooth between Kent and Wythe across blocks creates alternating east-west jumps of >150 meters.
+        for (name, ladder) in [("Northbound", nbLadder), ("Southbound", sbLadder)] {
+            // Filter to Williamsburg segment (latitudes 40.711 to 40.724)
+            let wburgStops = ladder.filter { $0.coordinate.latitude >= 40.711 && $0.coordinate.latitude <= 40.724 }
+            XCTAssertGreaterThanOrEqual(wburgStops.count, 4, "\(name) should have at least 4 stops in Williamsburg")
+
+            // Verify that all Williamsburg stops stay consistently on either Kent or Wythe
+            let isKent = wburgStops.allSatisfy { $0.stopName.contains("Kent") }
+            let isWythe = wburgStops.allSatisfy { $0.stopName.contains("Wythe") }
+            XCTAssertTrue(isKent || isWythe,
+                          "Sawtooth Elimination: \(name) stops in Williamsburg must strictly stay on a single thoroughfare (all Kent or all Wythe)")
+
+            // Check that consecutive stops do not have wild lateral jumps (distance between adjacent stops < 800m)
+            for i in 0..<(wburgStops.count - 1) {
+                let locA = CLLocation(latitude: wburgStops[i].coordinate.latitude, longitude: wburgStops[i].coordinate.longitude)
+                let locB = CLLocation(latitude: wburgStops[i+1].coordinate.latitude, longitude: wburgStops[i+1].coordinate.longitude)
+                let dist = locA.distance(from: locB)
+                XCTAssertLessThan(dist, 600, "\(name) consecutive stop jump \(dist)m between \(wburgStops[i].stopName) and \(wburgStops[i+1].stopName) exceeds threshold")
+            }
+        }
+    }
+
+    func testCrossStreetUniquenessPreservation() async throws {
+        let nbLadder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "B32",
+            directionId: 0,
+            currentStopId: "308667"
+        )
+        let sbLadder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "B32",
+            directionId: 1,
+            currentStopId: "308682"
+        )
+
+        for (name, ladder) in [("Northbound", nbLadder), ("Southbound", sbLadder)] {
+            var seenCross = Set<String>()
+            for stop in ladder {
+                let (_, cross) = SpatialDatabaseManager.shared.parseStopThoroughfareAndCrossStreet(stop.stopName)
+                let key = SpatialDatabaseManager.shared.normalizeCrossStreetKey(cross)
+                if !key.isEmpty {
+                    XCTAssertFalse(seenCross.contains(key),
+                                   "\(name) ladder has duplicate cross street '\(cross)' (key: '\(key)') at stop \(stop.stopName)")
+                    seenCross.insert(key)
+                }
+            }
+        }
+    }
+
+    func testCorridorProgressionEngineHelperParsing() {
+        let (thoroughfare1, cross1) = SpatialDatabaseManager.shared.parseStopThoroughfareAndCrossStreet("Kent Av & N 6 St")
+        XCTAssertEqual(thoroughfare1, "Kent Av")
+        XCTAssertEqual(cross1, "N 6 St")
+
+        let (thoroughfare2, cross2) = SpatialDatabaseManager.shared.parseStopThoroughfareAndCrossStreet("N 14 St & Kent Av")
+        XCTAssertEqual(thoroughfare2, "Kent Av")
+        XCTAssertEqual(cross2, "N 14 St")
+
+        let key1 = SpatialDatabaseManager.shared.normalizeCrossStreetKey("N 6th St")
+        let key2 = SpatialDatabaseManager.shared.normalizeCrossStreetKey("N 6 St")
+        XCTAssertEqual(key1, key2)
+
+        let key3 = SpatialDatabaseManager.shared.normalizeCrossStreetKey("Metropolitan Ave")
+        let key4 = SpatialDatabaseManager.shared.normalizeCrossStreetKey("Metropolitan Av")
+        XCTAssertEqual(key3, key4)
+    }
 }
+

@@ -2471,6 +2471,66 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
 
+    /// Parses a transit stop name into thoroughfare and cross-street components.
+    /// Handles standard intersection delimiters (" & ", " / ", " and ", " @ ") and normalizes known corridor thoroughfares.
+    public func parseStopThoroughfareAndCrossStreet(_ name: String) -> (thoroughfare: String, crossStreet: String) {
+        let clean = sanitizeStopName(name)
+        let delimiters = [" & ", " / ", " and ", " @ "]
+        for delim in delimiters {
+            if clean.contains(delim) {
+                let parts = clean.components(separatedBy: delim)
+                if parts.count >= 2 {
+                    let p0 = parts[0].trimmingCharacters(in: .whitespaces)
+                    let p1 = parts[1].trimmingCharacters(in: .whitespaces)
+                    // If p1 contains well-known corridor thoroughfare (e.g. "N 14 St & Kent Av"), swap so thoroughfare is Kent Av
+                    let lower1 = p1.lowercased()
+                    let lower0 = p0.lowercased()
+                    if (lower1.contains("kent av") || lower1.contains("wythe av")) &&
+                       !lower0.contains("kent av") && !lower0.contains("wythe av") {
+                        return (p1, p0)
+                    }
+                    return (p0, p1)
+                }
+            }
+        }
+        return (clean, "")
+    }
+
+    /// Normalizes a cross-street name for deduplication and uniqueness checks.
+    /// Standardizes street type suffixes (e.g. "St", "Av", "Blvd") and ordinal numbers ("6th" -> "6").
+    public func normalizeCrossStreetKey(_ name: String) -> String {
+        var lower = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !lower.isEmpty else { return "" }
+        
+        lower = lower.replacingOccurrences(of: ".", with: "")
+        
+        let suffixReplacements: [(String, String)] = [
+            ("avenue", "av"),
+            ("ave", "av"),
+            ("street", "st"),
+            ("boulevard", "blvd"),
+            ("road", "rd"),
+            ("place", "pl"),
+            ("drive", "dr"),
+            ("lane", "ln"),
+            ("terrace", "ter"),
+            ("court", "ct"),
+            ("parkway", "pkwy")
+        ]
+        
+        for (pattern, replacement) in suffixReplacements {
+            if lower.hasSuffix(" " + pattern) {
+                lower = String(lower.dropLast(pattern.count)) + replacement
+                break
+            }
+        }
+        
+        // Normalize ordinal numbers: e.g. "6th" -> "6", "1st" -> "1"
+        lower = lower.replacingOccurrences(of: #"(\d+)(st|nd|rd|th)\b"#, with: "$1", options: .regularExpression)
+        
+        return lower
+    }
+
     /// Fetches the ordered progression of stops along a route for the Track Thermometer.
     /// Marks passed stops, the current stop, terminus stops, and progressive arrival minutes.
     /// Supports both subway scheduled patterns (Tier 1) and spatial corridor progression along surface bus routes (Tier 2).
@@ -2518,9 +2578,51 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     let candidateRows = try Row.fetchAll(db, sql: busSql, arguments: ["%,\(lookupRouteId),%", "%,\(cleanRoute),%"])
                     
                     if !candidateRows.isEmpty {
+                        // Corridor Progression Engine: Filter stops by directional couplet affinity
+                        let cleanTargetId = currentStopId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                        let cleanRouteUpper = lookupRouteId.uppercased()
+                        
+                        let filteredCandidates = candidateRows.filter { r in
+                            let sId = (r["stop_id"] as? String ?? "").uppercased()
+                            let pId = (r["parent_station"] as? String ?? "").uppercased()
+                            let isTappedAnchor = (sId == cleanTargetId || pId == cleanTargetId || sId.hasPrefix(cleanTargetId) || cleanTargetId.hasPrefix(sId))
+                            if isTappedAnchor { return true }
+                            
+                            let rawName = r["stop_name"] as? String ?? ""
+                            let cleanName = self.sanitizeStopName(rawName)
+                            let lowerName = cleanName.lowercased()
+                            
+                            // Directional Couplet Gating
+                            if cleanRouteUpper == "B32" || cleanRouteUpper.contains("B32") {
+                                if directionId == 0 {
+                                    // Direction 0: Northbound (Williamsburg -> LIC)
+                                    if lowerName.contains("wythe av") || lowerName.contains("wythe avenue") ||
+                                       lowerName.contains("21 st &") || lowerName.hasPrefix("21 st") ||
+                                       lowerName.contains("freeman st") {
+                                        return false
+                                    }
+                                } else if directionId == 1 {
+                                    // Direction 1: Southbound (LIC -> Williamsburg)
+                                    if lowerName.contains("kent av") || lowerName.contains("kent avenue") ||
+                                       lowerName.contains("11 st &") || lowerName.hasPrefix("11 st") ||
+                                       lowerName.contains("green st &") || lowerName.hasPrefix("green st") {
+                                        return false
+                                    }
+                                }
+                            } else {
+                                let dirs = self.generateFallbackAvailableDirections(for: sId, routeId: lookupRouteId)
+                                if !dirs.isEmpty && !dirs.contains(directionId) {
+                                    return false
+                                }
+                            }
+                            return true
+                        }
+                        
+                        let candidatePool = filteredCandidates.isEmpty ? candidateRows : filteredCandidates
+                        
                         // Order by corridor spatial progression
-                        let lats = candidateRows.compactMap { $0["stop_lat"] as? Double }
-                        let lons = candidateRows.compactMap { $0["stop_lon"] as? Double }
+                        let lats = candidatePool.compactMap { $0["stop_lat"] as? Double }
+                        let lons = candidatePool.compactMap { $0["stop_lon"] as? Double }
                         let minLat = lats.min() ?? 0
                         let maxLat = lats.max() ?? 0
                         let minLon = lons.min() ?? 0
@@ -2529,7 +2631,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         let lonSpan = maxLon - minLon
                         
                         let isEastWest = lonSpan > latSpan
-                        rows = candidateRows.sorted { r1, r2 in
+                        rows = candidatePool.sorted { r1, r2 in
                             let lat1: Double = r1["stop_lat"] ?? 0
                             let lat2: Double = r2["stop_lat"] ?? 0
                             let lon1: Double = r1["stop_lon"] ?? 0
@@ -2545,16 +2647,37 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 }
                 
                 if !rows.isEmpty {
-                    // Deduplicate stops by name or parent_station while preserving progression order
+                    // Deduplicate stops by name, parent_station, and cross-street uniqueness while preserving progression order
+                    let cleanTargetId = currentStopId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
                     var seen = Set<String>()
+                    var seenCrossStreets = Set<String>()
                     var uniqueRows = [Row]()
+                    
                     for r in rows {
+                        let sId = (r["stop_id"] as? String ?? "").uppercased()
+                        let pId = (r["parent_station"] as? String ?? "").uppercased()
+                        let isTappedAnchor = (sId == cleanTargetId || pId == cleanTargetId || sId.hasPrefix(cleanTargetId) || cleanTargetId.hasPrefix(sId))
+                        
                         let cleanName = self.sanitizeStopName(r["stop_name"] as String? ?? "")
                         let key = (r["parent_station"] as String?) ?? (cleanName.isEmpty ? (r["stop_id"] as String) : cleanName)
-                        if !seen.contains(key) {
-                            seen.insert(key)
-                            uniqueRows.append(r)
+                        if seen.contains(key) && !isTappedAnchor {
+                            continue
                         }
+                        
+                        // Enforce cross-street uniqueness on surface routes
+                        if !isPatternRows {
+                            let (_, crossStreet) = self.parseStopThoroughfareAndCrossStreet(cleanName)
+                            let crossKey = self.normalizeCrossStreetKey(crossStreet)
+                            if !crossKey.isEmpty {
+                                if seenCrossStreets.contains(crossKey) && !isTappedAnchor {
+                                    continue
+                                }
+                                seenCrossStreets.insert(crossKey)
+                            }
+                        }
+                        
+                        seen.insert(key)
+                        uniqueRows.append(r)
                     }
                     
                     // Sort direction check for pattern rows (where rowid ASC was used)
@@ -3889,14 +4012,20 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         if lowerId.contains("1way_nb") || lowerId.contains("1way_north") {
             return [0]
         }
-        // Known one-way bus corridors & stop IDs (Kent Av is NB only, Wythe Av is SB only)
-        if stopId == "308666" || stopId == "308667" || stopId == "308668" ||
-           ((lowerId.contains("kent") || lowerName.contains("kent av")) && (routeId == "B32" || lowerId.contains("b32") || routeId.isEmpty)) {
-            return [0] // Northbound only on Kent Av
-        }
-        if stopId == "308683" ||
-           ((lowerId.contains("wythe") || lowerName.contains("wythe av")) && (routeId == "B32" || lowerId.contains("b32") || routeId.isEmpty)) {
-            return [1] // Southbound only on Wythe Av
+        // Known one-way bus corridors & stop IDs (Kent Av is NB only, Wythe Av is SB only; 11 St NB, 21 St SB on B32)
+        if routeId == "B32" || lowerId.contains("b32") || routeId.isEmpty {
+            if stopId == "308666" || stopId == "308667" || stopId == "308668" ||
+               lowerId.contains("kent") || lowerName.contains("kent av") ||
+               lowerName.contains("11 st &") || lowerName.hasPrefix("11 st") ||
+               lowerName.contains("green st &") || lowerName.hasPrefix("green st") {
+                return [0] // Northbound only on Kent Av / 11 St / Green St
+            }
+            if stopId == "308683" ||
+               lowerId.contains("wythe") || lowerName.contains("wythe av") ||
+               lowerName.contains("21 st &") || lowerName.hasPrefix("21 st") ||
+               lowerName.contains("freeman st") {
+                return [1] // Southbound only on Wythe Av / 21 St / Freeman St
+            }
         }
         return [0, 1]
     }
