@@ -152,7 +152,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
             return set
         }()
         
-        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship, isHoldingStation: Bool, progressLambda: Double, isAssigned: Bool, vehicleCoord: CLLocationCoordinate2D?, vehicleBearing: Double?, track: String?)] = []
+        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship, isHoldingStation: Bool, progressLambda: Double, isAssigned: Bool, vehicleCoord: CLLocationCoordinate2D?, vehicleBearing: Double?, track: String?, corridorVector: SpatialDatabaseManager.TransitCorridorVector?, terminalQualifier: String?)] = []
         let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         
         // 1. Index VehiclePositions from the feed by tripId and vehicleId
@@ -236,7 +236,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 if let vp = matchedVehicle, vp.trip.hasTransitRealtime_nyctTripDescriptor {
                     return vp.trip.TransitRealtime_nyctTripDescriptor.isAssigned
                 }
-                return false
+                return true
             }()
             
             // Direct GPS vehicle telemetry (bus or equipped consist)
@@ -342,7 +342,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
                     }
                     
                     let destination = resolveDestination(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId, matchingUpdate: stopUpdate)
-                    let direction = resolveDirection(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId)
+                    let classification = classifyDirection(tripUpdate: tripUpdate, line: tripRouteId, stopId: currentStopId, terminalName: destination)
+                    let direction = classification.displayDirection
                     
                     // Compute distance / stop status description with terminal dwell & hold clamping
                     let distance: String
@@ -436,7 +437,9 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         isAssigned: isAssigned,
                         vehicleCoord: directVehicleCoord,
                         vehicleBearing: directVehicleBearing,
-                        track: track
+                        track: track,
+                        corridorVector: classification.corridorVector,
+                        terminalQualifier: classification.terminalQualifier
                     ))
                 }
             }
@@ -475,7 +478,11 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 isAssigned: item.isAssigned,
                 vehicleCoordinate: item.vehicleCoord,
                 vehicleBearing: item.vehicleBearing,
-                track: item.track
+                track: item.track,
+                isHistoricalEvent: false,
+                historicalDelaySeconds: nil,
+                corridorVector: item.corridorVector,
+                terminalQualifier: item.terminalQualifier
             )
         }
         
@@ -515,63 +522,190 @@ public final class TransitRealtimeService: @unchecked Sendable {
         return false
     }
     
-    func resolveDirection(tripUpdate: TransitRealtime_TripUpdate, line: String, stopId: String) -> String {
+    // MARK: - 2-Tier Universal Direction Classification (Wave PE.7)
+    
+    func classifyDirection(
+        tripUpdate: TransitRealtime_TripUpdate,
+        line: String,
+        stopId: String,
+        terminalName: String? = nil
+    ) -> SpatialDatabaseManager.DirectionClassification {
         let isNorthbound = stopId.hasSuffix("N")
         let isSouthbound = stopId.hasSuffix("S")
         let isEastbound = stopId.hasSuffix("E")
         let isWestbound = stopId.hasSuffix("W")
+        let cleanLine = line.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let dirId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
         
-        if SubwayFeed.isBusRoute(line) {
-            let dirId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
+        // 1. Surface Bus Routes
+        if SubwayFeed.isBusRoute(cleanLine) {
             let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : (isEastbound ? "Eastbound" : (isWestbound ? "Westbound" : nil)))
-            let busDest = Self.resolveBusDestination(routeId: line, directionId: dirId, directionHint: hint)
-            if !busDest.direction.isEmpty {
-                return busDest.direction
+            let busDest = Self.resolveBusDestination(routeId: cleanLine, directionId: dirId, directionHint: hint)
+            let displayDir = !busDest.direction.isEmpty ? busDest.direction : Self.resolveBusDirectionVector(routeId: cleanLine, directionId: dirId, directionHint: hint, stopId: stopId)
+            let vector = SpatialDatabaseManager.TransitCorridorVector.infer(fromDirection: displayDir, line: cleanLine)
+            return SpatialDatabaseManager.DirectionClassification(
+                corridorVector: vector,
+                terminalQualifier: !busDest.destination.isEmpty ? busDest.destination : terminalName,
+                displayDirection: displayDir
+            )
+        }
+        
+        // 2. Radial Rail Systems (SIR, Boston MBTA)
+        if cleanLine == "SIR" || cleanLine == "SI" {
+            if isNorthbound || dirId == 0 {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .inbound,
+                    terminalQualifier: "St George",
+                    displayDirection: "Inbound (St George)"
+                )
+            } else {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .outbound,
+                    terminalQualifier: "Tottenville",
+                    displayDirection: "Outbound (Tottenville)"
+                )
             }
-            return Self.resolveBusDirectionVector(routeId: line, directionId: dirId, directionHint: hint, stopId: stopId)
         }
         
-        switch line.uppercased() {
-        case "L":
-            if isNorthbound { return "Manhattan-bound" }
-            if isSouthbound { return "Brooklyn-bound" }
-        case "G":
-            if isNorthbound { return "Queens-bound" }
-            if isSouthbound { return "Brooklyn-bound" }
-        case "7", "7X":
-            if isNorthbound { return "Queens-bound" }
-            if isSouthbound { return "Manhattan-bound" }
-        case "1", "2", "3":
-            if isNorthbound { return "Uptown & Bronx" }
-            if isSouthbound { return "Downtown & Brooklyn" }
-        case "4", "5", "6", "6X":
-            if isNorthbound { return "Uptown & Bronx" }
-            if isSouthbound { return "Downtown & Brooklyn" }
-        case "A", "C", "E":
-            if isNorthbound { return "Uptown & Queens / Bronx" }
-            if isSouthbound { return "Downtown & Brooklyn" }
-        case "B", "D", "F", "FX", "M":
-            if isNorthbound { return "Uptown & Queens / Bronx" }
-            if isSouthbound { return "Downtown & Brooklyn" }
-        case "N", "Q", "R", "W":
-            if isNorthbound { return "Uptown & Queens" }
-            if isSouthbound { return "Downtown & Brooklyn" }
-        case "J", "Z":
-            if isNorthbound { return "Queens-bound" }
-            if isSouthbound { return "Manhattan-bound" }
-        case "SIR", "SI":
-            if isNorthbound { return "Inbound (St George)" }
-            if isSouthbound { return "Outbound (Tottenville)" }
-        default:
-            break
+        // Boston MBTA radial lines (Green, Red, Orange, Blue)
+        let isMBTAGreen = cleanLine.hasPrefix("GREEN")
+        let isMBTARadial = isMBTAGreen || cleanLine == "RED" || cleanLine == "ORANGE" || cleanLine == "BLUE"
+        if isMBTARadial {
+            let isInbound = dirId == 1
+            let vector: SpatialDatabaseManager.TransitCorridorVector = isInbound ? .inbound : .outbound
+            let qualifier = terminalName ?? (isInbound ? "Government Center" : nil)
+            let displayDir = isInbound ? "Inbound" : "Outbound"
+            return SpatialDatabaseManager.DirectionClassification(
+                corridorVector: vector,
+                terminalQualifier: qualifier,
+                displayDirection: displayDir
+            )
         }
         
-        if isNorthbound { return "Northbound" }
-        if isSouthbound { return "Southbound" }
-        if isEastbound { return "Eastbound" }
-        if isWestbound { return "Westbound" }
+        // 3. Heavy Rail Subway Lines (NYC Subway)
         
-        return "Uptown / Downtown"
+        // East-West Crosstown Lines (L, 7)
+        if cleanLine == "L" {
+            if isNorthbound || dirId == 0 {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .westbound,
+                    terminalQualifier: terminalName ?? "8th Ave",
+                    displayDirection: "Manhattan-bound"
+                )
+            } else {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .eastbound,
+                    terminalQualifier: terminalName ?? "Canarsie - Rockaway Pkwy",
+                    displayDirection: "Brooklyn-bound"
+                )
+            }
+        }
+        
+        if cleanLine == "7" || cleanLine == "7X" {
+            if isNorthbound || dirId == 0 {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .eastbound,
+                    terminalQualifier: terminalName ?? "Flushing - Main St",
+                    displayDirection: "Queens-bound"
+                )
+            } else {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .westbound,
+                    terminalQualifier: terminalName ?? "34 St - Hudson Yards",
+                    displayDirection: "Manhattan-bound"
+                )
+            }
+        }
+        
+        if cleanLine == "G" {
+            if isNorthbound || dirId == 0 {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .northbound,
+                    terminalQualifier: terminalName ?? "Court Sq",
+                    displayDirection: "Queens-bound"
+                )
+            } else {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .southbound,
+                    terminalQualifier: terminalName ?? "Church Ave",
+                    displayDirection: "Brooklyn-bound"
+                )
+            }
+        }
+        
+        if cleanLine == "J" || cleanLine == "Z" {
+            if isNorthbound || dirId == 0 {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .northbound,
+                    terminalQualifier: terminalName ?? "Jamaica Center",
+                    displayDirection: "Queens-bound"
+                )
+            } else {
+                return SpatialDatabaseManager.DirectionClassification(
+                    corridorVector: .southbound,
+                    terminalQualifier: terminalName ?? "Broad St",
+                    displayDirection: "Manhattan-bound"
+                )
+            }
+        }
+        
+        // North-South Trunk Lines (1, 2, 3, 4, 5, 6, A, C, E, B, D, F, M, N, Q, R, W)
+        let effectiveNorthbound = isNorthbound || dirId == 0
+        
+        if effectiveNorthbound {
+            let vector: SpatialDatabaseManager.TransitCorridorVector = .northbound
+            let qualifier = terminalName
+            let displayDir: String
+            switch cleanLine {
+            case "1", "2", "3":
+                displayDir = "Uptown & Bronx"
+            case "4", "5", "6", "6X":
+                displayDir = "Uptown & Bronx"
+            case "A", "C", "E":
+                displayDir = "Uptown & Queens / Bronx"
+            case "B", "D", "F", "FX", "M":
+                displayDir = "Uptown & Queens / Bronx"
+            case "N", "Q", "R", "W":
+                displayDir = "Uptown & Queens"
+            default:
+                displayDir = "Uptown & Northbound"
+            }
+            return SpatialDatabaseManager.DirectionClassification(
+                corridorVector: vector,
+                terminalQualifier: qualifier,
+                displayDirection: displayDir
+            )
+        } else {
+            // Southbound
+            let vector: SpatialDatabaseManager.TransitCorridorVector = .southbound
+            
+            // Terminal qualifier disambiguation (PE.7 §3):
+            // W train terminates at Whitehall St (Lower Manhattan). Never label as Brooklyn!
+            // 1 train terminates at South Ferry (Lower Manhattan). Never label as Brooklyn!
+            let isLowerManhattanTerminal = cleanLine == "W" ||
+                (terminalName?.localizedCaseInsensitiveContains("whitehall") == true) ||
+                (terminalName?.localizedCaseInsensitiveContains("south ferry") == true) ||
+                (cleanLine == "1" && terminalName?.localizedCaseInsensitiveContains("south ferry") == true)
+            
+            let qualifier = terminalName ?? (cleanLine == "W" ? "W to Whitehall St" : nil)
+            
+            let displayDir: String
+            if isLowerManhattanTerminal {
+                displayDir = "Downtown & Lower Manhattan"
+            } else {
+                displayDir = "Downtown & Brooklyn"
+            }
+            
+            return SpatialDatabaseManager.DirectionClassification(
+                corridorVector: vector,
+                terminalQualifier: qualifier,
+                displayDirection: displayDir
+            )
+        }
+    }
+    
+    func resolveDirection(tripUpdate: TransitRealtime_TripUpdate, line: String, stopId: String) -> String {
+        classifyDirection(tripUpdate: tripUpdate, line: line, stopId: stopId).displayDirection
     }
     
     public func fetchServiceAlerts(for routeId: String) async -> [TransitAlert] {

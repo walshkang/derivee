@@ -1799,6 +1799,100 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    // MARK: - Transit Corridor Vectors & Direction Classification (Wave PE.7)
+    
+    public enum TransitCorridorVector: String, Sendable, CaseIterable, Equatable, Hashable {
+        case northbound = "Northbound"
+        case southbound = "Southbound"
+        case eastbound = "Eastbound"
+        case westbound = "Westbound"
+        case inbound = "Inbound"
+        case outbound = "Outbound"
+        
+        public var iconName: String {
+            switch self {
+            case .northbound: return "arrow.up.circle.fill"
+            case .southbound: return "arrow.down.circle.fill"
+            case .eastbound: return "arrow.right.circle.fill"
+            case .westbound: return "arrow.left.circle.fill"
+            case .inbound: return "arrow.up.circle.fill"
+            case .outbound: return "arrow.down.circle.fill"
+            }
+        }
+        
+        public var priority: Int {
+            switch self {
+            case .northbound, .inbound, .westbound: return 0
+            case .southbound, .outbound, .eastbound: return 1
+            }
+        }
+        
+        /// Infers the canonical corridor vector from a direction label, route ID, and optional destination.
+        public static func infer(fromDirection dir: String?, line: String? = nil, destination: String? = nil) -> TransitCorridorVector {
+            let u = (dir ?? "").uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanLine = (line ?? "").uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // 1. Radial Systems (SIR, MBTA Park St)
+            if cleanLine == "SIR" || cleanLine == "SI" || u.contains("ST GEORGE") || u.contains("TOTTENVILLE") {
+                if u.contains("INBOUND") || u.contains("ST GEORGE") { return .inbound }
+                if u.contains("OUTBOUND") || u.contains("TOTTENVILLE") { return .outbound }
+            }
+            if u.contains("INBOUND") { return .inbound }
+            if u.contains("OUTBOUND") { return .outbound }
+            
+            // 2. East-West Lines
+            if cleanLine == "L" {
+                if u.contains("MANHATTAN") || u.contains("8TH") || u.contains("NORTH") || u.contains("WEST") { return .westbound }
+                if u.contains("BROOKLYN") || u.contains("CANARSIE") || u.contains("ROCKAWAY") || u.contains("SOUTH") || u.contains("EAST") { return .eastbound }
+            }
+            if cleanLine == "7" || cleanLine == "7X" {
+                if u.contains("QUEENS") || u.contains("FLUSHING") || u.contains("MAIN") || u.contains("NORTH") || u.contains("EAST") { return .eastbound }
+                if u.contains("MANHATTAN") || u.contains("34 ST") || u.contains("HUDSON") || u.contains("SOUTH") || u.contains("WEST") { return .westbound }
+            }
+            
+            // 3. Direction Strings
+            if u.contains("UPTOWN") || u.contains("NORTH") || u.contains("BRONX") {
+                return .northbound
+            }
+            if u.contains("DOWNTOWN") || u.contains("SOUTH") {
+                return .southbound
+            }
+            if u.contains("EAST") {
+                return .eastbound
+            }
+            if u.contains("WEST") {
+                return .westbound
+            }
+            if u.contains("BROOKLYN") {
+                return .southbound
+            }
+            if u.contains("QUEENS") {
+                return .northbound
+            }
+            if u.contains("MANHATTAN") {
+                return .westbound
+            }
+            
+            return .northbound
+        }
+    }
+    
+    public struct DirectionClassification: Sendable, Equatable, Hashable {
+        public let corridorVector: TransitCorridorVector
+        public let terminalQualifier: String?
+        public let displayDirection: String
+        
+        public init(
+            corridorVector: TransitCorridorVector,
+            terminalQualifier: String? = nil,
+            displayDirection: String
+        ) {
+            self.corridorVector = corridorVector
+            self.terminalQualifier = terminalQualifier
+            self.displayDirection = displayDirection
+        }
+    }
+    
     public struct ArrivalInfo: Identifiable, Sendable {
         public let id: UUID
         public let line: String
@@ -1817,6 +1911,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let track: String?
         public let isHistoricalEvent: Bool
         public let historicalDelaySeconds: Int?
+        public let corridorVector: TransitCorridorVector?
+        public let terminalQualifier: String?
         
         public init(
             id: UUID = UUID(),
@@ -1830,12 +1926,14 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             scheduleRelationship: ScheduleRelationship = .scheduled,
             isHoldingStation: Bool = false,
             progressLambda: Double = 0.0,
-            isAssigned: Bool = false,
+            isAssigned: Bool = true,
             vehicleCoordinate: CLLocationCoordinate2D? = nil,
             vehicleBearing: Double? = nil,
             track: String? = nil,
             isHistoricalEvent: Bool = false,
-            historicalDelaySeconds: Int? = nil
+            historicalDelaySeconds: Int? = nil,
+            corridorVector: TransitCorridorVector? = nil,
+            terminalQualifier: String? = nil
         ) {
             self.id = id
             self.line = line
@@ -1854,6 +1952,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.track = track
             self.isHistoricalEvent = isHistoricalEvent
             self.historicalDelaySeconds = historicalDelaySeconds
+            self.corridorVector = corridorVector
+            self.terminalQualifier = terminalQualifier
         }
         
         /// Backward-compatible initializer overload for symbol stability across incremental builds.
@@ -1869,7 +1969,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             scheduleRelationship: ScheduleRelationship = .scheduled,
             isHoldingStation: Bool = false,
             progressLambda: Double = 0.0,
-            isAssigned: Bool = false,
+            isAssigned: Bool = true,
             vehicleCoordinate: CLLocationCoordinate2D? = nil,
             vehicleBearing: Double? = nil,
             track: String? = nil
@@ -1891,8 +1991,16 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 vehicleBearing: vehicleBearing,
                 track: track,
                 isHistoricalEvent: false,
-                historicalDelaySeconds: nil
+                historicalDelaySeconds: nil,
+                corridorVector: nil,
+                terminalQualifier: nil
             )
+        }
+        
+        /// Resolved canonical corridor vector (Tier 1).
+        public var resolvedCorridorVector: TransitCorridorVector {
+            if let v = corridorVector { return v }
+            return TransitCorridorVector.infer(fromDirection: direction, line: line, destination: destination)
         }
         
         public enum RunInspectionMode: Sendable, Equatable {
@@ -4083,66 +4191,72 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         switch routeId.uppercased() {
         case "L":
             return [
-                ArrivalInfo(line: "L", destination: "8th Ave", minutes: 3, direction: "Manhattan-bound", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: "L", destination: "Canarsie - Rockaway Pkwy", minutes: 5, direction: "Brooklyn-bound", distanceDescription: "1 stop away"),
-                ArrivalInfo(line: "L", destination: "8th Ave", minutes: 9, direction: "Manhattan-bound", distanceDescription: "5 stops away"),
-                ArrivalInfo(line: "L", destination: "Canarsie - Rockaway Pkwy", minutes: 14, direction: "Brooklyn-bound", distanceDescription: "6 stops away")
+                ArrivalInfo(line: "L", destination: "8th Ave", minutes: 3, direction: "Manhattan-bound", distanceDescription: "2 stops away", corridorVector: .westbound),
+                ArrivalInfo(line: "L", destination: "Canarsie - Rockaway Pkwy", minutes: 5, direction: "Brooklyn-bound", distanceDescription: "1 stop away", corridorVector: .eastbound),
+                ArrivalInfo(line: "L", destination: "8th Ave", minutes: 9, direction: "Manhattan-bound", distanceDescription: "5 stops away", corridorVector: .westbound),
+                ArrivalInfo(line: "L", destination: "Canarsie - Rockaway Pkwy", minutes: 14, direction: "Brooklyn-bound", distanceDescription: "6 stops away", corridorVector: .eastbound)
             ]
         case "G":
             return [
-                ArrivalInfo(line: "G", destination: "Court Sq", minutes: 4, direction: "Queens-bound", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: "G", destination: "Church Ave", minutes: 7, direction: "Brooklyn-bound", distanceDescription: "3 stops away"),
-                ArrivalInfo(line: "G", destination: "Court Sq", minutes: 14, direction: "Queens-bound", distanceDescription: "7 stops away")
+                ArrivalInfo(line: "G", destination: "Court Sq", minutes: 4, direction: "Queens-bound", distanceDescription: "2 stops away", corridorVector: .northbound),
+                ArrivalInfo(line: "G", destination: "Church Ave", minutes: 7, direction: "Brooklyn-bound", distanceDescription: "3 stops away", corridorVector: .southbound),
+                ArrivalInfo(line: "G", destination: "Court Sq", minutes: 14, direction: "Queens-bound", distanceDescription: "7 stops away", corridorVector: .northbound)
             ]
         case "7", "7X":
             return [
-                ArrivalInfo(line: "7", destination: "Flushing - Main St", minutes: 2, direction: "Queens-bound", distanceDescription: "1 stop away"),
-                ArrivalInfo(line: "7", destination: "34 St - Hudson Yards", minutes: 5, direction: "Manhattan-bound", distanceDescription: "3 stops away"),
-                ArrivalInfo(line: "7", destination: "Flushing - Main St", minutes: 9, direction: "Queens-bound", distanceDescription: "6 stops away")
+                ArrivalInfo(line: "7", destination: "Flushing - Main St", minutes: 2, direction: "Queens-bound", distanceDescription: "1 stop away", corridorVector: .eastbound),
+                ArrivalInfo(line: "7", destination: "34 St - Hudson Yards", minutes: 5, direction: "Manhattan-bound", distanceDescription: "3 stops away", corridorVector: .westbound),
+                ArrivalInfo(line: "7", destination: "Flushing - Main St", minutes: 9, direction: "Queens-bound", distanceDescription: "6 stops away", corridorVector: .eastbound)
             ]
         case "A", "C", "E":
             return [
-                ArrivalInfo(line: "A", destination: "Inwood - 207 St", minutes: 2, direction: "Uptown & Queens / Bronx", distanceDescription: "1 stop away"),
-                ArrivalInfo(line: "C", destination: "Euclid Ave", minutes: 5, direction: "Downtown & Brooklyn", distanceDescription: "3 stops away"),
-                ArrivalInfo(line: "E", destination: "World Trade Center", minutes: 8, direction: "Downtown & Brooklyn", distanceDescription: "5 stops away"),
-                ArrivalInfo(line: "A", destination: "Far Rockaway", minutes: 12, direction: "Downtown & Brooklyn", distanceDescription: "7 stops away")
+                ArrivalInfo(line: "A", destination: "Inwood - 207 St", minutes: 2, direction: "Uptown & Queens / Bronx", distanceDescription: "1 stop away", corridorVector: .northbound),
+                ArrivalInfo(line: "C", destination: "Euclid Ave", minutes: 5, direction: "Downtown & Brooklyn", distanceDescription: "3 stops away", corridorVector: .southbound),
+                ArrivalInfo(line: "E", destination: "World Trade Center", minutes: 8, direction: "Downtown & Lower Manhattan", distanceDescription: "5 stops away", corridorVector: .southbound, terminalQualifier: "E to World Trade Center"),
+                ArrivalInfo(line: "A", destination: "Far Rockaway", minutes: 12, direction: "Downtown & Brooklyn", distanceDescription: "7 stops away", corridorVector: .southbound)
             ]
         case "1", "2", "3":
             return [
-                ArrivalInfo(line: "1", destination: "Van Cortlandt Park", minutes: 3, direction: "Uptown & Bronx", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: "2", destination: "Flatbush Ave", minutes: 6, direction: "Downtown & Brooklyn", distanceDescription: "4 stops away"),
-                ArrivalInfo(line: "3", destination: "Harlem - 148 St", minutes: 12, direction: "Uptown & Bronx", distanceDescription: "8 stops away")
+                ArrivalInfo(line: "1", destination: "Van Cortlandt Park", minutes: 3, direction: "Uptown & Bronx", distanceDescription: "2 stops away", corridorVector: .northbound),
+                ArrivalInfo(line: "2", destination: "Flatbush Ave", minutes: 6, direction: "Downtown & Brooklyn", distanceDescription: "4 stops away", corridorVector: .southbound),
+                ArrivalInfo(line: "3", destination: "Harlem - 148 St", minutes: 12, direction: "Uptown & Bronx", distanceDescription: "8 stops away", corridorVector: .northbound)
             ]
         case "4", "5", "6", "6X":
             return [
-                ArrivalInfo(line: "4", destination: "Woodlawn", minutes: 2, direction: "Uptown & Bronx", distanceDescription: "1 stop away"),
-                ArrivalInfo(line: "5", destination: "Flatbush Ave", minutes: 5, direction: "Downtown & Brooklyn", distanceDescription: "3 stops away"),
-                ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 8, direction: "Uptown & Bronx", distanceDescription: "5 stops away")
+                ArrivalInfo(line: "4", destination: "Woodlawn", minutes: 2, direction: "Uptown & Bronx", distanceDescription: "1 stop away", corridorVector: .northbound),
+                ArrivalInfo(line: "5", destination: "Flatbush Ave", minutes: 5, direction: "Downtown & Brooklyn", distanceDescription: "3 stops away", corridorVector: .southbound),
+                ArrivalInfo(line: "6", destination: "Pelham Bay Park", minutes: 8, direction: "Uptown & Bronx", distanceDescription: "5 stops away", corridorVector: .northbound)
             ]
         case "B", "D", "F", "M":
             return [
-                ArrivalInfo(line: "F", destination: "Jamaica - 179 St", minutes: 3, direction: "Uptown & Queens / Bronx", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: "M", destination: "Middle Village", minutes: 7, direction: "Downtown & Brooklyn", distanceDescription: "4 stops away"),
-                ArrivalInfo(line: "F", destination: "Coney Island", minutes: 10, direction: "Downtown & Brooklyn", distanceDescription: "6 stops away")
+                ArrivalInfo(line: "F", destination: "Jamaica - 179 St", minutes: 3, direction: "Uptown & Queens / Bronx", distanceDescription: "2 stops away", corridorVector: .northbound),
+                ArrivalInfo(line: "M", destination: "Middle Village", minutes: 7, direction: "Downtown & Brooklyn", distanceDescription: "4 stops away", corridorVector: .southbound),
+                ArrivalInfo(line: "F", destination: "Coney Island", minutes: 10, direction: "Downtown & Brooklyn", distanceDescription: "6 stops away", corridorVector: .southbound)
             ]
         case "N", "Q", "R", "W":
             return [
-                ArrivalInfo(line: "N", destination: "Astoria - Ditmars Blvd", minutes: 3, direction: "Uptown & Queens", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: "Q", destination: "Coney Island", minutes: 6, direction: "Downtown & Brooklyn", distanceDescription: "4 stops away"),
-                ArrivalInfo(line: "R", destination: "Bay Ridge - 95 St", minutes: 11, direction: "Downtown & Brooklyn", distanceDescription: "6 stops away")
+                ArrivalInfo(line: "N", destination: "Astoria - Ditmars Blvd", minutes: 3, direction: "Uptown & Queens", distanceDescription: "2 stops away", corridorVector: .northbound),
+                ArrivalInfo(line: "Q", destination: "Coney Island", minutes: 6, direction: "Downtown & Brooklyn", distanceDescription: "4 stops away", corridorVector: .southbound),
+                ArrivalInfo(line: "W", destination: "Whitehall St", minutes: 8, direction: "Downtown & Lower Manhattan", distanceDescription: "3 stops away", corridorVector: .southbound, terminalQualifier: "W to Whitehall St"),
+                ArrivalInfo(line: "R", destination: "Bay Ridge - 95 St", minutes: 11, direction: "Downtown & Brooklyn", distanceDescription: "6 stops away", corridorVector: .southbound)
+            ]
+        case "W":
+            return [
+                ArrivalInfo(line: "W", destination: "Astoria - Ditmars Blvd", minutes: 3, direction: "Uptown & Queens", distanceDescription: "2 stops away", corridorVector: .northbound),
+                ArrivalInfo(line: "W", destination: "Whitehall St", minutes: 8, direction: "Downtown & Lower Manhattan", distanceDescription: "4 stops away", corridorVector: .southbound, terminalQualifier: "W to Whitehall St")
             ]
         case "J", "Z":
             return [
-                ArrivalInfo(line: "J", destination: "Jamaica Center", minutes: 4, direction: "Queens-bound", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: "J", destination: "Broad St", minutes: 8, direction: "Manhattan-bound", distanceDescription: "4 stops away")
+                ArrivalInfo(line: "J", destination: "Jamaica Center", minutes: 4, direction: "Queens-bound", distanceDescription: "2 stops away", corridorVector: .northbound),
+                ArrivalInfo(line: "J", destination: "Broad St", minutes: 8, direction: "Manhattan-bound", distanceDescription: "4 stops away", corridorVector: .southbound)
             ]
         case "SIR", "SI":
             let cleanStop = (stopId ?? "").uppercased().replacingOccurrences(of: "STOP_", with: "")
             let isStGeorge = cleanStop == "S31" || cleanStop.hasPrefix("S31") || cleanStop.contains("ST_GEORGE")
             let isTottenville = cleanStop == "S09" || cleanStop.hasPrefix("S09") || cleanStop.contains("TOTTENVILLE")
             
-            let stGeorgeArrival = ArrivalInfo(line: "SIR", destination: "St George", minutes: 5, direction: "Inbound (St George)", distanceDescription: "3 stops away")
-            let tottenvilleArrival = ArrivalInfo(line: "SIR", destination: "Tottenville", minutes: 12, direction: "Outbound (Tottenville)", distanceDescription: "7 stops away")
+            let stGeorgeArrival = ArrivalInfo(line: "SIR", destination: "St George", minutes: 5, direction: "Inbound (St George)", distanceDescription: "3 stops away", corridorVector: .inbound)
+            let tottenvilleArrival = ArrivalInfo(line: "SIR", destination: "Tottenville", minutes: 12, direction: "Outbound (Tottenville)", distanceDescription: "7 stops away", corridorVector: .outbound)
             
             if isStGeorge {
                 return [tottenvilleArrival]
@@ -4156,13 +4270,13 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 let (dest1, dir1) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 0)
                 let (dest2, dir2) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 1)
                 return [
-                    ArrivalInfo(line: routeId, destination: dest1, minutes: 3, direction: dir1, distanceDescription: "2 stops away"),
-                    ArrivalInfo(line: routeId, destination: dest2, minutes: 8, direction: dir2, distanceDescription: "5 stops away")
+                    ArrivalInfo(line: routeId, destination: dest1, minutes: 3, direction: dir1, distanceDescription: "2 stops away", corridorVector: TransitCorridorVector.infer(fromDirection: dir1)),
+                    ArrivalInfo(line: routeId, destination: dest2, minutes: 8, direction: dir2, distanceDescription: "5 stops away", corridorVector: TransitCorridorVector.infer(fromDirection: dir2))
                 ]
             }
             return [
-                ArrivalInfo(line: routeId, destination: "Uptown / Terminal", minutes: 3, direction: "Uptown & Northbound", distanceDescription: "2 stops away"),
-                ArrivalInfo(line: routeId, destination: "Downtown / Terminal", minutes: 8, direction: "Downtown & Southbound", distanceDescription: "5 stops away")
+                ArrivalInfo(line: routeId, destination: "Uptown / Terminal", minutes: 3, direction: "Uptown & Northbound", distanceDescription: "2 stops away", corridorVector: .northbound),
+                ArrivalInfo(line: routeId, destination: "Downtown / Terminal", minutes: 8, direction: "Downtown & Southbound", distanceDescription: "5 stops away", corridorVector: .southbound)
             ]
         }
     }

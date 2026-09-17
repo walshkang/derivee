@@ -130,38 +130,127 @@ struct TransitRevealSheet: View {
         let all = displayedArrivals
         guard !all.isEmpty else { return [] }
         
-        var dict: [String: [SpatialDatabaseManager.ArrivalInfo]] = [:]
-        var order: [String] = []
+        var vectorDict: [SpatialDatabaseManager.TransitCorridorVector: [SpatialDatabaseManager.ArrivalInfo]] = [:]
+        var vectorOrder: [SpatialDatabaseManager.TransitCorridorVector] = []
         
         for arr in all {
-            let dir = arr.direction ?? "Upcoming Departures"
-            if dict[dir] == nil {
-                dict[dir] = []
-                order.append(dir)
+            let vector = arr.resolvedCorridorVector
+            if vectorDict[vector] == nil {
+                vectorDict[vector] = []
+                vectorOrder.append(vector)
             }
-            dict[dir]?.append(arr)
+            vectorDict[vector]?.append(arr)
         }
         
-        order.sort { d1, d2 in
-            let p1 = directionPriority(for: d1)
-            let p2 = directionPriority(for: d2)
+        vectorOrder.sort { v1, v2 in
+            let p1 = v1.priority
+            let p2 = v2.priority
             if p1 != p2 { return p1 < p2 }
-            let min1 = dict[d1]?.first?.minutes ?? 999
-            let min2 = dict[d2]?.first?.minutes ?? 999
+            let min1 = vectorDict[v1]?.first?.minutes ?? 999
+            let min2 = vectorDict[v2]?.first?.minutes ?? 999
             return min1 < min2
         }
         
-        return order.compactMap { dir in
-            guard let items = dict[dir], !items.isEmpty else { return nil }
+        return vectorOrder.compactMap { vector in
+            guard let items = vectorDict[vector], !items.isEmpty else { return nil }
             let sortedItems = items.sorted { $0.minutes < $1.minutes }
-            let icon = directionIcon(for: dir)
-            let corridor = corridorNote(for: dir, items: sortedItems)
+            let header = Self.resolveClusterHeader(for: vector, arrivals: sortedItems)
+            let icon = vector.iconName
+            let corridor = corridorNote(for: header, items: sortedItems)
             return DirectionalArrivalGroup(
-                directionName: dir,
+                directionName: header,
                 corridorSubtitle: corridor,
                 iconName: icon,
                 arrivals: sortedItems
             )
+        }
+    }
+    
+    internal static func resolveClusterHeader(
+        for vector: SpatialDatabaseManager.TransitCorridorVector,
+        arrivals: [SpatialDatabaseManager.ArrivalInfo]
+    ) -> String {
+        guard !arrivals.isEmpty else { return vector.rawValue }
+        
+        let directions = Set(arrivals.compactMap { $0.direction })
+        
+        // If single unique direction string across all arrivals in this vector cluster, preserve it
+        if directions.count == 1, let single = directions.first {
+            return single
+        }
+        
+        // Multi-line / complex station clustering logic
+        switch vector {
+        case .northbound:
+            let upperDirs = directions.map { $0.uppercased() }
+            let hasQueens = upperDirs.contains(where: { $0.contains("QUEENS") })
+            let hasBronx = upperDirs.contains(where: { $0.contains("BRONX") })
+            let hasUptown = upperDirs.contains(where: { $0.contains("UPTOWN") })
+            
+            if hasQueens && hasBronx {
+                return "Uptown & Queens / The Bronx"
+            }
+            if hasBronx {
+                return "Uptown & Bronx"
+            }
+            if hasQueens {
+                return hasUptown ? "Uptown & Queens" : "Queens-bound"
+            }
+            if hasUptown {
+                return "Uptown & Northbound"
+            }
+            return "Northbound"
+            
+        case .southbound:
+            let upperDirs = directions.map { $0.uppercased() }
+            let hasBrooklyn = upperDirs.contains(where: { $0.contains("BROOKLYN") })
+            let hasLowerManhattan = upperDirs.contains(where: { $0.contains("LOWER MANHATTAN") || $0.contains("WHITEHALL") || $0.contains("SOUTH FERRY") })
+            let hasDowntown = upperDirs.contains(where: { $0.contains("DOWNTOWN") })
+            
+            if hasBrooklyn && hasLowerManhattan {
+                return "Downtown & Brooklyn / Lower Manhattan"
+            }
+            if hasLowerManhattan {
+                return "Downtown & Lower Manhattan"
+            }
+            if hasBrooklyn {
+                return "Downtown & Brooklyn"
+            }
+            if hasDowntown {
+                return "Downtown & Southbound"
+            }
+            return "Southbound"
+            
+        case .inbound:
+            let lines = Set(arrivals.map { $0.line.uppercased() })
+            if lines == ["SIR"] || lines == ["SI"] {
+                return "Inbound (St George)"
+            }
+            return "Inbound"
+            
+        case .outbound:
+            let lines = Set(arrivals.map { $0.line.uppercased() })
+            if lines == ["SIR"] || lines == ["SI"] {
+                return "Outbound (Tottenville)"
+            }
+            return "Outbound"
+            
+        case .eastbound:
+            let lines = Set(arrivals.map { $0.line.uppercased() })
+            if lines.contains("L") {
+                return "Brooklyn-bound"
+            }
+            if lines.contains("7") || lines.contains("7X") {
+                return "Queens-bound"
+            }
+            return "Eastbound"
+            
+        case .westbound:
+            let lines = Set(arrivals.map { $0.line.uppercased() })
+            if lines.contains("L") || lines.contains("7") || lines.contains("7X") {
+                return "Manhattan-bound"
+            }
+            return "Westbound"
         }
     }
     
@@ -1102,6 +1191,22 @@ struct LiveArrivalsCarousel: View {
                                 return nil
                             }
                         }()
+                        
+                        // Terminal qualifier disambiguation (PE.7 §3):
+                        // Display branch terminals (e.g. W to Whitehall St, Green Line C to Gov Center) in row subtitle
+                        if let qualifier = arrival.terminalQualifier, !qualifier.isEmpty, qualifier != arrival.destination {
+                            Text(qualifier)
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(Color(hex: "#FFB300"))
+                                .lineLimit(1)
+                            
+                            if displayDist != nil {
+                                Text("•")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         
                         if let distText = displayDist {
                             Text(distText)

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -325,6 +325,7 @@
 		EA09408674D08E7A3948EDFF /* SubwayPositionInterpolatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEB93D862AEF3BD0F00847F /* SubwayPositionInterpolatorTests.swift */; };
 		EAC17E9B196B23A083A1B458 /* ConfidenceBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D17F5390E1A53502E8FE8B88 /* ConfidenceBadgeView.swift */; };
 		EB9FF689C4861DEC3C01E5FC /* testConfidenceBadgeAllTiersSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 9B3BA87C530BD2823567320B /* testConfidenceBadgeAllTiersSnapshot.1.png */; };
+		EC870BBAEAAD5BF12B1142AB /* ComplexDirectionCanonicalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 439B59D5C8EAA3A86D0F73E2 /* ComplexDirectionCanonicalizationTests.swift */; };
 		EC99202B32B67D833CB29CE7 /* SettingsDeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAC4FDF126FEEE06EED9D7A /* SettingsDeepLinkTests.swift */; };
 		ED7B5DDCDF7988DCA80CDD92 /* MicroClimateEvaluatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C98008ECBE517AE425D0BF /* MicroClimateEvaluatorTests.swift */; };
 		EE226A15472B83FCF2DB4FCB /* SurfaceRunInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB8F42E7B0455FDFC0B9745D /* SurfaceRunInspector.swift */; };
@@ -441,7 +442,7 @@
 		00C98008ECBE517AE425D0BF /* MicroClimateEvaluatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicroClimateEvaluatorTests.swift; sourceTree = "<group>"; };
 		02000EEB32AD1E9ADDB2D695 /* RaptorEngine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RaptorEngine.cpp; sourceTree = "<group>"; };
 		02E3592BCFC7AFB5E5EABF5A /* RoutingEngineBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingEngineBridgeTests.swift; sourceTree = "<group>"; };
-		04FE07AE519948443B456F9A /* transit.sqlite */ = {isa = PBXFileReference; lastKnownFileType = text; path = transit.sqlite; sourceTree = "<group>"; };
+		04FE07AE519948443B456F9A /* transit.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = transit.sqlite; sourceTree = "<group>"; };
 		0500776ED4832392061B6D44 /* BoundedAStarRouter.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = BoundedAStarRouter.hpp; sourceTree = "<group>"; };
 		08C048FE60010DC495C1C7AB /* HydrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HydrationManager.swift; sourceTree = "<group>"; };
 		092DF7AB26448D36C38ED875 /* ActiveWalkingNavigationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveWalkingNavigationSession.swift; sourceTree = "<group>"; };
@@ -482,7 +483,7 @@
 		21AD6FB3518E383909502845 /* TransitRevealSheetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRevealSheetTests.swift; sourceTree = "<group>"; };
 		2262243D30C0ADBFEEEA713C /* MetalFogTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalFogTelemetryTests.swift; sourceTree = "<group>"; };
 		22985E8C3BC5CF4435B93C29 /* NearbyBusLensTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyBusLensTests.swift; sourceTree = "<group>"; };
-		250C5799146FC7DD7F64B3D1 /* city-nyc.pack.zst */ = {isa = PBXFileReference; lastKnownFileType = file; path = "city-nyc.pack.zst"; sourceTree = "<group>"; };
+		250C5799146FC7DD7F64B3D1 /* city-nyc.pack.zst */ = {isa = PBXFileReference; path = "city-nyc.pack.zst"; sourceTree = "<group>"; };
 		250E5AFF32C461A41CFF71AD /* MetalFogShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = MetalFogShader.metal; sourceTree = "<group>"; };
 		25451BB9D752CF3F313D42EB /* testDynamicRecoveryCardViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testDynamicRecoveryCardViewSnapshot.1.png; sourceTree = "<group>"; };
 		2552A34C9E8A15B4DED3D704 /* GBFSModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GBFSModels.swift; sourceTree = "<group>"; };
@@ -514,7 +515,8 @@
 		3F0CB6CA4122C28DEC7B25F6 /* testApertureMilestoneFrameSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testApertureMilestoneFrameSnapshot.1.png; sourceTree = "<group>"; };
 		4032DCABB51243EF7C507D85 /* BinaryHeaderValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BinaryHeaderValidationTests.swift; sourceTree = "<group>"; };
 		43042E5C9CA74D17EFB46E22 /* testAllMetrosSummaryViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testAllMetrosSummaryViewSnapshot.1.png; sourceTree = "<group>"; };
-		445AD172FC50D843E3DEA9E7 /* subway-lines.geojson */ = {isa = PBXFileReference; lastKnownFileType = text; path = "subway-lines.geojson"; sourceTree = "<group>"; };
+		439B59D5C8EAA3A86D0F73E2 /* ComplexDirectionCanonicalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComplexDirectionCanonicalizationTests.swift; sourceTree = "<group>"; };
+		445AD172FC50D843E3DEA9E7 /* subway-lines.geojson */ = {isa = PBXFileReference; path = "subway-lines.geojson"; sourceTree = "<group>"; };
 		47A3E08CE2FC2E71A4F9EEA6 /* H3SpatialMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H3SpatialMathTests.swift; sourceTree = "<group>"; };
 		47FDD1CBF726DA8A1160FD2A /* ColdStartLocationFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColdStartLocationFilterTests.swift; sourceTree = "<group>"; };
 		482E45C732819866B4B63747 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -534,14 +536,14 @@
 		587DBC0D7259B1BDC19D0323 /* MapCustomization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapCustomization.swift; sourceTree = "<group>"; };
 		591F9E805016DF32C53AA95D /* testStatsViewJournalSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testStatsViewJournalSnapshot.1.png; sourceTree = "<group>"; };
 		59C05DE289F6D782BB8F7F4F /* testExportTimetableVerificationScreenshots.2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testExportTimetableVerificationScreenshots.2.png; sourceTree = "<group>"; };
-		5AFFB73189473060ADA73222 /* Derivee.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Derivee.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5AFFB73189473060ADA73222 /* Derivee.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Derivee.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5D792C45F52FEA7658AA351B /* DepartureMatrixBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepartureMatrixBuffer.swift; sourceTree = "<group>"; };
 		5F5C9F33697C3C6D2AC8FE66 /* BoundedAStarRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedAStarRouterTests.swift; sourceTree = "<group>"; };
 		5FA1E40A44F1C7D276AEF000 /* testTransitSparklineViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testTransitSparklineViewSnapshot.1.png; sourceTree = "<group>"; };
 		5FE99F0C57D46BACC5466A29 /* ReliabilityHeatmapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReliabilityHeatmapCanvas.swift; sourceTree = "<group>"; };
 		608800F5963050E2167AE9FA /* SetAmbientTrackingIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetAmbientTrackingIntent.swift; sourceTree = "<group>"; };
 		62E9C99DC7F5A34F0F0E9F20 /* testNavigationCollapsedPeekRecoveryAlertSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testNavigationCollapsedPeekRecoveryAlertSnapshot.1.png; sourceTree = "<group>"; };
-		62ED06D39875FEC2E5065687 /* DeriveeCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeriveeCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		62ED06D39875FEC2E5065687 /* DeriveeCoreTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DeriveeCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6449E6A1807DA1489C220BA1 /* TerminusDwellAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminusDwellAnchor.swift; sourceTree = "<group>"; };
 		645F1EEDEA7E098541109468 /* CityPackManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPackManagerTests.swift; sourceTree = "<group>"; };
 		657333C2C6776034E2B15B9A /* SubwayStationRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubwayStationRegistry.swift; sourceTree = "<group>"; };
@@ -572,12 +574,12 @@
 		7D561ACC9DA545119DBD4BA4 /* NavigationSheetDetent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationSheetDetent.swift; sourceTree = "<group>"; };
 		7D6260F5AD1DBA460B302649 /* testConfidenceBandCanvasLowVarianceSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testConfidenceBandCanvasLowVarianceSnapshot.1.png; sourceTree = "<group>"; };
 		7DCE26F505D28DC4818435C5 /* ToggleAmbientTrackingIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToggleAmbientTrackingIntent.swift; sourceTree = "<group>"; };
-		7EC6A6941E06A9AA9C6D2A93 /* DeriveeWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DeriveeWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		7EC6A6941E06A9AA9C6D2A93 /* DeriveeWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = DeriveeWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7F9718A0C6F19BF050A52A38 /* TransitSparklineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitSparklineView.swift; sourceTree = "<group>"; };
 		80384B383FEE2FACF5DEF57F /* neighborhood.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = neighborhood.sqlite; sourceTree = "<group>"; };
 		818C9FA874236379986C6F46 /* GBFSSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GBFSSyncService.swift; sourceTree = "<group>"; };
 		81F73DEF87F947467FF074D7 /* ActiveCyclingNavigationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveCyclingNavigationSession.swift; sourceTree = "<group>"; };
-		837F3E24B40C81AB7E7CDDF8 /* station_shapes.geojson */ = {isa = PBXFileReference; lastKnownFileType = text; path = station_shapes.geojson; sourceTree = "<group>"; };
+		837F3E24B40C81AB7E7CDDF8 /* station_shapes.geojson */ = {isa = PBXFileReference; path = station_shapes.geojson; sourceTree = "<group>"; };
 		84929F88DE3A4803334F70D9 /* TransitMatrixInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitMatrixInspectorView.swift; sourceTree = "<group>"; };
 		84A6175246C3BAFC90AFB2E8 /* SearchCapsuleOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchCapsuleOverlay.swift; sourceTree = "<group>"; };
 		85250A713673C2E6E965F15B /* MetalFogStyleLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalFogStyleLayer.swift; sourceTree = "<group>"; };
@@ -607,7 +609,7 @@
 		94F77B8E3EE24B3260000B62 /* TransitRouteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRouteData.swift; sourceTree = "<group>"; };
 		95BDDF2EDBC81B90DC8BF68C /* RoutingTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTypes.swift; sourceTree = "<group>"; };
 		966E6957AA78D74369F921CC /* NeighborhoodTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeighborhoodTests.swift; sourceTree = "<group>"; };
-		97F9405AD2F0493CF5ECB925 /* neighborhood.sqlite-shm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "neighborhood.sqlite-shm"; sourceTree = "<group>"; };
+		97F9405AD2F0493CF5ECB925 /* neighborhood.sqlite-shm */ = {isa = PBXFileReference; path = "neighborhood.sqlite-shm"; sourceTree = "<group>"; };
 		9B3BA87C530BD2823567320B /* testConfidenceBadgeAllTiersSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testConfidenceBadgeAllTiersSnapshot.1.png; sourceTree = "<group>"; };
 		9C4FBD3DE070AA06CD7B75E6 /* CitySelectorPillTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CitySelectorPillTests.swift; sourceTree = "<group>"; };
 		9D7024D245E0C4D47FE945A4 /* TransitDatabaseEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitDatabaseEngine.swift; sourceTree = "<group>"; };
@@ -632,7 +634,7 @@
 		A8E2F6E2E57F1DA09847B635 /* SubwayPositionInterpolator.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = SubwayPositionInterpolator.hpp; sourceTree = "<group>"; };
 		A90DBE053EFE9737A7AA172F /* ConfidenceBandCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfidenceBandCanvas.swift; sourceTree = "<group>"; };
 		AA0BE03020FFFD18891CCCAD /* HeadsignEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadsignEngineTests.swift; sourceTree = "<group>"; };
-		AA1D089BD418F79AE29C57FC /* neighborhood.sqlite-wal */ = {isa = PBXFileReference; lastKnownFileType = text; path = "neighborhood.sqlite-wal"; sourceTree = "<group>"; };
+		AA1D089BD418F79AE29C57FC /* neighborhood.sqlite-wal */ = {isa = PBXFileReference; path = "neighborhood.sqlite-wal"; sourceTree = "<group>"; };
 		AA5762B1010037B3AF09C84A /* CitySwitchNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CitySwitchNavigationTests.swift; sourceTree = "<group>"; };
 		AA71743753D0719C6CEC196B /* StationComplexModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationComplexModels.swift; sourceTree = "<group>"; };
 		AAB08F70BD61134E953A9F76 /* TrackingControlWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingControlWidget.swift; sourceTree = "<group>"; };
@@ -672,7 +674,7 @@
 		C2A03AAEBBA0EFA393DA3A3C /* DynamicRecoveryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicRecoveryModels.swift; sourceTree = "<group>"; };
 		C2C0D5BA238C11930A909CFB /* testUnionSquareSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testUnionSquareSnapshot.1.png; sourceTree = "<group>"; };
 		C3F83979E39C6700ADDDBF8C /* StartAmbientTrackingIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartAmbientTrackingIntent.swift; sourceTree = "<group>"; };
-		C48AF06DA0327D2A4E8DC3D7 /* DeriveeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeriveeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C48AF06DA0327D2A4E8DC3D7 /* DeriveeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DeriveeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6083EE5B62BC24A46D675DC /* ApertureBrandingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApertureBrandingTests.swift; sourceTree = "<group>"; };
 		C6E88431DF1FC9075FDB42F7 /* MultimodalTripNavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultimodalTripNavigationManager.swift; sourceTree = "<group>"; };
 		C7CB2C7863F3D4EA63AA9BFB /* testNavigationCollapsedPeekViewNaturalWalkingImminentSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testNavigationCollapsedPeekViewNaturalWalkingImminentSnapshot.1.png; sourceTree = "<group>"; };
@@ -1152,6 +1154,7 @@
 				47FDD1CBF726DA8A1160FD2A /* ColdStartLocationFilterTests.swift */,
 				EAD9885D8802DD4E58CAA63B /* CommuterErgonomicsTests.swift */,
 				18473AE0D5E78E905ED89AAB /* ComplexDepartureTests.swift */,
+				439B59D5C8EAA3A86D0F73E2 /* ComplexDirectionCanonicalizationTests.swift */,
 				21288BAF48D59BC9981D3C23 /* ConfidenceBandCanvasTests.swift */,
 				A3BCD59655A0210A45773EE2 /* CorridorPulseMapTests.swift */,
 				71BEB9554F5F1D158F380826 /* CustomizationSettingsTests.swift */,
@@ -1467,18 +1470,23 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					204226316687ED9BDDF5F493 = {
+						DevelopmentTeam = K9HJ6RGKU6;
 						ProvisioningStyle = Automatic;
 					};
 					293E1BF99BBA4B121814C212 = {
+						DevelopmentTeam = K9HJ6RGKU6;
 						ProvisioningStyle = Automatic;
 					};
 					3491759ED4C580ABE4FB78AC = {
+						DevelopmentTeam = K9HJ6RGKU6;
 						ProvisioningStyle = Automatic;
 					};
 					709CC96C5666B5B898FA2F64 = {
+						DevelopmentTeam = K9HJ6RGKU6;
 						ProvisioningStyle = Automatic;
 					};
 					BE9C3C90A0B146A309A6FAB9 = {
+						DevelopmentTeam = K9HJ6RGKU6;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -1501,6 +1509,7 @@
 				A2D8039E8A383F4842E7143E /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */,
 				DF937CC7693D350B42F576DB /* XCRemoteSwiftPackageReference "SwiftZSTD" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -1788,6 +1797,7 @@
 				A5EE768EA1F0B4A9BA2DEC0F /* ColdStartLocationFilterTests.swift in Sources */,
 				36062D8234ADD0DDD5586A64 /* CommuterErgonomicsTests.swift in Sources */,
 				91AED5251C8B7E7422DCC234 /* ComplexDepartureTests.swift in Sources */,
+				EC870BBAEAAD5BF12B1142AB /* ComplexDirectionCanonicalizationTests.swift in Sources */,
 				A85F93D50988DFBEBFA63E04 /* ConfidenceBandCanvasTests.swift in Sources */,
 				53A8BA9FBF7761E65C2AA4E7 /* CorridorPulseMapTests.swift in Sources */,
 				E3078940A363E6D4FB910728 /* CustomizationSettingsTests.swift in Sources */,
@@ -1924,7 +1934,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -1955,7 +1965,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -1982,7 +1992,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = DeriveeWidget/DeriveeWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DeriveeWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2004,7 +2014,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
 				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2028,7 +2038,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
 				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2107,7 +2117,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
 				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2132,7 +2142,7 @@
 				CODE_SIGN_ENTITLEMENTS = Derivee/Derivee.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				INFOPLIST_FILE = Derivee/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2152,7 +2162,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = DeriveeWidget/DeriveeWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DeriveeWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2174,7 +2184,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
 				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2261,7 +2271,7 @@
 				CODE_SIGN_ENTITLEMENTS = Derivee/Derivee.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = KWWBXRPU7P;
+				DEVELOPMENT_TEAM = K9HJ6RGKU6;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/DeriveeCore/include";
 				INFOPLIST_FILE = Derivee/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

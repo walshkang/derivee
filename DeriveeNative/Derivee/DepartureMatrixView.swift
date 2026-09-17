@@ -1079,7 +1079,7 @@ private struct DeparturePillView: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Inspect departure at \(String(format: "%02d:%02d", hour, pill.minute))")
+        .accessibilityLabel("Inspect departure at \(hour):\(String(format: "%02d", pill.minute))")
     }
     
     private func evaluateStatus(at refDate: Date) -> (isPast: Bool, isNext: Bool) {
