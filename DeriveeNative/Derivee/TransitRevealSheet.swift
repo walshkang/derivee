@@ -46,7 +46,27 @@ struct TransitRevealSheet: View {
     // Wave PD.2: 3-Detent Persistent Dock Peek Detent (~90pt)
     public static let inspectionPeekDetent: PresentationDetent = .fraction(0.12)
     
-    @State internal var selectedDetent: PresentationDetent
+    private var externalDetent: Binding<PresentationDetent>?
+    @State private var internalDetent: PresentationDetent
+    
+    internal var selectedDetent: PresentationDetent {
+        get { externalDetent?.wrappedValue ?? internalDetent }
+        nonmutating set {
+            if let ext = externalDetent {
+                ext.wrappedValue = newValue
+            } else {
+                internalDetent = newValue
+            }
+        }
+    }
+    
+    private var selectedDetentBinding: Binding<PresentationDetent> {
+        Binding(
+            get: { self.selectedDetent },
+            set: { self.selectedDetent = $0 }
+        )
+    }
+    
     @State private var inspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil
     @State private var reliabilityTiers: [String: LineReliabilityTier] = [:]
     @State private var availableFloors: [StationFloor] = []
@@ -69,6 +89,7 @@ struct TransitRevealSheet: View {
         initialSelectedFloor: StationFloor? = nil,
         initialInspectingArrival: SpatialDatabaseManager.ArrivalInfo? = nil,
         initialDetent: PresentationDetent = .medium,
+        selectedDetent: Binding<PresentationDetent>? = nil,
         initialBusRouteFilter: String? = nil,
         referenceDate: Date? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
@@ -86,7 +107,8 @@ struct TransitRevealSheet: View {
         self._availableFloors = State(initialValue: initialAvailableFloors)
         self._selectedFloor = State(initialValue: initialSelectedFloor)
         self._inspectingArrival = State(initialValue: initialInspectingArrival)
-        self._selectedDetent = State(initialValue: initialDetent)
+        self.externalDetent = selectedDetent
+        self._internalDetent = State(initialValue: selectedDetent?.wrappedValue ?? initialDetent)
         self._selectedBusRouteFilter = State(initialValue: initialBusRouteFilter)
         self._isLiveActive = State(initialValue: !initialLiveArrivals.isEmpty)
         self.referenceDate = referenceDate
@@ -358,10 +380,9 @@ struct TransitRevealSheet: View {
             }
         }
         .animation(.snappy(duration: 0.28, extraBounce: 0.0), value: inspectingArrival?.id)
-        .animation(.easeInOut(duration: 0.2), value: selectedDetent)
         .presentationDetents(
             inspectingArrival != nil ? [Self.inspectionPeekDetent, .medium, .large] : [.medium, .large],
-            selection: $selectedDetent
+            selection: selectedDetentBinding
         )
         .presentationBackgroundInteraction(
             inspectingArrival != nil ? .enabled(upThrough: Self.inspectionPeekDetent) : .disabled

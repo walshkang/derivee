@@ -533,6 +533,23 @@ final class CommuterErgonomicsTests: XCTestCase {
         )
     }
 
+    func testFC5_ContentView_ZeroConcurrentSheetModifiers() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let contentViewFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/ContentView.swift")
+        let content = try String(contentsOf: contentViewFile, encoding: .utf8)
+        
+        let sheetMatches = content.components(separatedBy: ".sheet(").count - 1
+        XCTAssertEqual(
+            sheetMatches, 1,
+            "FC-5 Violation: ContentView must contain exactly 1 .sheet modifier. Found \(sheetMatches). Concurrent sheet presentation on root view causes background retention and presentation controller collision."
+        )
+        XCTAssertTrue(
+            content.contains(".sheet(item: $activeSheet)"),
+            "ContentView must present sheets exclusively through .sheet(item: $activeSheet)"
+        )
+    }
+
     func testFC5_InspectorBackAction_RestoresStationOverviewState() {
         var onBackCalled = false
         let arrival = SpatialDatabaseManager.ArrivalInfo(

@@ -1,17 +1,67 @@
 import SwiftUI
 import CoreLocation
 
+/// Unified mutually exclusive presentation state machine for Screen 0-4 modal sheets (Wave PE.9).
+/// Enforces single-sheet architecture with zero background sheet retention (FC-5 invariant).
+enum ActiveSheet: Identifiable, Equatable {
+    case cityPrompt(CityManifestEntry)
+    case transit(stopId: String)
+    case search
+    case routeComparison(RouteComparisonViewModel)
+    case navigation(JourneyItinerary)
+    case stats
+    case driftControls
+    
+    var id: String {
+        switch self {
+        case .cityPrompt(let city):
+            return "cityPrompt_\(city.slug)"
+        case .transit(let stopId):
+            return "transit_\(stopId)"
+        case .search:
+            return "search"
+        case .routeComparison:
+            return "routeComparison"
+        case .navigation(let itin):
+            return "navigation_\(itin.id)"
+        case .stats:
+            return "stats"
+        case .driftControls:
+            return "driftControls"
+        }
+    }
+    
+    static func == (lhs: ActiveSheet, rhs: ActiveSheet) -> Bool {
+        switch (lhs, rhs) {
+        case (.cityPrompt(let l), .cityPrompt(let r)):
+            return l.slug == r.slug
+        case (.transit(let l), .transit(let r)):
+            return l == r
+        case (.search, .search):
+            return true
+        case (.routeComparison(let l), .routeComparison(let r)):
+            return l === r
+        case (.navigation(let l), .navigation(let r)):
+            return l.id == r.id
+        case (.stats, .stats):
+            return true
+        case (.driftControls, .driftControls):
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 struct ContentView: View {
     @State private var isHydrationComplete = false
     @State private var isCheckingHydration = true
     @StateObject private var trackingEngine = AmbientTrackingEngine.shared
     @State private var spatialStore = SpatialStore()
     @State private var cityDetectionService = CityDetectionService()
-    @State private var showTransitSheet = false
-    @State private var selectedTransitStop: String? = nil
+    @State private var activeSheet: ActiveSheet? = nil
     @State private var isMapCentered = true
     @State private var recenterTrigger = false
-    @State private var showStatsView = false
     @State private var userScreenPosition: CGPoint? = nil
     @State private var targetCoordinate: CLLocationCoordinate2D? = nil
     @State private var currentUserLocation: CLLocationCoordinate2D? = nil
@@ -36,14 +86,9 @@ struct ContentView: View {
     @State private var activeNavigationSession: ActiveWalkingNavigationSession? = nil
     @State private var activeCyclingSession: ActiveCyclingNavigationSession? = nil
     @State private var navigationManager = MultimodalTripNavigationManager.shared
-    @State private var showNavigationSheet: Bool = false
     @State private var navigationDetent: PresentationDetent = NavigationSheetDetent.half.presentationDetent
-    @State private var showSearchSheet: Bool = false
-    @State private var showRouteComparisonSheet: Bool = false
-    @State private var routeComparisonVM: RouteComparisonViewModel? = nil
     @State private var activeRouteInspection: RouteInspectionCommand? = nil
     @State private var activeFloorLevel: Int? = nil
-    @State private var showDriftControls: Bool = false
     @State private var activeTransitSheetDetent: PresentationDetent = .medium
     
     private var currentTheme: BasemapTheme {
@@ -59,7 +104,8 @@ struct ContentView: View {
     
     /// True when the user is actively inspecting a station or train/bus corridor (Wave PE.3 - FC-10).
     private var isTransitInspecting: Bool {
-        (showTransitSheet && selectedTransitStop != nil) || activeRouteInspection != nil
+        if case .transit = activeSheet { return true }
+        return activeRouteInspection != nil
     }
     
     /// Mode-adaptive master fog opacity (Wave PE.3).
@@ -97,8 +143,30 @@ struct ContentView: View {
                     MapView(trackingEngine: trackingEngine,
                             spatialStore: spatialStore,
                             fogShape: spatialStore.currentFogShape,
-                            showTransitSheet: $showTransitSheet,
-                            selectedTransitStop: $selectedTransitStop,
+                            showTransitSheet: Binding(
+                                get: {
+                                    if case .transit = activeSheet { return true }
+                                    return false
+                                },
+                                set: { isShowing in
+                                    if !isShowing, case .transit = activeSheet {
+                                        activeSheet = nil
+                                    }
+                                }
+                            ),
+                            selectedTransitStop: Binding(
+                                get: {
+                                    if case .transit(let stopId) = activeSheet { return stopId }
+                                    return nil
+                                },
+                                set: { newStopId in
+                                    if let stopId = newStopId {
+                                        activeSheet = .transit(stopId: stopId)
+                                    } else if case .transit = activeSheet {
+                                        activeSheet = nil
+                                    }
+                                }
+                            ),
                             isCentered: $isMapCentered,
                             recenterTrigger: $recenterTrigger,
                             userScreenPosition: $userScreenPosition,
@@ -113,7 +181,10 @@ struct ContentView: View {
                             nearbyBusStops: nearbyBusStops,
                             activeSignalCoordinate: activeNavigationSession?.activeSignalCoordinate,
                             activeInspectionCommand: activeRouteInspection,
-                            activeSheetDetent: (showTransitSheet && selectedTransitStop != nil) ? activeTransitSheetDetent : nil,
+                            activeSheetDetent: {
+                                if case .transit = activeSheet { return activeTransitSheetDetent }
+                                return nil
+                            }(),
                             activeFloorLevel: activeFloorLevel,
                             onAmbientMapTap: {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -146,15 +217,15 @@ struct ContentView: View {
                     VStack {
                         HStack(alignment: .center, spacing: 10) {
                             SearchCapsuleOverlay {
-                                showSearchSheet = true
+                                activeSheet = .search
                             }
                             
                             AmbientDriftFAB(isTracking: trackingEngine.isTracking) {
-                                showDriftControls = true
+                                activeSheet = .driftControls
                             }
                             
                             ProfileFAB {
-                                showStatsView = true
+                                activeSheet = .stats
                             }
                         }
                         .padding(.top, 50)
@@ -171,8 +242,7 @@ struct ContentView: View {
                                     hasLocation: currentUserLocation != nil || trackingEngine.lastKnownLocation != nil,
                                     onSelectStop: { stop in
                                         isNearbyBusesExpanded = false
-                                        selectedTransitStop = stop.id
-                                        showTransitSheet = true
+                                        activeSheet = .transit(stopId: stop.id)
                                     },
                                     onRefresh: {
                                         scanNearbyBuses(force: true)
@@ -286,40 +356,58 @@ struct ContentView: View {
                         }
                     }
                 }
-                .sheet(item: $cityDetectionService.promptCity) { city in
-                    CityDownloadPromptSheet(
-                        city: city,
-                        onDownloadComplete: { installedCity in
-                            cityDetectionService.markCityInstalled(installedCity.slug)
-                            cityDetectionService.performAutoSwitch(to: installedCity)
-                        },
-                        onDismiss: {
-                            cityDetectionService.promptCity = nil
-                        },
-                        onSnooze: { snoozedCity in
-                            cityDetectionService.snoozeCity(slug: snoozedCity.slug)
-                        }
-                    )
-                    .presentationDetents([.fraction(0.38), .medium])
-                    .presentationDragIndicator(.visible)
-                    .presentationContentInteraction(.scrolls)
-                    .transitSheetGlassBackground()
-                }
-                .sheet(isPresented: Binding(
-                    get: { showTransitSheet && selectedTransitStop != nil },
-                    set: { newValue in
-                        showTransitSheet = newValue
-                        if !newValue {
-                            selectedTransitStop = nil
-                            activeRouteInspection = nil
-                            activeFloorLevel = nil
-                            activeTransitSheetDetent = .medium
-                        }
+                .onChange(of: cityDetectionService.promptCity) { _, newCity in
+                    if let city = newCity {
+                        activeSheet = .cityPrompt(city)
                     }
-                )) {
-                    if let stopId = selectedTransitStop {
+                }
+                .onChange(of: activeNavigationItinerary) { _, newItin in
+                    if let itin = newItin {
+                        navigationManager.startTripNavigation(itinerary: itin)
+                    }
+                }
+                .onChange(of: activeSheet) { oldSheet, newSheet in
+                    if case .transit = oldSheet, newSheet == nil {
+                        activeRouteInspection = nil
+                        activeFloorLevel = nil
+                        activeTransitSheetDetent = .medium
+                    } else if case .navigation = oldSheet, newSheet == nil {
+                        activeNavigationItinerary = nil
+                        activeNavigationSession = nil
+                        activeCyclingSession = nil
+                        navigationManager.endNavigation()
+                    } else if case .cityPrompt = oldSheet, newSheet == nil {
+                        cityDetectionService.promptCity = nil
+                    }
+                }
+                .sheet(item: $activeSheet) { sheet in
+                    switch sheet {
+                    case .cityPrompt(let city):
+                        CityDownloadPromptSheet(
+                            city: city,
+                            onDownloadComplete: { installedCity in
+                                cityDetectionService.markCityInstalled(installedCity.slug)
+                                cityDetectionService.performAutoSwitch(to: installedCity)
+                                activeSheet = nil
+                            },
+                            onDismiss: {
+                                cityDetectionService.promptCity = nil
+                                activeSheet = nil
+                            },
+                            onSnooze: { snoozedCity in
+                                cityDetectionService.snoozeCity(slug: snoozedCity.slug)
+                                activeSheet = nil
+                            }
+                        )
+                        .presentationDetents([.fraction(0.38), .medium])
+                        .presentationDragIndicator(.visible)
+                        .presentationContentInteraction(.scrolls)
+                        .transitSheetGlassBackground()
+                        
+                    case .transit(let stopId):
                         TransitRevealSheet(
                             stopId: stopId,
+                            selectedDetent: $activeTransitSheetDetent,
                             onFocusMap: { coord in
                                 targetCoordinate = coord
                                 isMapCentered = false
@@ -337,84 +425,50 @@ struct ContentView: View {
                                 activeTransitSheetDetent = detent
                             }
                         )
-                    }
-                }
-                .sheet(isPresented: $showSearchSheet) {
-                    PlaceSearchView(
-                        viewModel: SearchViewModel(
-                            spatialDbManager: .shared,
-                            initialLocation: currentUserLocation ?? trackingEngine.lastKnownLocation?.coordinate
-                        ),
-                        onSelectStation: { stopId, coord in
-                            showSearchSheet = false
-                            selectedTransitStop = stopId
-                            showTransitSheet = true
-                            if let c = coord {
-                                targetCoordinate = c
-                                isMapCentered = false
+                        
+                    case .search:
+                        PlaceSearchView(
+                            viewModel: SearchViewModel(
+                                spatialDbManager: .shared,
+                                initialLocation: currentUserLocation ?? trackingEngine.lastKnownLocation?.coordinate
+                            ),
+                            onSelectStation: { stopId, coord in
+                                activeSheet = .transit(stopId: stopId)
+                                if let c = coord {
+                                    targetCoordinate = c
+                                    isMapCentered = false
+                                }
+                            },
+                            onSelectDestination: { routingLoc in
+                                startRouteComparison(to: routingLoc)
+                            },
+                            onClose: {
+                                activeSheet = nil
                             }
-                        },
-                        onSelectDestination: { routingLoc in
-                            showSearchSheet = false
-                            startRouteComparison(to: routingLoc)
-                        },
-                        onClose: {
-                            showSearchSheet = false
-                        }
-                    )
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                    .presentationContentInteraction(.scrolls)
-                    .transitSheetGlassBackground()
-                }
-                .sheet(isPresented: Binding(
-                    get: { showRouteComparisonSheet && routeComparisonVM != nil },
-                    set: { newValue in
-                        showRouteComparisonSheet = newValue
-                        if !newValue {
-                            routeComparisonVM = nil
-                        }
-                    }
-                )) {
-                    if let vm = routeComparisonVM {
+                        )
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                        .presentationContentInteraction(.scrolls)
+                        .transitSheetGlassBackground()
+                        
+                    case .routeComparison(let vm):
                         RouteComparisonListView(
                             viewModel: vm,
                             onStartNavigation: { itinerary in
-                                showRouteComparisonSheet = false
-                                routeComparisonVM = nil
                                 activeNavigationItinerary = itinerary
-                                showNavigationSheet = true
+                                activeSheet = .navigation(itinerary)
                                 navigationDetent = NavigationSheetDetent.half.presentationDetent
                             },
                             onClose: {
-                                showRouteComparisonSheet = false
-                                routeComparisonVM = nil
+                                activeSheet = nil
                             }
                         )
                         .presentationDetents([.fraction(0.50), .large])
                         .presentationDragIndicator(.visible)
                         .presentationContentInteraction(.scrolls)
                         .transitSheetGlassBackground()
-                    }
-                }
-                .onChange(of: activeNavigationItinerary) { _, newItin in
-                    if let itin = newItin {
-                        navigationManager.startTripNavigation(itinerary: itin)
-                    }
-                }
-                .sheet(isPresented: Binding(
-                    get: { showNavigationSheet && (activeNavigationItinerary != nil || navigationManager.isNavigating) },
-                    set: { newValue in
-                        showNavigationSheet = newValue
-                        if !newValue {
-                            activeNavigationItinerary = nil
-                            activeNavigationSession = nil
-                            activeCyclingSession = nil
-                            navigationManager.endNavigation()
-                        }
-                    }
-                )) {
-                    if let itinerary = activeNavigationItinerary ?? navigationManager.itinerary {
+                        
+                    case .navigation(let itinerary):
                         NavigationGuidanceSheet(
                             itinerary: itinerary,
                             selectedDetent: $navigationDetent,
@@ -425,59 +479,58 @@ struct ContentView: View {
                                 isMapCentered = false
                             },
                             onEndJourney: {
-                                showNavigationSheet = false
+                                activeSheet = nil
                                 activeNavigationItinerary = nil
                                 activeNavigationSession = nil
                                 activeCyclingSession = nil
                                 navigationManager.endNavigation()
                             }
                         )
-                    }
-                }
-                .sheet(isPresented: $showStatsView) {
-                    StatsView(
-                        trackingEngine: trackingEngine,
-                        spatialStore: spatialStore,
-                        cityDetectionService: cityDetectionService,
-                        onSwitchCity: { slug, coord in
-                            let targetConfig = (try? CityPackManager.shared.loadConfig(for: slug)) ??
-                                               CityManifest.defaultManifest.findCity(bySlug: slug).map { entry in
-                                                   CityConfig(slug: entry.slug, displayName: entry.displayName, region: entry.region, bounds: entry.bounds ?? CityConfig.nycDefault.bounds, center: entry.center ?? CityConfig.nycDefault.center)
-                                               } ?? CityConfig.nycDefault
-                            
-                            if spatialStore.activeCitySlug != slug {
-                                executeCityHotSwap(to: slug)
-                            }
-                            
-                            // Disambiguate coordinate: if within bounds, target it; otherwise default to destination city center
-                            let resolvedCoord: CLLocationCoordinate2D
-                            if let c = coord, c.latitude != 0, c.longitude != 0, targetConfig.bounds.contains(coordinate: c) {
-                                resolvedCoord = c
-                            } else {
-                                resolvedCoord = targetConfig.center.coordinate
-                            }
-                            
-                            targetCoordinate = resolvedCoord
-                            isMapCentered = false
-                        },
-                        targetCoordinate: $targetCoordinate
-                    )
-                    .presentationDragIndicator(.visible)
-                    .presentationContentInteraction(.scrolls)
-                    .transitSheetGlassBackground()
-                }
-                .sheet(isPresented: $showDriftControls) {
-                    AmbientDriftControlCard(trackingEngine: trackingEngine)
-                        .presentationDetents([.height(290)])
+                        
+                    case .stats:
+                        StatsView(
+                            trackingEngine: trackingEngine,
+                            spatialStore: spatialStore,
+                            cityDetectionService: cityDetectionService,
+                            onSwitchCity: { slug, coord in
+                                let targetConfig = (try? CityPackManager.shared.loadConfig(for: slug)) ??
+                                                   CityManifest.defaultManifest.findCity(bySlug: slug).map { entry in
+                                                       CityConfig(slug: entry.slug, displayName: entry.displayName, region: entry.region, bounds: entry.bounds ?? CityConfig.nycDefault.bounds, center: entry.center ?? CityConfig.nycDefault.center)
+                                                   } ?? CityConfig.nycDefault
+                                
+                                if spatialStore.activeCitySlug != slug {
+                                    executeCityHotSwap(to: slug)
+                                }
+                                
+                                // Disambiguate coordinate: if within bounds, target it; otherwise default to destination city center
+                                let resolvedCoord: CLLocationCoordinate2D
+                                if let c = coord, c.latitude != 0, c.longitude != 0, targetConfig.bounds.contains(coordinate: c) {
+                                    resolvedCoord = c
+                                } else {
+                                    resolvedCoord = targetConfig.center.coordinate
+                                }
+                                
+                                targetCoordinate = resolvedCoord
+                                isMapCentered = false
+                            },
+                            targetCoordinate: $targetCoordinate
+                        )
                         .presentationDragIndicator(.visible)
                         .presentationContentInteraction(.scrolls)
                         .transitSheetGlassBackground()
+                        
+                    case .driftControls:
+                        AmbientDriftControlCard(trackingEngine: trackingEngine)
+                            .presentationDetents([.height(290)])
+                            .presentationDragIndicator(.visible)
+                            .presentationContentInteraction(.scrolls)
+                            .transitSheetGlassBackground()
+                    }
                 }
                 .onOpenURL { url in
                     guard url.scheme == "derivee" else { return }
                     if url.host == "progress" {
-                        showStatsView = false
-                        showTransitSheet = false
+                        activeSheet = nil
                         isMapCentered = true
                         recenterTrigger.toggle()
                         
@@ -488,10 +541,9 @@ struct ContentView: View {
                             glowOpacity = 0.0
                         }
                     } else if url.host == "navigation" {
-                        showStatsView = false
-                        showTransitSheet = false
-                        if activeNavigationItinerary != nil || navigationManager.isNavigating {
-                            showNavigationSheet = true
+                        activeSheet = nil
+                        if let itin = activeNavigationItinerary ?? navigationManager.itinerary {
+                            activeSheet = .navigation(itin)
                             navigationDetent = NavigationSheetDetent.half.presentationDetent
                             isMapCentered = true
                             recenterTrigger.toggle()
@@ -563,8 +615,7 @@ struct ContentView: View {
         let origin = RoutingLocation.coordinate(latitude: originCoord.latitude, longitude: originCoord.longitude, name: "Current Location")
         
         let vm = RouteComparisonViewModel(planner: JourneyPlanner.shared)
-        self.routeComparisonVM = vm
-        self.showRouteComparisonSheet = true
+        self.activeSheet = .routeComparison(vm)
         
         Task {
             await vm.searchJourneys(origin: origin, destination: destination)
@@ -588,8 +639,7 @@ struct ContentView: View {
         // Phase 1: Pre-Swap UI Query Teardown
         TransitRealtimeService.shared.prepareForCitySwap()
         ComplexDepartureService.shared.prepareForCitySwap()
-        showTransitSheet = false
-        selectedTransitStop = nil
+        activeSheet = nil
         isScanningBuses = false
         nearbyBusStops = []
         
