@@ -23,7 +23,7 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         routeId: String,
         lineName: String,
         agencyColorHex: String,
-        casingColorHex: String = "#FFFFFF",
+        casingColorHex: String? = nil,
         modalClass: TransitModalClass,
         coordinates: [CLLocationCoordinate2D],
         stationCoordinate: CLLocationCoordinate2D,
@@ -36,7 +36,7 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         self.routeId = routeId
         self.lineName = lineName
         self.agencyColorHex = agencyColorHex
-        self.casingColorHex = casingColorHex
+        self.casingColorHex = casingColorHex ?? TransitRouteData.adaptiveCasingColor(for: agencyColorHex, theme: .day)
         self.modalClass = modalClass
         self.coordinates = coordinates
         self.stationCoordinate = stationCoordinate

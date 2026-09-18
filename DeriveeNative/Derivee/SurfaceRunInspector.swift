@@ -1052,7 +1052,7 @@ public struct SurfaceRunInspector: View {
                     routeId: arrival.line,
                     lineName: lineInfo.name,
                     agencyColorHex: lineInfo.colorHex,
-                    casingColorHex: "#FFFFFF",
+                    casingColorHex: lineInfo.casingColorHex,
                     modalClass: routeConfig.modalClass,
                     coordinates: polyline,
                     stationCoordinate: validStationCoord,

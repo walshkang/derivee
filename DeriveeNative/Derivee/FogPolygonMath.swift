@@ -92,6 +92,50 @@ public enum FogPolygonMath {
         return sum
     }
     
+    // MARK: - Squiggle Elimination & Geographic Area (Wave PE.8)
+    
+    /// Counts distinct non-coincident vertices in a coordinate array (excluding duplicate closing vertex).
+    public static func distinctVertexCount(_ coords: [CLLocationCoordinate2D], epsilonMeters: Double = 0.1) -> Int {
+        guard coords.count >= 2 else { return coords.count }
+        var unique: [CLLocationCoordinate2D] = []
+        let points = (coords.first?.latitude == coords.last?.latitude && coords.first?.longitude == coords.last?.longitude)
+            ? Array(coords.dropLast())
+            : coords
+            
+        for pt in points {
+            if let last = unique.last {
+                let dLat = (pt.latitude - last.latitude) * 110_574.0
+                let dLon = (pt.longitude - last.longitude) * 111_320.0 * cos(pt.latitude * .pi / 180.0)
+                let dist = sqrt(dLat * dLat + dLon * dLon)
+                if dist > epsilonMeters {
+                    unique.append(pt)
+                }
+            } else {
+                unique.append(pt)
+            }
+        }
+        return unique.count
+    }
+    
+    /// Computes the planar projected surface area of a coordinate ring in square meters.
+    /// Uses equirectangular projection centered at the polygon's centroid.
+    public static func polygonAreaInSquareMeters(_ coords: [CLLocationCoordinate2D]) -> Double {
+        guard coords.count >= 3 else { return 0.0 }
+        let centerLat = coords.reduce(0.0) { $0 + $1.latitude } / Double(coords.count)
+        let latScale = 110_574.0 // meters per degree latitude
+        let lonScale = 111_320.0 * cos(centerLat * .pi / 180.0) // meters per degree longitude
+        
+        var sum: Double = 0.0
+        for i in 0..<(coords.count - 1) {
+            let x1 = coords[i].longitude * lonScale
+            let y1 = coords[i].latitude * latScale
+            let x2 = coords[i + 1].longitude * lonScale
+            let y2 = coords[i + 1].latitude * latScale
+            sum += (x1 * y2 - x2 * y1)
+        }
+        return abs(sum) * 0.5
+    }
+    
     /// Enforces the specified winding order (Clockwise or Counter-Clockwise) on a coordinate array.
     public static func enforceWindingOrder(_ coords: [CLLocationCoordinate2D], targetClockwise: Bool) -> [CLLocationCoordinate2D] {
         guard coords.count >= 3 else { return coords }
@@ -173,17 +217,25 @@ public enum FogPolygonMath {
                     }
                     
                     if coords.count >= 4 {
-                        if isOuterLoop {
-                            // Explored Corridor Exterior Boundary (Hole in World Box)
-                            // MUST be Clockwise (CW) for MapLibre interior hole convention (positive shoelace sum)
-                            let cwCoords = enforceWindingOrder(coords, targetClockwise: true)
-                            holePolygons.append(MLNPolygon(coordinates: cwCoords, count: UInt(cwCoords.count)))
-                            isOuterLoop = false
-                        } else {
-                            // Unvisited Island Interior Boundary (Positive Fog Island)
-                            // Standalone positive polygon exterior shell MUST be Clockwise (CW) for MapLibre
-                            let cwCoords = enforceWindingOrder(coords, targetClockwise: true)
-                            islandPolygons.append(MLNPolygonFeature(coordinates: cwCoords, count: UInt(cwCoords.count)))
+                        // Squiggle Elimination (Wave PE.8):
+                        // Suppress degenerate disjoint polygon rings (<3 distinct vertices or area < 10m²)
+                        // that produce stray floating amber loop artifacts.
+                        let uniqueCount = distinctVertexCount(coords)
+                        let areaM2 = polygonAreaInSquareMeters(coords)
+                        
+                        if uniqueCount >= 3 && areaM2 >= 10.0 {
+                            if isOuterLoop {
+                                // Explored Corridor Exterior Boundary (Hole in World Box)
+                                // MUST be Clockwise (CW) for MapLibre interior hole convention (positive shoelace sum)
+                                let cwCoords = enforceWindingOrder(coords, targetClockwise: true)
+                                holePolygons.append(MLNPolygon(coordinates: cwCoords, count: UInt(cwCoords.count)))
+                                isOuterLoop = false
+                            } else {
+                                // Unvisited Island Interior Boundary (Positive Fog Island)
+                                // Standalone positive polygon exterior shell MUST be Clockwise (CW) for MapLibre
+                                let cwCoords = enforceWindingOrder(coords, targetClockwise: true)
+                                islandPolygons.append(MLNPolygonFeature(coordinates: cwCoords, count: UInt(cwCoords.count)))
+                            }
                         }
                     }
                 }

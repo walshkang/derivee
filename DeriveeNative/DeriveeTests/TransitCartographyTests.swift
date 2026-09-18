@@ -41,14 +41,14 @@ final class TransitCartographyTests: XCTestCase {
         // Subway metrics
         let subway = TransitModalClass.subway
         XCTAssertEqual(subway.cartographyLineWidth, 4.0)
-        XCTAssertEqual(subway.cartographyCasingWidth, 6.0)
+        XCTAssertEqual(subway.cartographyCasingWidth, 7.0)
         XCTAssertNil(subway.cartographyLineDashPattern)
         XCTAssertNil(subway.cartographyCasingDashPattern)
         
         // Light Rail metrics (solid line, dashed casing)
         let lrt = TransitModalClass.lightRail
         XCTAssertEqual(lrt.cartographyLineWidth, 4.0)
-        XCTAssertEqual(lrt.cartographyCasingWidth, 6.0)
+        XCTAssertEqual(lrt.cartographyCasingWidth, 7.0)
         XCTAssertNil(lrt.cartographyLineDashPattern)
         XCTAssertEqual(lrt.cartographyCasingDashPattern, [3.0, 2.0])
         
@@ -241,6 +241,12 @@ final class TransitCartographyTests: XCTestCase {
         XCTAssertNotNil(expr, "Subway line color expression must be valid.")
     }
     
+    func testSubwayCasingColorExpressionEvaluation() {
+        let expr = MapView.Coordinator.subwayCasingColorExpression()
+        XCTAssertNotNil(expr, "Subway casing color expression must be valid.")
+        XCTAssertEqual(expr.keyPath, "casing_color")
+    }
+    
     func testMultiModalRouteDataCatalog() {
         let red = TransitRouteData.lineInfo(for: "Red")
         XCTAssertEqual(red.modalClass, .subway)
@@ -260,5 +266,176 @@ final class TransitCartographyTests: XCTestCase {
         
         let path = TransitRouteData.lineInfo(for: "PATH")
         XCTAssertEqual(path.modalClass, .subway)
+    }
+    
+    // MARK: - Wave PE.8 Tests: WCAG Contrast, Topological Chain & Squiggle Elimination
+    
+    func testWCAG21RelativeLuminanceAndContrastRatio() {
+        let whiteL = TransitRouteData.relativeLuminance(colorHex: "#FFFFFF")
+        let blackL = TransitRouteData.relativeLuminance(colorHex: "#000000")
+        XCTAssertEqual(whiteL, 1.0, accuracy: 0.001)
+        XCTAssertEqual(blackL, 0.0, accuracy: 0.001)
+        
+        let maxContrast = TransitRouteData.contrastRatio(hex1: "#FFFFFF", hex2: "#000000")
+        XCTAssertEqual(maxContrast, 21.0, accuracy: 0.01)
+        
+        // Day basemap (#F9F9F6) contrast tests
+        let dayBasemap = "#F9F9F6"
+        
+        // Low contrast routes (< 3.0:1)
+        let lTrainContrast = TransitRouteData.contrastRatio(hex1: "#A7A9AC", hex2: dayBasemap)
+        XCTAssertLessThan(lTrainContrast, 3.0, "L Train (#A7A9AC) contrast must be < 3.0:1 on Day basemap")
+        
+        let circleLineContrast = TransitRouteData.contrastRatio(hex1: "#FFD300", hex2: dayBasemap)
+        XCTAssertLessThan(circleLineContrast, 3.0, "Circle Line (#FFD300) contrast must be < 3.0:1 on Day basemap")
+        
+        let yellowSubwayContrast = TransitRouteData.contrastRatio(hex1: "#FCCC0A", hex2: dayBasemap)
+        XCTAssertLessThan(yellowSubwayContrast, 3.0, "Yellow subway (#FCCC0A) contrast must be < 3.0:1 on Day basemap")
+        
+        // High contrast routes (>= 3.0:1)
+        let redLineContrast = TransitRouteData.contrastRatio(hex1: "#DA291C", hex2: dayBasemap)
+        XCTAssertGreaterThanOrEqual(redLineContrast, 3.0, "Red Line (#DA291C) contrast must be >= 3.0:1 on Day basemap")
+        
+        let blueLineContrast = TransitRouteData.contrastRatio(hex1: "#0039A6", hex2: dayBasemap)
+        XCTAssertGreaterThanOrEqual(blueLineContrast, 3.0, "Blue Line (#0039A6) contrast must be >= 3.0:1 on Day basemap")
+    }
+    
+    func testAdaptiveCasingColorResolution() {
+        // Day theme: low contrast routes get dark charcoal casing #2C2C2E
+        XCTAssertEqual(TransitRouteData.adaptiveCasingColor(for: "#A7A9AC", theme: .day), "#2C2C2E")
+        XCTAssertEqual(TransitRouteData.adaptiveCasingColor(for: "#FFD300", theme: .day), "#2C2C2E")
+        XCTAssertEqual(TransitRouteData.adaptiveCasingColor(for: "#FCCC0A", theme: .day), "#2C2C2E")
+        
+        // Day theme: high contrast routes retain #FFFFFF casing
+        XCTAssertEqual(TransitRouteData.adaptiveCasingColor(for: "#DA291C", theme: .day), "#FFFFFF")
+        XCTAssertEqual(TransitRouteData.adaptiveCasingColor(for: "#0039A6", theme: .day), "#FFFFFF")
+        
+        // Night / dark background: dark routes get white casing
+        XCTAssertEqual(TransitRouteData.adaptiveCasingColor(for: "#08179C", backgroundHex: "#1C1C1E"), "#FFFFFF")
+        
+        // LineInfo properties
+        let lLine = TransitRouteData.lineInfo(for: "L")
+        XCTAssertEqual(lLine.adaptiveCasingHex, "#2C2C2E")
+        XCTAssertEqual(lLine.casingColorHex, "#2C2C2E")
+        
+        let redLine = TransitRouteData.lineInfo(for: "Red")
+        XCTAssertEqual(redLine.adaptiveCasingHex, "#FFFFFF")
+    }
+    
+    func testGeoJSONParsingInjectsAdaptiveCasing() {
+        let testGeoJSON = """
+        {
+          "type": "FeatureCollection",
+          "features": [
+            {
+              "type": "Feature",
+              "properties": {
+                "route_id": "L",
+                "route_name": "Canarsie Line",
+                "color_hex": "#A7A9AC",
+                "casing_color_hex": "#FFFFFF",
+                "modal_class": 0
+              },
+              "geometry": {
+                "type": "LineString",
+                "coordinates": [[-73.90, 40.64], [-74.00, 40.74]]
+              }
+            }
+          ]
+        }
+        """
+        let data = Data(testGeoJSON.utf8)
+        let collection = TransitCartographyLoader.parseGeoJSONData(data)
+        guard let feature = collection.shapes.first as? MLNFeature else {
+            XCTFail("Feature must be present")
+            return
+        }
+        
+        // Even though GeoJSON supplied #FFFFFF, dynamic engine replaces it with #2C2C2E due to low contrast
+        XCTAssertEqual(feature.attributes["casing_color_hex"] as? String, "#2C2C2E")
+        XCTAssertNotNil(feature.attributes["casing_color"] as? UIColor)
+    }
+    
+    func testTopologicalChainAssemblyContinuousStitching() {
+        // Two connected segments: Seg1: (0,0) -> (0,1), Seg2: (0,1) -> (0,2)
+        let seg1 = [
+            CLLocationCoordinate2D(latitude: 40.70, longitude: -74.00),
+            CLLocationCoordinate2D(latitude: 40.72, longitude: -74.00)
+        ]
+        let seg2 = [
+            CLLocationCoordinate2D(latitude: 40.72, longitude: -74.00),
+            CLLocationCoordinate2D(latitude: 40.74, longitude: -74.00)
+        ]
+        
+        let stitched = TransitRouteData.assembleTopologicalChain(segments: [seg1, seg2])
+        XCTAssertEqual(stitched.count, 3, "Connected endpoint should be merged without duplicate joint point")
+        XCTAssertEqual(stitched.first?.latitude, 40.70)
+        XCTAssertEqual(stitched.last?.latitude, 40.74)
+    }
+    
+    func testTopologicalChainAssemblyStationAnchorAlignment() {
+        // Route with 3 stations running South to North
+        let stations = [
+            CLLocationCoordinate2D(latitude: 40.70, longitude: -74.00), // Station 0
+            CLLocationCoordinate2D(latitude: 40.75, longitude: -74.00), // Station 1
+            CLLocationCoordinate2D(latitude: 40.80, longitude: -74.00)  // Station 2
+        ]
+        
+        // Segment A runs Station 0 to 1
+        let segA = [
+            CLLocationCoordinate2D(latitude: 40.70, longitude: -74.00),
+            CLLocationCoordinate2D(latitude: 40.75, longitude: -74.00)
+        ]
+        // Segment B runs Station 2 to 1 (reversed direction)
+        let segB = [
+            CLLocationCoordinate2D(latitude: 40.80, longitude: -74.00),
+            CLLocationCoordinate2D(latitude: 40.75, longitude: -74.00)
+        ]
+        // Segment C is on a completely distant branch (in Queens, 15km away)
+        let segC = [
+            CLLocationCoordinate2D(latitude: 40.70, longitude: -73.80),
+            CLLocationCoordinate2D(latitude: 40.75, longitude: -73.80)
+        ]
+        
+        let chain = TransitRouteData.assembleTopologicalChain(segments: [segA, segB, segC], stationAnchors: stations)
+        XCTAssertEqual(chain.first?.latitude, 40.70)
+        XCTAssertEqual(chain.last?.latitude, 40.80)
+        
+        // Ensure distant branch segC was pruned to eliminate diagonal jump shortcut across borough
+        for coord in chain {
+            XCTAssertEqual(coord.longitude, -74.00, accuracy: 0.01, "Should not contain distant Queens longitude")
+        }
+    }
+    
+    func testFogPolygonMathSquiggleElimination() {
+        // 1. Degenerate ring with < 3 distinct vertices
+        let twoVertexRing = [
+            CLLocationCoordinate2D(latitude: 40.70, longitude: -74.00),
+            CLLocationCoordinate2D(latitude: 40.71, longitude: -74.00),
+            CLLocationCoordinate2D(latitude: 40.70, longitude: -74.00)
+        ]
+        XCTAssertEqual(FogPolygonMath.distinctVertexCount(twoVertexRing), 2)
+        
+        // 2. Microscopic sliver loop (< 10m²)
+        let microLoop = [
+            CLLocationCoordinate2D(latitude: 40.70000, longitude: -74.00000),
+            CLLocationCoordinate2D(latitude: 40.70001, longitude: -74.00000),
+            CLLocationCoordinate2D(latitude: 40.70001, longitude: -74.00001),
+            CLLocationCoordinate2D(latitude: 40.70000, longitude: -74.00000)
+        ]
+        let microArea = FogPolygonMath.polygonAreaInSquareMeters(microLoop)
+        XCTAssertLessThan(microArea, 10.0, "Micro loop area must be < 10m²")
+        
+        // 3. Genuine H3 Resolution 9 hex ring (~105,000 m²)
+        // ~100m radius polygon around NYC
+        let genuineHexRing = [
+            CLLocationCoordinate2D(latitude: 40.700, longitude: -74.000),
+            CLLocationCoordinate2D(latitude: 40.702, longitude: -74.000),
+            CLLocationCoordinate2D(latitude: 40.703, longitude: -74.002),
+            CLLocationCoordinate2D(latitude: 40.701, longitude: -74.003),
+            CLLocationCoordinate2D(latitude: 40.700, longitude: -74.000)
+        ]
+        let genuineArea = FogPolygonMath.polygonAreaInSquareMeters(genuineHexRing)
+        XCTAssertGreaterThan(genuineArea, 10.0, "Genuine hex ring area must be > 10m²")
     }
 }

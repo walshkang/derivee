@@ -84,13 +84,13 @@ public enum TransitModalClass: Int, Sendable, CaseIterable, Codable, Comparable,
         }
     }
     
-    /// MapLibre casing stroke line width in points.
+    /// MapLibre casing stroke line width in points (7.0pt provides 1.5pt casing border on each side of 4.0pt line).
     public var cartographyCasingWidth: CGFloat {
         switch self {
         case .subway:
-            return 6.0
+            return 7.0
         case .lightRail:
-            return 6.0
+            return 7.0
         case .bus, .ferry:
             return 0.0
         }

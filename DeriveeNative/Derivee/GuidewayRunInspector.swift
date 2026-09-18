@@ -963,7 +963,7 @@ public struct GuidewayRunInspector: View {
                     routeId: arrival.line,
                     lineName: lineInfo.name,
                     agencyColorHex: lineInfo.colorHex,
-                    casingColorHex: "#FFFFFF",
+                    casingColorHex: lineInfo.casingColorHex,
                     modalClass: lineInfo.modalClass,
                     coordinates: polyline,
                     stationCoordinate: validStationCoord,

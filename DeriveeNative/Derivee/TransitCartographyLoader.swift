@@ -96,10 +96,6 @@ public enum TransitCartographyLoader: Sendable {
                 attrs["color_hex"] = hex
                 attrs["color"] = UIColor(hex: hex)
                 
-                if attrs["casing_color_hex"] == nil {
-                    attrs["casing_color_hex"] = "#FFFFFF"
-                }
-                
                 // Extract or infer modal_class for MapLibre layer predicates
                 let modalClassRaw: Int
                 if let raw = attrs["modal_class"] as? Int {
@@ -116,6 +112,23 @@ public enum TransitCartographyLoader: Sendable {
                     modalClassRaw = TransitModalClass.subway.rawValue
                 }
                 attrs["modal_class"] = modalClassRaw
+                
+                // Dynamic Luminance Contrast Engine (Wave PE.8):
+                // For rail, subway, and bus modes, guarantee >= 3.0:1 contrast against basemap.
+                // If casing_color_hex is omitted or #FFFFFF, and contrast against Day (#F9F9F6) is < 3.0:1,
+                // dynamically inject adaptive dark charcoal casing (#2C2C2E).
+                let explicitCasing = attrs["casing_color_hex"] as? String
+                let resolvedCasingHex: String
+                if let explicit = explicitCasing, explicit != "#FFFFFF" {
+                    resolvedCasingHex = explicit
+                } else if modalClassRaw == TransitModalClass.ferry.rawValue {
+                    resolvedCasingHex = explicitCasing ?? "#FFFFFF"
+                } else {
+                    resolvedCasingHex = TransitRouteData.adaptiveCasingColor(for: hex, theme: .day)
+                }
+                
+                attrs["casing_color_hex"] = resolvedCasingHex
+                attrs["casing_color"] = UIColor(hex: resolvedCasingHex)
                 
                 feature.attributes = attrs
             }

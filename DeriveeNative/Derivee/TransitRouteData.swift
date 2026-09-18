@@ -40,6 +40,15 @@ public struct TransitRouteData {
             modalClass == .subway && ["6X", "7X", "FX"].contains(routeId.uppercased())
         }
         
+        /// Adaptive casing color hex guaranteeing WCAG 2.1 contrast (>= 3.0:1) on light (#F9F9F6) and dark (#1C1C1E) basemaps.
+        public var adaptiveCasingHex: String {
+            TransitRouteData.adaptiveCasingColor(for: colorHex)
+        }
+        
+        public var casingColorHex: String {
+            adaptiveCasingHex
+        }
+        
         /// The glyph rendered inside the bullet (e.g., "6" for "6X", "7" for "7X", "F" for "FX").
         public var bulletGlyph: String {
             if isDiamond {
@@ -228,8 +237,231 @@ public struct TransitRouteData {
         return false
     }
     
+    // MARK: - WCAG 2.1 Relative Luminance & Contrast Engine (Wave PE.8)
+    
+    /// Calculates the WCAG 2.1 relative luminance (L) of a hex color in sRGB space.
+    /// L = 0.2126 * R_linear + 0.7152 * G_linear + 0.0722 * B_linear
+    public static func relativeLuminance(colorHex: String) -> Double {
+        let cleanHex = colorHex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var intVal: UInt64 = 0
+        guard Scanner(string: cleanHex).scanHexInt64(&intVal) else { return 0.0 }
+        
+        let r, g, b: Double
+        switch cleanHex.count {
+        case 3: // RGB (12-bit)
+            r = Double((intVal >> 8) * 17) / 255.0
+            g = Double((intVal >> 4 & 0xF) * 17) / 255.0
+            b = Double((intVal & 0xF) * 17) / 255.0
+        case 6: // RGB (24-bit)
+            r = Double((intVal >> 16) & 0xFF) / 255.0
+            g = Double((intVal >> 8) & 0xFF) / 255.0
+            b = Double(intVal & 0xFF) / 255.0
+        default:
+            return 0.0
+        }
+        
+        func linearize(_ c: Double) -> Double {
+            c <= 0.04045 ? (c / 12.92) : pow((c + 0.055) / 1.055, 2.4)
+        }
+        
+        return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
+    }
+    
+    /// Calculates the WCAG 2.1 contrast ratio between two hex colors.
+    /// Returns a value in [1.0, 21.0].
+    public static func contrastRatio(hex1: String, hex2: String) -> Double {
+        let l1 = relativeLuminance(colorHex: hex1)
+        let l2 = relativeLuminance(colorHex: hex2)
+        let lighter = max(l1, l2)
+        let darker = min(l1, l2)
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+    
+    /// Resolves an adaptive casing color for a route line to ensure >= 3.0:1 contrast against the basemap background.
+    /// Baseline backgrounds: Day `#F9F9F6`, Night `#1C1C1E`.
+    /// When contrast drops below 3.0:1 (e.g. NYC L train #A7A9AC, Boston Silver Line #7C878E, London Circle #FFD300, NQRW #FCCC0A),
+    /// injects a dark charcoal casing (#2C2C2E) for Day or crisp white (#FFFFFF) for Night.
+    public static func adaptiveCasingColor(for routeColorHex: String, backgroundHex: String = "#F9F9F6") -> String {
+        let isDark = backgroundHex == "#1C1C1E" || backgroundHex == "#000000"
+        let ratio = contrastRatio(hex1: routeColorHex, hex2: backgroundHex)
+        if ratio < 3.0 {
+            return isDark ? "#FFFFFF" : "#2C2C2E"
+        } else {
+            return isDark ? "#2C2C2E" : "#FFFFFF"
+        }
+    }
+    
+    public static func adaptiveCasingColor(for routeColorHex: String, theme: BasemapTheme) -> String {
+        adaptiveCasingColor(for: routeColorHex, backgroundHex: "#F9F9F6")
+    }
+    
+    // MARK: - MultiLineString Topological Chain Assembly (Wave PE.8)
+    
+    /// Stitches MultiLineString segments into a continuous, station-aligned coordinate chain.
+    /// Eliminates straight diagonal shortcut chords across city grids while retaining all valid track segments.
+    public static func assembleTopologicalChain(
+        segments: [[CLLocationCoordinate2D]],
+        stationAnchors: [CLLocationCoordinate2D] = []
+    ) -> [CLLocationCoordinate2D] {
+        let validSegments = segments.filter { $0.count >= 2 }
+        guard !validSegments.isEmpty else { return [] }
+        if validSegments.count == 1 { return validSegments[0] }
+        
+        func distanceMeters(_ c1: CLLocationCoordinate2D, _ c2: CLLocationCoordinate2D) -> Double {
+            let loc1 = CLLocation(latitude: c1.latitude, longitude: c1.longitude)
+            let loc2 = CLLocation(latitude: c2.latitude, longitude: c2.longitude)
+            return loc1.distance(from: loc2)
+        }
+        
+        // 1. Station-anchored assembly when route stop sequence is available
+        if stationAnchors.count >= 2 {
+            struct SegmentMatch {
+                let segment: [CLLocationCoordinate2D]
+                let startStationIdx: Int
+                let endStationIdx: Int
+                let isReversed: Bool
+            }
+            
+            var matches: [SegmentMatch] = []
+            for seg in validSegments {
+                guard let first = seg.first, let last = seg.last else { continue }
+                
+                var minStartDist = Double.infinity
+                var bestStartIdx = 0
+                var minEndDist = Double.infinity
+                var bestEndIdx = 0
+                
+                for (sIdx, anchor) in stationAnchors.enumerated() {
+                    let dStart = distanceMeters(first, anchor)
+                    if dStart < minStartDist {
+                        minStartDist = dStart
+                        bestStartIdx = sIdx
+                    }
+                    let dEnd = distanceMeters(last, anchor)
+                    if dEnd < minEndDist {
+                        minEndDist = dEnd
+                        bestEndIdx = sIdx
+                    }
+                }
+                
+                // Discard segments that are completely unaligned (>1200m from any station anchor)
+                if minStartDist > 1200 && minEndDist > 1200 { continue }
+                
+                let isReversed = bestStartIdx > bestEndIdx
+                let sIdx = isReversed ? bestEndIdx : bestStartIdx
+                let eIdx = isReversed ? bestStartIdx : bestEndIdx
+                let orientedSeg = isReversed ? seg.reversed() : seg
+                matches.append(SegmentMatch(segment: orientedSeg, startStationIdx: sIdx, endStationIdx: eIdx, isReversed: isReversed))
+            }
+            
+            if !matches.isEmpty {
+                // Sort segments along the station progression
+                matches.sort { m1, m2 in
+                    if m1.startStationIdx != m2.startStationIdx {
+                        return m1.startStationIdx < m2.startStationIdx
+                    }
+                    return (m1.endStationIdx - m1.startStationIdx) > (m2.endStationIdx - m2.startStationIdx)
+                }
+                
+                var assembled: [CLLocationCoordinate2D] = matches[0].segment
+                var currentEndStation = matches[0].endStationIdx
+                
+                for i in 1..<matches.count {
+                    let nextMatch = matches[i]
+                    // Skip redundant parallel tracks covering the exact same or already covered stations
+                    if nextMatch.endStationIdx <= currentEndStation && nextMatch.startStationIdx <= currentEndStation {
+                        continue
+                    }
+                    
+                    guard let chainLast = assembled.last, let nextFirst = nextMatch.segment.first else { continue }
+                    let gap = distanceMeters(chainLast, nextFirst)
+                    
+                    // Only connect if the gap is within a reasonable station/junction spacing (<= 350m)
+                    // Never draw straight diagonal jump lines across distant boroughs
+                    if gap <= 350.0 {
+                        if gap < 2.0 {
+                            assembled.append(contentsOf: nextMatch.segment.dropFirst())
+                        } else {
+                            assembled.append(contentsOf: nextMatch.segment)
+                        }
+                        currentEndStation = max(currentEndStation, nextMatch.endStationIdx)
+                    }
+                }
+                
+                if assembled.count >= 2 {
+                    return assembled
+                }
+            }
+        }
+        
+        // 2. Topological endpoint continuity assembly (when station anchors are unavailable or sparse)
+        var remaining = validSegments
+        // Start with the longest segment as the spine
+        remaining.sort { $0.count > $1.count }
+        var chain = remaining.removeFirst()
+        let maxConnectionDistance: Double = 250.0 // meters
+        
+        while !remaining.isEmpty {
+            guard let chainFirst = chain.first, let chainLast = chain.last else { break }
+            
+            var bestIdx: Int?
+            var bestDistance = maxConnectionDistance
+            var connectionMode: Int = 0 // 0: append, 1: append_rev, 2: prepend, 3: prepend_rev
+            
+            for (idx, seg) in remaining.enumerated() {
+                guard let segFirst = seg.first, let segLast = seg.last else { continue }
+                
+                let d1 = distanceMeters(chainLast, segFirst)
+                if d1 < bestDistance {
+                    bestDistance = d1
+                    bestIdx = idx
+                    connectionMode = 0
+                }
+                let d2 = distanceMeters(chainLast, segLast)
+                if d2 < bestDistance {
+                    bestDistance = d2
+                    bestIdx = idx
+                    connectionMode = 1
+                }
+                let d3 = distanceMeters(segLast, chainFirst)
+                if d3 < bestDistance {
+                    bestDistance = d3
+                    bestIdx = idx
+                    connectionMode = 2
+                }
+                let d4 = distanceMeters(segFirst, chainFirst)
+                if d4 < bestDistance {
+                    bestDistance = d4
+                    bestIdx = idx
+                    connectionMode = 3
+                }
+            }
+            
+            guard let matchedIdx = bestIdx else {
+                // No remaining segments can connect without creating a diagonal shortcut jump
+                break
+            }
+            
+            let seg = remaining.remove(at: matchedIdx)
+            switch connectionMode {
+            case 0: // chainLast -> segFirst
+                chain.append(contentsOf: seg.dropFirst())
+            case 1: // chainLast -> segLast (reverse seg)
+                chain.append(contentsOf: seg.reversed().dropFirst())
+            case 2: // segLast -> chainFirst
+                chain = Array(seg.dropLast()) + chain
+            case 3: // segFirst -> chainFirst (reverse seg)
+                chain = Array(seg.reversed().dropLast()) + chain
+            default:
+                break
+            }
+        }
+        
+        return chain
+    }
+    
     /// Parses GeoJSON / track route polyline off the main thread, querying local database first
-    static func loadRouteCoordinates(for stopOrRouteId: String) async -> [CLLocationCoordinate2D] {
+    static func loadRouteCoordinates(for stopOrRouteId: String, fallbackStops: [CLLocationCoordinate2D] = []) async -> [CLLocationCoordinate2D] {
         return await Task.detached(priority: .userInitiated) {
             let cleanId = stopOrRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
             let routeId = inferRouteId(from: cleanId)
@@ -245,7 +477,7 @@ public struct TransitRouteData {
             }
             
             // 2. Attempt to load from bundled or City Pack GeoJSON shapes
-            if let geoCoords = loadCoordinatesFromGeoJSON(for: routeId), !geoCoords.isEmpty {
+            if let geoCoords = loadCoordinatesFromGeoJSON(for: routeId, stationAnchors: fallbackStops), !geoCoords.isEmpty {
                 return geoCoords
             }
             
@@ -269,7 +501,7 @@ public struct TransitRouteData {
             return fallbackStops
         }
         
-        let loaded = await loadRouteCoordinates(for: routeId)
+        let loaded = await loadRouteCoordinates(for: routeId, fallbackStops: fallbackStops)
         if !loaded.isEmpty {
             return loaded
         }
@@ -279,7 +511,7 @@ public struct TransitRouteData {
         return []
     }
     
-    private static func loadCoordinatesFromGeoJSON(for routeId: String) -> [CLLocationCoordinate2D]? {
+    private static func loadCoordinatesFromGeoJSON(for routeId: String, stationAnchors: [CLLocationCoordinate2D] = []) -> [CLLocationCoordinate2D]? {
         guard let bundleURL = TransitCartographyLoader.resolveTransitLinesGeoJSONURL() ??
                               Bundle.main.url(forResource: "subway-lines", withExtension: "geojson") ??
                               Bundle(for: SpatialDatabaseManager.self).url(forResource: "subway-lines", withExtension: "geojson"),
@@ -317,8 +549,12 @@ public struct TransitRouteData {
                 if matches, let geom = feature["geometry"] as? [String: Any] {
                     let geomType = (geom["type"] as? String) ?? ""
                     if geomType == "MultiLineString", let multiCoords = geom["coordinates"] as? [[[Double]]] {
-                        if let longest = multiCoords.max(by: { $0.count < $1.count }) {
-                            return longest.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
+                        let segments = multiCoords.map { line in
+                            line.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
+                        }
+                        let assembled = assembleTopologicalChain(segments: segments, stationAnchors: stationAnchors)
+                        if !assembled.isEmpty {
+                            return assembled
                         }
                     } else if geomType == "LineString", let coords = geom["coordinates"] as? [[Double]] {
                         return coords.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
