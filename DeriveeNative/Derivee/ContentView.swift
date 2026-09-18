@@ -521,7 +521,7 @@ struct ContentView: View {
                         
                     case .driftControls:
                         AmbientDriftControlCard(trackingEngine: trackingEngine)
-                            .presentationDetents([.height(290)])
+                            .presentationDetents([.height(340)])
                             .presentationDragIndicator(.visible)
                             .presentationContentInteraction(.scrolls)
                             .transitSheetGlassBackground()

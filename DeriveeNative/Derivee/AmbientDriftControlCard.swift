@@ -50,7 +50,7 @@ struct AmbientDriftControlCard: View {
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("Dismiss controls")
             }
-            .padding(.top, 2)
+            .padding(.top, 24)
             
             // Section 1 & 2: Direct Interactive Switches
             VStack(spacing: 12) {
@@ -194,7 +194,7 @@ struct AmbientDriftControlCard: View {
     
     @ViewBuilder
     private var escalationBanner: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 13))
                 .foregroundColor(Color(hex: "#FFB300"))
@@ -203,8 +203,10 @@ struct AmbientDriftControlCard: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.secondary)
                 .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
             
-            Spacer()
+            Spacer(minLength: 4)
             
             Button(action: {
                 let impact = UIImpactFeedbackGenerator(style: .light)
