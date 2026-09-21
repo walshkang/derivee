@@ -1785,17 +1785,20 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let isHistoricalFallback: Bool
         public let isObservedReplay: Bool
         public let totalDepartures: Int
+        public let isScheduleAvailable: Bool
         
         public init(
             records: [HourScheduleRecord],
             isHistoricalFallback: Bool = false,
             isObservedReplay: Bool = false,
-            totalDepartures: Int? = nil
+            totalDepartures: Int? = nil,
+            isScheduleAvailable: Bool = true
         ) {
             self.records = records
             self.isHistoricalFallback = isHistoricalFallback
             self.isObservedReplay = isObservedReplay
             self.totalDepartures = totalDepartures ?? records.reduce(0) { $0 + $1.departures.count }
+            self.isScheduleAvailable = isScheduleAvailable
         }
     }
     
@@ -3551,6 +3554,76 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    // MARK: - Terminating Arrival Filtering (Wave PE.13)
+    
+    public static func isTerminatingArrival(headsign: String, stopName: String = "", stopId: String = "") -> Bool {
+        let cleanHeadsign = headsign.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanStopName = stopName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
+        
+        guard !cleanHeadsign.isEmpty else { return false }
+        
+        if !cleanStopName.isEmpty && cleanHeadsign == cleanStopName {
+            return true
+        }
+        
+        // Direction 0 terminals (North / Manhattan / Queens) terminating headsigns
+        if (cleanStopId == "601" || cleanStopId.hasPrefix("601") || cleanStopName.contains("pelham")) &&
+           (cleanHeadsign.contains("pelham")) {
+            return true
+        }
+        if (cleanStopId == "701" || cleanStopId.hasPrefix("701") || cleanStopName.contains("flushing")) &&
+           (cleanHeadsign.contains("flushing") || cleanHeadsign.contains("main st")) {
+            return true
+        }
+        if (cleanStopId == "L01" || cleanStopId.hasPrefix("L01") || cleanStopName.contains("8 av") || cleanStopName.contains("8th ave") || cleanStopName.contains("eighth ave")) &&
+           (cleanHeadsign.contains("8 av") || cleanHeadsign.contains("8th av") || cleanHeadsign.contains("eighth av")) {
+            return true
+        }
+        if (cleanStopId == "S31" || cleanStopId.hasPrefix("S31") || cleanStopName.contains("st george") || cleanStopName.contains("st. george")) &&
+           (cleanHeadsign.contains("st george") || cleanHeadsign.contains("st. george")) {
+            return true
+        }
+        if (cleanStopId == "A02" || cleanStopId.hasPrefix("A02") || cleanStopName.contains("inwood")) &&
+           (cleanHeadsign.contains("inwood") || cleanHeadsign.contains("207")) {
+            return true
+        }
+        if (cleanStopId == "101" || cleanStopId.hasPrefix("101") || cleanStopName.contains("van cortlandt")) &&
+           (cleanHeadsign.contains("van cortlandt") || cleanHeadsign.contains("242")) {
+            return true
+        }
+        if (cleanStopId == "201" || cleanStopId.hasPrefix("201") || cleanStopName.contains("wakefield")) &&
+           (cleanHeadsign.contains("wakefield") || cleanHeadsign.contains("241")) {
+            return true
+        }
+        if (cleanStopId == "D01" || cleanStopId.hasPrefix("D01") || cleanStopName.contains("norwood")) &&
+           (cleanHeadsign.contains("norwood") || cleanHeadsign.contains("205")) {
+            return true
+        }
+        
+        // Direction 1 terminals (South / Brooklyn / Staten Island) terminating headsigns
+        if (cleanStopId == "142" || cleanStopId.hasPrefix("142") || cleanStopName.contains("south ferry")) &&
+           (cleanHeadsign.contains("south ferry")) {
+            return true
+        }
+        if (cleanStopId == "L29" || cleanStopId.hasPrefix("L29") || cleanStopName.contains("canarsie") || cleanStopName.contains("rockaway pkwy")) &&
+           (cleanHeadsign.contains("canarsie") || cleanHeadsign.contains("rockaway pkwy")) {
+            return true
+        }
+        if (cleanStopId == "S09" || cleanStopId.hasPrefix("S09") || cleanStopName.contains("tottenville")) &&
+           (cleanHeadsign.contains("tottenville")) {
+            return true
+        }
+        
+        if !cleanStopName.isEmpty {
+            if cleanHeadsign.contains(cleanStopName) && !cleanHeadsign.contains(" to ") && !cleanHeadsign.contains(" via ") {
+                return true
+            }
+        }
+        
+        return false
+    }
+
     public func fetchTimetableResult(
         for stopId: String,
         routeId: String? = nil,
@@ -3578,18 +3651,19 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 let resolvedIds = self.resolvePlatformStopIds(for: stopId, in: db)
                 let idPlaceholders = Array(repeating: "?", count: resolvedIds.count).joined(separator: ", ")
                 
-                // Terminal directional filtering (PB.1 / Bugs 1, 2)
-                let cleanStop = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
-                let isSIRRoute = (routeIds + [routeId ?? ""]).map { $0.uppercased() }.contains { $0 == "SIR" || $0 == "SI" } || cleanStop.hasPrefix("S31") || cleanStop.hasPrefix("S09")
-                if isSIRRoute {
-                    if (cleanStop == "S31" || cleanStop.hasPrefix("S31")) && directionId == 0 {
-                        let emptyRecords = (0..<24).map { HourScheduleRecord(hourOfDay: $0, departures: []) }
-                        return TimetableResult(records: emptyRecords, isHistoricalFallback: false, isObservedReplay: false)
-                    }
-                    if (cleanStop == "S09" || cleanStop.hasPrefix("S09")) && directionId == 1 {
-                        let emptyRecords = (0..<24).map { HourScheduleRecord(hourOfDay: $0, departures: []) }
-                        return TimetableResult(records: emptyRecords, isHistoricalFallback: false, isObservedReplay: false)
-                    }
+                // Resolve stop name for terminal & arrival disambiguation
+                var stopName = ""
+                let allCandidateIds = [stopId] + resolvedIds
+                let candidatePlaceholders = Array(repeating: "?", count: allCandidateIds.count).joined(separator: ", ")
+                if let row = try? Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id IN (\(candidatePlaceholders)) LIMIT 1", arguments: StatementArguments(allCandidateIds)) {
+                    stopName = row["stop_name"] ?? ""
+                }
+                
+                // Terminal directional filtering (PB.1 / Bugs 1, 2 / PE.13)
+                let availableTerminalDirs = self.filterTerminalDirections([0, 1], for: stopId, stopName: stopName, routeId: routeId, routeIds: routeIds)
+                if !availableTerminalDirs.contains(directionId) && availableTerminalDirs.count == 1 {
+                    let emptyRecords = (0..<24).map { HourScheduleRecord(hourOfDay: $0, departures: []) }
+                    return TimetableResult(records: emptyRecords, isHistoricalFallback: false, isObservedReplay: false, totalDepartures: 0, isScheduleAvailable: false)
                 }
                 
                 // Past days ($dayOffset < 0): Try Observed Reality Replay from stop_events
@@ -3654,7 +3728,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                             let records = (0..<24).map { h in
                                 HourScheduleRecord(hourOfDay: h, departures: hourMap[h] ?? [])
                             }
-                            return TimetableResult(records: records, isHistoricalFallback: false, isObservedReplay: true)
+                            return TimetableResult(records: records, isHistoricalFallback: false, isObservedReplay: true, isScheduleAvailable: true)
                         }
                     }
                 }
@@ -3712,6 +3786,11 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                             
                             guard isActive else { continue }
                             
+                            // PE.13: Filter out terminating arrival patterns at this stop
+                            if Self.isTerminatingArrival(headsign: headsign, stopName: stopName, stopId: stopId) {
+                                continue
+                            }
+                            
                             let mins = minOffsets.components(separatedBy: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
                             for min in mins {
                                 let isExp = rId.contains("X") || rId.contains("SBS") || (rId == "2" || rId == "4" || rId == "5" || rId == "A")
@@ -3738,7 +3817,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         
                         if allPillsCount > 0 {
                             let isHistFallback = (dayOffset < 0)
-                            return TimetableResult(records: records, isHistoricalFallback: isHistFallback, isObservedReplay: false, totalDepartures: allPillsCount)
+                            return TimetableResult(records: records, isHistoricalFallback: isHistFallback, isObservedReplay: false, totalDepartures: allPillsCount, isScheduleAvailable: true)
                         }
                     }
                 }
@@ -3771,6 +3850,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         for hour in 0..<24 {
                             hourMap[hour] = []
                         }
+                        var allLegacyPills = 0
                         for (idx, row) in rows.enumerated() {
                             guard let hourStr: String = row["dep_hour"], let hour = Int(hourStr),
                                   let minStr: String = row["dep_min"], let min = Int(minStr) else { continue }
@@ -3778,6 +3858,12 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                             let rId: String = row["route_id"] ?? (routeId ?? "L")
                             let dir: Int = row["direction_id"] ?? directionId
                             let dest: String = row["headsign"] ?? (TransitRealtimeService.SubwayFeed.isBusRoute(rId) ? TransitRealtimeService.resolveBusDestination(routeId: rId, directionId: dir).destination : "Terminal")
+                            
+                            // PE.13: Filter out terminating arrivals at this stop
+                            if Self.isTerminatingArrival(headsign: dest, stopName: stopName, stopId: stopId) {
+                                continue
+                            }
+                            
                             let isExp = rId.contains("X") || rId.contains("SBS") || (rId == "2" || rId == "4" || rId == "5" || rId == "A")
                             let isFirst = idx == 0
                             let isLast = idx == rows.count - 1
@@ -3794,36 +3880,33 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                                 isLastDeparture: isLast
                             )
                             hourMap[hour]?.append(pill)
+                            allLegacyPills += 1
                         }
-                        let records = (0..<24).map { h in
-                            HourScheduleRecord(hourOfDay: h, departures: hourMap[h] ?? [])
+                        if allLegacyPills > 0 {
+                            let records = (0..<24).map { h in
+                                HourScheduleRecord(hourOfDay: h, departures: hourMap[h] ?? [])
+                            }
+                            return TimetableResult(records: records, isHistoricalFallback: dayOffset < 0, isObservedReplay: false, totalDepartures: allLegacyPills, isScheduleAvailable: true)
                         }
-                        return TimetableResult(records: records, isHistoricalFallback: dayOffset < 0, isObservedReplay: false)
                     }
                 }
             } catch let error as DatabaseError {
-                print("⚠️ Transit timetable query failed: \(error.message). Returning fallback timetable.")
+                print("⚠️ Transit timetable query failed: \(error.message). Returning empty timetable.")
             } catch {
                 throw error
             }
             
-            let effectiveRoutes: [String]
-            if !routeIds.isEmpty {
-                effectiveRoutes = routeIds
-            } else if let rId = routeId, !rId.isEmpty {
-                effectiveRoutes = [rId]
-            } else {
-                effectiveRoutes = [self.inferRouteId(from: stopId, name: stopId)]
-            }
-            
-            let fallbackRecords: [HourScheduleRecord]
-            if effectiveRoutes.count > 1 {
-                fallbackRecords = self.generateMultiRouteFallbackTimetable(for: stopId, routeIds: effectiveRoutes, directionId: directionId)
-            } else {
-                fallbackRecords = self.generateFallbackTimetable(for: stopId, routeId: effectiveRoutes.first ?? "L", directionId: directionId)
-            }
+            // PE.13: If no static timetable data is available, do NOT synthesize fake departures.
+            // Return an honest empty timetable with isScheduleAvailable: false.
+            let emptyRecords = (0..<24).map { HourScheduleRecord(hourOfDay: $0, departures: []) }
             let isHistFallback = (dayOffset < 0)
-            return TimetableResult(records: fallbackRecords, isHistoricalFallback: isHistFallback, isObservedReplay: false, totalDepartures: fallbackRecords.reduce(0) { $0 + $1.departures.count })
+            return TimetableResult(
+                records: emptyRecords,
+                isHistoricalFallback: isHistFallback,
+                isObservedReplay: false,
+                totalDepartures: 0,
+                isScheduleAvailable: false
+            )
         }
     }
     
@@ -3836,6 +3919,21 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         referenceDate: Date = Date()
     ) async throws -> [HourScheduleRecord] {
         let result = try await fetchTimetableResult(for: stopId, routeId: routeId, routeIds: routeIds, directionId: directionId, dayOffset: dayOffset, referenceDate: referenceDate)
+        if !result.isScheduleAvailable || result.totalDepartures == 0 {
+            let effectiveRoutes: [String]
+            if !routeIds.isEmpty {
+                effectiveRoutes = routeIds
+            } else if let rId = routeId, !rId.isEmpty {
+                effectiveRoutes = [rId]
+            } else {
+                effectiveRoutes = [self.inferRouteId(from: stopId, name: stopId)]
+            }
+            if effectiveRoutes.count > 1 {
+                return self.generateMultiRouteFallbackTimetable(for: stopId, routeIds: effectiveRoutes, directionId: directionId)
+            } else {
+                return self.generateFallbackTimetable(for: stopId, routeId: effectiveRoutes.first ?? "L", directionId: directionId)
+            }
+        }
         return result.records
     }
     
@@ -3852,10 +3950,17 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 let resolvedIds = self.resolvePlatformStopIds(for: stopId, in: db)
                 let idPlaceholders = Array(repeating: "?", count: resolvedIds.count).joined(separator: ", ")
                 
+                var stopName = ""
+                let allCandidateIds = [stopId] + resolvedIds
+                let candidatePlaceholders = Array(repeating: "?", count: allCandidateIds.count).joined(separator: ", ")
+                if let row = try? Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id IN (\(candidatePlaceholders)) LIMIT 1", arguments: StatementArguments(allCandidateIds)) {
+                    stopName = row["stop_name"] ?? ""
+                }
+                
                 // 1. Check scheduled_hourly_patterns
                 let patternCols = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_hourly_patterns)")
                 if !patternCols.isEmpty {
-                    var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_hourly_patterns WHERE stop_id IN (\(idPlaceholders))"
+                    var sql = "SELECT DISTINCT direction_id, headsign FROM transit.scheduled_hourly_patterns WHERE stop_id IN (\(idPlaceholders))"
                     var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
                     if !routeIds.isEmpty {
                         let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
@@ -3867,9 +3972,26 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     }
                     let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
                     if !rows.isEmpty {
-                        let dirs = rows.compactMap { row -> Int? in row["direction_id"] }
-                        if !dirs.isEmpty {
-                            return self.filterTerminalDirections(Set(dirs), for: stopId, routeId: routeId, routeIds: routeIds)
+                        var dirHeadsigns: [Int: [String]] = [:]
+                        for row in rows {
+                            if let d: Int = row["direction_id"] {
+                                let hs: String = row["headsign"] ?? ""
+                                dirHeadsigns[d, default: []].append(hs)
+                            }
+                        }
+                        
+                        var validDirs: Set<Int> = []
+                        for (d, headsigns) in dirHeadsigns {
+                            let hasDepartures = headsigns.contains { hs in
+                                !Self.isTerminatingArrival(headsign: hs, stopName: stopName, stopId: stopId)
+                            }
+                            if hasDepartures {
+                                validDirs.insert(d)
+                            }
+                        }
+                        
+                        if !validDirs.isEmpty {
+                            return self.filterTerminalDirections(validDirs, for: stopId, stopName: stopName, routeId: routeId, routeIds: routeIds)
                         }
                     }
                 }
@@ -3877,7 +3999,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 // 2. Check legacy scheduled_stops
                 let columns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_stops)")
                 if !columns.isEmpty {
-                    var sql = "SELECT DISTINCT direction_id FROM transit.scheduled_stops WHERE stop_id IN (\(idPlaceholders))"
+                    var sql = "SELECT DISTINCT direction_id, headsign FROM transit.scheduled_stops WHERE stop_id IN (\(idPlaceholders))"
                     var args: [DatabaseValueConvertible] = resolvedIds.map { $0 as DatabaseValueConvertible }
                     if !routeIds.isEmpty {
                         let placeholders = Array(repeating: "?", count: routeIds.count).joined(separator: ", ")
@@ -3889,11 +4011,26 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     }
                     let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
                     if !rows.isEmpty {
-                        let dirs = rows.compactMap { row -> Int? in
-                            row["direction_id"]
+                        var dirHeadsigns: [Int: [String]] = [:]
+                        for row in rows {
+                            if let d: Int = row["direction_id"] {
+                                let hs: String = row["headsign"] ?? ""
+                                dirHeadsigns[d, default: []].append(hs)
+                            }
                         }
-                        if !dirs.isEmpty {
-                            return self.filterTerminalDirections(Set(dirs), for: stopId, routeId: routeId, routeIds: routeIds)
+                        
+                        var validDirs: Set<Int> = []
+                        for (d, headsigns) in dirHeadsigns {
+                            let hasDepartures = headsigns.contains { hs in
+                                !Self.isTerminatingArrival(headsign: hs, stopName: stopName, stopId: stopId)
+                            }
+                            if hasDepartures {
+                                validDirs.insert(d)
+                            }
+                        }
+                        
+                        if !validDirs.isEmpty {
+                            return self.filterTerminalDirections(validDirs, for: stopId, stopName: stopName, routeId: routeId, routeIds: routeIds)
                         }
                     }
                 }
@@ -3922,24 +4059,56 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         let cleanId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         let lowerId = stopId.lowercased()
         let lowerName = stopName.lowercased()
-        let allRoutes = (routeIds + [routeId ?? ""]).map { $0.uppercased() }
-        let isSIR = allRoutes.contains("SIR") || allRoutes.contains("SI") || cleanId.hasPrefix("S31") || cleanId.hasPrefix("S09")
-        
-        let isStGeorge = cleanId == "S31" || cleanId.hasPrefix("S31") || lowerId.contains("st_george") || lowerName.contains("st george") || lowerName.contains("st. george")
-        let isTottenville = cleanId == "S09" || cleanId.hasPrefix("S09") || lowerId.contains("tottenville") || lowerName.contains("tottenville")
         
         var filtered = dirs
-        if isSIR || cleanId.hasPrefix("S") {
-            if isStGeorge {
-                filtered.remove(0)
-                if filtered.isEmpty { filtered.insert(1) }
-                return filtered
-            } else if isTottenville {
-                filtered.remove(1)
-                if filtered.isEmpty { filtered.insert(0) }
-                return filtered
+        
+        // Direction 0 Terminals (Uptown / Queens / North Terminals -> trains arrive in dir 0, departures are dir 1 only)
+        let dir0Ids: Set<String> = ["601", "701", "L01", "S31", "A02", "101", "201", "D01"]
+        var isDir0Terminal = dir0Ids.contains(cleanId)
+        if !isDir0Terminal {
+            for prefix in dir0Ids where cleanId.hasPrefix(prefix) {
+                isDir0Terminal = true
+                break
             }
         }
+        if !isDir0Terminal {
+            if lowerId.contains("pelham") || lowerName.contains("pelham bay") { isDir0Terminal = true }
+            else if lowerId.contains("flushing") || lowerName.contains("flushing") { isDir0Terminal = true }
+            else if lowerId.contains("8th_ave") || lowerId.contains("eighth_ave") || lowerName.contains("8 av") { isDir0Terminal = true }
+            else if lowerId.contains("st_george") || lowerName.contains("st george") || lowerName.contains("st. george") { isDir0Terminal = true }
+            else if lowerId.contains("inwood") || lowerName.contains("inwood") { isDir0Terminal = true }
+            else if lowerId.contains("van_cortlandt") || lowerName.contains("van cortlandt") { isDir0Terminal = true }
+            else if lowerId.contains("wakefield") || lowerName.contains("wakefield") { isDir0Terminal = true }
+            else if lowerId.contains("norwood") || lowerName.contains("norwood") { isDir0Terminal = true }
+        }
+            
+        if isDir0Terminal {
+            filtered.remove(0)
+            if filtered.isEmpty { filtered.insert(1) }
+            return filtered
+        }
+        
+        // Direction 1 Terminals (Downtown / Brooklyn / South Terminals -> trains arrive in dir 1, departures are dir 0 only)
+        let dir1Ids: Set<String> = ["142", "L29", "S09"]
+        var isDir1Terminal = dir1Ids.contains(cleanId)
+        if !isDir1Terminal {
+            for prefix in dir1Ids where cleanId.hasPrefix(prefix) {
+                isDir1Terminal = true
+                break
+            }
+        }
+        if !isDir1Terminal {
+            if lowerId.contains("south_ferry") || lowerName.contains("south ferry") { isDir1Terminal = true }
+            else if lowerId.contains("canarsie") || lowerName.contains("canarsie") { isDir1Terminal = true }
+            else if lowerId.contains("tottenville") || lowerName.contains("tottenville") { isDir1Terminal = true }
+        }
+            
+        if isDir1Terminal {
+            filtered.remove(1)
+            if filtered.isEmpty { filtered.insert(0) }
+            return filtered
+        }
+        
         return filtered
     }
     
@@ -4403,16 +4572,16 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         let upperName = stopName.uppercased()
 
         // Explicit directional routing qualifiers in stop name (e.g. (NB), (SB), (EB), (WB))
-        if upperName.contains("(NB)") || upperName.hasSuffix(" NB") {
+        if upperName.contains("(NB)") || upperName.hasSuffix(" NB") || upperName.contains(" NB ") {
             return [0]
         }
-        if upperName.contains("(SB)") || upperName.hasSuffix(" SB") {
+        if upperName.contains("(SB)") || upperName.hasSuffix(" SB") || upperName.contains(" SB ") {
             return [1]
         }
-        if upperName.contains("(EB)") || upperName.hasSuffix(" EB") {
+        if upperName.contains("(EB)") || upperName.hasSuffix(" EB") || upperName.contains(" EB ") {
             return [0]
         }
-        if upperName.contains("(WB)") || upperName.hasSuffix(" WB") {
+        if upperName.contains("(WB)") || upperName.hasSuffix(" WB") || upperName.contains(" WB ") {
             return [1]
         }
 
@@ -4429,6 +4598,32 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         if lowerId.contains("1way_nb") || lowerId.contains("1way_north") {
             return [0]
         }
+        
+        // Bus Corridors: Manhattan & Brooklyn one-way avenues & streets (Wave PE.13)
+        let isBus = stopId.hasPrefix("BUS_") || routeId.contains("-") || TransitRouteData.isBusRoute(routeId)
+        if isBus {
+            let primaryStreet = lowerName.components(separatedBy: "/").first ?? lowerName
+            let matchText = primaryStreet.isEmpty ? lowerId : primaryStreet
+            // Northbound avenues: 1st, 3rd, Madison, 6th, 8th, 10th
+            if matchText.contains("1 av") || matchText.contains("1st av") || matchText.contains("1av") ||
+               matchText.contains("3 av") || matchText.contains("3rd av") || matchText.contains("3av") ||
+               matchText.contains("madison") ||
+               matchText.contains("6 av") || matchText.contains("6th av") || matchText.contains("6av") || matchText.contains("ave of the americas") ||
+               matchText.contains("8 av") || matchText.contains("8th av") || matchText.contains("8av") ||
+               matchText.contains("10 av") || matchText.contains("10th av") || matchText.contains("10av") {
+                return [0]
+            }
+            // Southbound avenues: 2nd, Lexington, 5th, 7th, 9th, 11th
+            if matchText.contains("2 av") || matchText.contains("2nd av") || matchText.contains("2av") ||
+               matchText.contains("lexington") || matchText.contains("lex av") ||
+               matchText.contains("5 av") || matchText.contains("5th av") || matchText.contains("5av") || matchText.contains("fifth") ||
+               matchText.contains("7 av") || matchText.contains("7th av") || matchText.contains("7av") ||
+               matchText.contains("9 av") || matchText.contains("9th av") || matchText.contains("9av") || matchText.contains("columbus") ||
+               matchText.contains("11 av") || matchText.contains("11th av") || matchText.contains("11av") {
+                return [1]
+            }
+        }
+        
         // Known one-way bus corridors & stop IDs (Kent Av is NB only, Wythe Av is SB only; 11 St NB, 21 St SB on B32)
         if routeId == "B32" || lowerId.contains("b32") || routeId.isEmpty {
             if stopId == "308666" || stopId == "308667" || stopId == "308668" ||

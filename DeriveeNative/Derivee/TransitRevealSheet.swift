@@ -28,6 +28,7 @@ struct TransitRevealSheet: View {
     @State private var selectedDayOffset: Int = 0
     @State private var isHistoricalFallback: Bool = false
     @State private var isObservedReplay: Bool = false
+    @State private var isScheduleAvailable: Bool = true
     @State private var selectedRecord: SpatialDatabaseManager.HourlyReliabilityRecord? = nil
     @State private var liveArrivals: [SpatialDatabaseManager.ArrivalInfo] = []
     @State private var serviceAlerts: [TransitAlert] = []
@@ -591,6 +592,7 @@ struct TransitRevealSheet: View {
                                 isObservedReplay: isObservedReplay,
                                 scheduleValidity: CameraBounds.activeConfig.transit?.scheduleValidity,
                                 referenceDate: referenceDate,
+                                isScheduleAvailable: isScheduleAvailable,
                                 onInspectDeparture: { arrival in
                                     withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
                                         inspectingArrival = arrival
@@ -771,6 +773,7 @@ struct TransitRevealSheet: View {
             self.timetableSchedule = result.records
             self.isHistoricalFallback = result.isHistoricalFallback
             self.isObservedReplay = result.isObservedReplay
+            self.isScheduleAvailable = result.isScheduleAvailable
         }
     }
     
@@ -863,6 +866,7 @@ struct TransitRevealSheet: View {
             self.timetableSchedule = result.records
             self.isHistoricalFallback = result.isHistoricalFallback
             self.isObservedReplay = result.isObservedReplay
+            self.isScheduleAvailable = result.isScheduleAvailable
         }
         
         guard let details = details else { return }

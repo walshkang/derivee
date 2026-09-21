@@ -10,6 +10,7 @@ struct DepartureMatrixView: View {
     let referenceDate: Date?
     let isHistoricalFallback: Bool
     let isObservedReplay: Bool
+    let isScheduleAvailable: Bool
     let scheduleValidity: ScheduleValidity?
     public var onInspectDeparture: ((SpatialDatabaseManager.ArrivalInfo) -> Void)? = nil
     
@@ -36,6 +37,7 @@ struct DepartureMatrixView: View {
         isObservedReplay: Bool = false,
         scheduleValidity: ScheduleValidity? = nil,
         referenceDate: Date? = nil,
+        isScheduleAvailable: Bool = true,
         onInspectDeparture: ((SpatialDatabaseManager.ArrivalInfo) -> Void)? = nil
     ) {
         self.records = records
@@ -48,6 +50,7 @@ struct DepartureMatrixView: View {
         self.availableDirections = effectiveDirs
         self.isHistoricalFallback = isHistoricalFallback
         self.isObservedReplay = isObservedReplay
+        self.isScheduleAvailable = isScheduleAvailable
         self.scheduleValidity = scheduleValidity
         self.referenceDate = referenceDate
         self.onInspectDeparture = onInspectDeparture
@@ -625,14 +628,16 @@ struct DepartureMatrixView: View {
             
             // Direction Selector, Route Filter & Metric Bar
             VStack(spacing: 8) {
-                // Direction Selector Segmented Control (or Single-Direction Pill for One-Way Curbs)
-                if isBus && availableDirections.count == 1, let singleDir = availableDirections.first {
+                // Direction Selector Segmented Control (or Single-Direction Pill for One-Way Curbs & Terminals)
+                if availableDirections.count == 1, let singleDir = availableDirections.first {
+                    let dirLabel = isBus ? busDirectionLabel(for: singleDir) : directionLabel(for: singleDir)
+                    let badgeText = isBus ? "One-Way Curb" : "Terminal Station"
                     HStack(spacing: 8) {
                         Image(systemName: singleDir == 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(Color(hex: "#FFB300"))
                         
-                        Text("Serving \(busDirectionLabel(for: singleDir))")
+                        Text("Serving \(dirLabel)")
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
                             .foregroundColor(.primary)
                             .lineLimit(1)
@@ -640,7 +645,7 @@ struct DepartureMatrixView: View {
                         
                         Spacer()
                         
-                        Text("One-Way Curb")
+                        Text(badgeText)
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -799,46 +804,76 @@ struct DepartureMatrixView: View {
                 }
             }
             
-            // Full 24-Hour Scrollable Matrix
-            ScrollView(.vertical, showsIndicators: true) {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    let showRouteBadge = (selectedRouteFilter == "ALL" && routeIds.count > 1)
-                    ForEach(reconciled) { hourRec in
-                        HourRowView(
-                            hourRecord: hourRec,
-                            routeId: routeId,
-                            showRouteBadge: showRouteBadge,
-                            currentHour: selectedDayOffset == 0 ? currentHour : -1,
-                            allScheduleDates: allTransitionDates,
-                            isStatic: referenceDate != nil,
-                            onInspect: { pill in
-                                let arr = resolveArrivalInfo(for: pill, inHour: hourRec.hourOfDay, at: currentDate)
-                                onInspectDeparture?(arr)
-                            }
+            // Full 24-Hour Scrollable Matrix or Honest Empty State
+            if !isScheduleAvailable || (totalDeparturesCount == 0 && !isHistoricalFallback && !isObservedReplay) {
+                VStack(spacing: 12) {
+                    Image(systemName: "clock.badge.xmark")
+                        .font(.system(size: 28))
+                        .foregroundColor(Color(hex: "#FFB300"))
+                        .padding(.top, 8)
+                    
+                    Text("Timetable Not Available")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primary)
+                    
+                    Text("Scheduled timetable is not available for this stop.\nLive arrival tracking is active.")
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 32)
+                .padding(.horizontal, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.primary.opacity(0.03))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                         )
-                        .id(hourRec.hourOfDay)
-                        
-                        if hourRec.hourOfDay != 23 {
-                            Divider()
-                                .opacity(0.4)
+                )
+            } else {
+                ScrollView(.vertical, showsIndicators: true) {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        let showRouteBadge = (selectedRouteFilter == "ALL" && routeIds.count > 1)
+                        ForEach(reconciled) { hourRec in
+                            HourRowView(
+                                hourRecord: hourRec,
+                                routeId: routeId,
+                                showRouteBadge: showRouteBadge,
+                                currentHour: selectedDayOffset == 0 ? currentHour : -1,
+                                allScheduleDates: allTransitionDates,
+                                isStatic: referenceDate != nil,
+                                onInspect: { pill in
+                                    let arr = resolveArrivalInfo(for: pill, inHour: hourRec.hourOfDay, at: currentDate)
+                                    onInspectDeparture?(arr)
+                                }
+                            )
+                            .id(hourRec.hourOfDay)
+                            
+                            if hourRec.hourOfDay != 23 {
+                                Divider()
+                                    .opacity(0.4)
+                            }
                         }
                     }
+                    .padding(.vertical, 4)
+                    .scrollTargetLayout()
                 }
-                .padding(.vertical, 4)
-                .scrollTargetLayout()
+                .scrollPosition(id: $scrollPositionID, anchor: .top)
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: 380)
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.primary.opacity(0.03))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
+                )
             }
-            .scrollPosition(id: $scrollPositionID, anchor: .top)
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: 380)
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.primary.opacity(0.03))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                    )
-            )
             
             // Schedule Validity Footer (for future days)
             if selectedDayOffset > 0, let validity = scheduleValidity {
@@ -865,7 +900,9 @@ struct DepartureMatrixView: View {
             }
             
             // Legend Footer
-            LegendFooterView(routeId: routeId)
+            if isScheduleAvailable && (totalDeparturesCount > 0 || isHistoricalFallback || isObservedReplay) {
+                LegendFooterView(routeId: routeId)
+            }
         }
         .task {
             guard !isInitialized else { return }

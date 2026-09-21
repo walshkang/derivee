@@ -2025,6 +2025,148 @@ final class TransitRevealSheetTests: XCTestCase {
             "StationFloorStepperPill chevron buttons must be 24pt high"
         )
     }
+    
+    // MARK: - Wave PE.13 Honest Timetables, Placeholder Elimination & Terminal Direction Gating Tests
+    
+    func testPE13_isTerminatingArrival_TerminalClassification() {
+        // Pelham Bay Park (601)
+        XCTAssertTrue(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Pelham Bay Park", stopName: "Pelham Bay Park", stopId: "601"),
+            "Arrival headsign matching terminus stop must be identified as terminating arrival"
+        )
+        XCTAssertTrue(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Pelham Bay Pk", stopName: "Pelham Bay Park", stopId: "601"),
+            "Variant headsign matching terminus stop must be identified as terminating arrival"
+        )
+        XCTAssertFalse(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Brooklyn Bridge - City Hall", stopName: "Pelham Bay Park", stopId: "601"),
+            "Departing train headsign must NOT be identified as terminating arrival"
+        )
+        
+        // 8th Ave (L01)
+        XCTAssertTrue(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Manhattan - 8th Ave", stopName: "8 Av", stopId: "L01"),
+            "8th Ave arrival pattern must be identified as terminating arrival"
+        )
+        XCTAssertFalse(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Brooklyn - Canarsie", stopName: "8 Av", stopId: "L01"),
+            "Canarsie-bound departure from 8th Ave must NOT be identified as terminating arrival"
+        )
+        
+        // South Ferry (142)
+        XCTAssertTrue(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "South Ferry", stopName: "South Ferry", stopId: "142"),
+            "South Ferry arrival pattern must be identified as terminating arrival"
+        )
+        XCTAssertFalse(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Van Cortlandt Park - 242 St", stopName: "South Ferry", stopId: "142"),
+            "Uptown departure from South Ferry must NOT be identified as terminating arrival"
+        )
+        
+        // Flushing-Main St (701)
+        XCTAssertTrue(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Flushing - Main St", stopName: "Flushing - Main St", stopId: "701"),
+            "Flushing arrival pattern must be identified as terminating arrival"
+        )
+        XCTAssertFalse(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "34 St - Hudson Yards", stopName: "Flushing - Main St", stopId: "701"),
+            "Hudson Yards departure from Flushing must NOT be identified as terminating arrival"
+        )
+        
+        // Mid-corridor station (e.g. Union Square): Pelham-bound train is a departure, NOT a terminating arrival
+        XCTAssertFalse(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Pelham Bay Park", stopName: "14 St - Union Sq", stopId: "635"),
+            "Train departing mid-corridor station towards terminus must NOT be identified as terminating arrival"
+        )
+    }
+    
+    func testPE13_fetchTimetableResult_NoSyntheticPlaceholders() async throws {
+        // Query an unknown stop without static data: must return empty records with isScheduleAvailable: false
+        let result = try await dbManager.fetchTimetableResult(
+            for: "stop_no_static_data_available",
+            routeId: "L",
+            directionId: 0,
+            dayOffset: 0
+        )
+        
+        XCTAssertFalse(result.isScheduleAvailable, "Stop without static timetable must have isScheduleAvailable == false")
+        XCTAssertEqual(result.totalDepartures, 0, "Stop without static timetable must return 0 total departures (no synthetic placeholders)")
+        XCTAssertEqual(result.records.count, 24, "Result must contain 24 hour records")
+        for record in result.records {
+            XCTAssertTrue(record.departures.isEmpty, "Hour record must not contain fabricated departures")
+        }
+    }
+    
+    func testPE13_fetchAvailableDirections_TerminalsAndOneWayAvenues() async throws {
+        // Pelham Bay Park 6 is Direction 1 only (Downtown/Manhattan bound departures)
+        let dirsPelham = try await dbManager.fetchAvailableDirections(for: "601", routeId: "6")
+        XCTAssertEqual(dirsPelham, Set([1]), "Pelham Bay Park terminal must only have Direction 1 departures")
+        
+        // Flushing 7 is Direction 1 only (Manhattan bound departures)
+        let dirsFlushing = try await dbManager.fetchAvailableDirections(for: "701", routeId: "7")
+        XCTAssertEqual(dirsFlushing, Set([1]), "Flushing-Main St terminal must only have Direction 1 departures")
+        
+        // 8 Av L is Direction 1 only (Brooklyn bound departures)
+        let dirs8Av = try await dbManager.fetchAvailableDirections(for: "L01", routeId: "L")
+        XCTAssertEqual(dirs8Av, Set([1]), "8 Av terminal must only have Direction 1 departures")
+        
+        // Canarsie L is Direction 0 only (Manhattan bound departures)
+        let dirsCanarsie = try await dbManager.fetchAvailableDirections(for: "L29", routeId: "L")
+        XCTAssertEqual(dirsCanarsie, Set([0]), "Canarsie terminal must only have Direction 0 departures")
+        
+        // South Ferry 1 is Direction 0 only (Uptown bound departures)
+        let dirsSouthFerry = try await dbManager.fetchAvailableDirections(for: "142", routeId: "1")
+        XCTAssertEqual(dirsSouthFerry, Set([0]), "South Ferry terminal must only have Direction 0 departures")
+        
+        // Manhattan one-way avenues for buses:
+        // Madison Av is Northbound only (Direction 0)
+        let dirsMadison = try await dbManager.fetchAvailableDirections(for: "BUS_MADISON_42", routeId: "M1")
+        XCTAssertEqual(dirsMadison, Set([0]), "Madison Av bus stops must be Northbound (Direction 0) only")
+        
+        // 5th Av is Southbound only (Direction 1)
+        let dirs5th = try await dbManager.fetchAvailableDirections(for: "BUS_5AV_34", routeId: "M1")
+        XCTAssertEqual(dirs5th, Set([1]), "5th Av bus stops must be Southbound (Direction 1) only")
+    }
+    
+    func testPE13_DepartureMatrixView_ModeAdaptiveBadgeAndHonestEmptyState() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let departureMatrixFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/DepartureMatrixView.swift")
+        let content = try String(contentsOf: departureMatrixFile, encoding: .utf8)
+        
+        // 1. Mode-adaptive badge text in single-direction header pill
+        XCTAssertTrue(
+            content.contains("let badgeText = isBus ? \"One-Way Curb\" : \"Terminal Station\""),
+            "DepartureMatrixView must differentiate One-Way Curb for buses vs Terminal Station for rail/subway"
+        )
+        
+        // 2. Single-direction check generalized beyond bus
+        XCTAssertTrue(
+            content.contains("if availableDirections.count == 1, let singleDir = availableDirections.first"),
+            "DepartureMatrixView must support single-direction header pill for all modes"
+        )
+        
+        // 3. Honest empty state check
+        XCTAssertTrue(
+            content.contains("if !isScheduleAvailable || (totalDeparturesCount == 0 && !isHistoricalFallback && !isObservedReplay)"),
+            "DepartureMatrixView must render honest empty state when timetable is unavailable"
+        )
+        XCTAssertTrue(
+            content.contains("Text(\"Timetable Not Available\")"),
+            "DepartureMatrixView must display 'Timetable Not Available' heading"
+        )
+        
+        // 4. Instantiation test with empty schedule
+        let emptyRecords = (0..<24).map { SpatialDatabaseManager.HourScheduleRecord(hourOfDay: $0, departures: []) }
+        let emptyView = DepartureMatrixView(
+            records: emptyRecords,
+            routeId: "L",
+            stopId: "stop_test_empty",
+            isScheduleAvailable: false
+        )
+        let vc = UIHostingController(rootView: emptyView)
+        XCTAssertNotNil(vc.view)
+    }
 }
 
 
