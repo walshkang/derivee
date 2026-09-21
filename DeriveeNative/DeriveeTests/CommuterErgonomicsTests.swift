@@ -1213,6 +1213,190 @@ final class CommuterErgonomicsTests: XCTestCase {
         let content = try String(contentsOf: deriveeDir.appendingPathComponent("ContentView.swift"), encoding: .utf8)
         XCTAssertTrue(content.contains("AppStorageKeys.fogOpacity"), "ContentView must retain user baseline fogOpacity for clean restoration upon inspection exit (FC-10)")
     }
+
+    // MARK: - 11. FC-11: Header Grabber Clearance (Wave PE.10 & PE.12 Invariant)
+
+    func testFC11_AmbientDriftControlCard_HeaderGrabberClearance() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let cardFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/AmbientDriftControlCard.swift")
+        let content = try String(contentsOf: cardFile, encoding: .utf8)
+        
+        // Header top padding must be >= 20pt (specifically 24pt) to eliminate grabber collision
+        XCTAssertTrue(
+            content.contains(".padding(.top, 24)"),
+            "AmbientDriftControlCard header must have >= 20pt top padding for system grabber clearance (FC-11)"
+        )
+        XCTAssertFalse(
+            content.contains(".padding(.top, 2)"),
+            "AmbientDriftControlCard must eliminate legacy 2pt header top padding grabber collision (FC-11)"
+        )
+    }
+
+    func testFC11_SheetsWithVisibleDragIndicator_EnforceMinimumClearance() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let deriveeDir = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee")
+        let cardFile = deriveeDir.appendingPathComponent("AmbientDriftControlCard.swift")
+        let content = try String(contentsOf: cardFile, encoding: .utf8)
+        
+        if content.contains(".presentationDragIndicator(.visible)") {
+            XCTAssertTrue(
+                content.contains(".padding(.top, 24)") || content.contains(".padding(.top, 20)"),
+                "Visible drag indicator sheets must provide >= 20pt clearance (FC-11)"
+            )
+        }
+    }
+
+    // MARK: - 12. FC-12: No Truncated Status Banners (Wave PE.10 & PE.12 Invariant)
+
+    func testFC12_EscalationBanner_NonTruncatingMultilineLayout() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let cardFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/AmbientDriftControlCard.swift")
+        let content = try String(contentsOf: cardFile, encoding: .utf8)
+        
+        XCTAssertTrue(
+            content.contains(".fixedSize(horizontal: false, vertical: true)"),
+            "escalationBanner Text must specify .fixedSize(horizontal: false, vertical: true) for multi-line expansion (FC-12)"
+        )
+        XCTAssertTrue(
+            content.contains(".layoutPriority(1)"),
+            "escalationBanner Text must specify .layoutPriority(1) to prevent horizontal ellipsis truncation (FC-12)"
+        )
+        XCTAssertTrue(
+            content.contains("Spacer(minLength: 4)"),
+            "escalationBanner must specify compact Spacer(minLength: 4) to maximize text layout room (FC-12)"
+        )
+    }
+
+    // MARK: - 13. FC-13: Complex Direction Coherence (Wave PE.7 & PE.12 Invariant)
+
+    @MainActor
+    func testFC13_ComplexDirectionClustering_UnifiesCoLocatedLines() {
+        let bNorth = SpatialDatabaseManager.ArrivalInfo(
+            line: "B",
+            destination: "Bedford Park Blvd",
+            minutes: 2,
+            direction: "Uptown & Queens / Bronx",
+            corridorVector: .northbound
+        )
+        let nNorth = SpatialDatabaseManager.ArrivalInfo(
+            line: "N",
+            destination: "Astoria - Ditmars Blvd",
+            minutes: 4,
+            direction: "Uptown & Queens",
+            corridorVector: .northbound
+        )
+        let bSouth = SpatialDatabaseManager.ArrivalInfo(
+            line: "B",
+            destination: "Brighton Beach",
+            minutes: 3,
+            direction: "Downtown & Brooklyn",
+            corridorVector: .southbound
+        )
+        let wSouth = SpatialDatabaseManager.ArrivalInfo(
+            line: "W",
+            destination: "Whitehall St",
+            minutes: 6,
+            direction: "Downtown & Lower Manhattan",
+            corridorVector: .southbound
+        )
+        
+        let allArrivals = [bNorth, nNorth, bSouth, wSouth]
+        let details = SpatialDatabaseManager.StopDetails(
+            stopId: "complex_herald_sq",
+            name: "34 St-Herald Sq",
+            routeId: "B",
+            routeIds: ["B", "D", "F", "M", "N", "Q", "R", "W"],
+            routeType: 1,
+            modalClass: .subway,
+            coordinate: CLLocationCoordinate2D(latitude: 40.7497, longitude: -73.9878),
+            arrivals: allArrivals
+        )
+        
+        let sheet = TransitRevealSheet(
+            stopId: "complex_herald_sq",
+            initialDetails: details,
+            initialLiveArrivals: allArrivals
+        )
+        
+        let groups = sheet.groupedArrivals
+        XCTAssertEqual(groups.count, 2, "Complex station must unify co-located lines into exactly 2 cardinal corridor groups (FC-13)")
+        
+        let groupNamesUpper = groups.map { $0.directionName.uppercased() }
+        XCTAssertTrue(groupNamesUpper.contains(where: { $0.contains("UPTOWN") }), "Northbound lines must cluster under unified Uptown header (FC-13)")
+        XCTAssertTrue(groupNamesUpper.contains(where: { $0.contains("DOWNTOWN") }), "Southbound lines must cluster under unified Downtown header (FC-13)")
+    }
+
+    func testFC13_ClusterHeader_PreventsDuplicateCardinalPrefixBuckets() {
+        let northArrivals = [
+            SpatialDatabaseManager.ArrivalInfo(line: "B", destination: "Bedford Park Blvd", minutes: 2, direction: "Uptown & Queens / Bronx", corridorVector: .northbound),
+            SpatialDatabaseManager.ArrivalInfo(line: "N", destination: "Astoria", minutes: 5, direction: "Uptown & Queens", corridorVector: .northbound)
+        ]
+        
+        let header = TransitRevealSheet.resolveClusterHeader(for: .northbound, arrivals: northArrivals)
+        XCTAssertEqual(header.uppercased(), "UPTOWN & QUEENS / THE BRONX", "Disparate northbound branch arrivals must unify into a single macro header (FC-13)")
+    }
+
+    // MARK: - 14. FC-14: Basemap Contrast Minimum (Wave PE.8 & PE.12 Invariant)
+
+    func testFC14_BasemapContrastMinimum_AllRoutesPassWCAGOrAdaptiveCasing() {
+        let dayBasemap = "#F9F9F6"
+        let testRouteColors = [
+            "#0039A6", // NYC 8th Ave (A, C, E)
+            "#DA291C", // Boston Red Line / NYC 7th Ave (1, 2, 3)
+            "#FCCC0A", // NYC Broadway (N, Q, R, W)
+            "#EE352E", // NYC 7th Ave (1, 2, 3)
+            "#00933C", // NYC Lexington (4, 5, 6)
+            "#FF6319", // NYC 6th Ave (B, D, F, M)
+            "#B933AD", // NYC Flushing (7)
+            "#6CBE45", // NYC Crosstown (G)
+            "#A7A9AC", // NYC Canarsie (L)
+            "#808183", // NYC Shuttles (S)
+            "#996633", // NYC Nassau (J, Z)
+            "#00ADD0"  // Staten Island Railway (SIR)
+        ]
+        
+        for colorHex in testRouteColors {
+            let rawContrast = TransitRouteData.contrastRatio(hex1: colorHex, hex2: dayBasemap)
+            let casingHex = TransitRouteData.adaptiveCasingColor(for: colorHex, theme: .day)
+            
+            if rawContrast < 3.0 {
+                // For routes with low contrast on day basemap (e.g. L train #A7A9AC or Yellow #FCCC0A),
+                // the dynamic contrast engine must inject dark charcoal casing (#2C2C2E)
+                XCTAssertEqual(
+                    casingHex,
+                    "#2C2C2E",
+                    "Route \(colorHex) with contrast < 3.0:1 must receive dark charcoal casing #2C2C2E (FC-14)"
+                )
+                let casingContrast = TransitRouteData.contrastRatio(hex1: casingHex, hex2: dayBasemap)
+                XCTAssertGreaterThanOrEqual(
+                    casingContrast,
+                    4.5,
+                    "Injected casing must provide WCAG AA contrast (>= 4.5:1) against basemap (FC-14)"
+                )
+            } else {
+                // High contrast routes maintain standard crisp casing
+                XCTAssertEqual(
+                    casingHex,
+                    "#FFFFFF",
+                    "Route \(colorHex) with contrast >= 3.0:1 retains standard casing (FC-14)"
+                )
+            }
+        }
+    }
+
+    func testFC14_AdaptiveCasingColor_GuaranteesLegibilityOnBasemaps() {
+        let dayBasemap = "#F9F9F6"
+        let nightBasemap = "#1C1C1E"
+        
+        let dayCasingContrast = TransitRouteData.contrastRatio(hex1: "#2C2C2E", hex2: dayBasemap)
+        XCTAssertGreaterThanOrEqual(dayCasingContrast, 4.5, "Day adaptive casing #2C2C2E must exceed 4.5:1 on day basemap (FC-14)")
+        
+        let nightCasingContrast = TransitRouteData.contrastRatio(hex1: "#FFFFFF", hex2: nightBasemap)
+        XCTAssertGreaterThanOrEqual(nightCasingContrast, 4.5, "Night adaptive casing #FFFFFF must exceed 4.5:1 on night basemap (FC-14)")
+    }
 }
 
 

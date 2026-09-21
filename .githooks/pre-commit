@@ -54,6 +54,28 @@ for FILE in $STAGED_SWIFT; do
             ERRORS=$((ERRORS + 1))
         fi
     fi
+
+    # FC-11: Header grabber clearance on sheets with visible drag indicators (>= 20pt)
+    if [ "$FILE" = "DeriveeNative/Derivee/AmbientDriftControlCard.swift" ]; then
+        if git show :"$FILE" | grep -En '\.padding\(\.top, ([0-9]|1[0-9])\)' > /dev/null 2>&1; then
+            echo "❌ [FC-11 Violation] in $FILE:"
+            echo "   Header top padding < 20pt detected on sheet with visible drag indicator."
+            echo "   Must specify >= 20pt (e.g. .padding(.top, 24)) for grabber clearance (see design.md § 13.3)."
+            ERRORS=$((ERRORS + 1))
+        fi
+    fi
+
+    # FC-12: Zero truncated status/escalation banners (multi-line vertical expansion required)
+    if [ "$FILE" = "DeriveeNative/Derivee/AmbientDriftControlCard.swift" ]; then
+        if git show :"$FILE" | grep -n 'var escalationBanner' > /dev/null 2>&1; then
+            if ! git show :"$FILE" | grep -n '\.fixedSize(horizontal: false, vertical: true)' > /dev/null 2>&1; then
+                echo "❌ [FC-12 Violation] in $FILE:"
+                echo "   escalationBanner detected without .fixedSize(horizontal: false, vertical: true)."
+                echo "   Must allow multi-line expansion without horizontal ellipsis truncation."
+                ERRORS=$((ERRORS + 1))
+            fi
+        fi
+    fi
 done
 
 if [ $ERRORS -gt 0 ]; then
