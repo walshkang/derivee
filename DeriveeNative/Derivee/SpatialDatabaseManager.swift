@@ -2753,22 +2753,134 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 var rows = [Row]()
                 var isPatternRows = false
                 
-                // Tier 1: Query scheduled_hourly_patterns (Subway / Rail)
-                let patternColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_hourly_patterns)")
-                if !patternColumns.isEmpty {
-                    let sql = """
-                        SELECT DISTINCT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon, s.parent_station, s.routes
+                // Tier 1A: Query complete trip sequence from transit.stop_times (when static GTFS stop_times exists)
+                let stopTimesColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(stop_times)")
+                if !stopTimesColumns.isEmpty {
+                    let tripSql = """
+                        SELECT DISTINCT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon, s.parent_station, s.routes, st.stop_sequence
                         FROM transit.stops s
-                        JOIN transit.scheduled_hourly_patterns p ON (s.stop_id = p.stop_id OR s.parent_station = p.stop_id)
-                        WHERE p.route_id = ? AND p.direction_id = ?
-                        ORDER BY p.rowid ASC
+                        JOIN transit.stop_times st ON (s.stop_id = st.stop_id OR s.parent_station = st.stop_id)
+                        JOIN transit.trips t ON t.trip_id = st.trip_id
+                        WHERE (t.route_id = ? OR t.route_id = ?) AND t.direction_id = ?
+                        AND t.trip_id = (
+                            SELECT t2.trip_id FROM transit.trips t2 
+                            JOIN transit.stop_times st2 ON t2.trip_id = st2.trip_id 
+                            WHERE (t2.route_id = ? OR t2.route_id = ?) AND t2.direction_id = ? 
+                            GROUP BY t2.trip_id ORDER BY COUNT(*) DESC LIMIT 1
+                        )
+                        ORDER BY st.stop_sequence ASC
                     """
-                    rows = try Row.fetchAll(db, sql: sql, arguments: [lookupRouteId, directionId])
-                    if rows.isEmpty && lookupRouteId != routeId {
-                        rows = try Row.fetchAll(db, sql: sql, arguments: [routeId, directionId])
-                    }
+                    rows = try Row.fetchAll(db, sql: tripSql, arguments: [lookupRouteId, routeId, directionId, lookupRouteId, routeId, directionId])
                     if !rows.isEmpty {
                         isPatternRows = true
+                    }
+                }
+                
+                // Tier 1B: Query scheduled_hourly_patterns (Subway / Rail compact timetable)
+                if rows.isEmpty {
+                    let patternColumns = try Row.fetchAll(db, sql: "PRAGMA transit.table_info(scheduled_hourly_patterns)")
+                    if !patternColumns.isEmpty {
+                        let sql = """
+                            SELECT DISTINCT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon, s.parent_station, s.routes
+                            FROM transit.stops s
+                            JOIN transit.scheduled_hourly_patterns p ON (s.stop_id = p.stop_id OR s.parent_station = p.stop_id)
+                            WHERE p.route_id = ? AND p.direction_id = ?
+                        """
+                        let candidatePatternRows = try Row.fetchAll(db, sql: sql, arguments: [lookupRouteId, directionId])
+                        let effectivePatternRows = candidatePatternRows.isEmpty && lookupRouteId != routeId
+                            ? try Row.fetchAll(db, sql: sql, arguments: [routeId, directionId])
+                            : candidatePatternRows
+                        
+                        if !effectivePatternRows.isEmpty {
+                            isPatternRows = true
+                            
+                            // Physical Corridor Progression: Order stops along the rail track sequence
+                            // Retrieve destination headsign from route_directions
+                            let dirSql = "SELECT headsign FROM transit.route_directions WHERE (route_id = ? OR route_id = ?) AND direction_id = ? LIMIT 1"
+                            let headsignRow = try? Row.fetchOne(db, sql: dirSql, arguments: [lookupRouteId, routeId, directionId])
+                            let headsign = (headsignRow?["headsign"] as? String ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                            
+                            // Find destination stop matching headsign or standard terminals
+                            let northTerminals = SubwayStationRegistry.standardTerminals[lookupRouteId.uppercased()]?.north ?? []
+                            let southTerminals = SubwayStationRegistry.standardTerminals[lookupRouteId.uppercased()]?.south ?? []
+                            let originTerminals = (directionId == 0) ? southTerminals : northTerminals
+                            let targetTerminals = (directionId == 0) ? northTerminals : southTerminals
+                            
+                            var destStop = effectivePatternRows.first { r in
+                                let name = (r["stop_name"] as? String ?? "").lowercased()
+                                return !headsign.isEmpty && (name.contains(headsign) || headsign.contains(name))
+                            }
+                            if destStop == nil {
+                                destStop = effectivePatternRows.first { r in
+                                    let sId = (r["stop_id"] as? String ?? "").uppercased()
+                                    let pId = (r["parent_station"] as? String ?? "").uppercased()
+                                    return targetTerminals.contains(sId) || targetTerminals.contains(pId)
+                                }
+                            }
+                            let effectiveDest = destStop ?? effectivePatternRows.last!
+                            let destLat = effectiveDest["stop_lat"] as? Double ?? 0.0
+                            let destLon = effectiveDest["stop_lon"] as? Double ?? 0.0
+                            
+                            // Start stop: match origin terminals first, fallback to stop farthest from destination
+                            var startStopCandidate = effectivePatternRows.first { r in
+                                let sId = (r["stop_id"] as? String ?? "").uppercased()
+                                let pId = (r["parent_station"] as? String ?? "").uppercased()
+                                return originTerminals.contains(sId) || originTerminals.contains(pId)
+                            }
+                            if startStopCandidate == nil {
+                                startStopCandidate = effectivePatternRows.max { r1, r2 in
+                                    let lat1 = r1["stop_lat"] as? Double ?? 0.0
+                                    let lon1 = r1["stop_lon"] as? Double ?? 0.0
+                                    let lat2 = r2["stop_lat"] as? Double ?? 0.0
+                                    let lon2 = r2["stop_lon"] as? Double ?? 0.0
+                                    let d1 = hypot(lat1 - destLat, lon1 - destLon)
+                                    let d2 = hypot(lat2 - destLat, lon2 - destLon)
+                                    return d1 < d2
+                                }
+                            }
+                            let startStop = startStopCandidate ?? effectivePatternRows.first!
+                            
+                            // Nearest-neighbor corridor walk: connect stops along contiguous rail progression
+                            var ordered = [startStop]
+                            var remaining = effectivePatternRows.filter { r in
+                                let s1 = r["stop_id"] as? String ?? ""
+                                let s2 = startStop["stop_id"] as? String ?? ""
+                                return s1 != s2
+                            }
+                            
+                            while !remaining.isEmpty {
+                                let curr = ordered.last!
+                                let cLat = curr["stop_lat"] as? Double ?? 0.0
+                                let cLon = curr["stop_lon"] as? Double ?? 0.0
+                                
+                                var bestIdx = 0
+                                var bestDist = Double.infinity
+                                for (idx, cand) in remaining.enumerated() {
+                                    let candLat = cand["stop_lat"] as? Double ?? 0.0
+                                    let candLon = cand["stop_lon"] as? Double ?? 0.0
+                                    let d = hypot(cLat - candLat, cLon - candLon)
+                                    if d < bestDist {
+                                        bestDist = d
+                                        bestIdx = idx
+                                    }
+                                }
+                                ordered.append(remaining.remove(at: bestIdx))
+                            }
+                            
+                            // Verify destination is at the end of the ladder; reverse if inverted
+                            if let first = ordered.first, let last = ordered.last {
+                                let fLat = first["stop_lat"] as? Double ?? 0.0
+                                let fLon = first["stop_lon"] as? Double ?? 0.0
+                                let lLat = last["stop_lat"] as? Double ?? 0.0
+                                let lLon = last["stop_lon"] as? Double ?? 0.0
+                                let dFirstToDest = hypot(fLat - destLat, fLon - destLon)
+                                let dLastToDest = hypot(lLat - destLat, lLon - destLon)
+                                if dFirstToDest < dLastToDest {
+                                    ordered.reverse()
+                                }
+                            }
+                            rows = ordered
+                        }
                     }
                 }
                 
@@ -2885,16 +2997,6 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         uniqueRows.append(r)
                     }
                     
-                    // Sort direction check for pattern rows (where rowid ASC was used)
-                    if isPatternRows && uniqueRows.count >= 2 {
-                        let lat0: Double = uniqueRows.first?["stop_lat"] ?? 0
-                        let lat1: Double = uniqueRows.last?["stop_lat"] ?? 0
-                        if directionId == 1 && lat0 < lat1 {
-                            uniqueRows.reverse()
-                        } else if directionId == 0 && lat0 > lat1 {
-                            uniqueRows.reverse()
-                        }
-                    }
                     
                     let cleanTarget = currentStopId.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
                     var resolvedIndex = uniqueRows.firstIndex { row in

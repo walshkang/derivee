@@ -462,9 +462,10 @@ public struct GuidewayRunInspector: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
             } else {
-                let earlierStops = stopLadder.filter { $0.isPassed }
+                let passedStops = stopLadder.filter { $0.isPassed }
                 let approachingAndUpcomingStops = stopLadder.filter { !$0.isPassed }
-                let hasEarlierStops = !earlierStops.isEmpty
+                let hasPassedStops = !passedStops.isEmpty
+                let hasAccordion = passedStops.count >= 3
                 
                 let vehicleIdx = stopLadder.firstIndex(where: { $0.isVehicleHere }) ?? (stopLadder.firstIndex(where: { $0.isCurrent }) ?? 0)
                 let currentIdx = stopLadder.firstIndex(where: { $0.isCurrent }) ?? 0
@@ -479,57 +480,68 @@ public struct GuidewayRunInspector: View {
                             renderLadderNode(stop: stop, isFirst: index == 0, isLast: isLastInBlock)
                                 .id(stop.id)
                         }
-                    } else if hasEarlierStops {
-                        // Collapsed Accordion Header / Toggle for Earlier Stops (Wave PD.3)
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.22)) {
-                                isPassedStopsExpanded.toggle()
-                            }
-                        } label: {
-                            HStack(alignment: .center, spacing: 14) {
-                                // Continuous Track Stem indicator
-                                VStack(spacing: 0) {
-                                    Rectangle()
-                                        .fill(Color.clear)
-                                        .frame(width: 4, height: 6)
-                                    Circle()
-                                        .fill(Color.secondary.opacity(0.35))
-                                        .frame(width: 8, height: 8)
-                                    Rectangle()
-                                        .fill(Color.secondary.opacity(0.25))
-                                        .frame(width: 4, height: 6)
+                    } else {
+                        // Preceding Stops Accordion (Invariant FC-1):
+                        // Auto-collapse when passed count >= 3, render inline when < 3
+                        if hasAccordion {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    isPassedStopsExpanded.toggle()
                                 }
-                                .frame(width: 24)
-                                
-                                let count = earlierStops.count
-                                let noun = count == 1 ? "earlier stop" : "earlier stops"
-                                Text("\(count) \(noun)")
-                                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                                    .foregroundColor(.secondary)
-                                
-                                Image(systemName: isPassedStopsExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.secondary)
-                                
-                                Spacer()
+                            } label: {
+                                HStack(alignment: .center, spacing: 14) {
+                                    // Continuous Track Stem indicator
+                                    VStack(spacing: 0) {
+                                        Rectangle()
+                                            .fill(Color.clear)
+                                            .frame(width: 4)
+                                            .frame(minHeight: 8, maxHeight: .infinity)
+                                        Circle()
+                                            .fill(Color.secondary.opacity(0.35))
+                                            .frame(width: 8, height: 8)
+                                        Rectangle()
+                                            .fill(Color.secondary.opacity(0.25))
+                                            .frame(width: 4)
+                                            .frame(minHeight: 8, maxHeight: .infinity)
+                                    }
+                                    .frame(width: 24)
+                                    
+                                    // Wave PE.11 / PD.3: auto-collapse preceding earlier stops into 'X stops passed' accordion
+                                    let noun = passedStops.count == 1 ? "earlier stop" : "stops passed"
+                                    Text("\(passedStops.count) \(noun)")
+                                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Image(systemName: isPassedStopsExpanded ? "chevron.up" : "chevron.down")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Spacer()
+                                }
+                                .padding(.vertical, 6)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.vertical, 6)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        
-                        if isPassedStopsExpanded {
-                            ForEach(Array(earlierStops.enumerated()), id: \.element.id) { index, stop in
+                            .buttonStyle(.plain)
+                            
+                            if isPassedStopsExpanded {
+                                ForEach(Array(passedStops.enumerated()), id: \.element.id) { index, stop in
+                                    renderLadderNode(stop: stop, isFirst: index == 0, isLast: false)
+                                        .id(stop.id)
+                                }
+                            }
+                        } else if hasPassedStops {
+                            // Render passed stops inline directly above current station when < 3
+                            ForEach(Array(passedStops.enumerated()), id: \.element.id) { index, stop in
                                 renderLadderNode(stop: stop, isFirst: index == 0, isLast: false)
+                                    .id(stop.id)
                             }
                         }
-                    }
-                    
-                    if !inspectionMode.isHistoricalReplay {
+                        
+                        // Approaching & Upcoming Stops anchored to commuter station
                         if hasDistantConsist, let vehicleStop = stopLadder.indices.contains(vehicleIdx) ? stopLadder[vehicleIdx] : nil {
                             let intermediateApproachingStops = stopLadder.enumerated().filter { idx, _ in idx > vehicleIdx && idx < currentIdx }.map(\.element)
                             let activeAndUpcomingStops = stopLadder.enumerated().filter { idx, _ in idx >= currentIdx }.map(\.element)
-                            let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded)
+                            let isFirstInBlock = !hasPassedStops
                             
                             // 1. Live Oncoming Vehicle Stop
                             renderLadderNode(stop: vehicleStop, isFirst: isFirstInBlock, isLast: false)
@@ -546,13 +558,15 @@ public struct GuidewayRunInspector: View {
                                     VStack(spacing: 0) {
                                         Rectangle()
                                             .fill(lineInfo.color)
-                                            .frame(width: 4, height: 6)
+                                            .frame(width: 4)
+                                            .frame(minHeight: 8, maxHeight: .infinity)
                                         Circle()
                                             .fill(lineInfo.color.opacity(0.6))
                                             .frame(width: 8, height: 8)
                                         Rectangle()
                                             .fill(lineInfo.color)
-                                            .frame(width: 4, height: 6)
+                                            .frame(width: 4)
+                                            .frame(minHeight: 8, maxHeight: .infinity)
                                     }
                                     .frame(width: 24)
                                     
@@ -590,7 +604,7 @@ public struct GuidewayRunInspector: View {
                         } else {
                             // Standard / Close-range Approaching & Upcoming stops (starts at live oncoming train's current stop)
                             ForEach(Array(approachingAndUpcomingStops.enumerated()), id: \.element.id) { index, stop in
-                                let isFirstInBlock = (!hasEarlierStops || !isPassedStopsExpanded) && index == 0
+                                let isFirstInBlock = !hasPassedStops && index == 0
                                 let isLastInBlock = index == approachingAndUpcomingStops.count - 1
                                 renderLadderNode(stop: stop, isFirst: isFirstInBlock, isLast: isLastInBlock)
                                     .id(stop.isVehicleHere ? "VEHICLE_STOP_\(stop.id)" : (stop.isCurrent ? "ACTIVE_STATION_\(stop.id)" : stop.id))
@@ -610,12 +624,13 @@ public struct GuidewayRunInspector: View {
     @ViewBuilder
     private func renderLadderNode(stop: TrackStop, isFirst: Bool, isLast: Bool) -> some View {
         HStack(alignment: .center, spacing: 14) {
-            // Track Stem & Station Bullet
+            // Track Stem & Station Bullet (Continuous edge-to-edge solid progression stroke)
             VStack(spacing: 0) {
                 // Upper Stem
                 Rectangle()
                     .fill(isFirst ? Color.clear : (stop.isPassed ? Color.secondary.opacity(0.25) : lineInfo.color))
-                    .frame(width: 4, height: 18)
+                    .frame(width: 4)
+                    .frame(minHeight: 18, maxHeight: .infinity)
                 
                 // Central Node
                 ZStack {
@@ -672,7 +687,8 @@ public struct GuidewayRunInspector: View {
                 // Lower Stem
                 Rectangle()
                     .fill(isLast ? Color.clear : (stop.isPassed && !stop.isCurrent && !stop.isVehicleHere ? Color.secondary.opacity(0.25) : lineInfo.color))
-                    .frame(width: 4, height: 18)
+                    .frame(width: 4)
+                    .frame(minHeight: 18, maxHeight: .infinity)
             }
             .frame(width: 24)
             

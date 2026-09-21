@@ -464,6 +464,9 @@ struct MapView: UIViewRepresentable {
             updateNearbyBusStops(parent.nearbyBusStops, in: style)
             updatePOIs(in: style)
             updateExploredHexes(in: mapView, with: parent.spatialStore.currentFogShape)
+            if let activeCmd = parent.activeInspectionCommand {
+                updateRouteInspection(activeCmd, activeDetent: parent.activeSheetDetent, sheetHeight: parent.activeSheetHeight, in: mapView)
+            }
             startLureTimer()
         }
         

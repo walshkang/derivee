@@ -208,4 +208,67 @@ final class TrainInspectorTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - 6. Wave PE.11: Stop Ladder Continuity, Preceding Stops Accordion & Polyline Sync Tests
+
+    func testPE11_MLadder_CompleteTripSequence_IncludesPrecedingStops() async throws {
+        // Query M train Northbound (direction 0, to Forest Hills-71 Av) at Myrtle-Wyckoff (M08)
+        let ladder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "M",
+            directionId: 0,
+            currentStopId: "M08",
+            currentArrivalMinutes: 3
+        )
+        
+        XCTAssertFalse(ladder.isEmpty, "M train ladder must not be empty")
+        
+        // 1. Current stop must be Myrtle-Wyckoff (M08)
+        let current = ladder.first(where: { $0.isCurrent })
+        XCTAssertNotNil(current, "Current stop must exist on ladder")
+        XCTAssertTrue(current?.stopId.contains("M08") == true || current?.stopName.contains("Myrtle-Wyckoff") == true)
+        XCTAssertEqual(current?.estimatedMinutes, 3)
+        XCTAssertEqual(current?.isPassed, false)
+        
+        // 2. Preceding stops must include origin M01 (Middle Village) and intermediate stops M04, M05, M06
+        let passed = ladder.filter { $0.isPassed }
+        XCTAssertTrue(passed.count >= 3, "M train at Myrtle-Wyckoff must have at least 3 preceding stops (M01, M04, M05, M06)")
+        
+        let origin = passed.first
+        XCTAssertTrue(origin?.stopId.contains("M01") == true || origin?.stopName.contains("Middle Village") == true,
+                      "First preceding stop must be origin M01 Middle Village")
+        
+        // 3. Downstream stops must include terminus G08 (Forest Hills-71 Av)
+        let upcoming = ladder.filter { !$0.isPassed && !$0.isCurrent }
+        let terminus = upcoming.last
+        XCTAssertTrue(terminus?.stopId.contains("G08") == true || terminus?.stopName.contains("Forest Hills") == true,
+                      "Last stop must be destination G08 Forest Hills-71 Av")
+    }
+
+    func testPE11_LLadder_PrecedingStopsAccordionThreshold() async throws {
+        // Query L train Manhattan-bound (direction 0, to 8 Av) at 14 St-Union Sq (L03)
+        let ladder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
+            routeId: "L",
+            directionId: 0,
+            currentStopId: "L03",
+            currentArrivalMinutes: 2
+        )
+        
+        XCTAssertFalse(ladder.isEmpty, "L train ladder must not be empty")
+        let passed = ladder.filter { $0.isPassed }
+        
+        // At Union Sq, commuter has traveled past Canarsie, East New York, Bushwick, and Williamsburg (>15 stops)
+        XCTAssertTrue(passed.count >= 3, "Passed stops >= 3 must trigger accordion collapse")
+        
+        // Origin must be Canarsie-Rockaway Pkwy (L29)
+        let origin = passed.first
+        XCTAssertTrue(origin?.stopId.contains("L29") == true || origin?.stopName.contains("Canarsie") == true,
+                      "Origin stop must be Canarsie-Rockaway Pkwy")
+        
+        // Downstream stops must be 6th Ave (L02) and 8th Ave (L01)
+        let upcoming = ladder.filter { !$0.isPassed && !$0.isCurrent }
+        XCTAssertFalse(upcoming.isEmpty)
+        let last = upcoming.last
+        XCTAssertTrue(last?.stopId.contains("L01") == true || last?.stopName.contains("8 Av") == true,
+                      "Terminus must be 8 Av")
+    }
 }
