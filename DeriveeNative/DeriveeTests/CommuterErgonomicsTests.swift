@@ -550,6 +550,26 @@ final class CommuterErgonomicsTests: XCTestCase {
         )
     }
 
+    func testFC5_FloatingLensesHitTestingAndAutoCollapseHierarchy() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let contentViewFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/ContentView.swift")
+        let content = try String(contentsOf: contentViewFile, encoding: .utf8)
+        
+        XCTAssertTrue(
+            content.contains(".allowsHitTesting(activeSheet == nil)"),
+            "FC-5 Violation: ContentView must gate hit-testing on floating lenses via .allowsHitTesting(activeSheet == nil)"
+        )
+        XCTAssertTrue(
+            content.contains(".opacity(activeSheet == nil ? 1.0 : 0.0)"),
+            "FC-5 Violation: ContentView must gate opacity on floating lenses via .opacity(activeSheet == nil ? 1.0 : 0.0)"
+        )
+        XCTAssertTrue(
+            content.contains("isNearbyBusesExpanded = false"),
+            "FC-5 Violation: ContentView must auto-collapse isNearbyBusesExpanded when sheets or transit stops are selected"
+        )
+    }
+
     func testFC5_InspectorBackAction_RestoresStationOverviewState() {
         var onBackCalled = false
         let arrival = SpatialDatabaseManager.ArrivalInfo(

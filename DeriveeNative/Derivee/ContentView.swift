@@ -161,6 +161,7 @@ struct ContentView: View {
                                 },
                                 set: { newStopId in
                                     if let stopId = newStopId {
+                                        isNearbyBusesExpanded = false
                                         activeSheet = .transit(stopId: stopId)
                                     } else if case .transit = activeSheet {
                                         activeSheet = nil
@@ -249,6 +250,9 @@ struct ContentView: View {
                                     }
                                 )
                                 .padding(.leading, 20)
+                                .opacity(activeSheet == nil ? 1.0 : 0.0)
+                                .allowsHitTesting(activeSheet == nil)
+                                .animation(.easeInOut(duration: 0.2), value: activeSheet == nil)
                             }
                             
                             Spacer()
@@ -258,8 +262,12 @@ struct ContentView: View {
                                 isMapCentered = true
                             }
                             .padding(.trailing, 20)
+                            .opacity(activeSheet == nil ? 1.0 : 0.0)
+                            .allowsHitTesting(activeSheet == nil)
+                            .animation(.easeInOut(duration: 0.2), value: activeSheet == nil)
                         }
                         .padding(.bottom, 40)
+                        .allowsHitTesting(activeSheet == nil)
                     }
                     
                     if let poiName = spatialStore.newlyDiscoveredPOIName, isReadyForToasts {
@@ -367,6 +375,11 @@ struct ContentView: View {
                     }
                 }
                 .onChange(of: activeSheet) { oldSheet, newSheet in
+                    if newSheet != nil {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            isNearbyBusesExpanded = false
+                        }
+                    }
                     if case .transit = oldSheet, newSheet == nil {
                         activeRouteInspection = nil
                         activeFloorLevel = nil

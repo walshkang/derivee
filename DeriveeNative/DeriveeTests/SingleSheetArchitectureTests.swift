@@ -130,4 +130,31 @@ final class SingleSheetArchitectureTests: XCTestCase {
         activeSheet = nil
         XCTAssertNil(activeSheet)
     }
+
+    // MARK: - 5. Floating Lens Hit-Testing & Collision Safety (Pre-T.1 / FC-5)
+
+    func testFC5_FloatingLensesHitTestingAndOpacityGatedByActiveSheet() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let contentViewFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/ContentView.swift")
+        let content = try String(contentsOf: contentViewFile, encoding: .utf8)
+        
+        // Both NearbyBusesCapsule and RecenterFAB must disable hit-testing when a sheet is presented
+        XCTAssertTrue(
+            content.contains(".allowsHitTesting(activeSheet == nil)"),
+            "FC-5 Violation: ContentView must apply .allowsHitTesting(activeSheet == nil) to prevent invisible tap-interception traps over bottom sheets"
+        )
+        
+        // Both NearbyBusesCapsule and RecenterFAB must attenuate opacity when a sheet is presented
+        XCTAssertTrue(
+            content.contains(".opacity(activeSheet == nil ? 1.0 : 0.0)"),
+            "FC-5 Violation: ContentView must apply .opacity(activeSheet == nil ? 1.0 : 0.0) to hide floating lenses while sheets are active"
+        )
+        
+        // Must auto-collapse isNearbyBusesExpanded on activeSheet presentation and selectedTransitStop binding
+        XCTAssertTrue(
+            content.contains("isNearbyBusesExpanded = false"),
+            "FC-5 Violation: ContentView must auto-collapse isNearbyBusesExpanded when sheets or transit stops are selected"
+        )
+    }
 }
