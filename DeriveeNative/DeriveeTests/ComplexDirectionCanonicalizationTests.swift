@@ -361,6 +361,36 @@ final class ComplexDirectionCanonicalizationTests: XCTestCase {
         XCTAssertEqual(lWestOnSouthPlatform.directionId, 0)
     }
     
+    func testMTA_LTrainDirectionIDZero_CanarsieAnomaly() {
+        let service = TransitRealtimeService.shared
+        
+        // Real-world MTA NYCT feed anomaly: All L trains have direction_id = 0 in protobuf feed.
+        // A Canarsie-bound trip (e.g. tripId: 092250_L..S, terminal: L29S / Canarsie - Rockaway Pkwy)
+        // has directionID = 0 in trip descriptor.
+        var tuCanarsie = TransitRealtime_TripUpdate()
+        tuCanarsie.trip.tripID = "092250_L..S"
+        tuCanarsie.trip.directionID = 0
+        var stu = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu.stopID = "L29S"
+        tuCanarsie.stopTimeUpdate = [stu]
+        
+        // At Bedford Ave (L08S)
+        let classified = service.classifyDirection(tripUpdate: tuCanarsie, line: "L", stopId: "L08S")
+        XCTAssertEqual(classified.corridorVector, .eastbound, "MTA direction_id=0 anomaly must be overridden by Canarsie terminal/trip suffix")
+        XCTAssertEqual(classified.displayDirection, "Brooklyn-bound")
+        XCTAssertEqual(classified.directionId, 1)
+        
+        // Even at Manhattan platform during single tracking, terminal Canarsie must classify as Brooklyn-bound
+        let classifiedOnNorth = service.classifyDirection(tripUpdate: tuCanarsie, line: "L", stopId: "L08N")
+        XCTAssertEqual(classifiedOnNorth.corridorVector, .eastbound)
+        XCTAssertEqual(classifiedOnNorth.displayDirection, "Brooklyn-bound")
+        XCTAssertEqual(classifiedOnNorth.directionId, 1)
+        
+        // Also test destination resolution
+        let dest = service.resolveDestination(tripUpdate: tuCanarsie, line: "L", stopId: "L08S")
+        XCTAssertEqual(dest, "L to Canarsie-Rockaway Pkwy")
+    }
+    
     func testPreT2_SingleTrackingImmunity_7TrainReversePlatform() {
         let service = TransitRealtimeService.shared
         

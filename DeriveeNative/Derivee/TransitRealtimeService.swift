@@ -640,18 +640,36 @@ public final class TransitRealtimeService: @unchecked Sendable {
             // Direction 0: Manhattan-bound (8th Ave / Westbound)
             // Direction 1: Brooklyn-bound (Canarsie - Rockaway Pkwy / Eastbound)
             let resolvedDir: Int
-            if let d = explicitDirId {
-                // Tier 1: Explicit GTFS-RT directionId
-                resolvedDir = d
-            } else if let term = terminalName?.lowercased(), !term.isEmpty {
-                // Tier 2: Headsign Terminal Matching
-                if term.contains("8 av") || term.contains("8th av") || term.contains("eighth av") || term.contains("manhattan") || term.contains("14 st") || term.contains("union sq") {
-                    resolvedDir = 0
-                } else if term.contains("canarsie") || term.contains("rockaway") || term.contains("brooklyn") || term.contains("lorimer") || term.contains("myrtle") || term.contains("broadway junction") {
-                    resolvedDir = 1
-                } else {
-                    resolvedDir = (isNorthbound || isWestbound) ? 0 : 1
+            let lowerTerm = terminalName?.lowercased() ?? ""
+            let isCanarsieTerm = lowerTerm.contains("canarsie") || lowerTerm.contains("rockaway") || lowerTerm.contains("brooklyn") || lowerTerm.contains("lorimer") || lowerTerm.contains("myrtle") || lowerTerm.contains("broadway junction")
+            let isManhattanTerm = lowerTerm.contains("8 av") || lowerTerm.contains("8th av") || lowerTerm.contains("eighth av") || lowerTerm.contains("manhattan") || lowerTerm.contains("14 st") || lowerTerm.contains("union sq")
+            
+            let tripId = tripUpdate.trip.tripID
+            let isTripSouth = tripId.contains("..S") || tripId.hasSuffix("S")
+            let isTripNorth = tripId.contains("..N") || tripId.hasSuffix("N")
+            
+            let nyctDir: TransitRealtime_NyctTripDescriptor.Direction? = {
+                if tripUpdate.trip.hasTransitRealtime_nyctTripDescriptor && tripUpdate.trip.TransitRealtime_nyctTripDescriptor.hasDirection {
+                    return tripUpdate.trip.TransitRealtime_nyctTripDescriptor.direction
                 }
+                return nil
+            }()
+            
+            if isCanarsieTerm && !isManhattanTerm {
+                // Tier 1: Ground truth terminal headsign (Brooklyn / Canarsie)
+                resolvedDir = 1
+            } else if isManhattanTerm && !isCanarsieTerm {
+                // Tier 1: Ground truth terminal headsign (Manhattan / 8th Ave)
+                resolvedDir = 0
+            } else if let nyct = nyctDir {
+                resolvedDir = (nyct == .south || nyct == .east) ? 1 : 0
+            } else if isTripSouth && !isTripNorth {
+                resolvedDir = 1
+            } else if isTripNorth && !isTripSouth {
+                resolvedDir = 0
+            } else if let d = explicitDirId {
+                // Explicit GTFS-RT directionId (used when terminalName is not provided, e.g. single-tracking tests)
+                resolvedDir = d
             } else {
                 // Tier 3: Platform suffix fallback
                 resolvedDir = (isNorthbound || isWestbound) ? 0 : 1
@@ -678,20 +696,25 @@ public final class TransitRealtimeService: @unchecked Sendable {
             // Direction 0: Queens-bound (Flushing - Main St / Eastbound)
             // Direction 1: Manhattan-bound (34 St - Hudson Yards / Westbound)
             let resolvedDir: Int
-            if let d = explicitDirId {
-                // Tier 1: Explicit GTFS-RT directionId
+            let lowerTerm = terminalName?.lowercased() ?? ""
+            let isQueensTerm = lowerTerm.contains("flushing") || lowerTerm.contains("main st") || lowerTerm.contains("willets") || lowerTerm.contains("74 st") || lowerTerm.contains("queens")
+            let isManhattanTerm = lowerTerm.contains("34 st") || lowerTerm.contains("hudson yards") || lowerTerm.contains("times sq") || lowerTerm.contains("manhattan")
+            
+            let tripId = tripUpdate.trip.tripID
+            let isTripSouth = tripId.contains("..S") || tripId.hasSuffix("S")
+            let isTripNorth = tripId.contains("..N") || tripId.hasSuffix("N")
+            
+            if isQueensTerm && !isManhattanTerm {
+                resolvedDir = 0
+            } else if isManhattanTerm && !isQueensTerm {
+                resolvedDir = 1
+            } else if isTripSouth && !isTripNorth {
+                resolvedDir = 1
+            } else if isTripNorth && !isTripSouth {
+                resolvedDir = 0
+            } else if let d = explicitDirId {
                 resolvedDir = d
-            } else if let term = terminalName?.lowercased(), !term.isEmpty {
-                // Tier 2: Headsign Terminal Matching
-                if term.contains("flushing") || term.contains("main st") || term.contains("willets") || term.contains("74 st") || term.contains("queens") {
-                    resolvedDir = 0
-                } else if term.contains("34 st") || term.contains("hudson yards") || term.contains("times sq") || term.contains("manhattan") {
-                    resolvedDir = 1
-                } else {
-                    resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
-                }
             } else {
-                // Tier 3: Platform suffix fallback
                 resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
             }
             
@@ -716,20 +739,25 @@ public final class TransitRealtimeService: @unchecked Sendable {
             // Direction 0: Queens-bound (Court Sq / Northbound)
             // Direction 1: Brooklyn-bound (Church Ave / Southbound)
             let resolvedDir: Int
-            if let d = explicitDirId {
-                // Tier 1: Explicit GTFS-RT directionId
+            let lowerTerm = terminalName?.lowercased() ?? ""
+            let isQueensTerm = lowerTerm.contains("court sq") || lowerTerm.contains("queens")
+            let isBrooklynTerm = lowerTerm.contains("church av") || lowerTerm.contains("smith") || lowerTerm.contains("bedford") || lowerTerm.contains("brooklyn")
+            
+            let tripId = tripUpdate.trip.tripID
+            let isTripSouth = tripId.contains("..S") || tripId.hasSuffix("S")
+            let isTripNorth = tripId.contains("..N") || tripId.hasSuffix("N")
+            
+            if isQueensTerm && !isBrooklynTerm {
+                resolvedDir = 0
+            } else if isBrooklynTerm && !isQueensTerm {
+                resolvedDir = 1
+            } else if isTripSouth && !isTripNorth {
+                resolvedDir = 1
+            } else if isTripNorth && !isTripSouth {
+                resolvedDir = 0
+            } else if let d = explicitDirId {
                 resolvedDir = d
-            } else if let term = terminalName?.lowercased(), !term.isEmpty {
-                // Tier 2: Headsign Terminal Matching
-                if term.contains("court sq") || term.contains("queens") {
-                    resolvedDir = 0
-                } else if term.contains("church av") || term.contains("smith") || term.contains("bedford") || term.contains("brooklyn") {
-                    resolvedDir = 1
-                } else {
-                    resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
-                }
             } else {
-                // Tier 3: Platform suffix fallback
                 resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
             }
             
@@ -754,20 +782,25 @@ public final class TransitRealtimeService: @unchecked Sendable {
             // Direction 0: Queens-bound (Jamaica Center / Northbound)
             // Direction 1: Manhattan-bound (Broad St / Southbound)
             let resolvedDir: Int
-            if let d = explicitDirId {
-                // Tier 1: Explicit GTFS-RT directionId
+            let lowerTerm = terminalName?.lowercased() ?? ""
+            let isQueensTerm = lowerTerm.contains("jamaica") || lowerTerm.contains("parsons") || lowerTerm.contains("121 st") || lowerTerm.contains("crescent") || lowerTerm.contains("queens")
+            let isManhattanTerm = lowerTerm.contains("broad st") || lowerTerm.contains("chambers") || lowerTerm.contains("essex") || lowerTerm.contains("manhattan")
+            
+            let tripId = tripUpdate.trip.tripID
+            let isTripSouth = tripId.contains("..S") || tripId.hasSuffix("S")
+            let isTripNorth = tripId.contains("..N") || tripId.hasSuffix("N")
+            
+            if isQueensTerm && !isManhattanTerm {
+                resolvedDir = 0
+            } else if isManhattanTerm && !isQueensTerm {
+                resolvedDir = 1
+            } else if isTripSouth && !isTripNorth {
+                resolvedDir = 1
+            } else if isTripNorth && !isTripSouth {
+                resolvedDir = 0
+            } else if let d = explicitDirId {
                 resolvedDir = d
-            } else if let term = terminalName?.lowercased(), !term.isEmpty {
-                // Tier 2: Headsign Terminal Matching
-                if term.contains("jamaica") || term.contains("parsons") || term.contains("121 st") || term.contains("crescent") || term.contains("queens") {
-                    resolvedDir = 0
-                } else if term.contains("broad st") || term.contains("chambers") || term.contains("essex") || term.contains("manhattan") {
-                    resolvedDir = 1
-                } else {
-                    resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
-                }
             } else {
-                // Tier 3: Platform suffix fallback
                 resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
             }
             
@@ -792,34 +825,36 @@ public final class TransitRealtimeService: @unchecked Sendable {
         // Direction 0: Northbound (Uptown & Bronx / Queens)
         // Direction 1: Southbound (Downtown & Brooklyn / Lower Manhattan)
         let resolvedDir: Int
-        if let d = explicitDirId {
-            // Tier 1: Explicit GTFS-RT directionId
+        let lowerTerm = terminalName?.lowercased() ?? ""
+        let isNorthTerminal = lowerTerm.contains("uptown") || lowerTerm.contains("bronx") || lowerTerm.contains("van cortlandt") ||
+            lowerTerm.contains("242 st") || lowerTerm.contains("wakefield") || lowerTerm.contains("241 st") || lowerTerm.contains("harlem") ||
+            lowerTerm.contains("148 st") || lowerTerm.contains("woodlawn") || lowerTerm.contains("dyre") || lowerTerm.contains("pelham") ||
+            lowerTerm.contains("parkchester") || lowerTerm.contains("inwood") || lowerTerm.contains("207 st") || lowerTerm.contains("bedford park") ||
+            lowerTerm.contains("norwood") || lowerTerm.contains("205 st") || lowerTerm.contains("jamaica") || lowerTerm.contains("179 st") ||
+            lowerTerm.contains("forest hills") || lowerTerm.contains("71 av") || lowerTerm.contains("astoria") || lowerTerm.contains("ditmars")
+        
+        let isSouthTerminal = lowerTerm.contains("downtown") || lowerTerm.contains("brooklyn") || lowerTerm.contains("south ferry") ||
+            lowerTerm.contains("whitehall") || lowerTerm.contains("world trade") || lowerTerm.contains("wtc") || lowerTerm.contains("flatbush") ||
+            lowerTerm.contains("new lots") || lowerTerm.contains("brooklyn bridge") || lowerTerm.contains("bowling green") || lowerTerm.contains("euclid") ||
+            lowerTerm.contains("far rockaway") || lowerTerm.contains("rockaway park") || lowerTerm.contains("lefferts") || lowerTerm.contains("coney island") ||
+            lowerTerm.contains("stillwell") || lowerTerm.contains("brighton beach") || lowerTerm.contains("church av") || lowerTerm.contains("bay ridge") ||
+            lowerTerm.contains("95 st") || lowerTerm.contains("middle village") || lowerTerm.contains("metropolitan") || lowerTerm.contains("broad st")
+        
+        let trunkTripId = tripUpdate.trip.tripID
+        let isTrunkTripSouth = trunkTripId.contains("..S") || trunkTripId.hasSuffix("S")
+        let isTrunkTripNorth = trunkTripId.contains("..N") || trunkTripId.hasSuffix("N")
+        
+        if isNorthTerminal && !isSouthTerminal {
+            resolvedDir = 0
+        } else if isSouthTerminal && !isNorthTerminal {
+            resolvedDir = 1
+        } else if isTrunkTripSouth && !isTrunkTripNorth {
+            resolvedDir = 1
+        } else if isTrunkTripNorth && !isTrunkTripSouth {
+            resolvedDir = 0
+        } else if let d = explicitDirId {
             resolvedDir = d
-        } else if let term = terminalName?.lowercased(), !term.isEmpty {
-            // Tier 2: Headsign Terminal Matching
-            let isNorthTerminal = term.contains("uptown") || term.contains("bronx") || term.contains("van cortlandt") ||
-                term.contains("242 st") || term.contains("wakefield") || term.contains("241 st") || term.contains("harlem") ||
-                term.contains("148 st") || term.contains("woodlawn") || term.contains("dyre") || term.contains("pelham") ||
-                term.contains("parkchester") || term.contains("inwood") || term.contains("207 st") || term.contains("bedford park") ||
-                term.contains("norwood") || term.contains("205 st") || term.contains("jamaica") || term.contains("179 st") ||
-                term.contains("forest hills") || term.contains("71 av") || term.contains("astoria") || term.contains("ditmars")
-            
-            let isSouthTerminal = term.contains("downtown") || term.contains("brooklyn") || term.contains("south ferry") ||
-                term.contains("whitehall") || term.contains("world trade") || term.contains("wtc") || term.contains("flatbush") ||
-                term.contains("new lots") || term.contains("brooklyn bridge") || term.contains("bowling green") || term.contains("euclid") ||
-                term.contains("far rockaway") || term.contains("rockaway park") || term.contains("lefferts") || term.contains("coney island") ||
-                term.contains("stillwell") || term.contains("brighton beach") || term.contains("church av") || term.contains("bay ridge") ||
-                term.contains("95 st") || term.contains("middle village") || term.contains("metropolitan") || term.contains("broad st")
-            
-            if isNorthTerminal && !isSouthTerminal {
-                resolvedDir = 0
-            } else if isSouthTerminal && !isNorthTerminal {
-                resolvedDir = 1
-            } else {
-                resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
-            }
         } else {
-            // Tier 3: Platform suffix fallback
             resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
         }
         
@@ -1198,14 +1233,28 @@ public final class TransitRealtimeService: @unchecked Sendable {
         let isEastbound = cleanStop.hasSuffix("E")
         let isWestbound = cleanStop.hasSuffix("W")
         
+        let tripId = tripUpdate.trip.hasTripID ? tripUpdate.trip.tripID : ""
+        let isTripNorth = tripId.contains("..N") || tripId.hasSuffix("N")
+        let isTripSouth = tripId.contains("..S") || tripId.hasSuffix("S")
+        let nyctDirection: TransitRealtime_NyctTripDescriptor.Direction? = {
+            if tripUpdate.trip.hasTransitRealtime_nyctTripDescriptor {
+                return tripUpdate.trip.TransitRealtime_nyctTripDescriptor.direction
+            }
+            return nil
+        }()
+
         let directionId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
         let effectiveNorthbound: Bool = {
-            if let d = directionId { return d == 0 }
+            if nyctDirection == .north { return true }
+            if nyctDirection == .south { return false }
+            if isTripNorth { return true }
+            if isTripSouth { return false }
             if isNorthbound { return true }
             if isSouthbound { return false }
+            if let d = directionId { return d == 0 }
             return true
         }()
-        let effectiveDirectionId = directionId ?? (effectiveNorthbound ? 0 : 1)
+        let effectiveDirectionId = effectiveNorthbound ? 0 : (directionId ?? 1)
         let isBus = SubwayFeed.isBusRoute(line)
         let cleanLine = line.uppercased().trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "_").last ?? line.uppercased()
         

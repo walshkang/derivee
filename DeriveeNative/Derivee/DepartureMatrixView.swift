@@ -63,7 +63,8 @@ struct DepartureMatrixView: View {
             return effectiveRouteIds.first ?? routeId
         }()
         self._selectedRouteFilter = State(initialValue: defaultFilter)
-        self._scrollPositionID = State(initialValue: nil)
+        let initialHour = Self.calculateInitialScrollTarget(relativeTo: referenceDate ?? Date(), dayOffset: selectedDayOffset.wrappedValue)
+        self._scrollPositionID = State(initialValue: initialHour)
         self._isInitialized = State(initialValue: false)
         
         if !effectiveDirs.contains(selectedDirection.wrappedValue), let firstAvailable = effectiveDirs.sorted().first {
@@ -312,9 +313,11 @@ struct DepartureMatrixView: View {
         let currentMinute = calendar.component(.minute, from: currentDate)
         let nowMinutes = currentHour * 60 + currentMinute
         
-        let filteredLiveArrivals = (selectedRouteFilter == "ALL")
-            ? liveArrivals
-            : liveArrivals.filter { $0.line.uppercased() == selectedRouteFilter.uppercased() }
+        let filteredLiveArrivals = liveArrivals.filter { arr in
+            let routeMatches = (selectedRouteFilter == "ALL") || (arr.line.uppercased() == selectedRouteFilter.uppercased())
+            let dirMatches = (arr.directionId == selectedDirection)
+            return routeMatches && dirMatches
+        }
         
         var matchedArrivalIds = Set<UUID>()
         var pillMatchMap: [String: SpatialDatabaseManager.ArrivalInfo] = [:]
@@ -570,12 +573,16 @@ struct DepartureMatrixView: View {
         filteredRecords.reduce(0) { $0 + $1.departures.count }
     }
     
-    func resolveInitialScrollTarget(relativeTo referenceTime: Date = Date()) -> Int {
-        if selectedDayOffset != 0 {
+    static func calculateInitialScrollTarget(relativeTo referenceTime: Date = Date(), dayOffset: Int = 0) -> Int {
+        if dayOffset != 0 {
             return 0
         }
         let currentHour = Calendar.current.component(.hour, from: referenceTime)
         return max(0, min(23, currentHour))
+    }
+    
+    func resolveInitialScrollTarget(relativeTo referenceTime: Date = Date()) -> Int {
+        Self.calculateInitialScrollTarget(relativeTo: referenceTime, dayOffset: selectedDayOffset)
     }
     
     var allTransitionDates: [Date] {
@@ -591,19 +598,21 @@ struct DepartureMatrixView: View {
             }
         }
         
-        // Scheduled departures
+        // Scheduled departures (+30s expiration timestamps)
         for hourRec in filteredRecords {
             let h = hourRec.hourOfDay
             for dep in hourRec.departures {
                 if let d = calendar.date(bySettingHour: h, minute: dep.minute, second: 0, of: today) {
                     dates.append(d)
+                    dates.append(d.addingTimeInterval(30))
                 }
             }
         }
         
-        // Live arrivals
-        for arr in liveArrivals {
+        // Live arrivals for selected direction & route (+30s expiration timestamps)
+        for arr in liveArrivals where (arr.directionId == selectedDirection && (selectedRouteFilter == "ALL" || arr.line.uppercased() == selectedRouteFilter.uppercased())) {
             dates.append(arr.arrivalDate)
+            dates.append(arr.arrivalDate.addingTimeInterval(30))
         }
         
         return Array(Set(dates)).sorted()
@@ -780,14 +789,35 @@ struct DepartureMatrixView: View {
                             .fill(Color(hex: "#34C759").opacity(0.12))
                     )
                 } else {
+                    let nextDeparture = reconciled.flatMap { rec in
+                        rec.departures.compactMap { dep -> (hour: Int, dep: SpatialDatabaseManager.DeparturePillRecord)? in
+                            dep.isNextDeparture ? (rec.hourOfDay, dep) : nil
+                        }
+                    }.first
+
                     HStack {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 6) {
                             Image(systemName: "clock.arrow.circlepath")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.secondary)
                             Text(selectedDayOffset == 0 ? "24-HOUR TIMETABLE" : "SCHEDULED TIMETABLE")
                                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundColor(.secondary)
+                            
+                            if selectedDayOffset == 0, let next = nextDeparture {
+                                HStack(spacing: 3) {
+                                    Circle()
+                                        .fill(next.dep.isLive ? Color(hex: "#34C759") : Color(hex: "#FFB300"))
+                                        .frame(width: 5, height: 5)
+                                    Text(String(format: "NEXT %02d:%02d", next.hour, next.dep.minute))
+                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                        .foregroundColor(Color(hex: "#FFB300"))
+                                }
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color(hex: "#FFB300").opacity(0.12))
+                                .clipShape(Capsule())
+                            }
                         }
                         
                         Spacer()
@@ -1138,8 +1168,7 @@ private struct DeparturePillView: View {
         }
         
         let isPast = effectiveDate.timeIntervalSince(refDate) < -30.0
-        let futureDates = allScheduleDates.filter { $0.timeIntervalSince(refDate) >= -30.0 }
-        let isNext = !isPast && (futureDates.min() == effectiveDate)
+        let isNext = !isPast && pill.isNextDeparture
         
         return (isPast, isNext)
     }

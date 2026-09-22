@@ -2187,6 +2187,89 @@ final class TransitRevealSheetTests: XCTestCase {
         let vc = UIHostingController(rootView: emptyView)
         XCTAssertNotNil(vc.view)
     }
+    
+    func testDepartureMatrixView_NextDeparturePillAndStatusEvaluation() throws {
+        let calendar = Calendar.current
+        let now = Date()
+        let currentHour = calendar.component(.hour, from: now)
+        let currentMinute = calendar.component(.minute, from: now)
+        
+        // 1. Initial scroll target matches current hour when dayOffset is 0
+        let scrollTarget = DepartureMatrixView.calculateInitialScrollTarget(relativeTo: now, dayOffset: 0)
+        XCTAssertEqual(scrollTarget, currentHour)
+        
+        let futureScrollTarget = DepartureMatrixView.calculateInitialScrollTarget(relativeTo: now, dayOffset: 1)
+        XCTAssertEqual(futureScrollTarget, 0, "Future days must start at 00:00")
+        
+        // 2. Build test records: one past departure, one upcoming departure
+        let upcomingMinute = (currentMinute + 5) % 60
+        let upcomingHour = (upcomingMinute < currentMinute) ? (currentHour + 1) % 24 : currentHour
+        
+        let pastPill = SpatialDatabaseManager.DeparturePillRecord(
+            id: "past_1",
+            tripId: "trip_past",
+            routeId: "L",
+            destination: "8 Av",
+            minute: max(0, currentMinute - 10),
+            isPast: true,
+            isNextDeparture: false
+        )
+        let upcomingPill = SpatialDatabaseManager.DeparturePillRecord(
+            id: "up_1",
+            tripId: "trip_up",
+            routeId: "L",
+            destination: "8 Av",
+            minute: upcomingMinute,
+            isPast: false,
+            isNextDeparture: false
+        )
+        
+        let records = (0..<24).map { h -> SpatialDatabaseManager.HourScheduleRecord in
+            if h == currentHour && upcomingHour == currentHour {
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [pastPill, upcomingPill])
+            } else if h == currentHour {
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [pastPill])
+            } else if h == upcomingHour {
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [upcomingPill])
+            } else {
+                return SpatialDatabaseManager.HourScheduleRecord(hourOfDay: h, departures: [])
+            }
+        }
+        
+        let view = DepartureMatrixView(
+            records: records,
+            routeId: "L",
+            stopId: "stop_bedford",
+            isScheduleAvailable: true
+        )
+        
+        // 3. Reconciled records must accurately tag the upcoming departure with isNextDeparture = true
+        let reconciled = view.reconciledRecords(at: now)
+        let nextPills = reconciled.flatMap { $0.departures.filter { $0.isNextDeparture } }
+        XCTAssertEqual(nextPills.count, 1, "Exactly one pill across 24 hours must be tagged with isNextDeparture")
+        XCTAssertEqual(nextPills.first?.minute, upcomingMinute)
+        
+        // 4. Direction isolation: Cross-directional live arrivals must NOT match
+        let crossDirArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "Canarsie",
+            minutes: 3,
+            direction: "Brooklyn-bound",
+            distanceDescription: "Approaching",
+            directionId: 1 // Southbound, whereas default selectedDirection is 0
+        )
+        let viewWithCrossDirArrival = DepartureMatrixView(
+            records: records,
+            routeId: "L",
+            stopId: "stop_bedford",
+            liveArrivals: [crossDirArrival],
+            selectedDirection: .constant(0),
+            isScheduleAvailable: true
+        )
+        let reconciledCross = viewWithCrossDirArrival.reconciledRecords(at: now)
+        let liveMatched = reconciledCross.flatMap { $0.departures.filter { $0.isLive } }
+        XCTAssertTrue(liveMatched.isEmpty, "Cross-directional arrival (direction 1) must not match direction 0 departures")
+    }
 }
 
 
