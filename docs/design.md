@@ -757,12 +757,15 @@ The inspector answers exactly **five questions** a rider has when tapping a spec
 | **Context** | **Follow-On Departure** | Below the ladder: `Next [ 6 ] in 8 min • 1:39 PM`. Sourced from the same `LiveArrivalsCarousel` data. Helps decide whether to rush or wait. |
 | **Signal** | **Crowding Micro-Badge** | Single glanceable badge from GTFS-RT `occupancy_status`: `🟢 Seats available`, `🟡 Standing room`, `🟠 Crowded`. No carriage diagrams. No multi-car breakdowns. |
 
-#### 10.5.2 Map Synchronization
+#### 10.5.2 Map Synchronization & Persistent Peek Dock
 
 When the Guideway Run Inspector opens:
-* The background map camera smoothly pans and zooms to frame the user's station and the active route polyline.
+* The background map camera smoothly pans and zooms to frame the user's station and the active route polyline, dynamically adapting bottom padding based on sheet detent (`~110pt` at peek dock vs `~360pt` at `.medium`).
 * The route polyline illuminates through the fog in the agency's official line color with 4px primary stroke and 6px casing.
-* **Live Kinematic Vehicle Marker `[Wave R]`:** Smooth inter-station animated vehicle tracking along the polyline is deferred to Wave R (`SubwayPositionInterpolator` in C++20). Until then, no vehicle marker is rendered on the map — the stop progression ladder is the primary position indicator.
+* **Persistent Peek Dock (`.fraction(0.12)` ~90pt):** Commuters can lower the inspector to peek detent to inspect the unobstructed hero map. The route polyline, vehicle halo, and casing remain pinned to the map (FC-7).
+* **Non-Trapping Dismissal Ergonomics:** Dragging down on the sheet during inspection snaps back to `.inspectionPeekDetent` via `onChange(of: selectedDetent)`. Commuters are never trapped via `.interactiveDismissDisabled`. Dismissal and route teardown occur strictly on explicit user action (back chevron `< Bedford Av` or close button `(X)`).
+* **Continuous Ladder Stem & Transfer Disambiguation:** Stop ladder nodes render a continuous 4pt vertical stem through the 24×24 node background, eliminating 7pt gaps. Transfer routes are prefixed with a subtle `⇄` glyph (e.g. `⇄ [J] [Z]`) and express variants are normalized via `trunkRouteId(for:)` (suppressing `6` on `6X`, `7` on `7X`, `F` on `FX`).
+* **Live Kinematic Vehicle Marker `[Wave R]`:** Smooth inter-station animated vehicle tracking along the polyline is deferred to Wave R (`SubwayPositionInterpolator` in C++20). Until then, live vehicle positions are snapped to the approaching stop on the ladder and highlighted with vehicle pucks on the map.
 
 #### 10.5.3 What Is Explicitly Removed
 
@@ -783,7 +786,7 @@ The following elements from the legacy "Deep Train Inspector" are permanently ex
 
 > **Implementation:** `SurfaceRunInspector.swift` with `SurfaceInspectableRoute` protocol
 > **Trigger:** Tapping any bus or ferry arrival row in the Live Arrivals carousel or `NearbyBusesCapsule`.
-> **Presentation:** Identical to Guideway: `.sheet()` with `.fraction(0.40)` / `.fraction(0.88)` detents.
+> **Presentation:** In-place transition within `TransitRevealSheet` with `.fraction(0.12)` peek detent, `.medium`, and `.large`.
 
 The Surface Run Inspector is **structurally identical** to the Guideway Run Inspector (§10.5) — same 5-element skeleton, same layout, same map synchronization pattern. It differs only in **semantic tokens** driven by the `SurfaceInspectableRoute` protocol:
 
@@ -805,6 +808,42 @@ protocol SurfaceInspectableRoute {
 | **Stop Ladder Nodes** | Station names | Cross-street intersections (e.g. `2nd Ave & 23rd St`) | Pier / terminal names |
 | **Subterranean Content** | None (deferred to Wave R/4C) | None — zero underground references | None |
 | **Map Polyline** | Track-aligned fixed guideway | Surface street route | Water route with dashed line pattern |
+
+---
+
+### 10.7 Direction Classification, Terminal Suppression & Modal Isolation Invariants
+
+To guarantee 100% data fidelity and eliminate commuter misdirection across all modes, Screen 2 enforces four strict architectural invariants:
+
+#### 10.7.1 3-Tier Direction Resolution Hierarchy (Single-Tracking Immunity)
+
+Direction classification in `TransitRealtimeService.classifyDirection` follows a strict 3-tier precedence order:
+
+1. **Tier 1 — Explicit GTFS-RT `directionId` (Authoritative Signal):** Evaluated **only** when explicitly provided in the live feed (`hasDirectionID == true`). This signal represents ground-truth dispatch from the transit agency. It is completely immune to:
+   - **Reverse Single-Tracking:** During late-night maintenance (common on L, 7, G lines), Canarsie-bound L trains operate on the Manhattan-bound platform (`L08N`). The platform suffix `N` indicates Manhattan, but the explicit `directionId = 0` indicates Canarsie. Tier 1 ensures the agency signal overrides the physical platform geometry.
+   - **Terminal Crossover Tracks:** Trains momentarily arriving on reversing crossover tracks.
+2. **Tier 2 — Headsign Terminal Matching:** Match destination strings against the curated terminal directory (`isTerminatingArrival` / static GTFS terminal names).
+3. **Tier 3 — Platform Suffix (`N`/`S`/`E`/`W`) Fallback:** Physical platform suffix is utilized **strictly as a last-resort fallback** when the agency feed omits `directionId` and the destination is ambiguous. Conflating `dirId == 0` with "unset" is strictly prohibited.
+
+#### 10.7.2 Canonical Direction Storage on `ArrivalInfo`
+
+To prevent architectural drift and UI desynchronization:
+* `ArrivalInfo` stores canonical `directionId: Int` (0 or 1) as a first-class property resolved at ingestion.
+* Reverse-engineering direction IDs by parsing localized display strings (e.g. checking `direction.contains("DOWNTOWN")` in `resolvedDirectionId`) is strictly deprecated. Downstream reliability lookups, ladder ordering, and follow-on departures bind directly to the canonical integer ID.
+
+#### 10.7.3 Gated Terminal Arrival Suppression (Short-Turn Protection)
+
+At rail terminal stations (e.g. Pelham Bay Park `601`, South Ferry `142`), terminating arrivals (`6 to Pelham Bay Park EXP`) must be suppressed from appearing as departures under outgoing direction headers.
+
+* **Terminal Gating Rule:** The suppression condition (`idx == count - 1 AND destination matches stopName`) must **only** fire at stations verified in the terminal catalog (`isTerminatingArrival` / static GTFS terminal set).
+* **Short-Turn Protection:** At non-terminal intermediate stations (e.g. 6 train short-turned at Parkchester `611`), feed rolling-window cutoffs where `idx == count - 1` are treated as active departures. Legitimate intermediate departures are never dropped due to agency feed truncation artifacts.
+
+#### 10.7.4 Station Complex Modal Isolation
+
+In multi-modal transit hubs (e.g. Atlantic Av–Barclays Center, Times Sq–42 St), member stops of differing transit modes are clustered under a shared complex ID for wayfinding, but **must maintain strict modal isolation**:
+* Tier 0 station complex resolution (`fetchStopDetails`) is gated by the tapped stop's `route_type`.
+* Bus stops located within or adjacent to heavy-rail complexes (e.g. Kent Av `308667`) must **never** be promoted to subway complexes or assigned `modalClass = .subway`.
+* Bus stops always render as a single chronological arrival stream with multi-route filter chips, rather than subway-style bi-directional headers.
 
 ---
 

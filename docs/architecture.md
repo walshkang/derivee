@@ -534,3 +534,41 @@ To prevent visual and conceptual conflation, live transit run tracking in Screen
 - **Modal Scope:** Shared road infrastructure transit: City buses, Select Bus Service (SBS), and streetcars.
 - **Chronological Stop Ladder:** Renders downstream stops with live bus-to-stop ETA countdowns, follow-on departures, and mode-specific semantic tokens via `SurfaceInspectableRoute` (stop noun, water tracking, countdown display).
 - **Corridor Regularity Placement:** Headway regularity analytics (Osuna-Newell wait times $E[W] = \frac{\mu_h}{2}(1 + \text{CV}_h^2)$, TCQSM bunching $\alpha = 0.25$, gap $\beta = 1.75$ per Research Doc 19) are calculated by the Go Observer / Wave R engine and surfaced as per-line reliability badges on Screen 2 arrival rows, keeping the surface inspector uncluttered.
+
+#### 3. Map Camera & Inspection Command Synchronization Lifecycle
+In `MapView.Coordinator`:
+- **Unconditional Command State Ingestion:** The coordinator maintains `lastAppliedInspectionCommand` and `lastAppliedInspectionCommandId`. When `updateRouteInspection(command:)` receives a non-nil `RouteInspectionCommand`, it assigns `lastAppliedInspectionCommand = cmd` **unconditionally**, ensuring the latest `vehicleCoordinate` is cached even when `cmd.id` is unchanged.
+- **Detent Re-framing Guard:** When the sheet detent transitions between `.inspectionPeekDetent` (`.fraction(0.12)`), `.medium`, and `.large`, the coordinator executes detent-adaptive camera re-framing (`frameRouteAndStation`) using the freshly cached command. This prevents camera jumps caused by stale vehicle coordinates during live feed refreshes.
+
+---
+
+### 9.9 Transit Data Fidelity & Multi-Modal Resolution Engine
+
+To maintain absolute data integrity across multi-modal complexes, single-tracking reroutes, and one-way thoroughfares, Dérivée enforces four data-layer architectural contracts:
+
+#### 1. 3-Tier Direction Resolution Hierarchy (`TransitRealtimeService`)
+In `TransitRealtimeService.classifyDirection`, direction calculation follows a strict hierarchy designed to survive real-world operational disruptions:
+- **Tier 1 — Explicit GTFS-RT `directionId` (Authoritative Signal):** When `tripUpdate.trip.hasDirectionID` is true, the agency's explicit `directionID` (0 or 1) takes precedence over all physical platform identifiers. During reverse single-tracking (e.g. Canarsie-bound L train operating on platform `L08N`), the explicit `directionID` correctly resolves the vector as eastbound, preventing inverted stop ladders. This rule applies equally to heavy rail subway lines and Staten Island Railway (`S31N`/`S31S`).
+- **Tier 2 — Headsign Terminal Matching:** When explicit direction is omitted, destination strings are matched against curated terminal endpoints (`isTerminatingArrival` / static GTFS terminal set).
+- **Tier 3 — Platform Suffix Fallback:** Platform suffix (`N`/`S`/`E`/`W`) is evaluated strictly as a fallback. Conflating `directionId == 0` with an unset value is strictly prohibited.
+
+#### 2. First-Class Canonical Direction Storage (`ArrivalInfo`)
+`ArrivalInfo` stores canonical `directionId: Int` (0 or 1) as a first-class field populated at feed ingestion:
+- Downstream systems (reliability lookup, timetable matrix filtering, stop progression ladders, follow-on departure indexing) read `directionId` directly.
+- Reverse-engineering direction IDs by parsing localized display strings (`direction.contains("DOWNTOWN")`) in `SpatialDatabaseManager.resolvedDirectionId` is completely eliminated, preventing silent drift when localization strings or borough targets change.
+
+#### 3. Station Complex Modal Isolation & Route-Type Gating
+In `SpatialDatabaseManager.fetchStopDetails`, Tier 0 station complex resolution joins `transit.stop_resolution` and `transit.complexes`:
+- **Modal Isolation:** Candidate complex member stops must be filtered by the tapped stop's `route_type` (or `modalClass`). Bus stops (e.g. Kent Av & N 6 St `308667`) located within the spatial concourse of subway complexes must never inherit heavy-rail complex IDs or be assigned `modalClass = .subway`.
+- **Chronological Stream Preservation:** Bus stops maintain their pure `.bus` modal classification, rendering chronological departure streams and multi-route filter chips rather than bi-directional subway headers.
+
+#### 4. Stop-Level Fallback Route Gating
+When generating fallback departures for local stations lacking live realtime feeds:
+- Gating must use the individual stop's `routes` column from `transit.stops`, **never** the complex-wide aggregated `routeIds`.
+- This ensures local-only stations (e.g. Astor Pl `631`) never synthesize departures for express routes (4/5) simply because they share a corridor or complex entry.
+
+#### 5. Floating Lens Hit-Testing Hierarchy (`ContentView`)
+In `ContentView.swift`:
+- When any modal sheet (`activeSheet != nil`) or transit station sheet (`selectedTransitStop != nil`) is active, floating overlays (`NearbyBusesCapsule`, `RecenterFAB`) must auto-collapse and set `.allowsHitTesting(false)`.
+- Applying `.opacity(0.0)` alone is insufficient in SwiftUI; explicit hit-test disabling prevents invisible frames from intercepting touches meant for the bottom sheet.
+
