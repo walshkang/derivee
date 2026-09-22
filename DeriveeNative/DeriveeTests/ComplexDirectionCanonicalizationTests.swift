@@ -754,4 +754,48 @@ final class ComplexDirectionCanonicalizationTests: XCTestCase {
         XCTAssertFalse(atlSubwayMembers.contains("303254"), "Subway complex members must not leak bus stop 303254")
         XCTAssertFalse(atlSubwayMembers.contains("305411"), "Subway complex members must not leak bus stop 305411")
     }
+    
+    // MARK: - Pre-T.6: Stem Transfers & Stop-Level Route Gating
+    
+    func testPreT6_AstorPl_StopLevelRouteGating() async throws {
+        let dbManager = SpatialDatabaseManager.shared
+        
+        // Astor Pl (636 / 636N) is a local-only IRT stop serving line 6 / 6X.
+        // It must NOT inherit express route 5 from nearby/trunk complexes, and primary route must be 6.
+        let details = try await dbManager.fetchStopDetails(for: "636")
+        XCTAssertEqual(details.routeId, "6")
+        XCTAssertTrue(details.routeIds.contains("6") || details.routeIds.contains("6X"))
+        XCTAssertFalse(details.routeIds.contains("5"), "Astor Pl must not contain express route 5")
+        
+        // Arrivals must only contain line 6 or 6X (no express line 4 or 5 arrivals)
+        XCTAssertFalse(details.arrivals.isEmpty)
+        for arr in details.arrivals {
+            XCTAssertTrue(arr.line == "6" || arr.line == "6X", "Astor Pl arrivals must not contain line '\(arr.line)'")
+        }
+    }
+    
+    func testPreT6_GenerateArrivals_RouteSpecificFallback() async throws {
+        let dbManager = SpatialDatabaseManager.shared
+        
+        // generateArrivals for "6" must ONLY return line 6 / 6X arrivals, never 4 or 5
+        let sixArrivals = await dbManager.generateArrivals(for: "6")
+        XCTAssertFalse(sixArrivals.isEmpty)
+        for arr in sixArrivals {
+            XCTAssertTrue(arr.line == "6" || arr.line == "6X", "Expected 6/6X arrival but got '\(arr.line)'")
+        }
+        
+        // generateArrivals for "4" must ONLY return line 4 arrivals, never 5 or 6
+        let fourArrivals = await dbManager.generateArrivals(for: "4")
+        XCTAssertFalse(fourArrivals.isEmpty)
+        for arr in fourArrivals {
+            XCTAssertEqual(arr.line, "4", "Expected 4 arrival but got '\(arr.line)'")
+        }
+        
+        // generateArrivals for "F" must ONLY return line F / FX arrivals, never B or D
+        let fArrivals = await dbManager.generateArrivals(for: "F")
+        XCTAssertFalse(fArrivals.isEmpty)
+        for arr in fArrivals {
+            XCTAssertTrue(arr.line == "F" || arr.line == "FX", "Expected F/FX arrival but got '\(arr.line)'")
+        }
+    }
 }

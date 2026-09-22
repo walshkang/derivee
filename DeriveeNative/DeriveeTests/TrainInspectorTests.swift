@@ -271,4 +271,133 @@ final class TrainInspectorTests: XCTestCase {
         XCTAssertTrue(last?.stopId.contains("L01") == true || last?.stopName.contains("8 Av") == true,
                       "Terminus must be 8 Av")
     }
+
+    // MARK: - 5. Pre-T.6 Continuous Ladder Stem & Express Variant Normalization Tests
+
+    func testTrunkRouteIdNormalization() {
+        // Express variants normalize to base trunk
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "6X"), "6")
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "6x"), "6")
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "7X"), "7")
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "7x"), "7")
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "FX"), "F")
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "fx"), "F")
+        
+        // Base trunks return clean uppercase
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "6"), "6")
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "7"), "7")
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "F"), "F")
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "L"), "L")
+        XCTAssertEqual(TransitRouteData.trunkRouteId(for: "M15-SBS"), "M15-SBS")
+    }
+
+    func testGuidewayRunInspector_StripsExpressVariantTransfers() {
+        // When inspecting 6X express train:
+        // A stop with raw transfers ["6", "6X", "4", "5"] must strip both self-referential "6X" and trunk-equivalent "6"
+        let arrival6X = SpatialDatabaseManager.ArrivalInfo(
+            line: "6X",
+            destination: "Pelham Bay Park",
+            minutes: 4,
+            direction: "Uptown & Bronx",
+            distanceDescription: "2 stops away",
+            corridorVector: .northbound
+        )
+        let inspector6X = GuidewayRunInspector(
+            arrival: arrival6X,
+            currentStopId: "635N",
+            currentStopName: "14 St - Union Sq"
+        )
+        let testStop = TrackStop(
+            id: "test_union_sq",
+            stopId: "635",
+            stopName: "14 St - Union Sq",
+            coordinate: CLLocationCoordinate2D(latitude: 40.7359, longitude: -73.9906),
+            sequenceIndex: 0,
+            isPassed: false,
+            isCurrent: true,
+            isTerminus: false,
+            estimatedMinutes: 4,
+            transferRoutes: ["4", "5", "6", "6X", "L", "N", "Q", "R", "W"]
+        )
+        let filteredTransfers = inspector6X.displayedTransferRoutes(for: testStop)
+        XCTAssertFalse(filteredTransfers.contains("6X"), "6X inspector must not display self-referential 6X transfer badge")
+        XCTAssertFalse(filteredTransfers.contains("6"), "6X inspector must not display express variant trunk 6 transfer badge")
+        XCTAssertTrue(filteredTransfers.contains("4"))
+        XCTAssertTrue(filteredTransfers.contains("5"))
+        XCTAssertTrue(filteredTransfers.contains("L"))
+        
+        // When inspecting 7X express train:
+        let arrival7X = SpatialDatabaseManager.ArrivalInfo(
+            line: "7X",
+            destination: "Flushing - Main St",
+            minutes: 3,
+            direction: "Queens-bound",
+            distanceDescription: "1 stop away",
+            corridorVector: .eastbound
+        )
+        let inspector7X = GuidewayRunInspector(
+            arrival: arrival7X,
+            currentStopId: "701",
+            currentStopName: "Flushing"
+        )
+        let stop7 = TrackStop(
+            id: "test_7",
+            stopId: "702",
+            stopName: "Queensboro Plaza",
+            coordinate: CLLocationCoordinate2D(latitude: 40.7505, longitude: -73.9402),
+            sequenceIndex: 1,
+            isPassed: false,
+            isCurrent: false,
+            isTerminus: false,
+            estimatedMinutes: 5,
+            transferRoutes: ["7", "7X", "N", "W"]
+        )
+        let filtered7 = inspector7X.displayedTransferRoutes(for: stop7)
+        XCTAssertFalse(filtered7.contains("7X"), "7X inspector must not display self-referential 7X")
+        XCTAssertFalse(filtered7.contains("7"), "7X inspector must not display trunk 7 transfer badge")
+        XCTAssertTrue(filtered7.contains("N"))
+        XCTAssertTrue(filtered7.contains("W"))
+        
+        // When inspecting FX express train:
+        let arrivalFX = SpatialDatabaseManager.ArrivalInfo(
+            line: "FX",
+            destination: "Coney Island",
+            minutes: 6,
+            direction: "Brooklyn-bound",
+            distanceDescription: "3 stops away",
+            corridorVector: .southbound
+        )
+        let inspectorFX = GuidewayRunInspector(
+            arrival: arrivalFX,
+            currentStopId: "F20",
+            currentStopName: "Church Av"
+        )
+        let stopFX = TrackStop(
+            id: "test_fx",
+            stopId: "F20",
+            stopName: "Church Av",
+            coordinate: CLLocationCoordinate2D(latitude: 40.6508, longitude: -73.9796),
+            sequenceIndex: 2,
+            isPassed: false,
+            isCurrent: false,
+            isTerminus: false,
+            estimatedMinutes: 8,
+            transferRoutes: ["F", "FX", "G"]
+        )
+        let filteredFX = inspectorFX.displayedTransferRoutes(for: stopFX)
+        XCTAssertFalse(filteredFX.contains("FX"), "FX inspector must not display self-referential FX")
+        XCTAssertFalse(filteredFX.contains("F"), "FX inspector must not display trunk F transfer badge")
+        XCTAssertTrue(filteredFX.contains("G"))
+    }
+
+    func testGuidewayRunInspector_ContinuousStemGeometry() throws {
+        // Assert that GuidewayRunInspector source file incorporates the continuous 4pt background stem on the 24x24 node
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let guidewayFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/GuidewayRunInspector.swift")
+        let content = try String(contentsOf: guidewayFile, encoding: .utf8)
+        
+        XCTAssertTrue(content.contains(".frame(width: 4, height: 12)"), "GuidewayRunInspector must render 4pt-wide, 12pt-tall upper and lower stem segments in node background")
+        XCTAssertTrue(content.contains("displayedTransferRoutes(for: stop)"), "GuidewayRunInspector must invoke displayedTransferRoutes to normalize transfer badges")
+    }
 }

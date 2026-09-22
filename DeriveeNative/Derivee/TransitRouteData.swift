@@ -69,6 +69,18 @@ public struct TransitRouteData {
         }
     }
     
+    /// Returns the canonical trunk route identifier for express variants (e.g. "6X" -> "6", "7X" -> "7", "FX" -> "F").
+    /// For standard routes or surface buses, returns the cleaned, trimmed uppercase route ID.
+    public static func trunkRouteId(for routeId: String) -> String {
+        let clean = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        switch clean {
+        case "6X": return "6"
+        case "7X": return "7"
+        case "FX": return "F"
+        default: return clean
+        }
+    }
+    
     public static func lineInfo(for routeId: String) -> LineInfo {
         let cleanId = routeId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         

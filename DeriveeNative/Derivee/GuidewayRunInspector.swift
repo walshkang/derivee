@@ -621,6 +621,20 @@ public struct GuidewayRunInspector: View {
         }
     }
     
+    /// Normalizes transfer routes by stripping self-referential routes (route == current line)
+    /// and express variants matching the trunk (e.g. 6 on 6X, 7 on 7X, F on FX). (Wave Pre-T.6)
+    internal func displayedTransferRoutes(for stop: TrackStop) -> [String] {
+        let currentTrunk = TransitRouteData.trunkRouteId(for: arrival.line)
+        let lineTrunk = TransitRouteData.trunkRouteId(for: lineInfo.routeId)
+        return stop.transferRoutes.filter { rId in
+            let transferTrunk = TransitRouteData.trunkRouteId(for: rId)
+            return rId != lineInfo.routeId &&
+                   rId != arrival.line &&
+                   transferTrunk != currentTrunk &&
+                   transferTrunk != lineTrunk
+        }
+    }
+    
     @ViewBuilder
     private func renderLadderNode(stop: TrackStop, isFirst: Bool, isLast: Bool) -> some View {
         HStack(alignment: .center, spacing: 14) {
@@ -683,6 +697,17 @@ public struct GuidewayRunInspector: View {
                     }
                 }
                 .frame(width: 24, height: 24)
+                .background(
+                    VStack(spacing: 0) {
+                        Rectangle()
+                            .fill(isFirst ? Color.clear : (stop.isPassed ? Color.secondary.opacity(0.25) : lineInfo.color))
+                            .frame(width: 4, height: 12)
+                        Rectangle()
+                            .fill(isLast ? Color.clear : (stop.isPassed && !stop.isCurrent && !stop.isVehicleHere ? Color.secondary.opacity(0.25) : lineInfo.color))
+                            .frame(width: 4, height: 12)
+                    }
+                    .frame(width: 24, height: 24)
+                )
                 
                 // Lower Stem
                 Rectangle()
@@ -744,14 +769,15 @@ public struct GuidewayRunInspector: View {
                             }
                         }
                         
-                        // Connecting Lines Badges (Wave PD.9: Transfer Route Disambiguation)
-                        if !stop.transferRoutes.isEmpty {
+                        // Connecting Lines Badges (Wave PD.9 / Pre-T.6: Transfer Route Disambiguation & Express Variant Normalization)
+                        let activeTransfers = displayedTransferRoutes(for: stop)
+                        if !activeTransfers.isEmpty {
                             HStack(alignment: .center, spacing: 3.5) {
                                 Text("⇄")
                                     .font(.system(size: 9.5, weight: .bold))
                                     .foregroundColor(.secondary.opacity(0.75))
                                     .accessibilityHidden(true)
-                                ForEach(stop.transferRoutes.prefix(7), id: \.self) { rId in
+                                ForEach(activeTransfers.prefix(7), id: \.self) { rId in
                                     TransferRouteBadge(routeId: rId)
                                 }
                             }
