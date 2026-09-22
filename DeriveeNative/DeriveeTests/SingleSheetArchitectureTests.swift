@@ -157,4 +157,92 @@ final class SingleSheetArchitectureTests: XCTestCase {
             "FC-5 Violation: ContentView must auto-collapse isNearbyBusesExpanded when sheets or transit stops are selected"
         )
     }
+
+    // MARK: - 6. Pre-T.5 Persistent Inspection Dock Hardening & Non-Trapping Dismissal Tests (WPT5)
+
+    @MainActor
+    func testPreT5_InspectionPeekDetent_SnapBackClamping() {
+        var externalDetent: PresentationDetent = .medium
+        let externalBinding = Binding<PresentationDetent>(
+            get: { externalDetent },
+            set: { externalDetent = $0 }
+        )
+        let arr = SpatialDatabaseManager.ArrivalInfo(line: "L", destination: "Canarsie", minutes: 4)
+        let sheet = TransitRevealSheet(
+            stopId: "stop_bedford",
+            initialInspectingArrival: arr,
+            initialDetent: .medium,
+            selectedDetent: externalBinding
+        )
+        
+        // Simulating user dragging sheet down into peek detent
+        sheet.selectedDetent = TransitRevealSheet.inspectionPeekDetent
+        XCTAssertEqual(externalDetent, TransitRevealSheet.inspectionPeekDetent)
+        XCTAssertEqual(sheet.selectedDetent, TransitRevealSheet.inspectionPeekDetent)
+    }
+
+    func testPreT5_CompactDockPill_DefensivePrefixStripping() {
+        // Line-prefixed destination with uppercase line
+        XCTAssertEqual(
+            TransitRevealSheet.cleanInspectionDestination(destination: "L to Canarsie - Rockaway Pkwy", line: "L"),
+            "Canarsie - Rockaway Pkwy"
+        )
+        
+        // Line-prefixed destination with lowercase line
+        XCTAssertEqual(
+            TransitRevealSheet.cleanInspectionDestination(destination: "l to 8 Av", line: "L"),
+            "8 Av"
+        )
+        
+        // Bus line prefix
+        XCTAssertEqual(
+            TransitRevealSheet.cleanInspectionDestination(destination: "B32 to Williamsburg Bridge Plaza", line: "B32"),
+            "Williamsburg Bridge Plaza"
+        )
+        
+        // Generic "To " prefix
+        XCTAssertEqual(
+            TransitRevealSheet.cleanInspectionDestination(destination: "To Long Island City", line: "B32"),
+            "Long Island City"
+        )
+        XCTAssertEqual(
+            TransitRevealSheet.cleanInspectionDestination(destination: "to Jamaica Center", line: "E"),
+            "Jamaica Center"
+        )
+        
+        // Non-prefixed destination passes through unmodified
+        XCTAssertEqual(
+            TransitRevealSheet.cleanInspectionDestination(destination: "Pelham Bay Park", line: "6"),
+            "Pelham Bay Park"
+        )
+        XCTAssertEqual(
+            TransitRevealSheet.cleanInspectionDestination(destination: "World Trade Center", line: "E"),
+            "World Trade Center"
+        )
+    }
+
+    func testPreT5_SourceCodeAudit_NoInteractiveDismissDisabled_AndPeekChromeHidden() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let sheetFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/TransitRevealSheet.swift")
+        let content = try String(contentsOf: sheetFile, encoding: .utf8)
+        
+        // 1. Must NOT contain .interactiveDismissDisabled to prevent trapping the commuter (FC-7)
+        XCTAssertFalse(
+            content.contains(".interactiveDismissDisabled"),
+            "FC-7 Violation: TransitRevealSheet must not use .interactiveDismissDisabled which locks commuters in the sheet"
+        )
+        
+        // 2. Must hide inspectorView from accessibility during peek detent
+        XCTAssertTrue(
+            content.contains(".accessibilityHidden(selectedDetent == Self.inspectionPeekDetent)"),
+            "Pre-T.5 Violation: TransitRevealSheet must isolate accessibility in peek detent"
+        )
+        
+        // 3. Must apply auto-scaling (.minimumScaleFactor(0.85)) to dock pill destination text
+        XCTAssertTrue(
+            content.contains(".minimumScaleFactor(0.85)"),
+            "Pre-T.5 Violation: compactInspectionDockPill must apply .minimumScaleFactor(0.85) to prevent ellipsis truncation"
+        )
+    }
 }

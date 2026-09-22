@@ -1117,8 +1117,11 @@ struct MapView: UIViewRepresentable {
             guard let style = mapView.style else { return }
             
             if let cmd = command {
+                lastAppliedInspectionCommand = cmd
+                
                 if lastAppliedInspectionCommandId != cmd.id {
                     lastAppliedInspectionCommandId = cmd.id
+                    lastAppliedInspectionDetent = activeDetent
                     
                     // 1. Resolve or create shape source
                     let source: MLNShapeSource
@@ -1312,19 +1315,37 @@ struct MapView: UIViewRepresentable {
                             animated: true
                         )
                     }
-                } else if lastAppliedInspectionDetent != activeDetent, let activeCmd = lastAppliedInspectionCommand {
-                    // Detent transition while route inspection remains active (Wave PE.2)
-                    lastAppliedInspectionDetent = activeDetent
-                    if activeCmd.shouldFrameCamera {
-                        frameRouteAndStation(
-                            coordinates: activeCmd.coordinates,
-                            station: activeCmd.stationCoordinate,
-                            vehicleCoordinate: activeCmd.vehicleCoordinate,
-                            activeDetent: activeDetent,
-                            sheetHeight: sheetHeight,
-                            in: mapView,
-                            animated: true
-                        )
+                } else {
+                    // Update vehicle position if telemetry arrived for active run
+                    if let vehicleSource = style.source(withIdentifier: ephemeralVehicleSourceId) as? MLNShapeSource {
+                        if let vehicleCoord = cmd.vehicleCoordinate {
+                            let vehicleFeature = MLNPointFeature()
+                            vehicleFeature.coordinate = vehicleCoord
+                            vehicleFeature.attributes = [
+                                "color": cmd.agencyColorHex,
+                                "bearing": cmd.vehicleBearing ?? 0.0,
+                                "has_bearing": (cmd.vehicleBearing != nil)
+                            ]
+                            vehicleSource.shape = vehicleFeature
+                        } else {
+                            vehicleSource.shape = nil
+                        }
+                    }
+                    
+                    // Detent transition while route inspection remains active (Wave PE.2 / Pre-T.5)
+                    if lastAppliedInspectionDetent != activeDetent, let activeCmd = lastAppliedInspectionCommand {
+                        lastAppliedInspectionDetent = activeDetent
+                        if activeCmd.shouldFrameCamera {
+                            frameRouteAndStation(
+                                coordinates: activeCmd.coordinates,
+                                station: activeCmd.stationCoordinate,
+                                vehicleCoordinate: activeCmd.vehicleCoordinate,
+                                activeDetent: activeDetent,
+                                sheetHeight: sheetHeight,
+                                in: mapView,
+                                animated: true
+                            )
+                        }
                     }
                 }
             } else {

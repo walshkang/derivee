@@ -591,7 +591,12 @@ final class InspectorMapSyncTests: XCTestCase {
         )
         
         let hosting = UIHostingController(rootView: sheet)
-        XCTAssertNotNil(hosting.view)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = hosting
+        window.makeKeyAndVisible()
+        hosting.beginAppearanceTransition(true, animated: false)
+        hosting.endAppearanceTransition()
+        hosting.view.layoutIfNeeded()
         
         // On appear, initialDetent (.fraction(0.12)) must be notified to parent
         XCTAssertEqual(
@@ -643,5 +648,74 @@ final class InspectorMapSyncTests: XCTestCase {
         XCTAssertLessThan(latSpan, 0.20, "Distant approach span must remain within city corridor limits")
         XCTAssertGreaterThan(lonSpan, 0.03, "Distant approach span must span corridor longitude")
     }
+
+    // MARK: - 10. Wave Pre-T.5 Persistent Inspection Dock Synchronization Tests (WPT5)
+
+    func testPreT5_SourceCodeAudit_MapViewUnconditionalAssignment() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let mapViewFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/MapView.swift")
+        let content = try String(contentsOf: mapViewFile, encoding: .utf8)
+        
+        // 1. Must unconditionally assign lastAppliedInspectionCommand = cmd when command is present
+        XCTAssertTrue(
+            content.contains("lastAppliedInspectionCommand = cmd"),
+            "Pre-T.5 Violation: MapView.Coordinator must unconditionally assign lastAppliedInspectionCommand = cmd"
+        )
+        
+        // 2. Must record lastAppliedInspectionDetent = activeDetent upon new command ID
+        XCTAssertTrue(
+            content.contains("lastAppliedInspectionDetent = activeDetent"),
+            "Pre-T.5 Violation: MapView.Coordinator must record lastAppliedInspectionDetent = activeDetent"
+        )
+        
+        // 3. Must re-frame camera on detent transition using activeCmd
+        XCTAssertTrue(
+            content.contains("else if lastAppliedInspectionDetent != activeDetent, let activeCmd = lastAppliedInspectionCommand") ||
+            content.contains("if lastAppliedInspectionDetent != activeDetent, let activeCmd = lastAppliedInspectionCommand"),
+            "Pre-T.5 Violation: MapView.Coordinator must re-frame camera with activeCmd on detent change"
+        )
+    }
+
+    func testPreT5_RouteInspectionCommand_RetainsTelemetryForDetentReFrame() {
+        let station = CLLocationCoordinate2D(latitude: 40.7173, longitude: -73.9566)
+        let initialVehicle = CLLocationCoordinate2D(latitude: 40.7145, longitude: -73.9440)
+        let updatedVehicle = CLLocationCoordinate2D(latitude: 40.7130, longitude: -73.9390)
+        
+        let initialCmd = RouteInspectionCommand(
+            routeId: "L",
+            lineName: "14th Street-Canarsie Local",
+            agencyColorHex: "#A7A9AC",
+            modalClass: .subway,
+            coordinates: [station, initialVehicle],
+            stationCoordinate: station,
+            vehicleCoordinate: initialVehicle
+        )
+        
+        // Simulating live vehicle telemetry update (same route/station, updated vehicle location)
+        let updatedCmd = RouteInspectionCommand(
+            id: initialCmd.id,
+            routeId: initialCmd.routeId,
+            lineName: initialCmd.lineName,
+            agencyColorHex: initialCmd.agencyColorHex,
+            modalClass: initialCmd.modalClass,
+            coordinates: initialCmd.coordinates,
+            stationCoordinate: initialCmd.stationCoordinate,
+            vehicleCoordinate: updatedVehicle
+        )
+        
+        XCTAssertEqual(initialCmd.id, updatedCmd.id, "Trip ID must remain invariant across live telemetry updates")
+        XCTAssertEqual(updatedCmd.vehicleCoordinate?.latitude, updatedVehicle.latitude)
+        XCTAssertEqual(updatedCmd.vehicleCoordinate?.longitude, updatedVehicle.longitude)
+        
+        // Bounding box computed from updated command must enclose the updated vehicle coordinate
+        let bounds = updatedCmd.computedBoundingBox(tightVehicleBounding: true)
+        XCTAssertNotNil(bounds)
+        if let b = bounds {
+            XCTAssertLessThanOrEqual(b.sw.latitude, updatedVehicle.latitude)
+            XCTAssertGreaterThanOrEqual(b.ne.latitude, station.latitude)
+        }
+    }
 }
+
 

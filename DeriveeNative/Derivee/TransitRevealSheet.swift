@@ -64,7 +64,13 @@ struct TransitRevealSheet: View {
     private var selectedDetentBinding: Binding<PresentationDetent> {
         Binding(
             get: { self.selectedDetent },
-            set: { self.selectedDetent = $0 }
+            set: { newValue in
+                if self.inspectingArrival != nil && newValue != .medium && newValue != .large && newValue != Self.inspectionPeekDetent {
+                    self.selectedDetent = Self.inspectionPeekDetent
+                } else {
+                    self.selectedDetent = newValue
+                }
+            }
         )
     }
     
@@ -362,10 +368,12 @@ struct TransitRevealSheet: View {
                     inspectorView(for: arr)
                         .opacity(selectedDetent == Self.inspectionPeekDetent ? 0 : 1)
                         .allowsHitTesting(selectedDetent != Self.inspectionPeekDetent)
+                        .accessibilityHidden(selectedDetent == Self.inspectionPeekDetent)
                     
                     if selectedDetent == Self.inspectionPeekDetent {
                         compactInspectionDockPill(for: arr)
                             .transition(.opacity)
+                            .zIndex(1)
                     }
                 }
                 .transition(.asymmetric(
@@ -405,7 +413,10 @@ struct TransitRevealSheet: View {
             }
         }
         .onChange(of: selectedDetent) { _, newDetent in
-            onDetentChange?(newDetent)
+            if inspectingArrival != nil && newDetent != .medium && newDetent != .large && newDetent != Self.inspectionPeekDetent {
+                selectedDetent = Self.inspectionPeekDetent
+            }
+            onDetentChange?(selectedDetent)
         }
         .task(id: stopId) {
             await startPollingLifecycle()
@@ -674,20 +685,35 @@ struct TransitRevealSheet: View {
         }
     }
     
-    // MARK: - Wave PD.2: Compact Interactive Inspection Dock Pill
+    // MARK: - Wave PD.2 / Pre-T.5: Compact Interactive Inspection Dock Pill
+    
+    internal static func cleanInspectionDestination(destination: String, line: String) -> String {
+        let dest = destination.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = "\(line) to "
+        if dest.lowercased().hasPrefix(prefix.lowercased()) {
+            return String(dest.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if dest.lowercased().hasPrefix("to ") {
+            return String(dest.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return dest
+    }
     
     @ViewBuilder
     internal func compactInspectionDockPill(for arr: SpatialDatabaseManager.ArrivalInfo) -> some View {
+        let cleanDestination = Self.cleanInspectionDestination(destination: arr.destination, line: arr.line)
+        
         HStack(alignment: .center, spacing: 10) {
             // [Route Badge]
             TransitRouteBadge(routeId: arr.line, size: .compact)
             
             // [Destination] • [ETA]
             HStack(spacing: 5) {
-                Text(arr.destination)
+                Text(cleanDestination)
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(.primary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 
                 Text("•")
                     .font(.subheadline.weight(.bold))
