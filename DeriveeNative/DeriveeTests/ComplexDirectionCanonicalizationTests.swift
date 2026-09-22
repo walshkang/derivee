@@ -664,4 +664,94 @@ final class ComplexDirectionCanonicalizationTests: XCTestCase {
         )
         XCTAssertEqual(arrivals.first?.directionId, 0)
     }
+    
+    // MARK: - Pre-T.4: Station Complex Modal Isolation & One-Way Curb Grounding
+    
+    func testPreT4_BusStopModalIsolation_KentAv() async throws {
+        let dbManager = SpatialDatabaseManager.shared
+        let details = try await dbManager.fetchStopDetails(for: "308667")
+        
+        // Modal Isolation Invariant: Bus stop must maintain pure .bus modalClass
+        XCTAssertEqual(details.modalClass, .bus, "Kent Av stop 308667 must never be promoted to .subway")
+        XCTAssertEqual(details.routeType, 3, "Kent Av stop 308667 must have routeType == 3 (Bus)")
+        XCTAssertEqual(details.routeIds, ["B32"], "Kent Av stop 308667 must only serve B32")
+        XCTAssertEqual(details.name, "Kent Av & N 6 St")
+        
+        // All arrivals must be Northbound (Direction 0)
+        XCTAssertFalse(details.arrivals.isEmpty, "Arrivals should be generated for Kent Av stop.")
+        for arrival in details.arrivals {
+            let dir = arrival.direction ?? ""
+            XCTAssertTrue(dir.contains("Northbound") || dir.contains("Uptown"),
+                          "Arrival direction '\(dir)' must be Northbound for Kent Av.")
+            XCTAssertFalse(dir.contains("Southbound") || dir.contains("Downtown"),
+                           "Arrival direction must NOT contain Southbound for Northbound-only Kent Av stop.")
+        }
+    }
+    
+    func testPreT4_MultiModalHubSeparation_AtlanticAve() async throws {
+        let dbManager = SpatialDatabaseManager.shared
+        
+        // 1. Tapping subway station 235 (2/3/4/5) at Atlantic Av hub
+        let subwayDetails = try await dbManager.fetchStopDetails(for: "235")
+        XCTAssertEqual(subwayDetails.modalClass, .subway, "Subway stop 235 must have modalClass == .subway")
+        XCTAssertEqual(subwayDetails.routeType, 1, "Subway stop 235 must have routeType == 1")
+        XCTAssertTrue(subwayDetails.name.contains("Atlantic"), "Must unify to Atlantic Ave complex")
+        
+        // Modal Isolation Invariant: Subway complex routes must NEVER contain bus routes
+        for r in subwayDetails.routeIds {
+            XCTAssertFalse(TransitRouteData.isBusRoute(r), "Subway complex routeIds must not contain bus route '\(r)'")
+            XCTAssertFalse(TransitRouteData.isFerryRoute(r), "Subway complex routeIds must not contain ferry route '\(r)'")
+        }
+        XCTAssertTrue(subwayDetails.routeIds.contains("2") || subwayDetails.routeIds.contains("4"))
+        
+        // 2. Tapping surface bus stop 303254 (Flatbush Av & Atlantic Av) co-located at Atlantic Av hub
+        let busDetails = try await dbManager.fetchStopDetails(for: "303254")
+        XCTAssertEqual(busDetails.modalClass, .bus, "Bus stop 303254 must maintain modalClass == .bus, never promoted to subway")
+        XCTAssertEqual(busDetails.routeType, 3, "Bus stop 303254 must have routeType == 3")
+        XCTAssertEqual(busDetails.name, "Flatbush Av & Atlantic Av")
+        XCTAssertTrue(busDetails.routeIds.contains("B41") || busDetails.routeIds.contains("B45") || busDetails.routeIds.contains("B67"))
+        
+        // Bus stop must NOT contain subway routes
+        for r in busDetails.routeIds {
+            XCTAssertTrue(TransitRouteData.isBusRoute(r), "Bus stop routeIds must only contain bus routes: '\(r)'")
+        }
+    }
+    
+    func testPreT4_OneWayCurb_StopNamePassing() async throws {
+        let dbManager = SpatialDatabaseManager.shared
+        
+        // One-Way Thoroughfares in Brooklyn & Manhattan:
+        // Kent Av (B32) is Northbound only (Direction 0)
+        let dirsKent = try await dbManager.fetchAvailableDirections(for: "308667", stopName: "Kent Av & N 6 St", routeId: "B32")
+        XCTAssertEqual(dirsKent, Set([0]), "Kent Av NB must have only Direction 0")
+        
+        // Wythe Av (B32) is Southbound only (Direction 1)
+        let dirsWythe = try await dbManager.fetchAvailableDirections(for: "308683", stopName: "Wythe Av & N 12 St", routeId: "B32")
+        XCTAssertEqual(dirsWythe, Set([1]), "Wythe Av SB must have only Direction 1")
+        
+        // Madison Av is Northbound only (Direction 0)
+        let dirsMadison = try await dbManager.fetchAvailableDirections(for: "BUS_MADISON_42", stopName: "Madison Av & E 42 St", routeId: "M1")
+        XCTAssertEqual(dirsMadison, Set([0]), "Madison Av NB must have only Direction 0")
+        
+        // 5th Av is Southbound only (Direction 1)
+        let dirs5th = try await dbManager.fetchAvailableDirections(for: "BUS_5AV_34", stopName: "5 Av & W 34 St", routeId: "M1")
+        XCTAssertEqual(dirs5th, Set([1]), "5th Av SB must have only Direction 1")
+    }
+    
+    func testPreT4_ResolveComplexMemberStopIds_ModalIsolation() async throws {
+        let dbManager = SpatialDatabaseManager.shared
+        
+        // Bus stops must NOT resolve subway complex member stops
+        let kentMembers = await dbManager.resolveComplexMemberStopIds(for: "308667")
+        XCTAssertEqual(kentMembers, Set(["308667"]), "Bus stop 308667 must only resolve to itself, never subway platforms")
+        
+        let flatbushMembers = await dbManager.resolveComplexMemberStopIds(for: "303254")
+        XCTAssertEqual(flatbushMembers, Set(["303254"]), "Co-located bus stop 303254 must only resolve to itself")
+        
+        // Subway complex members must NOT leak bus stop IDs
+        let atlSubwayMembers = await dbManager.resolveComplexMemberStopIds(for: "235")
+        XCTAssertTrue(atlSubwayMembers.contains("235") || atlSubwayMembers.contains("235N"))
+        XCTAssertFalse(atlSubwayMembers.contains("303254"), "Subway complex members must not leak bus stop 303254")
+        XCTAssertFalse(atlSubwayMembers.contains("305411"), "Subway complex members must not leak bus stop 305411")
+    }
 }

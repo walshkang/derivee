@@ -17,29 +17,35 @@ final class BusStopNameSanitizationTests: XCTestCase {
         let detailsNB = try await dbManager.fetchStopDetails(for: "308667")
         XCTAssertEqual(detailsNB.name, "Kent Av & N 6 St", "Kent Av stop 308667 must be sanitized to 'Kent Av & N 6 St'.")
         XCTAssertFalse(detailsNB.name.contains("NB 6 St"), "Stop name must not bind 'NB' into street token '6 St'.")
+        XCTAssertEqual(detailsNB.modalClass, .bus, "Kent Av bus stop 308667 must maintain .bus modal classification, never promoted to .subway.")
+        XCTAssertEqual(detailsNB.routeType, 3, "Kent Av bus stop 308667 must have routeType == 3 (Bus).")
+        XCTAssertEqual(detailsNB.routeIds, ["B32"], "Kent Av bus stop 308667 must only serve bus route B32.")
         
         // Stop 308396 is Kent Av & South 6th St
         let detailsSB = try await dbManager.fetchStopDetails(for: "308396")
         XCTAssertEqual(detailsSB.name, "Kent Av & S 6 St", "Kent Av stop 308396 must be sanitized to 'Kent Av & S 6 St'.")
         XCTAssertFalse(detailsSB.name.contains("SB 6 St"), "Stop name must not bind 'SB' into street token '6 St'.")
+        XCTAssertEqual(detailsSB.modalClass, .bus, "Kent Av bus stop 308396 must maintain .bus modal classification.")
+        XCTAssertEqual(detailsSB.routeType, 3, "Kent Av bus stop 308396 must have routeType == 3 (Bus).")
     }
     
     func testSingleDirectionBusStopAvailableDirections() async throws {
         // Kent Av (B32) is Northbound only (Direction 0)
-        let dirs308667 = try await dbManager.fetchAvailableDirections(for: "308667", routeId: "B32")
+        let dirs308667 = try await dbManager.fetchAvailableDirections(for: "308667", stopName: "Kent Av & N 6 St", routeId: "B32")
         XCTAssertEqual(dirs308667, Set([0]), "Kent Av stop 308667 must have only Direction 0 (Northbound).")
         
-        let dirs308666 = try await dbManager.fetchAvailableDirections(for: "308666", routeId: "B32")
+        let dirs308666 = try await dbManager.fetchAvailableDirections(for: "308666", stopName: "Kent Av & Grand St", routeId: "B32")
         XCTAssertEqual(dirs308666, Set([0]), "Kent Av stop 308666 must have only Direction 0 (Northbound).")
         
         // Wythe Av (B32) is Southbound only (Direction 1)
-        let dirsWythe = try await dbManager.fetchAvailableDirections(for: "308683", routeId: "B32")
+        let dirsWythe = try await dbManager.fetchAvailableDirections(for: "308683", stopName: "Wythe Av & N 12 St", routeId: "B32")
         XCTAssertEqual(dirsWythe, Set([1]), "Wythe Av stop 308683 must have only Direction 1 (Southbound).")
     }
     
     func testSingleDirectionBusStopArrivalsGating() async throws {
         let details = try await dbManager.fetchStopDetails(for: "308667")
         XCTAssertFalse(details.arrivals.isEmpty, "Arrivals should be generated for Kent Av stop.")
+        XCTAssertEqual(details.modalClass, .bus, "Kent Av stop must have modalClass == .bus.")
         
         // All arrivals must be Northbound (Direction 0)
         for arrival in details.arrivals {

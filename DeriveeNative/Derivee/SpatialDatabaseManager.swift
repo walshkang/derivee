@@ -818,12 +818,45 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
+    /// Evaluates whether a given stop ID or platform represents a bus stop based on intrinsic attributes in `transit.stops`.
+    public func isBusStopId(_ stopId: String, in db: Database) -> Bool {
+        if stopId.hasPrefix("BUS_") { return true }
+        let clean = stopId.trimmingCharacters(in: CharacterSet(charactersIn: "NSEW"))
+        if let row = try? Row.fetchOne(db, sql: """
+            SELECT location_type, routes, parent_station
+            FROM transit.stops
+            WHERE stop_id = ? OR stop_id = ?
+            LIMIT 1
+        """, arguments: [stopId, clean]) {
+            let locType: Int = row["location_type"] ?? 0
+            let routesStr: String = row["routes"] ?? ""
+            let parentStation: String? = row["parent_station"]
+            let parsed = routesStr.components(separatedBy: CharacterSet(charactersIn: ",;/| "))
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let hasBus = parsed.contains(where: { TransitRouteData.isBusRoute($0) })
+            let hasRail = parsed.contains(where: { !TransitRouteData.isBusRoute($0) && !TransitRouteData.isFerryRoute($0) })
+            if hasBus && !hasRail { return true }
+            if (parentStation == nil || parentStation?.isEmpty == true) && locType == 0 {
+                if TransitRouteData.isBusRoute(clean) || hasBus { return true }
+            }
+        } else if TransitRouteData.isBusRoute(clean) {
+            return true
+        }
+        return false
+    }
+    
     /// Synchronous variant of `resolveComplexMemberStopIds` executing within an existing db read transaction.
     public func resolveComplexMemberStopIds(for stopId: String, in db: Database) -> Set<String> {
         var result: Set<String> = [stopId]
         guard (try? self.ensureTransitAttached(in: db)) != nil else { return result }
         
         guard let _ = try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(stop_resolution)") else {
+            return result
+        }
+        
+        // Modal Isolation (Wave Pre-T.4): If the queried stop is a bus stop, do not resolve subway complex members
+        if !stopId.hasPrefix("complex_") && isBusStopId(stopId, in: db) {
             return result
         }
         
@@ -849,10 +882,14 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         """, arguments: [complexId]) {
             for r in rows {
                 if let p: String = r["parent_station_id"], !p.isEmpty {
-                    result.insert(p)
+                    if !isBusStopId(p, in: db) {
+                        result.insert(p)
+                    }
                 }
                 if let c: String = r["child_stop_id"], !c.isEmpty {
-                    result.insert(c)
+                    if !isBusStopId(c, in: db) {
+                        result.insert(c)
+                    }
                 }
             }
         }
@@ -2387,7 +2424,11 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                 let hasComplexTables = (try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(complexes)")) != nil &&
                                       (try? Row.fetchOne(db, sql: "PRAGMA transit.table_info(stop_resolution)")) != nil
                 
-                if hasComplexTables {
+                // Modal Isolation (Wave Pre-T.4): Candidate complex member stops must be filtered by the
+                // tapped stop's modal classification. Bus stops (e.g. Kent Av & N 6 St 308667, Flatbush & Atlantic 303254)
+                // must never be promoted to heavy-rail subway complexes or assigned modalClass = .subway.
+                let isBusStop = self.isBusStopId(stopId, in: db)
+                if hasComplexTables && !isBusStop {
                     let cid: Int64?
                     if stopId.hasPrefix("complex_") {
                         let clean = stopId.replacingOccurrences(of: "complex_", with: "")
@@ -2430,7 +2471,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                                     } else if trimmed == "SI" {
                                         trimmed = "SIR"
                                     }
-                                    if !trimmed.isEmpty && !collected.contains(trimmed) {
+                                    // Modal Isolation: A heavy-rail subway complex must not incorporate bus or ferry routes
+                                    if !trimmed.isEmpty && !collected.contains(trimmed) &&
+                                       !TransitRouteData.isBusRoute(trimmed) && !TransitRouteData.isFerryRoute(trimmed) {
                                         collected.append(trimmed)
                                     }
                                 }
@@ -2592,7 +2635,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                     let modalClass = TransitModalClass.from(routeType: routeType)
                     let isBus = modalClass == .bus
                     let primaryRouteId = routeIds.first ?? (isBus ? "M15" : "L")
-                    let arrivals = isBus ? self.generateBusArrivals(for: primaryRouteId, stopName: name) : self.generateArrivals(for: primaryRouteId, stopId: stopId)
+                    let arrivals = isBus ? self.generateBusArrivals(for: primaryRouteId, stopId: stopId, stopName: name) : self.generateArrivals(for: primaryRouteId, stopId: stopId)
                     let coord: CLLocationCoordinate2D?
                     if let lat = stopLat, let lon = stopLon {
                         coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
@@ -2942,7 +2985,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                                     }
                                 }
                             } else {
-                                let dirs = self.generateFallbackAvailableDirections(for: sId, routeId: lookupRouteId)
+                                let dirs = self.generateFallbackAvailableDirections(for: sId, stopName: cleanName, routeId: lookupRouteId)
                                 if !dirs.isEmpty && !dirs.contains(directionId) {
                                     return false
                                 }
@@ -3988,7 +4031,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         return result.records
     }
     
-    public func fetchAvailableDirections(for stopId: String, routeId: String? = nil, routeIds: [String] = []) async throws -> Set<Int> {
+    public func fetchAvailableDirections(for stopId: String, stopName: String? = nil, routeId: String? = nil, routeIds: [String] = []) async throws -> Set<Int> {
         let startTime = CFAbsoluteTimeGetCurrent()
         defer {
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
@@ -3996,16 +4039,18 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
         
         return try await dbWriter.read { db in
+            var effectiveStopName = (stopName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             do {
                 try self.ensureTransitAttached(in: db)
                 let resolvedIds = self.resolvePlatformStopIds(for: stopId, in: db)
                 let idPlaceholders = Array(repeating: "?", count: resolvedIds.count).joined(separator: ", ")
                 
-                var stopName = ""
-                let allCandidateIds = [stopId] + resolvedIds
-                let candidatePlaceholders = Array(repeating: "?", count: allCandidateIds.count).joined(separator: ", ")
-                if let row = try? Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id IN (\(candidatePlaceholders)) LIMIT 1", arguments: StatementArguments(allCandidateIds)) {
-                    stopName = row["stop_name"] ?? ""
+                if effectiveStopName.isEmpty {
+                    let allCandidateIds = [stopId] + resolvedIds
+                    let candidatePlaceholders = Array(repeating: "?", count: allCandidateIds.count).joined(separator: ", ")
+                    if let row = try? Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id IN (\(candidatePlaceholders)) LIMIT 1", arguments: StatementArguments(allCandidateIds)) {
+                        effectiveStopName = row["stop_name"] ?? ""
+                    }
                 }
                 
                 // 1. Check scheduled_hourly_patterns
@@ -4034,7 +4079,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         var validDirs: Set<Int> = []
                         for (d, headsigns) in dirHeadsigns {
                             let hasDepartures = headsigns.contains { hs in
-                                !Self.isTerminatingArrival(headsign: hs, stopName: stopName, stopId: stopId)
+                                !Self.isTerminatingArrival(headsign: hs, stopName: effectiveStopName, stopId: stopId)
                             }
                             if hasDepartures {
                                 validDirs.insert(d)
@@ -4042,7 +4087,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         }
                         
                         if !validDirs.isEmpty {
-                            return self.filterTerminalDirections(validDirs, for: stopId, stopName: stopName, routeId: routeId, routeIds: routeIds)
+                            return self.filterTerminalDirections(validDirs, for: stopId, stopName: effectiveStopName, routeId: routeId, routeIds: routeIds)
                         }
                     }
                 }
@@ -4073,7 +4118,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         var validDirs: Set<Int> = []
                         for (d, headsigns) in dirHeadsigns {
                             let hasDepartures = headsigns.contains { hs in
-                                !Self.isTerminatingArrival(headsign: hs, stopName: stopName, stopId: stopId)
+                                !Self.isTerminatingArrival(headsign: hs, stopName: effectiveStopName, stopId: stopId)
                             }
                             if hasDepartures {
                                 validDirs.insert(d)
@@ -4081,7 +4126,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
                         }
                         
                         if !validDirs.isEmpty {
-                            return self.filterTerminalDirections(validDirs, for: stopId, stopName: stopName, routeId: routeId, routeIds: routeIds)
+                            return self.filterTerminalDirections(validDirs, for: stopId, stopName: effectiveStopName, routeId: routeId, routeIds: routeIds)
                         }
                     }
                 }
@@ -4092,14 +4137,18 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             }
             
             // 3. Fallback: Lookup stop_name from database if available to disambiguate one-way corridors and qualifiers
-            var stopName = ""
-            if let row = try? Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
-                stopName = row["stop_name"] ?? ""
+            let finalStopName: String
+            if !effectiveStopName.isEmpty {
+                finalStopName = effectiveStopName
+            } else if let row = try? Row.fetchOne(db, sql: "SELECT stop_name FROM transit.stops WHERE stop_id = ?", arguments: [stopId]) {
+                finalStopName = row["stop_name"] ?? ""
+            } else {
+                finalStopName = ""
             }
             return self.filterTerminalDirections(
-                self.generateFallbackAvailableDirections(for: stopId, stopName: stopName, routeId: routeId ?? "L"),
+                self.generateFallbackAvailableDirections(for: stopId, stopName: finalStopName, routeId: routeId ?? "L"),
                 for: stopId,
-                stopName: stopName,
+                stopName: finalStopName,
                 routeId: routeId,
                 routeIds: routeIds
             )
@@ -4394,9 +4443,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         return "North / Southbound"
     }
     
-    private func generateBusArrivals(for routeId: String, stopName: String) -> [ArrivalInfo] {
+    private func generateBusArrivals(for routeId: String, stopId: String = "", stopName: String) -> [ArrivalInfo] {
         let cleanName = sanitizeStopName(stopName)
-        let availableDirs = generateFallbackAvailableDirections(for: cleanName, routeId: routeId)
+        let availableDirs = generateFallbackAvailableDirections(for: stopId, stopName: cleanName, routeId: routeId)
         let (dest1, dir1) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 0, stopName: cleanName)
         let (dest2, dir2) = TransitRealtimeService.resolveBusDestination(routeId: routeId, directionId: 1, stopName: cleanName)
         
@@ -4634,8 +4683,9 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
     
     private func generateFallbackAvailableDirections(for stopId: String, stopName: String = "", routeId: String) -> Set<Int> {
         let lowerId = stopId.lowercased()
-        let lowerName = stopName.lowercased()
-        let upperName = stopName.uppercased()
+        let effectiveName = stopName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? (lowerId.contains(" ") ? stopId : "") : stopName
+        let lowerName = effectiveName.lowercased()
+        let upperName = effectiveName.uppercased()
 
         // Explicit directional routing qualifiers in stop name (e.g. (NB), (SB), (EB), (WB))
         if upperName.contains("(NB)") || upperName.hasSuffix(" NB") || upperName.contains(" NB ") {
@@ -4666,7 +4716,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
         
         // Bus Corridors: Manhattan & Brooklyn one-way avenues & streets (Wave PE.13)
-        let isBus = stopId.hasPrefix("BUS_") || routeId.contains("-") || TransitRouteData.isBusRoute(routeId)
+        let isBus = stopId.hasPrefix("BUS_") || routeId.contains("-") || TransitRouteData.isBusRoute(routeId) || TransitRouteData.isBusRoute(stopId)
         if isBus {
             let primaryStreet = lowerName.components(separatedBy: "/").first ?? lowerName
             let matchText = primaryStreet.isEmpty ? lowerId : primaryStreet

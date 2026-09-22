@@ -842,7 +842,7 @@ struct TransitRevealSheet: View {
         }
         let hw = try? await SpatialDatabaseManager.shared.fetchHeadwayData(for: stopId)
         let rel = try? await SpatialDatabaseManager.shared.fetchHourlyReliability(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [])
-        let availDirs = (try? await SpatialDatabaseManager.shared.fetchAvailableDirections(for: stopId, routeId: details?.routeId, routeIds: details?.routeIds ?? [])) ?? [0, 1]
+        let availDirs = (try? await SpatialDatabaseManager.shared.fetchAvailableDirections(for: stopId, stopName: details?.name, routeId: details?.routeId, routeIds: details?.routeIds ?? [])) ?? [0, 1]
         
         let initialDir: Int
         if !availDirs.contains(selectedDirection), let firstAvail = availDirs.sorted().first {
