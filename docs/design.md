@@ -688,29 +688,79 @@ The 24 × 7 Reliability Heatmap directly replaces the legacy 7-day sparkline in 
 
 ---
 
-### 10.2 Hour × Minute Departure Matrix & $\pm 7$ Day Navigation (`W11.7b-DEPARTURES`)
+### 10.2 Multimodal Timetable Intelligence & Empirical Reality (Wave U / `W11.7b-DEPARTURES`)
 
-The Hour × Minute Departure Matrix provides full Naver Maps-style schedule inspection for high-density transit corridors.
+The Departure Matrix & Timetable system bridges static agency timetables with empirical operational reality, formulating the operational lessons from the MTA L Train Schedule and South Korea's Naver Maps.
 
 * **UI Container & Segmented Control:**
   * Housed directly inside Screen 2 (`TransitRevealSheet`) via a native segmented picker: `[ Live Arrivals | Full Timetable ]`.
   * Preserves Screen Hierarchy Guardrail G10 by remaining entirely within Screen 2 at the `.large` sheet detent.
-* **$\pm 7$ Day Scrubbing Bar (Time-Machine Navigation):**
-  * Directly below the segmented control, a horizontal 7-day day selector enables time-traveling transit analysis:
-    * **Today (Live):** Real-time countdown overlays, active delay badges, pulsing live amber dot, and past departure dimming.
-    * **Future Days ($+1 \dots +7$):** Pure static scheduled timetable matching that specific day of week (weekday vs. Saturday vs. Sunday patterns).
-    * **Past Days ($-7 \dots -1$):** **Observed Reality Replay** pulled from `stop_events`:
-      * Pills color-coded by performance: **Green** (On-Time $\le 2\text{m}$), **Amber** (Minor Delay $2\text{m}–5\text{m}$), **Red** (Severe Delay $> 5\text{m}$).
-      * Tapping a past pill displays: *"Scheduled 8:14 AM • Arrived 8:19 AM (+5m late) • Train ID #L0842"*.
-* **Matrix Layout:**
-  * **Vertical Axis (Rows):** Operating hours from early morning service launch (`05:00`) to late-night connections (`24:00`+).
-  * **Horizontal Axis (Columns):** Dynamic flex container housing chronological 2-digit departure minute pills (e.g. `02, 08, 15, 22, 30, 37...`) rather than a rigid 60-slot grid, gracefully accommodating both high-frequency subway corridors and lower-frequency express buses.
-* **Visual Data Encoding & Badges:**
-  * **Departure Pills:** 2-digit monospace integer in high-contrast neutral pill container (`#1C1C1E` / `#FFFFFF`).
-  * **Service Variants (Express / Branch):** Highlighted with filled background badges using official route line colors (e.g. Red for 1/2/3/NWK-WTC, Green for 4/5/6/HOB-WTC).
-  * **Boundary Markers:** First and last departures of the operating day styled with distinct amber border rings.
-  * **Live Real-Time Imminent Anchor (Wave P.2 De-clutter):** In accordance with Wave P.2 (`WP2-MATRIX-DECLUTTER`), live arrival countdowns, duplicate pills, and pulsing dots are stripped from the static 24-hour reference matrix (`DepartureMatrixView`). Live countdown treatment ($\Delta t = T_{\text{actual}} - T_{\text{current}}$) with Electric Amber (`#FFB300`) badging is restricted strictly to a single imminent departure anchor pill per route direction. High-cadence real-time countdowns remain isolated to the top `LiveArrivalsCarousel` on Screen 2.
-  * **Delay Badging:** Vehicles deviating $\ge 3\text{ min}$ from scheduled timetable append a high-visibility delta tag (e.g. Alert Red `+5m` or Amber `+3m` pill) in the upper-right quadrant.
+* **Mode Toggle (`[ Timetable | Past Reality ]`):**
+  * Pinned inside `Full Timetable` directly beneath the corridor direction selector:
+    * **`Timetable` Mode:** Houses the $\pm 7$ day scrubber, dynamic frequency bands, and the 24-hour departure grid (including today's live anchors and past single-day truth replays).
+    * **`Past Reality` Mode:** Houses the Naver-style Week-over-Week reality comparison matrix for recurring commute slots.
+
+#### 10.2.1 Dual-Paced Presentation & Dynamic Frequency Bands (`WU2-FREQUENCY-BANDS`)
+
+For high-frequency transit corridors, commuters plan around **intervals and frequency windows** rather than exact synthetic minutes. Dérivée employs a dual-paced presentation:
+
+* **Dynamic Modal Headway Threshold ($H_{\text{median}} \le 10\text{ min}$):**
+  * If the median scheduled headway $H_{\text{median}} \le 10\text{ min}$ (e.g. NYC Subways, SBS/BRT buses, light rail, frequent ferries), the default view renders clean **Time-of-Day Frequency Bands**:
+    * **Morning Rush (07:00 – 09:30):** *Every 3–5 min*
+    * **Midday (09:30 – 16:00):** *Every 6–8 min*
+    * **Evening Rush (16:00 – 19:30):** *Every 4–6 min*
+    * **Late Night (23:00 – 05:00):** *Every 12–20 min*
+  * **First & Last Service Anchors ("첫차 / 막차"):** Pinned at the top of the card: `First: 05:14 (to Pelham Bay) • Last: 01:20`. Crucial for early-morning and late-night commuter safety.
+  * **1-Tap Disclosure Toggle (`[ View 24-Hour Departure Grid ▾ ]`):** Seamlessly expands the view into the granular hour×minute departure grid, anchored directly to the active wall-clock hour. A sticky `[ ▴ Summary Bands ]` chip allows collapsing back.
+* **Low-Frequency & Scheduled Corridor Handling ($H_{\text{median}} > 10\text{ min}$):**
+  * Lines operating with $H > 10\text{ min}$ (LIRR / Metro-North commuter rail, express commuter buses, regional ferries) automatically bypass frequency bands and default directly to the 24-Hour Departure Grid with branch/express destination badges.
+
+#### 10.2.2 High-Precision Schedule Auto-Promotion (Hong Kong / Tokyo Mode)
+
+In world-class transit systems with extraordinary schedule adherence (e.g. Hong Kong MTR, Tokyo Metro, Swiss SBB/ZVV):
+
+* **Auto-Promotion Rule:** If Go Observer telemetry confirms $\text{OTP} \ge 95\%$ and Excess Wait Time $\text{EWT} \le 1.0\text{ min}$ (or `exact_times = 1` in GTFS static), the engine automatically promotes the **Exact 24-Hour Grid** as the default view, badged with `Precision Schedule • 95% OTP`.
+* A compact toggle chip `[ ≡ Bands ]` allows flipping back to high-level frequency bands if desired.
+
+#### 10.2.3 Naver-Style Week-over-Week Past Timetable Matrix ("과거 시간표" — `WU3-WEEK-OVER-WEEK-MATRIX`)
+
+When the user selects **`Past Reality`** inside the Timetable tab:
+
+* **Controls:**
+  * **Day-of-Week Selector:** Horizontal pill selector (`Mon`, `Tue`, `Wed`, `Thu`, `Fri`, `Sat`, `Sun`).
+  * **Hour Selector:** Horizontal scrolling pill carousel (`00시`, `01시`, … `16시`, … `23시`).
+* **4-Column Hybrid Reality Layout:**
+  * **Column 1 (`Scheduled`):** Planned timetable departures for that hour slot.
+  * **Column 2 (`1 Wk Ago`):** Actual recorded arrival timestamps from $T - 7\text{ days}$.
+  * **Column 3 (`2 Wks Ago`):** Actual recorded arrival timestamps from $T - 14\text{ days}$.
+  * **Column 4 (`3 Wks Ago`):** Actual recorded arrival timestamps from $T - 21\text{ days}$.
+* **Data Source:** Queried from Go Observer's 30-day rolling `transit.stop_events` database.
+* **Visual Anomaly Indicators:**
+  * **Dropped / Canceled Runs:** Indicated with a clean dimmed `—` dash.
+  * **Bunched Consists (`Platooned`):** Arrivals separated by $<90\text{s}$ are visually connected with an amber bracket and tagged `Platooned`.
+  * **Excessive Headway Gaps:** Gaps exceeding $1.75 \times H_{\text{sched}}$ highlighted with subtle gap bars.
+* **Hourly Summary Header:**
+  * Displays the empirical takeaway:  
+    *“Typical 16:00 Performance: 84% On-Time • Median Headway: 14m (Sched: 12m) • Bunching Risk: Low”*.
+
+#### 10.2.4 Schedule vs. Actual "Truth Replay" & Post-Mortem Inspector (`WU4-TRUTH-REPLAY-PILLS`)
+
+When scrubbing to past calendar days ($-7 \dots -1$) in the standard Timetable grid:
+
+* **Comparative Pill Badges:**
+  * **On-Time Departure:** `08:12` (Green dot • $0\text{m}–2\text{m}$ delta).
+  * **Delayed Departure:** `08:19` with struck-through scheduled time `~08:12~` (Amber border • $+7\text{m}$).
+  * **Ghost / Canceled Run:** `~08:20~` (Faded red strike-through, never observed).
+  * **Added / Extra Run:** `+08:25` (Blue/violet pill, unscheduled run injected for crowding).
+* **Station Day Summary Header:** Displays `88% On-Time • 3 Gaps (>15m) • 2 Dropped • Avg Delay: +2.1m`.
+* **Historical Replay Inspector:**
+  * Tapping any past pill transitions to the Run Inspector in `Historical Replay` mode.
+  * Displays completed stop progression ladder with recorded timestamps, static route polyline, and root-cause diagnostics (*“Origin Delay: +5m at Pelham Bay • Corridor Lost Time: +2m at 125th St”*).
+
+#### 10.2.5 Origin-Anchored Propagation Engine (`WU1-ORIGIN-PROPAGATION`)
+
+* **Calculation Principle:** For lines dispatched from terminals, downstream stop ETAs are calculated as $\text{ETA}_k = T_{\text{origin\_actual}} + \sum \overline{\Delta t}_{i \to i+1}$ using empirical segment run-times from `trip_slot_profiles`. Interlocking holds freeze downstream arrival times.
+* **Zero UI Clutter Policy:** Origin timepoints are strictly internal calculation assets. Stop progression ladders maintain clean, uniform station circles without artificial terminal/timepoint icon clutter.
 
 ---
 
@@ -778,6 +828,7 @@ The following elements from the legacy "Deep Train Inspector" are permanently ex
 | `"CARRIAGE OCCUPANCY"` multi-car diagram | Over-detailed for quick inspection | Reduced to single micro-badge (above) |
 | `"15-MIN ORIGIN SLOT REGULARITY"` card | Analytical noise during "where's my train?" | Screen 2 per-line reliability badge |
 | `"TRACK THERMOMETER"` verbose header | The ladder stays; the verbose header dies | Retained as "Stop Progression Ladder" |
+| `"Terminal / Timepoint Hierarchy Icons"` | Origin timepoint dispatch math is strictly an internal calculation asset for kinematic speed, headways, and next-train routing; ladder nodes maintain clean, uniform station circles without timepoint clutter | Backend Propagation Engine (Wave U.1) |
 | Analytical boilerplate text | Clutters the glanceable interface | Deleted |
 
 ---
