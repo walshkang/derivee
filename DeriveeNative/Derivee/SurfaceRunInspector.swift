@@ -141,7 +141,7 @@ public struct SurfaceRunInspector: View {
     }
     
     private var directionId: Int {
-        arrival.resolvedDirectionId
+        arrival.directionId
     }
     
     private var isFerry: Bool {

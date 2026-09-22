@@ -1884,15 +1884,18 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let corridorVector: TransitCorridorVector
         public let terminalQualifier: String?
         public let displayDirection: String
+        public let directionId: Int
         
         public init(
             corridorVector: TransitCorridorVector,
             terminalQualifier: String? = nil,
-            displayDirection: String
+            displayDirection: String,
+            directionId: Int = 0
         ) {
             self.corridorVector = corridorVector
             self.terminalQualifier = terminalQualifier
             self.displayDirection = displayDirection
+            self.directionId = directionId
         }
     }
     
@@ -1916,6 +1919,7 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         public let historicalDelaySeconds: Int?
         public let corridorVector: TransitCorridorVector?
         public let terminalQualifier: String?
+        public let directionId: Int
         
         public init(
             id: UUID = UUID(),
@@ -1936,7 +1940,8 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             isHistoricalEvent: Bool = false,
             historicalDelaySeconds: Int? = nil,
             corridorVector: TransitCorridorVector? = nil,
-            terminalQualifier: String? = nil
+            terminalQualifier: String? = nil,
+            directionId: Int? = nil
         ) {
             self.id = id
             self.line = line
@@ -1957,6 +1962,16 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             self.historicalDelaySeconds = historicalDelaySeconds
             self.corridorVector = corridorVector
             self.terminalQualifier = terminalQualifier
+            if let d = directionId {
+                self.directionId = d
+            } else {
+                let dir = (direction ?? "").uppercased()
+                if dir.contains("DOWNTOWN") || dir.contains("SOUTH") || dir.contains("BROOKLYN") || dir.contains("OUTBOUND") || dir.contains("WEST") || dir.contains("TOTTENVILLE") || corridorVector == .southbound || corridorVector == .eastbound || corridorVector == .outbound {
+                    self.directionId = 1
+                } else {
+                    self.directionId = 0
+                }
+            }
         }
         
         /// Backward-compatible initializer overload for symbol stability across incremental builds.
@@ -2049,15 +2064,12 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             Self.formatHistoricalOutcome(delaySeconds: delaySeconds)
         }
         
-        /// Direction ID (0 or 1) inferred from the direction label.
+        /// Canonical Direction ID (0 or 1) stored directly on ArrivalInfo (Wave Pre-T.2).
         /// Direction 1 corresponds to Downtown / South / Brooklyn / Outbound / West;
         /// Direction 0 corresponds to Uptown / North / Manhattan / Queens / Bronx / Inbound / East.
+        @available(*, deprecated, message: "Use canonical arrival.directionId directly instead of parsing strings.")
         public var resolvedDirectionId: Int {
-            let dir = (direction ?? "").uppercased()
-            if dir.contains("DOWNTOWN") || dir.contains("SOUTH") || dir.contains("BROOKLYN") || dir.contains("OUTBOUND") || dir.contains("WEST") || dir.contains("TOTTENVILLE") {
-                return 1
-            }
-            return 0
+            directionId
         }
         
         /// Formatted track designation (e.g. "Track 1") or nil if unspecified.

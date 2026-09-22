@@ -907,18 +907,18 @@ struct TransitRevealSheet: View {
     internal func reliabilityTier(for arrival: SpatialDatabaseManager.ArrivalInfo) -> LineReliabilityTier? {
         let slot = TripSlotProfileRecord.slotIndex(for: arrival.arrivalDate)
         let day = TripSlotProfileRecord.dayType(for: arrival.arrivalDate)
-        let key = "\(arrival.line)_\(arrival.resolvedDirectionId)_\(slot)_\(day)"
+        let key = "\(arrival.line)_\(arrival.directionId)_\(slot)_\(day)"
         if let direct = reliabilityTiers[key] {
             return direct
         }
-        let routeKey = "\(arrival.line)_\(arrival.resolvedDirectionId)"
+        let routeKey = "\(arrival.line)_\(arrival.directionId)"
         if let routeDirect = reliabilityTiers[routeKey] {
             return routeDirect
         }
         
         // Instantaneous fallback: check hourlyReliability loaded for this sheet
         let hour = Calendar.current.component(.hour, from: arrival.arrivalDate)
-        if let match = hourlyReliability.first(where: { $0.routeId == arrival.line && $0.directionId == arrival.resolvedDirectionId && $0.hourOfDay == hour }) {
+        if let match = hourlyReliability.first(where: { $0.routeId == arrival.line && $0.directionId == arrival.directionId && $0.hourOfDay == hour }) {
             return LineReliabilityTier(score: match.onTimePct)
         }
         
@@ -935,7 +935,7 @@ struct TransitRevealSheet: View {
         for arr in arrivals {
             let slot = TripSlotProfileRecord.slotIndex(for: arr.arrivalDate)
             let day = TripSlotProfileRecord.dayType(for: arr.arrivalDate)
-            let key = "\(arr.line)_\(arr.resolvedDirectionId)_\(slot)_\(day)"
+            let key = "\(arr.line)_\(arr.directionId)_\(slot)_\(day)"
             if reliabilityTiers[key] == nil && !neededKeys.contains(key) {
                 neededKeys.insert(key)
                 candidates.append(arr)
@@ -947,12 +947,12 @@ struct TransitRevealSheet: View {
         for candidate in candidates {
             let slot = TripSlotProfileRecord.slotIndex(for: candidate.arrivalDate)
             let day = TripSlotProfileRecord.dayType(for: candidate.arrivalDate)
-            let key = "\(candidate.line)_\(candidate.resolvedDirectionId)_\(slot)_\(day)"
-            let routeKey = "\(candidate.line)_\(candidate.resolvedDirectionId)"
+            let key = "\(candidate.line)_\(candidate.directionId)_\(slot)_\(day)"
+            let routeKey = "\(candidate.line)_\(candidate.directionId)"
             
             if let tier = await SpatialDatabaseManager.shared.fetchReliabilityTier(
                 routeId: candidate.line,
-                directionId: candidate.resolvedDirectionId,
+                directionId: candidate.directionId,
                 stopId: stopId,
                 date: candidate.arrivalDate
             ) {

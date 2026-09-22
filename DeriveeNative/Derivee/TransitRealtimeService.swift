@@ -152,7 +152,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
             return set
         }()
         
-        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship, isHoldingStation: Bool, progressLambda: Double, isAssigned: Bool, vehicleCoord: CLLocationCoordinate2D?, vehicleBearing: Double?, track: String?, corridorVector: SpatialDatabaseManager.TransitCorridorVector?, terminalQualifier: String?)] = []
+        var rawArrivals: [(line: String, destination: String, arrivalEpoch: Int64, direction: String?, distance: String?, tripId: String?, scheduleRelationship: SpatialDatabaseManager.ScheduleRelationship, isHoldingStation: Bool, progressLambda: Double, isAssigned: Bool, vehicleCoord: CLLocationCoordinate2D?, vehicleBearing: Double?, track: String?, corridorVector: SpatialDatabaseManager.TransitCorridorVector?, terminalQualifier: String?, directionId: Int)] = []
         let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
         
         // 1. Index VehiclePositions from the feed by tripId and vehicleId
@@ -393,7 +393,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         }
                     }
                     
-                    // Terminal directional filtering (PB.1 / Bugs 1, 2):
+                    // Terminal directional filtering (PB.1 / Bugs 1, 2 / Wave Pre-T.2):
                     // Suppress impossible northbound departures at St George and impossible southbound departures at Tottenville
                     let cleanRoute = tripRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
                     let isSIR = cleanRoute == "SIR" || cleanRoute == "SI"
@@ -401,11 +401,13 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         let isStGeorge = cleanStopId == "S31" || cleanStopId.hasPrefix("S31")
                         let isTottenville = cleanStopId == "S09" || cleanStopId.hasPrefix("S09")
                         if isStGeorge {
-                            if destination.contains("St George") || direction.contains("Inbound") || currentStopId.hasSuffix("N") {
+                            // Direction 0 is Inbound (terminating at St George). Direction 1 is Outbound (departing to Tottenville).
+                            if classification.directionId == 0 {
                                 continue
                             }
                         } else if isTottenville {
-                            if destination.contains("Tottenville") || direction.contains("Outbound") || currentStopId.hasSuffix("S") {
+                            // Direction 1 is Outbound (terminating at Tottenville). Direction 0 is Inbound (departing to St George).
+                            if classification.directionId == 1 {
                                 continue
                             }
                         }
@@ -439,7 +441,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         vehicleBearing: directVehicleBearing,
                         track: track,
                         corridorVector: classification.corridorVector,
-                        terminalQualifier: classification.terminalQualifier
+                        terminalQualifier: classification.terminalQualifier,
+                        directionId: classification.directionId
                     ))
                 }
             }
@@ -482,7 +485,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
                 isHistoricalEvent: false,
                 historicalDelaySeconds: nil,
                 corridorVector: item.corridorVector,
-                terminalQualifier: item.terminalQualifier
+                terminalQualifier: item.terminalQualifier,
+                directionId: item.directionId
             )
         }
         
@@ -522,7 +526,7 @@ public final class TransitRealtimeService: @unchecked Sendable {
         return false
     }
     
-    // MARK: - 2-Tier Universal Direction Classification (Wave PE.7)
+    // MARK: - 3-Tier Universal Direction Classification (Wave Pre-T.2)
     
     func classifyDirection(
         tripUpdate: TransitRealtime_TripUpdate,
@@ -535,34 +539,58 @@ public final class TransitRealtimeService: @unchecked Sendable {
         let isEastbound = stopId.hasSuffix("E")
         let isWestbound = stopId.hasSuffix("W")
         let cleanLine = line.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        let dirId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
+        let explicitDirId: Int? = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
         
         // 1. Surface Bus Routes
         if SubwayFeed.isBusRoute(cleanLine) {
             let hint = isNorthbound ? "Northbound" : (isSouthbound ? "Southbound" : (isEastbound ? "Eastbound" : (isWestbound ? "Westbound" : nil)))
-            let busDest = Self.resolveBusDestination(routeId: cleanLine, directionId: dirId, directionHint: hint)
-            let displayDir = !busDest.direction.isEmpty ? busDest.direction : Self.resolveBusDirectionVector(routeId: cleanLine, directionId: dirId, directionHint: hint, stopId: stopId)
+            let busDest = Self.resolveBusDestination(routeId: cleanLine, directionId: explicitDirId, directionHint: hint)
+            let displayDir = !busDest.direction.isEmpty ? busDest.direction : Self.resolveBusDirectionVector(routeId: cleanLine, directionId: explicitDirId, directionHint: hint, stopId: stopId)
             let vector = SpatialDatabaseManager.TransitCorridorVector.infer(fromDirection: displayDir, line: cleanLine)
+            let dirId: Int = explicitDirId ?? (vector == .southbound || vector == .westbound || vector == .outbound ? 1 : 0)
             return SpatialDatabaseManager.DirectionClassification(
                 corridorVector: vector,
                 terminalQualifier: !busDest.destination.isEmpty ? busDest.destination : terminalName,
-                displayDirection: displayDir
+                displayDirection: displayDir,
+                directionId: dirId
             )
         }
         
         // 2. Radial Rail Systems (SIR, Boston MBTA)
         if cleanLine == "SIR" || cleanLine == "SI" {
-            if isNorthbound || dirId == 0 {
+            // Direction 0: Inbound (St George)
+            // Direction 1: Outbound (Tottenville)
+            let resolvedDir: Int
+            if let d = explicitDirId {
+                // Tier 1: Explicit GTFS-RT directionId
+                resolvedDir = d
+            } else if let term = terminalName?.lowercased(), !term.isEmpty {
+                // Tier 2: Headsign Terminal Matching
+                if term.contains("st george") || term.contains("st. george") || term.contains("inbound") {
+                    resolvedDir = 0
+                } else if term.contains("tottenville") || term.contains("outbound") {
+                    resolvedDir = 1
+                } else {
+                    resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+                }
+            } else {
+                // Tier 3: Platform Suffix fallback
+                resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+            }
+            
+            if resolvedDir == 0 {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .inbound,
                     terminalQualifier: "St George",
-                    displayDirection: "Inbound (St George)"
+                    displayDirection: "Inbound (St George)",
+                    directionId: 0
                 )
             } else {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .outbound,
                     terminalQualifier: "Tottenville",
-                    displayDirection: "Outbound (Tottenville)"
+                    displayDirection: "Outbound (Tottenville)",
+                    directionId: 1
                 )
             }
         }
@@ -571,14 +599,32 @@ public final class TransitRealtimeService: @unchecked Sendable {
         let isMBTAGreen = cleanLine.hasPrefix("GREEN")
         let isMBTARadial = isMBTAGreen || cleanLine == "RED" || cleanLine == "ORANGE" || cleanLine == "BLUE"
         if isMBTARadial {
-            let isInbound = dirId == 1
+            let isInbound: Bool
+            if let d = explicitDirId {
+                // Tier 1: Explicit GTFS-RT directionId (MBTA: dir 1 is Inbound, dir 0 is Outbound)
+                isInbound = (d == 1)
+            } else if let term = terminalName?.lowercased(), !term.isEmpty {
+                // Tier 2: Headsign Terminal Matching
+                if term.contains("government center") || term.contains("park street") || term.contains("bowdoin") || term.contains("north station") || term.contains("inbound") {
+                    isInbound = true
+                } else if term.contains("outbound") || term.contains("boston college") || term.contains("cleveland") || term.contains("riverside") || term.contains("heath") || term.contains("ashmont") || term.contains("braintree") || term.contains("forest hills") || term.contains("oak grove") || term.contains("wonderland") {
+                    isInbound = false
+                } else {
+                    isInbound = isNorthbound || isEastbound
+                }
+            } else {
+                // Tier 3: Platform suffix fallback
+                isInbound = isNorthbound || isEastbound
+            }
+            
             let vector: SpatialDatabaseManager.TransitCorridorVector = isInbound ? .inbound : .outbound
             let qualifier = terminalName ?? (isInbound ? "Government Center" : nil)
             let displayDir = isInbound ? "Inbound" : "Outbound"
             return SpatialDatabaseManager.DirectionClassification(
                 corridorVector: vector,
                 terminalQualifier: qualifier,
-                displayDirection: displayDir
+                displayDirection: displayDir,
+                directionId: isInbound ? 1 : 0
             )
         }
         
@@ -586,73 +632,193 @@ public final class TransitRealtimeService: @unchecked Sendable {
         
         // East-West Crosstown Lines (L, 7)
         if cleanLine == "L" {
-            if isNorthbound || dirId == 0 {
+            // Direction 0: Manhattan-bound (8th Ave / Westbound)
+            // Direction 1: Brooklyn-bound (Canarsie - Rockaway Pkwy / Eastbound)
+            let resolvedDir: Int
+            if let d = explicitDirId {
+                // Tier 1: Explicit GTFS-RT directionId
+                resolvedDir = d
+            } else if let term = terminalName?.lowercased(), !term.isEmpty {
+                // Tier 2: Headsign Terminal Matching
+                if term.contains("8 av") || term.contains("8th av") || term.contains("eighth av") || term.contains("manhattan") || term.contains("14 st") || term.contains("union sq") {
+                    resolvedDir = 0
+                } else if term.contains("canarsie") || term.contains("rockaway") || term.contains("brooklyn") || term.contains("lorimer") || term.contains("myrtle") || term.contains("broadway junction") {
+                    resolvedDir = 1
+                } else {
+                    resolvedDir = (isNorthbound || isWestbound) ? 0 : 1
+                }
+            } else {
+                // Tier 3: Platform suffix fallback
+                resolvedDir = (isNorthbound || isWestbound) ? 0 : 1
+            }
+            
+            if resolvedDir == 0 {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .westbound,
                     terminalQualifier: terminalName ?? "8th Ave",
-                    displayDirection: "Manhattan-bound"
+                    displayDirection: "Manhattan-bound",
+                    directionId: 0
                 )
             } else {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .eastbound,
                     terminalQualifier: terminalName ?? "Canarsie - Rockaway Pkwy",
-                    displayDirection: "Brooklyn-bound"
+                    displayDirection: "Brooklyn-bound",
+                    directionId: 1
                 )
             }
         }
         
         if cleanLine == "7" || cleanLine == "7X" {
-            if isNorthbound || dirId == 0 {
+            // Direction 0: Queens-bound (Flushing - Main St / Eastbound)
+            // Direction 1: Manhattan-bound (34 St - Hudson Yards / Westbound)
+            let resolvedDir: Int
+            if let d = explicitDirId {
+                // Tier 1: Explicit GTFS-RT directionId
+                resolvedDir = d
+            } else if let term = terminalName?.lowercased(), !term.isEmpty {
+                // Tier 2: Headsign Terminal Matching
+                if term.contains("flushing") || term.contains("main st") || term.contains("willets") || term.contains("74 st") || term.contains("queens") {
+                    resolvedDir = 0
+                } else if term.contains("34 st") || term.contains("hudson yards") || term.contains("times sq") || term.contains("manhattan") {
+                    resolvedDir = 1
+                } else {
+                    resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+                }
+            } else {
+                // Tier 3: Platform suffix fallback
+                resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+            }
+            
+            if resolvedDir == 0 {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .eastbound,
                     terminalQualifier: terminalName ?? "Flushing - Main St",
-                    displayDirection: "Queens-bound"
+                    displayDirection: "Queens-bound",
+                    directionId: 0
                 )
             } else {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .westbound,
                     terminalQualifier: terminalName ?? "34 St - Hudson Yards",
-                    displayDirection: "Manhattan-bound"
+                    displayDirection: "Manhattan-bound",
+                    directionId: 1
                 )
             }
         }
         
         if cleanLine == "G" {
-            if isNorthbound || dirId == 0 {
+            // Direction 0: Queens-bound (Court Sq / Northbound)
+            // Direction 1: Brooklyn-bound (Church Ave / Southbound)
+            let resolvedDir: Int
+            if let d = explicitDirId {
+                // Tier 1: Explicit GTFS-RT directionId
+                resolvedDir = d
+            } else if let term = terminalName?.lowercased(), !term.isEmpty {
+                // Tier 2: Headsign Terminal Matching
+                if term.contains("court sq") || term.contains("queens") {
+                    resolvedDir = 0
+                } else if term.contains("church av") || term.contains("smith") || term.contains("bedford") || term.contains("brooklyn") {
+                    resolvedDir = 1
+                } else {
+                    resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+                }
+            } else {
+                // Tier 3: Platform suffix fallback
+                resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+            }
+            
+            if resolvedDir == 0 {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .northbound,
                     terminalQualifier: terminalName ?? "Court Sq",
-                    displayDirection: "Queens-bound"
+                    displayDirection: "Queens-bound",
+                    directionId: 0
                 )
             } else {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .southbound,
                     terminalQualifier: terminalName ?? "Church Ave",
-                    displayDirection: "Brooklyn-bound"
+                    displayDirection: "Brooklyn-bound",
+                    directionId: 1
                 )
             }
         }
         
         if cleanLine == "J" || cleanLine == "Z" {
-            if isNorthbound || dirId == 0 {
+            // Direction 0: Queens-bound (Jamaica Center / Northbound)
+            // Direction 1: Manhattan-bound (Broad St / Southbound)
+            let resolvedDir: Int
+            if let d = explicitDirId {
+                // Tier 1: Explicit GTFS-RT directionId
+                resolvedDir = d
+            } else if let term = terminalName?.lowercased(), !term.isEmpty {
+                // Tier 2: Headsign Terminal Matching
+                if term.contains("jamaica") || term.contains("parsons") || term.contains("121 st") || term.contains("crescent") || term.contains("queens") {
+                    resolvedDir = 0
+                } else if term.contains("broad st") || term.contains("chambers") || term.contains("essex") || term.contains("manhattan") {
+                    resolvedDir = 1
+                } else {
+                    resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+                }
+            } else {
+                // Tier 3: Platform suffix fallback
+                resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+            }
+            
+            if resolvedDir == 0 {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .northbound,
                     terminalQualifier: terminalName ?? "Jamaica Center",
-                    displayDirection: "Queens-bound"
+                    displayDirection: "Queens-bound",
+                    directionId: 0
                 )
             } else {
                 return SpatialDatabaseManager.DirectionClassification(
                     corridorVector: .southbound,
                     terminalQualifier: terminalName ?? "Broad St",
-                    displayDirection: "Manhattan-bound"
+                    displayDirection: "Manhattan-bound",
+                    directionId: 1
                 )
             }
         }
         
         // North-South Trunk Lines (1, 2, 3, 4, 5, 6, A, C, E, B, D, F, M, N, Q, R, W)
-        let effectiveNorthbound = isNorthbound || dirId == 0
+        // Direction 0: Northbound (Uptown & Bronx / Queens)
+        // Direction 1: Southbound (Downtown & Brooklyn / Lower Manhattan)
+        let resolvedDir: Int
+        if let d = explicitDirId {
+            // Tier 1: Explicit GTFS-RT directionId
+            resolvedDir = d
+        } else if let term = terminalName?.lowercased(), !term.isEmpty {
+            // Tier 2: Headsign Terminal Matching
+            let isNorthTerminal = term.contains("uptown") || term.contains("bronx") || term.contains("van cortlandt") ||
+                term.contains("242 st") || term.contains("wakefield") || term.contains("241 st") || term.contains("harlem") ||
+                term.contains("148 st") || term.contains("woodlawn") || term.contains("dyre") || term.contains("pelham") ||
+                term.contains("parkchester") || term.contains("inwood") || term.contains("207 st") || term.contains("bedford park") ||
+                term.contains("norwood") || term.contains("205 st") || term.contains("jamaica") || term.contains("179 st") ||
+                term.contains("forest hills") || term.contains("71 av") || term.contains("astoria") || term.contains("ditmars")
+            
+            let isSouthTerminal = term.contains("downtown") || term.contains("brooklyn") || term.contains("south ferry") ||
+                term.contains("whitehall") || term.contains("world trade") || term.contains("wtc") || term.contains("flatbush") ||
+                term.contains("new lots") || term.contains("brooklyn bridge") || term.contains("bowling green") || term.contains("euclid") ||
+                term.contains("far rockaway") || term.contains("rockaway park") || term.contains("lefferts") || term.contains("coney island") ||
+                term.contains("stillwell") || term.contains("brighton beach") || term.contains("church av") || term.contains("bay ridge") ||
+                term.contains("95 st") || term.contains("middle village") || term.contains("metropolitan") || term.contains("broad st")
+            
+            if isNorthTerminal && !isSouthTerminal {
+                resolvedDir = 0
+            } else if isSouthTerminal && !isNorthTerminal {
+                resolvedDir = 1
+            } else {
+                resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+            }
+        } else {
+            // Tier 3: Platform suffix fallback
+            resolvedDir = (isNorthbound || isEastbound) ? 0 : 1
+        }
         
-        if effectiveNorthbound {
+        if resolvedDir == 0 {
             let vector: SpatialDatabaseManager.TransitCorridorVector = .northbound
             let qualifier = terminalName
             let displayDir: String
@@ -673,7 +839,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
             return SpatialDatabaseManager.DirectionClassification(
                 corridorVector: vector,
                 terminalQualifier: qualifier,
-                displayDirection: displayDir
+                displayDirection: displayDir,
+                directionId: 0
             )
         } else {
             // Southbound
@@ -699,7 +866,8 @@ public final class TransitRealtimeService: @unchecked Sendable {
             return SpatialDatabaseManager.DirectionClassification(
                 corridorVector: vector,
                 terminalQualifier: qualifier,
-                displayDirection: displayDir
+                displayDirection: displayDir,
+                directionId: 1
             )
         }
     }
@@ -1027,9 +1195,9 @@ public final class TransitRealtimeService: @unchecked Sendable {
         
         let directionId = tripUpdate.trip.hasDirectionID ? Int(tripUpdate.trip.directionID) : nil
         let effectiveNorthbound: Bool = {
+            if let d = directionId { return d == 0 }
             if isNorthbound { return true }
             if isSouthbound { return false }
-            if let d = directionId { return d == 0 }
             return true
         }()
         let effectiveDirectionId = directionId ?? (effectiveNorthbound ? 0 : 1)

@@ -338,4 +338,176 @@ final class ComplexDirectionCanonicalizationTests: XCTestCase {
         )
         XCTAssertEqual(arrSIROutbound.resolvedCorridorVector, .outbound)
     }
+    
+    // MARK: - 6. Wave Pre-T.2: 3-Tier Direction Hierarchy & Single-Tracking Immunity
+    
+    func testPreT2_SingleTrackingImmunity_LTrainReversePlatform() {
+        let service = TransitRealtimeService.shared
+        
+        // Scenario 1: Brooklyn-bound (dirId = 1) train arriving at Manhattan-bound platform (L08N) during single-tracking
+        var tuEast = TransitRealtime_TripUpdate()
+        tuEast.trip.directionID = 1
+        let lEastOnNorthPlatform = service.classifyDirection(tripUpdate: tuEast, line: "L", stopId: "L08N")
+        XCTAssertEqual(lEastOnNorthPlatform.corridorVector, .eastbound, "Tier 1 directionID=1 must override platform suffix N")
+        XCTAssertEqual(lEastOnNorthPlatform.displayDirection, "Brooklyn-bound")
+        XCTAssertEqual(lEastOnNorthPlatform.directionId, 1)
+        
+        // Scenario 2: Manhattan-bound (dirId = 0) train arriving at Brooklyn-bound platform (L08S) during single-tracking
+        var tuWest = TransitRealtime_TripUpdate()
+        tuWest.trip.directionID = 0
+        let lWestOnSouthPlatform = service.classifyDirection(tripUpdate: tuWest, line: "L", stopId: "L08S")
+        XCTAssertEqual(lWestOnSouthPlatform.corridorVector, .westbound, "Tier 1 directionID=0 must override platform suffix S")
+        XCTAssertEqual(lWestOnSouthPlatform.displayDirection, "Manhattan-bound")
+        XCTAssertEqual(lWestOnSouthPlatform.directionId, 0)
+    }
+    
+    func testPreT2_SingleTrackingImmunity_7TrainReversePlatform() {
+        let service = TransitRealtimeService.shared
+        
+        // Queens-bound (dirId = 0) train arriving at 725S (Manhattan platform)
+        var tuQueens = TransitRealtime_TripUpdate()
+        tuQueens.trip.directionID = 0
+        let sevenQueensOnSouth = service.classifyDirection(tripUpdate: tuQueens, line: "7", stopId: "725S")
+        XCTAssertEqual(sevenQueensOnSouth.corridorVector, .eastbound, "Tier 1 directionID=0 must override platform suffix S for 7 line")
+        XCTAssertEqual(sevenQueensOnSouth.displayDirection, "Queens-bound")
+        XCTAssertEqual(sevenQueensOnSouth.directionId, 0)
+        
+        // Manhattan-bound (dirId = 1) train arriving at 725N (Queens platform)
+        var tuManhattan = TransitRealtime_TripUpdate()
+        tuManhattan.trip.directionID = 1
+        let sevenManhattanOnNorth = service.classifyDirection(tripUpdate: tuManhattan, line: "7", stopId: "725N")
+        XCTAssertEqual(sevenManhattanOnNorth.corridorVector, .westbound, "Tier 1 directionID=1 must override platform suffix N for 7 line")
+        XCTAssertEqual(sevenManhattanOnNorth.displayDirection, "Manhattan-bound")
+        XCTAssertEqual(sevenManhattanOnNorth.directionId, 1)
+    }
+    
+    func testPreT2_SingleTrackingImmunity_GTrainReversePlatform() {
+        let service = TransitRealtimeService.shared
+        
+        // Church Ave Brooklyn-bound (dirId = 1) train arriving at G22N (Queens platform)
+        var tuSouth = TransitRealtime_TripUpdate()
+        tuSouth.trip.directionID = 1
+        let gSouthOnNorth = service.classifyDirection(tripUpdate: tuSouth, line: "G", stopId: "G22N")
+        XCTAssertEqual(gSouthOnNorth.corridorVector, .southbound, "Tier 1 directionID=1 must override platform suffix N for G line")
+        XCTAssertEqual(gSouthOnNorth.displayDirection, "Brooklyn-bound")
+        XCTAssertEqual(gSouthOnNorth.directionId, 1)
+        
+        // Court Sq Queens-bound (dirId = 0) train arriving at G22S (Brooklyn platform)
+        var tuNorth = TransitRealtime_TripUpdate()
+        tuNorth.trip.directionID = 0
+        let gNorthOnSouth = service.classifyDirection(tripUpdate: tuNorth, line: "G", stopId: "G22S")
+        XCTAssertEqual(gNorthOnSouth.corridorVector, .northbound, "Tier 1 directionID=0 must override platform suffix S for G line")
+        XCTAssertEqual(gNorthOnSouth.displayDirection, "Queens-bound")
+        XCTAssertEqual(gNorthOnSouth.directionId, 0)
+    }
+    
+    func testPreT2_SingleTrackingImmunity_TrunkReversePlatform() {
+        let service = TransitRealtimeService.shared
+        
+        // Downtown 4 train (dirId = 1) arriving on 128N (Uptown platform)
+        var tuSouth = TransitRealtime_TripUpdate()
+        tuSouth.trip.directionID = 1
+        let fourSouthOnNorth = service.classifyDirection(tripUpdate: tuSouth, line: "4", stopId: "128N")
+        XCTAssertEqual(fourSouthOnNorth.corridorVector, .southbound, "Tier 1 directionID=1 must override platform suffix N on trunk lines")
+        XCTAssertEqual(fourSouthOnNorth.displayDirection, "Downtown & Brooklyn")
+        XCTAssertEqual(fourSouthOnNorth.directionId, 1)
+        
+        // Uptown 4 train (dirId = 0) arriving on 128S (Downtown platform)
+        var tuNorth = TransitRealtime_TripUpdate()
+        tuNorth.trip.directionID = 0
+        let fourNorthOnSouth = service.classifyDirection(tripUpdate: tuNorth, line: "4", stopId: "128S")
+        XCTAssertEqual(fourNorthOnSouth.corridorVector, .northbound, "Tier 1 directionID=0 must override platform suffix S on trunk lines")
+        XCTAssertEqual(fourNorthOnSouth.displayDirection, "Uptown & Bronx")
+        XCTAssertEqual(fourNorthOnSouth.directionId, 0)
+    }
+    
+    func testPreT2_SingleTrackingImmunity_SIRReversePlatform() {
+        let service = TransitRealtimeService.shared
+        
+        // Outbound Tottenville train (dirId = 1) departing from St George S31N (Inbound platform)
+        var tuOutbound = TransitRealtime_TripUpdate()
+        tuOutbound.trip.directionID = 1
+        let sirOutOnNorth = service.classifyDirection(tripUpdate: tuOutbound, line: "SIR", stopId: "S31N")
+        XCTAssertEqual(sirOutOnNorth.corridorVector, .outbound, "Tier 1 directionID=1 must override platform suffix N for SIR")
+        XCTAssertEqual(sirOutOnNorth.displayDirection, "Outbound (Tottenville)")
+        XCTAssertEqual(sirOutOnNorth.directionId, 1)
+        
+        // Inbound St George train (dirId = 0) arriving at Tottenville S09S (Outbound platform)
+        var tuInbound = TransitRealtime_TripUpdate()
+        tuInbound.trip.directionID = 0
+        let sirInOnSouth = service.classifyDirection(tripUpdate: tuInbound, line: "SIR", stopId: "S09S")
+        XCTAssertEqual(sirInOnSouth.corridorVector, .inbound, "Tier 1 directionID=0 must override platform suffix S for SIR")
+        XCTAssertEqual(sirInOnSouth.displayDirection, "Inbound (St George)")
+        XCTAssertEqual(sirInOnSouth.directionId, 0)
+    }
+    
+    func testPreT2_Tier2HeadsignTerminalMatching_OverridesPlatformSuffix() {
+        let service = TransitRealtimeService.shared
+        let tuWithoutDir = TransitRealtime_TripUpdate() // hasDirectionID == false
+        
+        // L train with Canarsie terminal at L08N (platform N)
+        let lCanarsieOnNorth = service.classifyDirection(
+            tripUpdate: tuWithoutDir,
+            line: "L",
+            stopId: "L08N",
+            terminalName: "Canarsie - Rockaway Pkwy"
+        )
+        XCTAssertEqual(lCanarsieOnNorth.corridorVector, .eastbound, "Tier 2 headsign matching must override platform suffix when directionID is absent")
+        XCTAssertEqual(lCanarsieOnNorth.displayDirection, "Brooklyn-bound")
+        XCTAssertEqual(lCanarsieOnNorth.directionId, 1)
+        
+        // 4 train with Brooklyn College terminal at 128N (platform N)
+        let fourFlatbushOnNorth = service.classifyDirection(
+            tripUpdate: tuWithoutDir,
+            line: "4",
+            stopId: "128N",
+            terminalName: "Flatbush Ave - Brooklyn College"
+        )
+        XCTAssertEqual(fourFlatbushOnNorth.corridorVector, .southbound, "Tier 2 southern terminal matching must override platform suffix N")
+        XCTAssertEqual(fourFlatbushOnNorth.displayDirection, "Downtown & Brooklyn")
+        XCTAssertEqual(fourFlatbushOnNorth.directionId, 1)
+    }
+    
+    func testPreT2_ArrivalInfoCanonicalDirectionStorage() {
+        // Explicit directionId = 1 stored canonically
+        let arr1 = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "Canarsie",
+            minutes: 4,
+            direction: "Brooklyn-bound",
+            directionId: 1
+        )
+        XCTAssertEqual(arr1.directionId, 1)
+        XCTAssertEqual(arr1.resolvedDirectionId, 1)
+        
+        // Explicit directionId = 0 stored canonically
+        let arr0 = SpatialDatabaseManager.ArrivalInfo(
+            line: "L",
+            destination: "8th Ave",
+            minutes: 2,
+            direction: "Manhattan-bound",
+            directionId: 0
+        )
+        XCTAssertEqual(arr0.directionId, 0)
+        XCTAssertEqual(arr0.resolvedDirectionId, 0)
+        
+        // Fallback inference when directionId is nil
+        let arrInferredSouth = SpatialDatabaseManager.ArrivalInfo(
+            line: "4",
+            destination: "Crown Hts",
+            minutes: 6,
+            direction: "Downtown & Brooklyn"
+        )
+        XCTAssertEqual(arrInferredSouth.directionId, 1)
+        XCTAssertEqual(arrInferredSouth.resolvedDirectionId, 1)
+        
+        let arrInferredNorth = SpatialDatabaseManager.ArrivalInfo(
+            line: "4",
+            destination: "Woodlawn",
+            minutes: 3,
+            direction: "Uptown & Bronx"
+        )
+        XCTAssertEqual(arrInferredNorth.directionId, 0)
+        XCTAssertEqual(arrInferredNorth.resolvedDirectionId, 0)
+    }
 }

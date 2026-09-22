@@ -60,7 +60,7 @@ public struct GuidewayRunInspector: View {
     }
     
     private var directionId: Int {
-        arrival.resolvedDirectionId
+        arrival.directionId
     }
     
     private var inspectionMode: SpatialDatabaseManager.ArrivalInfo.RunInspectionMode {
