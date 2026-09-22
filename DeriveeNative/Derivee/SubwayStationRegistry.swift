@@ -120,6 +120,50 @@ public enum SubwayStationRegistry {
         return ("", isNorthbound ? "Uptown / Northbound" : "Downtown / Southbound")
     }
     
+    // MARK: - Vetted Terminal Catalog (Wave Pre-T.3)
+    
+    /// Set of all vetted parent station IDs that serve as route termini.
+    public static let allVettedTerminalStopIds: Set<String> = {
+        var set = Set<String>()
+        for (_, pair) in standardTerminals {
+            set.formUnion(pair.north)
+            set.formUnion(pair.south)
+        }
+        return set
+    }()
+    
+    /// Returns true if the station ID corresponds to a vetted rail/subway terminus.
+    public static func isVettedTerminalStop(_ stopId: String) -> Bool {
+        let clean = cleanStopId(stopId)
+        guard !clean.isEmpty else { return false }
+        return allVettedTerminalStopIds.contains(clean)
+    }
+    
+    /// Checks whether `stopId` is the vetted terminus for a specific route and direction:
+    /// - Direction 0 (Northbound / Queens-bound / Inbound): checks `pair.north`
+    /// - Direction 1 (Southbound / Brooklyn-bound / Outbound): checks `pair.south`
+    public static func isTerminatingDirection(stopId: String, route: String, directionId: Int) -> Bool {
+        let cleanStop = cleanStopId(stopId)
+        guard !cleanStop.isEmpty else { return false }
+        let cleanRoute = route.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        let config: (north: Set<String>, south: Set<String>)? = {
+            if let exact = standardTerminals[cleanRoute] { return exact }
+            let base = cleanRoute.replacingOccurrences(of: "X", with: "")
+            if let b = standardTerminals[base] { return b }
+            if cleanRoute == "SI" { return standardTerminals["SIR"] }
+            if cleanRoute == "SIR" { return standardTerminals["SI"] }
+            return nil
+        }()
+        
+        guard let terminals = config else { return false }
+        if directionId == 0 {
+            return terminals.north.contains(cleanStop)
+        } else {
+            return terminals.south.contains(cleanStop)
+        }
+    }
+    
     // MARK: - MBTA Subway Terminals
     
     public static let mbtaTerminalsById: [String: String] = [

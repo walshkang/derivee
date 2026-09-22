@@ -510,4 +510,158 @@ final class ComplexDirectionCanonicalizationTests: XCTestCase {
         XCTAssertEqual(arrInferredNorth.directionId, 0)
         XCTAssertEqual(arrInferredNorth.resolvedDirectionId, 0)
     }
+    
+    // MARK: - 8. Wave Pre-T.3: Gated Terminal Arrival Suppression & Short-Turn Safety
+    
+    func testPreT3_VettedTerminals_StandardTerminalCompleteness() {
+        // Assert vetted terminal detection
+        XCTAssertTrue(SubwayStationRegistry.isVettedTerminalStop("601"), "Pelham Bay Park (601) must be recognized as vetted terminal")
+        XCTAssertTrue(SubwayStationRegistry.isVettedTerminalStop("640"), "Brooklyn Bridge (640) must be recognized as vetted terminal")
+        XCTAssertTrue(SubwayStationRegistry.isVettedTerminalStop("142"), "South Ferry (142) must be recognized as vetted terminal")
+        XCTAssertTrue(SubwayStationRegistry.isVettedTerminalStop("701"), "Flushing-Main St (701) must be recognized as vetted terminal")
+        XCTAssertTrue(SubwayStationRegistry.isVettedTerminalStop("726"), "34 St-Hudson Yards (726) must be recognized as vetted terminal")
+        XCTAssertTrue(SubwayStationRegistry.isVettedTerminalStop("L01"), "8 Av (L01) must be recognized as vetted terminal")
+        XCTAssertTrue(SubwayStationRegistry.isVettedTerminalStop("L29"), "Canarsie-Rockaway Pkwy (L29) must be recognized as vetted terminal")
+        XCTAssertTrue(SubwayStationRegistry.isVettedTerminalStop("S31"), "St George (S31) must be recognized as vetted terminal")
+        XCTAssertTrue(SubwayStationRegistry.isVettedTerminalStop("S09"), "Tottenville (S09) must be recognized as vetted terminal")
+        
+        // Assert direction-aware termination
+        XCTAssertTrue(SubwayStationRegistry.isTerminatingDirection(stopId: "601", route: "6", directionId: 0), "Uptown 6 terminates at 601")
+        XCTAssertFalse(SubwayStationRegistry.isTerminatingDirection(stopId: "601", route: "6", directionId: 1), "Downtown 6 departs from 601")
+        XCTAssertTrue(SubwayStationRegistry.isTerminatingDirection(stopId: "142", route: "1", directionId: 1), "Downtown 1 terminates at 142")
+        XCTAssertFalse(SubwayStationRegistry.isTerminatingDirection(stopId: "142", route: "1", directionId: 0), "Uptown 1 departs from 142")
+        
+        // Assert intermediate stations are NOT vetted terminals
+        XCTAssertFalse(SubwayStationRegistry.isVettedTerminalStop("608"), "Parkchester (608) must NOT be a vetted terminal")
+        XCTAssertFalse(SubwayStationRegistry.isVettedTerminalStop("611"), "Elder Av (611) must NOT be a vetted terminal")
+        XCTAssertFalse(SubwayStationRegistry.isVettedTerminalStop("635"), "Union Sq (635) must NOT be a vetted terminal")
+        XCTAssertFalse(SubwayStationRegistry.isVettedTerminalStop("631"), "Grand Central (631) must NOT be a vetted terminal")
+        XCTAssertFalse(SubwayStationRegistry.isTerminatingDirection(stopId: "608", route: "6", directionId: 0), "Parkchester cannot be terminating direction for 6")
+        XCTAssertFalse(SubwayStationRegistry.isTerminatingDirection(stopId: "608", route: "6", directionId: 1), "Parkchester cannot be terminating direction for 6")
+    }
+    
+    func testPreT3_PelhamBayPark_NorthboundArrivalSuppression() throws {
+        let service = TransitRealtimeService.shared
+        let refDate = Date(timeIntervalSince1970: 1720000000)
+        
+        // Construct mock feed message with:
+        // 1. Terminating arrival at Pelham Bay Park (601N): Northbound 6 train arriving at 601N (idx == count - 1)
+        // 2. Outgoing departure from Pelham Bay Park (601S): Southbound 6 train departing 601S (idx == 0) heading to Brooklyn Bridge
+        var feed = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(refDate.timeIntervalSince1970)
+        feed.header = header
+        
+        // Entity 1: Inbound terminating arrival (6 to Pelham Bay Park EXP)
+        var entity1 = TransitRealtime_FeedEntity()
+        entity1.id = "TRIP_TERMINATING_601"
+        var tu1 = TransitRealtime_TripUpdate()
+        tu1.trip.tripID = "6_ARRIVING_AT_PELHAM"
+        tu1.trip.routeID = "6"
+        tu1.trip.directionID = 0
+        
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "601N"
+        stu1.arrival = TransitRealtime_TripUpdate.StopTimeEvent()
+        stu1.arrival.time = Int64(refDate.timeIntervalSince1970 + 120) // In 2 min
+        tu1.stopTimeUpdate = [stu1] // idx == 0 and count == 1, so idx == count - 1
+        entity1.tripUpdate = tu1
+        
+        // Entity 2: Outgoing departure (6 to Brooklyn Bridge)
+        var entity2 = TransitRealtime_FeedEntity()
+        entity2.id = "TRIP_DEPARTING_601"
+        var tu2 = TransitRealtime_TripUpdate()
+        tu2.trip.tripID = "6_DEPARTING_FROM_PELHAM"
+        tu2.trip.routeID = "6"
+        tu2.trip.directionID = 1
+        
+        var stu2_origin = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2_origin.stopID = "601S"
+        stu2_origin.departure = TransitRealtime_TripUpdate.StopTimeEvent()
+        stu2_origin.departure.time = Int64(refDate.timeIntervalSince1970 + 300) // In 5 min
+        
+        var stu2_dest = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu2_dest.stopID = "640S"
+        stu2_dest.arrival = TransitRealtime_TripUpdate.StopTimeEvent()
+        stu2_dest.arrival.time = Int64(refDate.timeIntervalSince1970 + 3600)
+        tu2.stopTimeUpdate = [stu2_origin, stu2_dest]
+        entity2.tripUpdate = tu2
+        
+        feed.entity = [entity1, entity2]
+        let data = try feed.serializedData()
+        
+        let arrivals = try service.parseFeedMessage(
+            data: data,
+            stopId: "601",
+            targetRouteId: "6",
+            targetRouteIds: ["6"],
+            referenceDate: refDate
+        )
+        
+        // Assert: The terminating arrival in direction 0 (Uptown) MUST be suppressed!
+        XCTAssertFalse(
+            arrivals.contains(where: { $0.directionId == 0 }),
+            "Terminating arrival at Pelham Bay Park (601) in Direction 0 must be suppressed from departures"
+        )
+        XCTAssertFalse(
+            arrivals.contains(where: { $0.destination.lowercased().contains("pelham") }),
+            "Arrivals terminating at Pelham Bay Park must not appear on departure board"
+        )
+        
+        // Assert: The outgoing departure in direction 1 (Downtown) MUST be retained!
+        let departures = arrivals.filter { $0.directionId == 1 }
+        XCTAssertEqual(departures.count, 1, "Outgoing Southbound departure from Pelham Bay Park must be retained")
+        XCTAssertTrue(
+            departures.first?.destination.contains("Brooklyn Bridge") == true,
+            "Departure destination must reflect Brooklyn Bridge"
+        )
+    }
+    
+    func testPreT3_Parkchester_ShortTurnAndFeedWindowProtection() throws {
+        let service = TransitRealtimeService.shared
+        let refDate = Date(timeIntervalSince1970: 1720000000)
+        
+        // Construct mock feed at intermediate station Parkchester (608):
+        // 1. Short-turn 6 train ending at Parkchester (idx == count - 1, destination matches Parkchester)
+        var feed = TransitRealtime_FeedMessage()
+        var header = TransitRealtime_FeedHeader()
+        header.gtfsRealtimeVersion = "2.0"
+        header.timestamp = UInt64(refDate.timeIntervalSince1970)
+        feed.header = header
+        
+        // Entity 1: Short-turn 6 train ending at Parkchester (608N)
+        var entity1 = TransitRealtime_FeedEntity()
+        entity1.id = "TRIP_SHORT_TURN_608"
+        var tu1 = TransitRealtime_TripUpdate()
+        tu1.trip.tripID = "6_SHORT_TURN_PARKCHESTER"
+        tu1.trip.routeID = "6"
+        tu1.trip.directionID = 0
+        
+        var stu1 = TransitRealtime_TripUpdate.StopTimeUpdate()
+        stu1.stopID = "608N"
+        stu1.arrival = TransitRealtime_TripUpdate.StopTimeEvent()
+        stu1.arrival.time = Int64(refDate.timeIntervalSince1970 + 180)
+        tu1.stopTimeUpdate = [stu1] // idx == 0, count == 1, so idx == count - 1
+        entity1.tripUpdate = tu1
+        
+        feed.entity = [entity1]
+        let data = try feed.serializedData()
+        
+        let arrivals = try service.parseFeedMessage(
+            data: data,
+            stopId: "608",
+            targetRouteId: "6",
+            targetRouteIds: ["6"],
+            referenceDate: refDate
+        )
+        
+        // Invariant: At intermediate non-terminal stations like Parkchester (608),
+        // short-turns MUST NOT be suppressed, because Parkchester is not a vetted terminal!
+        XCTAssertEqual(
+            arrivals.count, 1,
+            "Short-turn 6 train at Parkchester (608) must NOT be suppressed by terminal gating rule"
+        )
+        XCTAssertEqual(arrivals.first?.directionId, 0)
+    }
 }

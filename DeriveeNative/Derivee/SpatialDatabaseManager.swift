@@ -3566,14 +3566,37 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
         }
     }
     
-    // MARK: - Terminating Arrival Filtering (Wave PE.13)
+    // MARK: - Terminating Arrival Filtering (Wave PE.13 & Pre-T.3)
     
     public static func isTerminatingArrival(headsign: String, stopName: String = "", stopId: String = "") -> Bool {
         let cleanHeadsign = headsign.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let cleanStopName = stopName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let cleanStopId = stopId.uppercased().replacingOccurrences(of: "STOP_", with: "").replacingOccurrences(of: "BUS_", with: "")
+        let cleanStopId = SubwayStationRegistry.cleanStopId(stopId)
         
         guard !cleanHeadsign.isEmpty else { return false }
+        
+        // Terminal Gating Rule (Pre-T.3 / Station 3 / PE.13):
+        // Only vetted rail terminal stops may suppress terminating arrivals.
+        // Mid-corridor short-turns at intermediate stations (e.g. Parkchester 608/611) must NEVER be suppressed.
+        if !cleanStopId.isEmpty {
+            guard SubwayStationRegistry.isVettedTerminalStop(cleanStopId) else {
+                return false
+            }
+        } else if !cleanStopName.isEmpty {
+            // If stopId is not provided, verify that stopName corresponds to a vetted terminal stop
+            let isVettedName = SubwayStationRegistry.allVettedTerminalStopIds.contains { termId in
+                if let name = SubwayStationRegistry.resolveStationName(for: termId)?.lowercased(), !name.isEmpty {
+                    return cleanStopName.contains(name) || name.contains(cleanStopName)
+                }
+                return false
+            }
+            guard isVettedName else {
+                return false
+            }
+        } else {
+            // Neither stopId nor stopName provided: cannot verify vetted terminal
+            return false
+        }
         
         if !cleanStopName.isEmpty && cleanHeadsign == cleanStopName {
             return true
@@ -3618,6 +3641,14 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
            (cleanHeadsign.contains("south ferry")) {
             return true
         }
+        if (cleanStopId == "640" || cleanStopId.hasPrefix("640") || cleanStopName.contains("brooklyn bridge")) &&
+           (cleanHeadsign.contains("brooklyn bridge") || cleanHeadsign.contains("city hall")) {
+            return true
+        }
+        if (cleanStopId == "726" || cleanStopId.hasPrefix("726") || cleanStopName.contains("hudson yards")) &&
+           (cleanHeadsign.contains("hudson yards") || cleanHeadsign.contains("34 st")) {
+            return true
+        }
         if (cleanStopId == "L29" || cleanStopId.hasPrefix("L29") || cleanStopName.contains("canarsie") || cleanStopName.contains("rockaway pkwy")) &&
            (cleanHeadsign.contains("canarsie") || cleanHeadsign.contains("rockaway pkwy")) {
             return true
@@ -3627,8 +3658,16 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             return true
         }
         
+        // General check for matching station name at vetted termini
         if !cleanStopName.isEmpty {
-            if cleanHeadsign.contains(cleanStopName) && !cleanHeadsign.contains(" to ") && !cleanHeadsign.contains(" via ") {
+            if cleanHeadsign.contains(cleanStopName) {
+                return true
+            }
+        }
+        
+        // Match against official terminal station name if stopId is known
+        if !cleanStopId.isEmpty, let termName = SubwayStationRegistry.resolveStationName(for: cleanStopId)?.lowercased() {
+            if cleanHeadsign.contains(termName) || termName.contains(cleanHeadsign) {
                 return true
             }
         }
@@ -4113,6 +4152,21 @@ public final class SpatialDatabaseManager: @unchecked Sendable {
             if lowerId.contains("south_ferry") || lowerName.contains("south ferry") { isDir1Terminal = true }
             else if lowerId.contains("canarsie") || lowerName.contains("canarsie") { isDir1Terminal = true }
             else if lowerId.contains("tottenville") || lowerName.contains("tottenville") { isDir1Terminal = true }
+        }
+        
+        // Coordinated SubwayStationRegistry check (Pre-T.3)
+        let routesToCheck: [String] = {
+            var rList = routeIds
+            if let r = routeId, !rList.contains(r) { rList.insert(r, at: 0) }
+            return rList
+        }()
+        for r in routesToCheck {
+            if SubwayStationRegistry.isTerminatingDirection(stopId: cleanId, route: r, directionId: 0) {
+                isDir0Terminal = true
+            }
+            if SubwayStationRegistry.isTerminatingDirection(stopId: cleanId, route: r, directionId: 1) {
+                isDir1Terminal = true
+            }
         }
             
         if isDir1Terminal {

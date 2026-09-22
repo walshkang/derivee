@@ -393,23 +393,28 @@ public final class TransitRealtimeService: @unchecked Sendable {
                         }
                     }
                     
-                    // Terminal directional filtering (PB.1 / Bugs 1, 2 / Wave Pre-T.2):
-                    // Suppress impossible northbound departures at St George and impossible southbound departures at Tottenville
-                    let cleanRoute = tripRouteId.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-                    let isSIR = cleanRoute == "SIR" || cleanRoute == "SI"
-                    if isSIR {
-                        let isStGeorge = cleanStopId == "S31" || cleanStopId.hasPrefix("S31")
-                        let isTottenville = cleanStopId == "S09" || cleanStopId.hasPrefix("S09")
-                        if isStGeorge {
-                            // Direction 0 is Inbound (terminating at St George). Direction 1 is Outbound (departing to Tottenville).
-                            if classification.directionId == 0 {
-                                continue
-                            }
-                        } else if isTottenville {
-                            // Direction 1 is Outbound (terminating at Tottenville). Direction 0 is Inbound (departing to St George).
-                            if classification.directionId == 1 {
-                                continue
-                            }
+                    // Gated Terminal Arrival Suppression & Short-Turn Safety (Station 3 / PE.13 / Wave Pre-T.3):
+                    // (1) Suppress terminating arrivals (e.g. 6 to Pelham Bay Park EXP at northern rail terminus Pelham Bay Park 601,
+                    // 1 to South Ferry at South Ferry 142, Inbound at St George S31, Outbound at Tottenville S09).
+                    // (2) Terminal Gating Invariant: idx == count - 1 AND destination matches stopName ONLY suppresses
+                    // departures at vetted terminal stops (isTerminatingArrival / static GTFS terminal set),
+                    // defaulting to showing departures at intermediate stations (e.g. 6 train short-turned at Parkchester 608/611).
+                    let isLastStopInTrip = (idx == tripUpdate.stopTimeUpdate.count - 1)
+                    let isTerminatingAtVettedStop = SubwayStationRegistry.isTerminatingDirection(
+                        stopId: currentStopId,
+                        route: tripRouteId,
+                        directionId: classification.directionId
+                    )
+                    
+                    if isTerminatingAtVettedStop {
+                        let stopStationName = SubwayStationRegistry.resolveStationName(for: currentStopId) ?? ""
+                        let isTerminating = SpatialDatabaseManager.isTerminatingArrival(
+                            headsign: destination,
+                            stopName: stopStationName,
+                            stopId: currentStopId
+                        )
+                        if isLastStopInTrip || isTerminating {
+                            continue
                         }
                     }
                     

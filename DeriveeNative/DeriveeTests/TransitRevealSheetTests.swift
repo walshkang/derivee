@@ -2078,6 +2078,26 @@ final class TransitRevealSheetTests: XCTestCase {
             SpatialDatabaseManager.isTerminatingArrival(headsign: "Pelham Bay Park", stopName: "14 St - Union Sq", stopId: "635"),
             "Train departing mid-corridor station towards terminus must NOT be identified as terminating arrival"
         )
+        
+        // Real-time destination string at Pelham Bay Park (601)
+        XCTAssertTrue(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "6 to Pelham Bay Park EXP", stopName: "Pelham Bay Park", stopId: "601"),
+            "Full real-time destination string at terminus must be identified as terminating arrival"
+        )
+        
+        // Pre-T.3 Short-Turn Safety at intermediate stations (Parkchester 608 / 611)
+        XCTAssertFalse(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Parkchester", stopName: "Parkchester", stopId: "608"),
+            "Short-turn train at intermediate station Parkchester (608) must NOT be identified as terminating arrival"
+        )
+        XCTAssertFalse(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "6 to Parkchester EXP (Short Turn)", stopName: "Parkchester", stopId: "608"),
+            "Short-turn train with full qualifier at Parkchester must NOT be identified as terminating arrival"
+        )
+        XCTAssertFalse(
+            SpatialDatabaseManager.isTerminatingArrival(headsign: "Parkchester", stopName: "Elder Av", stopId: "611"),
+            "Short-turn train at intermediate stop 611 must NOT be identified as terminating arrival"
+        )
     }
     
     func testPE13_fetchTimetableResult_NoSyntheticPlaceholders() async throws {
