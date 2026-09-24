@@ -51,15 +51,9 @@ func CreateCityPackWithAssets(configPath, transitDBPath, geojsonPath string, ext
 	hasher := sha256.New()
 	multiOut := io.MultiWriter(outFile, hasher)
 
-	// Wrap with Zstandard encoder (maximum compression level for static distributions)
-	zstdWriter, err := zstd.NewWriter(multiOut, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create zstd writer: %w", err)
-	}
-	defer zstdWriter.Close()
-
-	tarWriter := tar.NewWriter(zstdWriter)
-	defer tarWriter.Close()
+	// Buffer tar archive in memory so we can compress as a single segment with exact frame content size header for SwiftZSTD
+	var tarBuf bytes.Buffer
+	tarWriter := tar.NewWriter(&tarBuf)
 
 	filesToPack := []struct {
 		ArchiveName string
@@ -112,12 +106,31 @@ func CreateCityPackWithAssets(configPath, transitDBPath, geojsonPath string, ext
 		totalUncompressedSize += written
 	}
 
-	// Close tar and zstd writers to flush all data
+	// Close tar writer to complete tar stream
 	if err := tarWriter.Close(); err != nil {
 		return nil, fmt.Errorf("failed to flush tar writer: %w", err)
 	}
-	if err := zstdWriter.Close(); err != nil {
-		return nil, fmt.Errorf("failed to flush zstd writer: %w", err)
+
+	tarBytes := tarBuf.Bytes()
+
+	// Compress with SingleSegment=true to embed exact uncompressed frame size in ZSTD header (required by SwiftZSTD decompressFrame)
+	encoder, err := zstd.NewWriter(nil,
+		zstd.WithEncoderLevel(zstd.SpeedBestCompression),
+		zstd.WithSingleSegment(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create zstd encoder: %w", err)
+	}
+	defer encoder.Close()
+
+	compressedData := encoder.EncodeAll(tarBytes, make([]byte, 0, len(tarBytes)/4))
+
+	if _, err := multiOut.Write(compressedData); err != nil {
+		return nil, fmt.Errorf("failed to write compressed data: %w", err)
+	}
+
+	if err := outFile.Sync(); err != nil {
+		return nil, fmt.Errorf("failed to sync output file: %w", err)
 	}
 
 	// Get final compressed file size
@@ -202,8 +215,18 @@ func ExtractCityPack(packPath, targetDir string) error {
 	return nil
 }
 
-// VerifyCityPack checks that a .pack.zst archive can be decompressed and contains all required files
+// VerifyCityPack checks that a .pack.zst archive can be decompressed and contains all required base files.
+// If any routing files are present, it validates that all expected routing files declared in config exist.
 func VerifyCityPack(packPath string) error {
+	return verifyCityPackInternal(packPath, false)
+}
+
+// VerifyCityPackV2 checks that a .pack.zst archive can be decompressed and contains all required files including routing assets.
+func VerifyCityPackV2(packPath string) error {
+	return verifyCityPackInternal(packPath, true)
+}
+
+func verifyCityPackInternal(packPath string, requireRouting bool) error {
 	packFile, err := os.Open(packPath)
 	if err != nil {
 		return fmt.Errorf("failed to open pack file: %w", err)
@@ -249,19 +272,28 @@ func VerifyCityPack(packPath string) error {
 	if len(configBytes) > 0 {
 		var cfg CityConfig
 		if err := json.Unmarshal(configBytes, &cfg); err == nil {
-			if cfg.Version >= 2 || cfg.Routing != nil {
-				routingFiles := []string{"timetable.bin", "ultra_transfers.csr", "walk_graph.bin"}
-				if cfg.Routing != nil {
-					if cfg.Routing.TimetableBinFile != "" {
-						routingFiles[0] = cfg.Routing.TimetableBinFile
-					}
-					if cfg.Routing.UltraCsrFile != "" {
-						routingFiles[1] = cfg.Routing.UltraCsrFile
-					}
-					if cfg.Routing.WalkGraphFile != "" {
-						routingFiles[2] = cfg.Routing.WalkGraphFile
-					}
+			routingFiles := []string{"timetable.bin", "ultra_transfers.csr", "walk_graph.bin"}
+			if cfg.Routing != nil {
+				if cfg.Routing.TimetableBinFile != "" {
+					routingFiles[0] = cfg.Routing.TimetableBinFile
 				}
+				if cfg.Routing.UltraCsrFile != "" {
+					routingFiles[1] = cfg.Routing.UltraCsrFile
+				}
+				if cfg.Routing.WalkGraphFile != "" {
+					routingFiles[2] = cfg.Routing.WalkGraphFile
+				}
+			}
+
+			hasAnyRoutingFile := false
+			for _, rf := range routingFiles {
+				if foundFiles[rf] {
+					hasAnyRoutingFile = true
+					break
+				}
+			}
+
+			if (requireRouting && (cfg.Version >= 2 || cfg.Routing != nil)) || hasAnyRoutingFile {
 				for _, rf := range routingFiles {
 					if !foundFiles[rf] {
 						return fmt.Errorf("missing required routing file in v2 pack: %s", rf)

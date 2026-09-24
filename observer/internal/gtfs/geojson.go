@@ -20,16 +20,26 @@ type GeoJSONFeature struct {
 	Geometry   GeoJSONGeometry        `json:"geometry"`
 }
 
-// GeoJSONRouteProperties defines the styling and modal properties expected by MapLibre & Swift
+// GeoJSONRouteProperties defines the styling, corridor, and modal properties expected by MapLibre & Swift
 type GeoJSONRouteProperties struct {
-	RouteID        string `json:"route_id"`
-	RouteShortName string `json:"route_short_name"`
-	RouteName      string `json:"route_name"`
-	ColorHex       string `json:"color_hex"`
-	Color          string `json:"color"`
-	CasingColorHex string `json:"casing_color_hex"`
-	RouteType      int    `json:"route_type"`
-	ModalClass     int    `json:"modal_class"`
+	// Backward-Compatible Keys (used by current Swift NSExpression)
+	RouteID        string   `json:"route_id"`
+	RouteShortName string   `json:"route_short_name"`
+	RouteName      string   `json:"route_name"`
+	ColorHex       string   `json:"color_hex"`
+	Color          string   `json:"color"`
+	CasingColorHex string   `json:"casing_color_hex"`
+	CasingColor    string   `json:"casing_color"`
+	RouteType      int      `json:"route_type"`
+	ModalClass     int      `json:"modal_class"`
+
+	// Additive Wave V Parallel Corridor & Dedup Keys
+	TrunkColor     string   `json:"trunk_color"`
+	CorridorID     string   `json:"corridor_id"`
+	BundleSize     int      `json:"bundle_size"`
+	BundleIndex    int      `json:"bundle_index"`
+	CompositeKey   string   `json:"composite_key"`
+	Routes         []string `json:"routes"`
 }
 
 // GeoJSONGeometry represents LineString or MultiLineString geometry
@@ -105,118 +115,100 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 	// 5. Simplify all Canonical Arcs once
 	simplifiedArcs := SimplifyGraph(graph, ThresholdSubway, arcMinThreshold)
 
-	// 6. Reassemble Route Geometries from Simplified Arcs
-	// Sort route IDs for deterministic GeoJSON output
-	sortedRouteIDs := make([]string, 0, len(routeShapes))
-	for rID := range routeShapes {
-		sortedRouteIDs = append(sortedRouteIDs, rID)
+	// 6. Build Inverted Index: ArcID -> map[routeID]Route
+	arcRoutes := make(map[int]map[string]Route)
+	for routeID, shapesMap := range routeShapes {
+		route := ds.Routes[routeID]
+		for shapeID := range shapesMap {
+			for _, arcRef := range graph.ShapeArcs[shapeID] {
+				if arcRoutes[arcRef.ArcID] == nil {
+					arcRoutes[arcRef.ArcID] = make(map[string]Route)
+				}
+				arcRoutes[arcRef.ArcID][routeID] = route
+			}
+		}
 	}
-	sort.Strings(sortedRouteIDs)
+
+	// 7. Emit Consolidated Corridor Ribbon Features (INV-CORR-01, INV-CORR-02, INV-CORR-03)
+	// Sort Arc IDs for deterministic GeoJSON output
+	sortedArcIDs := make([]int, 0, len(graph.Arcs))
+	for _, arc := range graph.Arcs {
+		if len(arcRoutes[arc.ID]) > 0 {
+			sortedArcIDs = append(sortedArcIDs, arc.ID)
+		}
+	}
+	sort.Ints(sortedArcIDs)
 
 	var features []GeoJSONFeature
 
-	for _, routeID := range sortedRouteIDs {
-		route := ds.Routes[routeID]
-		modalClass := ResolveModalClass(route.RouteType)
-
-		color := ResolveRouteColor(route)
-		casingColor := "#FFFFFF"
-		if modalClass == ModalClassLRT {
-			casingColor = "#FFFFFF"
-		}
-
-		routeName := route.RouteLongName
-		if routeName == "" {
-			routeName = route.RouteShortName
-		}
-
-		// Reassemble all shapes for this route
-		var routeLines [][][2]float64
-		seenShapeSignatures := make(map[string]bool)
-
-		// Sort shape IDs for determinism
-		shapeIDs := make([]string, 0, len(routeShapes[routeID]))
-		for sID := range routeShapes[routeID] {
-			shapeIDs = append(shapeIDs, sID)
-		}
-		sort.Strings(shapeIDs)
-
-		for _, shapeID := range shapeIDs {
-			arcRefs := graph.ShapeArcs[shapeID]
-			if len(arcRefs) == 0 {
-				continue
-			}
-
-			var shapeCoords [][2]float64
-			for _, ref := range arcRefs {
-				pts := simplifiedArcs[ref.ArcID]
-				if len(pts) == 0 {
-					continue
-				}
-
-				if ref.Reversed {
-					// Add points in reverse
-					for j := len(pts) - 1; j >= 0; j-- {
-						p := pts[j]
-						coord := [2]float64{p.Lon, p.Lat}
-						if len(shapeCoords) == 0 || shapeCoords[len(shapeCoords)-1] != coord {
-							shapeCoords = append(shapeCoords, coord)
-						}
-					}
-				} else {
-					// Add points forward
-					for _, p := range pts {
-						coord := [2]float64{p.Lon, p.Lat}
-						if len(shapeCoords) == 0 || shapeCoords[len(shapeCoords)-1] != coord {
-							shapeCoords = append(shapeCoords, coord)
-						}
-					}
-				}
-			}
-
-			if len(shapeCoords) >= 2 {
-				// Deduplicate identical polylines
-				sig := fmt.Sprintf("%v-%v-%d", shapeCoords[0], shapeCoords[len(shapeCoords)-1], len(shapeCoords))
-				if !seenShapeSignatures[sig] {
-					seenShapeSignatures[sig] = true
-					routeLines = append(routeLines, shapeCoords)
-				}
-			}
-		}
-
-		if len(routeLines) == 0 {
+	for _, arcID := range sortedArcIDs {
+		pts := simplifiedArcs[arcID]
+		if len(pts) < 2 {
 			continue
 		}
 
-		props := GeoJSONRouteProperties{
-			RouteID:        route.RouteID,
-			RouteShortName: route.RouteShortName,
-			RouteName:      routeName,
-			ColorHex:       color,
-			Color:          color,
-			CasingColorHex: casingColor,
-			RouteType:      route.RouteType,
-			ModalClass:     modalClass,
+		// Convert points to coordinates slice
+		// Note: arc.Points and simplifiedArcs are already canonically oriented (INV-CORR-03)
+		coords := make([][2]float64, len(pts))
+		for i, p := range pts {
+			coords[i] = [2]float64{p.Lon, p.Lat}
 		}
 
-		var geom GeoJSONGeometry
-		if len(routeLines) == 1 {
-			geom = GeoJSONGeometry{
-				Type:        "LineString",
-				Coordinates: routeLines[0],
-			}
-		} else {
-			geom = GeoJSONGeometry{
-				Type:        "MultiLineString",
-				Coordinates: routeLines,
-			}
+		// Collect unique routes traversing this arc
+		routeMap := arcRoutes[arcID]
+		routesList := make([]Route, 0, len(routeMap))
+		for _, r := range routeMap {
+			routesList = append(routesList, r)
 		}
 
-		features = append(features, GeoJSONFeature{
-			Type:       "Feature",
-			Properties: props,
-			Geometry:   geom,
-		})
+		// Consolidate into Trunk Bundles (INV-CORR-01, INV-CORR-02)
+		bundles, err := ConsolidateCorridorBundles(routesList, DefaultColorDistance)
+		if err != nil {
+			return nil, nil, fmt.Errorf("arc %d bundle consolidation failed: %w", arcID, err)
+		}
+
+		corridorID := fmt.Sprintf("corridor_arc_%d", arcID)
+
+		for _, b := range bundles {
+			lead := b.LeadRoute
+			routeName := lead.RouteLongName
+			if routeName == "" {
+				routeName = lead.RouteShortName
+			}
+			routeShortName := strings.Join(b.RouteNames, ", ")
+
+			casingColor := "#FFFFFF"
+
+			props := GeoJSONRouteProperties{
+				// Backward-Compatible Keys (used by current Swift NSExpression)
+				RouteID:        lead.RouteID,
+				RouteShortName: routeShortName,
+				RouteName:      routeName,
+				ColorHex:       b.TrunkColor,
+				Color:          b.TrunkColor,
+				CasingColorHex: casingColor,
+				CasingColor:    casingColor,
+				RouteType:      lead.RouteType,
+				ModalClass:     b.ModalClass,
+
+				// Additive Wave V Parallel Corridor & Dedup Keys
+				TrunkColor:     b.TrunkColor,
+				CorridorID:     corridorID,
+				BundleSize:     b.BundleSize,
+				BundleIndex:    b.BundleIndex,
+				CompositeKey:   b.CompositeKey,
+				Routes:         b.RouteNames,
+			}
+
+			features = append(features, GeoJSONFeature{
+				Type:       "Feature",
+				Properties: props,
+				Geometry: GeoJSONGeometry{
+					Type:        "LineString",
+					Coordinates: coords,
+				},
+			})
+		}
 	}
 
 	fc := &GeoJSONFeatureCollection{

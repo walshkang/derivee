@@ -25,6 +25,14 @@ func ToPointKey(p Point2D) PointKey {
 	}
 }
 
+// LessPointKey returns true if a is lexicographically smaller than b (Lon, then Lat) per INV-CORR-03
+func LessPointKey(a, b PointKey) bool {
+	if a.Lon != b.Lon {
+		return a.Lon < b.Lon
+	}
+	return a.Lat < b.Lat
+}
+
 // Arc represents a canonical linear path bounded by locked junction nodes
 type Arc struct {
 	ID       int
@@ -114,27 +122,29 @@ func BuildTopologyGraph(shapes map[string][]ShapePoint) *TopologyGraph {
 
 	// Rule C: Shape divergence/convergence points
 	// If two shapes enter vertex V from U, but exit to different vertices W1 and W2, V is a junction
-	type Transition struct {
-		from PointKey
-		to   PointKey
-	}
-	transitionsAtVertex := make(map[PointKey]map[Transition]bool)
+	transitionsFromU := make(map[PointKey]map[PointKey]map[PointKey]bool)
 	for _, pts := range cleanShapes {
 		for i := 1; i < len(pts)-1; i++ {
 			prevK := ToPointKey(pts[i-1])
 			currK := ToPointKey(pts[i])
 			nextK := ToPointKey(pts[i+1])
-			if transitionsAtVertex[currK] == nil {
-				transitionsAtVertex[currK] = make(map[Transition]bool)
+			if transitionsFromU[currK] == nil {
+				transitionsFromU[currK] = make(map[PointKey]map[PointKey]bool)
 			}
-			transitionsAtVertex[currK][Transition{from: prevK, to: nextK}] = true
+			if transitionsFromU[currK][prevK] == nil {
+				transitionsFromU[currK][prevK] = make(map[PointKey]bool)
+			}
+			transitionsFromU[currK][prevK][nextK] = true
 		}
 	}
 
-	for k, trans := range transitionsAtVertex {
-		if len(trans) > 1 {
-			// Multiple distinct transitions flow through k -> mark as junction
-			junctions[k] = true
+	for k, fromMap := range transitionsFromU {
+		for _, toSet := range fromMap {
+			if len(toSet) > 1 {
+				// Multiple distinct exits from the same entry U -> divergence junction
+				junctions[k] = true
+				break
+			}
 		}
 	}
 
@@ -191,10 +201,19 @@ func BuildTopologyGraph(shapes map[string][]ShapePoint) *TopologyGraph {
 					}
 					revHash := hashPoints(revPoints)
 
-					// Canonical ordering: compare startK and endK
+					// Canonical ordering per INV-CORR-03: compare startK and endK lexicographically
 					isCanonicalForward := false
-					if startK.Lon < endK.Lon || (startK.Lon == endK.Lon && startK.Lat <= endK.Lat) {
+					if LessPointKey(startK, endK) {
 						isCanonicalForward = true
+					} else if startK == endK {
+						// Loop arc tiebreaking using intermediate point
+						if len(currentArcPoints) > 2 {
+							p1 := ToPointKey(currentArcPoints[1])
+							pn2 := ToPointKey(currentArcPoints[len(currentArcPoints)-2])
+							isCanonicalForward = LessPointKey(p1, pn2)
+						} else {
+							isCanonicalForward = true
+						}
 					}
 
 					var canonKey ArcKey

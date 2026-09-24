@@ -235,8 +235,8 @@ func TestGenerateTransitLinesGeoJSONZeroZFighting(t *testing.T) {
 		t.Fatalf("GenerateTransitLinesGeoJSON failed: %v", err)
 	}
 
-	if len(fc.Features) != 4 {
-		t.Fatalf("Expected 4 features (Red, Green-B, Green-C, Ferry; Bus excluded), got %d", len(fc.Features))
+	if len(fc.Features) != 5 {
+		t.Fatalf("Expected 5 features (Red, Shared Green Trunk, Green-B branch, Green-C branch, Ferry; Bus excluded), got %d", len(fc.Features))
 	}
 
 	// Verify valid JSON
@@ -252,30 +252,52 @@ func TestGenerateTransitLinesGeoJSONZeroZFighting(t *testing.T) {
 		}
 	}
 
-	// Verify Green-B and Green-C shared segment coordinates match bit-for-bit
-	var gbCoords, gcCoords [][2]float64
+	// Verify Consolidated Green Line Trunk (Park St -> Boylston -> Copley)
+	var sharedTrunk *GeoJSONFeature
+	var gbBranch, gcBranch *GeoJSONFeature
+
 	for _, f := range fc.Features {
-		if f.Properties.RouteID == "Green-B" {
-			if lines, ok := f.Geometry.Coordinates.([][2]float64); ok {
-				gbCoords = lines
-			}
-		}
-		if f.Properties.RouteID == "Green-C" {
-			if lines, ok := f.Geometry.Coordinates.([][2]float64); ok {
-				gcCoords = lines
-			}
+		if len(f.Properties.Routes) == 2 && f.Properties.TrunkColor == "#00843D" {
+			sharedTrunk = &f
+		} else if f.Properties.RouteID == "Green-B" {
+			gbBranch = &f
+		} else if f.Properties.RouteID == "Green-C" {
+			gcBranch = &f
 		}
 	}
 
-	if len(gbCoords) < 3 || len(gcCoords) < 3 {
-		t.Fatalf("Expected at least 3 points in gbCoords and gcCoords")
+	if sharedTrunk == nil {
+		t.Fatalf("Consolidated Green Line trunk feature (Park St -> Copley) missing from GeoJSON")
+	}
+	if sharedTrunk.Properties.CompositeKey != "badge_B_C" {
+		t.Errorf("Expected trunk composite key 'badge_B_C', got %s", sharedTrunk.Properties.CompositeKey)
+	}
+	if sharedTrunk.Properties.BundleSize != 1 || sharedTrunk.Properties.BundleIndex != 0 {
+		t.Errorf("Expected bundle_size=1, bundle_index=0, got size=%d, idx=%d",
+			sharedTrunk.Properties.BundleSize, sharedTrunk.Properties.BundleIndex)
 	}
 
-	// Shared Park St -> Boylston -> Copley (first 3 points) must be identical
-	for i := 0; i < 3; i++ {
-		if gbCoords[i][0] != gcCoords[i][0] || gbCoords[i][1] != gcCoords[i][1] {
-			t.Fatalf("Z-Fighting detected: point %d differs between Green-B (%v) and Green-C (%v)",
-				i, gbCoords[i], gcCoords[i])
-		}
+	trunkCoords, ok := sharedTrunk.Geometry.Coordinates.([][2]float64)
+	if !ok || len(trunkCoords) != 3 {
+		t.Fatalf("Expected 3 coordinates in shared trunk (Park St -> Boylston -> Copley), got %v", sharedTrunk.Geometry.Coordinates)
+	}
+
+	// Verify branch continuity: Both branches must connect at Copley with bit-for-bit coordinate match
+	if gbBranch == nil || gcBranch == nil {
+		t.Fatalf("Expected distinct branch features for Green-B and Green-C")
+	}
+
+	gbBranchCoords, _ := gbBranch.Geometry.Coordinates.([][2]float64)
+	gcBranchCoords, _ := gcBranch.Geometry.Coordinates.([][2]float64)
+
+	copleyExpected := [2]float64{-71.0760, 42.3500}
+	if trunkCoords[0] != copleyExpected {
+		t.Errorf("Expected trunk to start at Copley %v (canonical orientation), got %v", copleyExpected, trunkCoords[0])
+	}
+	if gbBranchCoords[len(gbBranchCoords)-1] != copleyExpected {
+		t.Errorf("Green-B branch does not connect at Copley: branch end=%v, expected=%v", gbBranchCoords[len(gbBranchCoords)-1], copleyExpected)
+	}
+	if gcBranchCoords[len(gcBranchCoords)-1] != copleyExpected {
+		t.Errorf("Green-C branch does not connect at Copley: branch end=%v, expected=%v", gcBranchCoords[len(gcBranchCoords)-1], copleyExpected)
 	}
 }
