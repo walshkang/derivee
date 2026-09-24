@@ -48,6 +48,9 @@ type GeoJSONRouteProperties struct {
 	SortKey        int      `json:"sort_key"`
 	ArcLengthM     float64  `json:"arc_length_m"`
 	IsExpress      bool     `json:"is_express"`
+
+	// Wave V.2b Parallel Offset Properties
+	DeltaOffset    float64  `json:"delta_offset"`
 }
 
 // GeoJSONGeometry represents LineString or MultiLineString geometry
@@ -191,6 +194,36 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 			casingWidthZ11, casingWidthZ14, casingWidthZ17 := CalculateCasingWidths(b.BundleSize)
 			sortKey := ModalPriority(b.ModalClass)*1000 + CalculateHexHue(b.TrunkColor)
 
+			deltaOffsetPt := 0.0
+			featureCoords := coords
+
+			if b.BundleSize > 1 {
+				deltaOffsetPt = (float64(b.BundleIndex) - float64(b.BundleSize-1)/2.0) * 3.5
+				offsetDistM := CalculateBundleOffsetDistance(b.BundleIndex, b.BundleSize, DefaultOffsetOptions)
+				if math.Abs(offsetDistM) > 1e-6 {
+					offsetPts, err := OffsetPolyline(pts, offsetDistM, DefaultOffsetOptions)
+					if err == nil && len(offsetPts) >= 2 {
+						clippedPts := ClipSwallowtails(offsetPts, pts, offsetDistM)
+						if len(clippedPts) >= 2 {
+							// Ensure canonical orientation along longitudinal axis (INV-CORR-03)
+							startKey := ToPointKey(clippedPts[0])
+							endKey := ToPointKey(clippedPts[len(clippedPts)-1])
+							if !LessPointKey(startKey, endKey) && startKey != endKey {
+								// Reverse to preserve canonical orientation
+								for i, j := 0, len(clippedPts)-1; i < j; i, j = i+1, j-1 {
+									clippedPts[i], clippedPts[j] = clippedPts[j], clippedPts[i]
+								}
+							}
+							c := make([][2]float64, len(clippedPts))
+							for i, p := range clippedPts {
+								c[i] = [2]float64{p.Lon, p.Lat}
+							}
+							featureCoords = c
+						}
+					}
+				}
+			}
+
 			props := GeoJSONRouteProperties{
 				RouteID:        lead.RouteID,
 				RouteShortName: routeShortName,
@@ -214,6 +247,7 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 				SortKey:        sortKey,
 				ArcLengthM:     arcLength,
 				IsExpress:      isExpress,
+				DeltaOffset:    deltaOffsetPt,
 			}
 
 			features = append(features, GeoJSONFeature{
@@ -221,7 +255,7 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 				Properties: props,
 				Geometry: GeoJSONGeometry{
 					Type:        "LineString",
-					Coordinates: coords,
+					Coordinates: featureCoords,
 				},
 			})
 		}

@@ -275,3 +275,87 @@ func TestBackwardCompatibility_GeoJSONProperties(t *testing.T) {
 		t.Fatalf("JSON unmarshal failed: %v", err)
 	}
 }
+
+// TestParallelCorridorBundling_MultiColorOffsets verifies Queens Boulevard multi-color bundle (K=3: E Blue, F Orange, R Yellow)
+func TestParallelCorridorBundling_MultiColorOffsets(t *testing.T) {
+	ds := NewDataset(time.Now())
+	// E (Blue #0039A6), F (Orange #FF6319), R (Yellow #FCCC0A)
+	ds.Routes["E"] = Route{RouteID: "E", RouteShortName: "E", RouteLongName: "8th Ave Express", RouteType: 1, RouteColor: "0039A6"}
+	ds.Routes["F"] = Route{RouteID: "F", RouteShortName: "F", RouteLongName: "6th Ave Express", RouteType: 1, RouteColor: "FF6319"}
+	ds.Routes["R"] = Route{RouteID: "R", RouteShortName: "R", RouteLongName: "Broadway Local", RouteType: 1, RouteColor: "FCCC0A"}
+
+	ds.Trips["tE"] = Trip{TripID: "tE", RouteID: "E", ShapeID: "shape_qbl"}
+	ds.Trips["tF"] = Trip{TripID: "tF", RouteID: "F", ShapeID: "shape_qbl"}
+	ds.Trips["tR"] = Trip{TripID: "tR", RouteID: "R", ShapeID: "shape_qbl"}
+
+	ds.Shapes["shape_qbl"] = []ShapePoint{
+		{ShapeID: "shape_qbl", ShapePtLon: -73.937225, ShapePtLat: 40.749718, ShapePtSequence: 1},
+		{ShapeID: "shape_qbl", ShapePtLon: -73.934166, ShapePtLat: 40.750875, ShapePtSequence: 2},
+		{ShapeID: "shape_qbl", ShapePtLon: -73.929851, ShapePtLat: 40.752314, ShapePtSequence: 3},
+		{ShapeID: "shape_qbl", ShapePtLon: -73.925812, ShapePtLat: 40.753892, ShapePtSequence: 4},
+	}
+
+	fc, _, err := GenerateTransitLinesGeoJSON(ds)
+	if err != nil {
+		t.Fatalf("GenerateTransitLinesGeoJSON failed: %v", err)
+	}
+
+	if len(fc.Features) != 3 {
+		t.Fatalf("Expected exactly 3 parallel ribbon features for K=3 Queens Blvd, got %d", len(fc.Features))
+	}
+
+	// Verify properties and offset coordinates
+	seenOffsets := make(map[float64]bool)
+	var coordsList [][][2]float64
+
+	for i, feat := range fc.Features {
+		props := feat.Properties
+		if props.BundleSize != 3 {
+			t.Errorf("Feature %d: expected bundle_size 3, got %d", i, props.BundleSize)
+		}
+		if props.BundleIndex != i {
+			t.Errorf("Feature %d: expected bundle_index %d, got %d", i, i, props.BundleIndex)
+		}
+
+		seenOffsets[props.DeltaOffset] = true
+
+		coords, ok := parseLineCoords(feat.Geometry.Coordinates)
+		if !ok || len(coords) < 4 {
+			t.Fatalf("Feature %d: invalid coordinates", i)
+		}
+		coordsList = append(coordsList, coords)
+
+		// Zero self-intersections (INV-OFFSET-02)
+		var pts2D []Point2D
+		for _, c := range coords {
+			pts2D = append(pts2D, Point2D{Lon: c[0], Lat: c[1]})
+		}
+		metricCoords, _, _ := ProjectToLocalM(pts2D)
+		if err := ValidateSelfIntersections_INV_OFFSET_02(metricCoords); err != nil {
+			t.Errorf("Feature %d: INV-OFFSET-02 violated: %v", i, err)
+		}
+	}
+
+	// Verify offsets: -3.5pt, 0.0pt, +3.5pt
+	if !seenOffsets[-3.5] || !seenOffsets[0.0] || !seenOffsets[3.5] {
+		t.Errorf("Expected delta_offset values [-3.5, 0.0, 3.5], got map: %v", seenOffsets)
+	}
+
+	// Verify that ribbons are geometrically distinct (parallel separation)
+	c0 := coordsList[0]
+	c1 := coordsList[1]
+	c2 := coordsList[2]
+
+	for j := 0; j < len(c0); j++ {
+		// Latitude and longitude should differ between ribbon 0, ribbon 1, ribbon 2
+		dist01 := CalculateHaversineDistance(c0[j][1], c0[j][0], c1[j][1], c1[j][0])
+		dist12 := CalculateHaversineDistance(c1[j][1], c1[j][0], c2[j][1], c2[j][0])
+		if dist01 < 1.0 {
+			t.Errorf("Vertex %d: ribbon 0 and ribbon 1 too close (<1m): %.3fm", j, dist01)
+		}
+		if dist12 < 1.0 {
+			t.Errorf("Vertex %d: ribbon 1 and ribbon 2 too close (<1m): %.3fm", j, dist12)
+		}
+	}
+}
+

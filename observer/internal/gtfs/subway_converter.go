@@ -29,6 +29,9 @@ type LegacySubwayGeoJSON struct {
 }
 
 func parseLineCoords(raw interface{}) ([][2]float64, bool) {
+	if typed, ok := raw.([][2]float64); ok {
+		return typed, true
+	}
 	slice, ok := raw.([]interface{})
 	if !ok {
 		return nil, false

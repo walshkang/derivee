@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -78,12 +79,65 @@ func TestNYCTrunkDeduplicationAndCanonicalCorridors(t *testing.T) {
 				props.CorridorID, startKey, endKey)
 		}
 
+		// INV-OFFSET-02: Zero self-intersections across all emitted subway features
+		var pts2D []Point2D
+		for _, c := range coords {
+			pts2D = append(pts2D, Point2D{Lon: c[0], Lat: c[1]})
+		}
+		metricCoords, _, _ := ProjectToLocalM(pts2D)
+		if err := ValidateSelfIntersections_INV_OFFSET_02(metricCoords); err != nil {
+			t.Errorf("INV-OFFSET-02 failed on %s (bundle %d/%d): %v", props.CorridorID, props.BundleIndex, props.BundleSize, err)
+		}
+
+		// Wave V.2b delta_offset assertions
+		if props.BundleSize == 1 && props.DeltaOffset != 0.0 {
+			t.Errorf("K=1 feature %s should have delta_offset=0, got %f", props.CorridorID, props.DeltaOffset)
+		}
+		if props.BundleSize > 1 && math.Abs(props.DeltaOffset) > 3.501 {
+			t.Errorf("Feature %s delta_offset %f exceeds ceiling of 3.5pt", props.CorridorID, props.DeltaOffset)
+		}
+
 		// Additive attributes check
 		if !strings.HasPrefix(props.CompositeKey, "badge_") {
 			t.Errorf("Invalid composite key: %s", props.CompositeKey)
 		}
 		if len(props.Routes) == 0 {
 			t.Errorf("Empty routes array in feature %s", props.CorridorID)
+		}
+	}
+
+	// Verify parallel separation across corridors with K >= 2
+	corridorFeatures := make(map[string][]GeoJSONFeature)
+	for _, feat := range fc.Features {
+		corridorFeatures[feat.Properties.CorridorID] = append(corridorFeatures[feat.Properties.CorridorID], feat)
+	}
+
+	for corridorID, feats := range corridorFeatures {
+		if len(feats) >= 2 {
+			// Check delta_offset symmetry
+			var deltaSum float64
+			for _, f := range feats {
+				deltaSum += f.Properties.DeltaOffset
+			}
+			if math.Abs(deltaSum) > 1e-4 {
+				t.Errorf("Corridor %s delta_offset sum %f is not symmetrical around 0", corridorID, deltaSum)
+			}
+
+			// Check that ribbon 0 and ribbon 1 have distinct, offset coordinates
+			coords0, _ := parseLineCoords(feats[0].Geometry.Coordinates)
+			coords1, _ := parseLineCoords(feats[1].Geometry.Coordinates)
+			if len(coords0) == len(coords1) {
+				allIdentical := true
+				for i := 0; i < len(coords0); i++ {
+					if coords0[i][0] != coords1[i][0] || coords0[i][1] != coords1[i][1] {
+						allIdentical = false
+						break
+					}
+				}
+				if allIdentical {
+					t.Errorf("Corridor %s parallel ribbons 0 and 1 have identical un-offset coordinates", corridorID)
+				}
+			}
 		}
 	}
 
