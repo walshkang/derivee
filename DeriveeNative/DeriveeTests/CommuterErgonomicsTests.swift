@@ -1,6 +1,7 @@
 import XCTest
 import SwiftUI
 import CoreLocation
+import MapLibre
 @testable import Derivee
 
 /// Exhaustive Commuter Ergonomics & UX Invariant Test Suite.
@@ -1416,6 +1417,127 @@ final class CommuterErgonomicsTests: XCTestCase {
         
         let nightCasingContrast = TransitRouteData.contrastRatio(hex1: "#FFFFFF", hex2: nightBasemap)
         XCTAssertGreaterThanOrEqual(nightCasingContrast, 4.5, "Night adaptive casing #FFFFFF must exceed 4.5:1 on night basemap (FC-14)")
+    }
+
+    // MARK: - 15. FC-15: Zero Missing Trunk Lines & Multiplicity Ceilings (Wave V.3 & V.4 Invariant)
+
+    func testFC15_ZeroMissingTrunkLines_AllCanonicalRoutesRepresented() {
+        let shapeCollection = TransitCartographyLoader.loadTransitLinesShapeSync()
+        XCTAssertGreaterThan(shapeCollection.shapes.count, 0, "Transit network shape must not be empty (FC-15)")
+        
+        var foundRoutes = Set<String>()
+        var maxK = 0
+        
+        for shape in shapeCollection.shapes {
+            guard let feature = shape as? MLNFeature else { continue }
+            let attrs = feature.attributes
+            
+            // Extract routes or route group or composite key tokens
+            if let compKey = attrs["composite_key"] as? String {
+                let tokens = CorridorBadgeRenderer.parseTokens(from: compKey)
+                for t in tokens {
+                    foundRoutes.insert(t)
+                }
+            }
+            if let rg = attrs["route_group"] as? String {
+                foundRoutes.insert(rg)
+            }
+            if let k = attrs["bundle_multiplicity"] as? Int {
+                maxK = max(maxK, k)
+            } else if let kNum = attrs["bundle_multiplicity"] as? NSNumber {
+                maxK = max(maxK, kNum.intValue)
+            }
+        }
+        
+        // Canonical NYC subway route token set
+        let requiredTokens = ["1", "2", "3", "4", "5", "6", "7", "A", "C", "E", "B", "D", "F", "M", "G", "J", "Z", "L", "N", "Q", "R", "W", "S", "SIR"]
+        for req in requiredTokens {
+            XCTAssertTrue(foundRoutes.contains(req) || foundRoutes.contains(where: { $0.contains(req) }), "Canonical subway line \(req) must be represented in transit network (FC-15)")
+        }
+        
+        // Multiplicity Ceiling: K <= 4 to prevent visual ribbon clumping
+        XCTAssertLessThanOrEqual(maxK, 4, "Bundle multiplicity K must not exceed 4 (FC-15)")
+    }
+
+    // MARK: - 16. FC-16: Zoom-Indexed Width Ceilings & Trench Enclosure (Wave V.3 Invariant)
+
+    func testFC16_ZoomIndexedWidthCeilings_GuaranteesScreenLegibility() {
+        let subway = TransitModalClass.subway
+        let ribbonExpr = subway.cartographyLineWidthExpression()
+        let casingExpr = subway.cartographyCasingWidthExpression()
+        
+        let ribbonStops = (ribbonExpr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber]
+        let casingStops = (casingExpr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber]
+        
+        XCTAssertNotNil(ribbonStops)
+        XCTAssertNotNil(casingStops)
+        
+        if let rStops = ribbonStops, let cStops = casingStops {
+            let r11 = rStops[11.0]?.doubleValue ?? 0
+            let r14 = rStops[14.0]?.doubleValue ?? 0
+            let r17 = rStops[17.0]?.doubleValue ?? 0
+            
+            let c11 = cStops[11.0]?.doubleValue ?? 0
+            let c14 = cStops[14.0]?.doubleValue ?? 0
+            let c17 = cStops[17.0]?.doubleValue ?? 0
+            
+            // Width ceilings per Research Doc 22 §4.2:
+            XCTAssertLessThanOrEqual(r11, 1.5, "Regional (z=11) ribbon width must not exceed 1.5pt (FC-16)")
+            XCTAssertLessThanOrEqual(r14, 3.0, "Neighborhood (z=14) ribbon width must not exceed 3.0pt (FC-16)")
+            XCTAssertLessThanOrEqual(r17, 5.0, "Street (z=17) ribbon width must not exceed 5.0pt (FC-16)")
+            
+            // Casing margins: margin = (casing - ribbon) / 2
+            let margin11 = (c11 - r11) / 2.0
+            let margin14 = (c14 - r14) / 2.0
+            XCTAssertLessThanOrEqual(margin11, 1.0, "Regional casing margin must be <= 1.0pt (FC-16)")
+            XCTAssertLessThanOrEqual(margin14, 1.0, "Neighborhood casing margin must be <= 1.0pt (FC-16)")
+            
+            // Multi-ribbon ceiling at z=11 for K_max = 3: total width must be <= 15pt
+            let totalMaxRegionalWidth = (Double(3) * r11) + (2.0 * margin11)
+            XCTAssertLessThanOrEqual(totalMaxRegionalWidth, 15.0, "Total corridor width at z=11 must remain <= 15pt (FC-16)")
+        }
+    }
+
+    // MARK: - 17. FC-17: Zero Static Line Widths on Transit Corridors (Wave V.3 Invariant)
+
+    func testFC17_TransitCorridorsUseDynamicInterpolatedExpressions() {
+        let subway = TransitModalClass.subway
+        let lrt = TransitModalClass.lightRail
+        let trenchExpr = TransitModalClass.trenchCasingWidthExpression()
+        
+        let subwayLineExpr = subway.cartographyLineWidthExpression()
+        let subwayCasingExpr = subway.cartographyCasingWidthExpression()
+        let lrtLineExpr = lrt.cartographyLineWidthExpression()
+        let lrtCasingExpr = lrt.cartographyCasingWidthExpression()
+        
+        for expr in [subwayLineExpr, subwayCasingExpr, lrtLineExpr, lrtCasingExpr, trenchExpr] {
+            XCTAssertEqual(
+                expr.expressionType,
+                .function,
+                "Transit corridor width expressions must be dynamic interpolation functions, never static numbers (FC-17)"
+            )
+            XCTAssertEqual(
+                expr.function,
+                "mgl_interpolate:withCurveType:parameters:stops:",
+                "Width expression must interpolate along zoom curve (FC-17)"
+            )
+        }
+    }
+
+    // MARK: - 18. INV-BADGE-01: In-Line Route Badge Opacity Ramp (Wave V.4 Invariant)
+
+    func testINV_BADGE_01_RouteBadgeOpacityRampClampedBelowZoomThreshold() {
+        let expr = TransitModalClass.badgeOpacityExpression()
+        XCTAssertEqual(expr.expressionType, .function, "Badge opacity must be an interpolation function (INV-BADGE-01)")
+        XCTAssertEqual(expr.function, "mgl_interpolate:withCurveType:parameters:stops:")
+        
+        let stops = (expr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber]
+        XCTAssertNotNil(stops, "Stops dictionary must be present (INV-BADGE-01)")
+        
+        if let stops = stops {
+            XCTAssertEqual(stops[13.5]?.doubleValue ?? -1, 0.0, accuracy: 0.01, "Badge opacity clamped to 0.0 for z < 13.5 (INV-BADGE-01)")
+            XCTAssertEqual(stops[14.5]?.doubleValue ?? -1, 1.0, accuracy: 0.01, "Badge opacity reaches full 1.0 at z >= 14.5 (INV-BADGE-01)")
+        }
     }
 }
 

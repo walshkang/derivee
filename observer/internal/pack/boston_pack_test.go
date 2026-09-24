@@ -241,8 +241,8 @@ func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
 	if redProp, ok := routeFeatureMap["Red"]; !ok {
 		t.Errorf("Red Line missing from GeoJSON")
 	} else {
-		if redProp.ColorHex != "#DA291C" {
-			t.Errorf("Expected Red Line color #DA291C, got %s", redProp.ColorHex)
+		if redProp.TrunkColorHex != "#DA291C" {
+			t.Errorf("Expected Red Line color #DA291C, got %s", redProp.TrunkColorHex)
 		}
 		if redProp.ModalClass != gtfs.ModalClassSubway {
 			t.Errorf("Expected Red Line modal class 0 (Subway), got %d", redProp.ModalClass)
@@ -253,8 +253,8 @@ func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
 	if greenProp, ok := routeFeatureMap["Green-B"]; !ok {
 		t.Errorf("Green-B missing from GeoJSON")
 	} else {
-		if greenProp.ColorHex != "#00843D" {
-			t.Errorf("Expected Green Line color #00843D, got %s", greenProp.ColorHex)
+		if greenProp.TrunkColorHex != "#00843D" {
+			t.Errorf("Expected Green Line color #00843D, got %s", greenProp.TrunkColorHex)
 		}
 		if greenProp.ModalClass != gtfs.ModalClassLRT {
 			t.Errorf("Expected Green Line modal class 1 (LRT), got %d", greenProp.ModalClass)
@@ -265,8 +265,8 @@ func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
 	if ferryProp, ok := routeFeatureMap["Boat-F4"]; !ok {
 		t.Errorf("Charlestown Ferry missing from GeoJSON")
 	} else {
-		if ferryProp.ColorHex != "#00A3E0" {
-			t.Errorf("Expected Ferry color #00A3E0, got %s", ferryProp.ColorHex)
+		if ferryProp.TrunkColorHex != "#00A3E0" {
+			t.Errorf("Expected Ferry color #00A3E0, got %s", ferryProp.TrunkColorHex)
 		}
 		if ferryProp.ModalClass != gtfs.ModalClassFerry {
 			t.Errorf("Expected Ferry modal class 3 (Ferry), got %d", ferryProp.ModalClass)
@@ -277,8 +277,8 @@ func TestBostonMBTA_MultiModalPackCompilationAndVerification(t *testing.T) {
 	if slProp, ok := routeFeatureMap["SL1"]; !ok {
 		t.Errorf("Silver Line SL1 missing from GeoJSON")
 	} else {
-		if slProp.ColorHex != "#7C878E" {
-			t.Errorf("Expected Silver Line color #7C878E, got %s", slProp.ColorHex)
+		if slProp.TrunkColorHex != "#7C878E" {
+			t.Errorf("Expected Silver Line color #7C878E, got %s", slProp.TrunkColorHex)
 		}
 		if slProp.ModalClass != gtfs.ModalClassBus {
 			t.Errorf("Expected Silver Line modal class 2 (Bus), got %d", slProp.ModalClass)

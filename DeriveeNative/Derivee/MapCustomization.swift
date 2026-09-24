@@ -68,6 +68,12 @@ public enum MapCustomizationDefaults {
     public static let nearbyBusStopsSourceId = "nearby-bus-stops-source"
     public static let nearbyBusStopsLayerId = "nearby-bus-stops-layer"
     
+    // Wave V.3 & V.4 Unified Trench Casing, Multi-Ribbon & In-Line Badge Layers
+    public static let transitTrenchCasingLayerId = "transit-trench-casing"
+    public static let transitRibbonStrokeLayerId = "transit-ribbon-stroke"
+    public static let transitBadgesCenterSymbolLayerId = "transit-badges-center-symbol"
+    public static let transitBadgesRepeatedSymbolLayerId = "transit-badges-repeated-symbol"
+    
     // Metal Fog Engine (Wave O.3)
     public static let defaultEnableMetalFogEngine: Bool = false
     public static let metalFogLayerId = "metal-fog-layer"

@@ -92,9 +92,39 @@ public enum TransitCartographyLoader: Sendable {
         for shape in features {
             if let feature = shape as? MLNFeature {
                 var attrs = feature.attributes
-                let hex = (attrs["color_hex"] as? String) ?? (attrs["color"] as? String) ?? "#FFB300"
+                let hex = (attrs["trunk_color_hex"] as? String) 
+                    ?? (attrs["trunk_color"] as? String) 
+                    ?? (attrs["color_hex"] as? String) 
+                    ?? (attrs["color"] as? String) 
+                    ?? "#FFB300"
+                attrs["trunk_color_hex"] = hex
+                attrs["trunk_color"] = UIColor(hex: hex)
                 attrs["color_hex"] = hex
                 attrs["color"] = UIColor(hex: hex)
+                
+                // Unified Trench Casing widths (Wave V.3)
+                let cw11 = (attrs["casing_width_z11"] as? NSNumber)?.doubleValue ?? (attrs["casing_width_z11"] as? Double) ?? 2.5
+                let cw = (attrs["casing_width"] as? NSNumber)?.doubleValue ?? (attrs["casing_width"] as? Double) ?? 4.5
+                let cw17 = (attrs["casing_width_z17"] as? NSNumber)?.doubleValue ?? (attrs["casing_width_z17"] as? Double) ?? 8.1
+                attrs["casing_width_z11"] = cw11
+                attrs["casing_width"] = cw
+                attrs["casing_width_z17"] = cw17
+                
+                // Visual priority sort key & arc length (Wave V.3 & V.4)
+                let sortKey = (attrs["sort_key"] as? NSNumber)?.intValue ?? (attrs["sort_key"] as? Int) ?? 0
+                attrs["sort_key"] = sortKey
+                
+                let arcLen = (attrs["arc_length_m"] as? NSNumber)?.doubleValue ?? (attrs["arc_length_m"] as? Double) ?? 0.0
+                attrs["arc_length_m"] = arcLen
+                
+                let isExpress = (attrs["is_express"] as? Bool) ?? (attrs["is_express"] as? NSNumber)?.boolValue ?? false
+                attrs["is_express"] = isExpress
+                
+                let compKey = (attrs["composite_key"] as? String) 
+                    ?? (attrs["route_group"] as? String).map { "badge_\($0)" } 
+                    ?? (attrs["route_id"] as? String).map { "badge_\($0)" } 
+                    ?? "badge_\(hex.replacingOccurrences(of: "#", with: ""))"
+                attrs["composite_key"] = compKey
                 
                 // Extract or infer modal_class for MapLibre layer predicates
                 let modalClassRaw: Int

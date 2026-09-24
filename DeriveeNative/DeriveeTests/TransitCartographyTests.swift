@@ -519,4 +519,57 @@ final class TransitCartographyTests: XCTestCase {
         let genuineArea = FogPolygonMath.polygonAreaInSquareMeters(genuineHexRing)
         XCTAssertGreaterThan(genuineArea, 10.0, "Genuine hex ring area must be > 10m²")
     }
+    
+    // MARK: - Wave V.3 & V.4 Tests: Unified Trench Casing & In-Line Badges
+    
+    func testTrenchCasingWidthExpression() {
+        let expr = TransitModalClass.trenchCasingWidthExpression()
+        XCTAssertEqual(expr.expressionType, .function)
+        XCTAssertEqual(expr.function, "mgl_interpolate:withCurveType:parameters:stops:")
+        
+        let stopsDict = (expr.arguments?[3] as? NSExpression)?.constantValue as? NSDictionary
+        XCTAssertNotNil(stopsDict)
+        if let stops = stopsDict {
+            let expr11 = stops[11.0] as? NSExpression
+            let expr14 = stops[14.0] as? NSExpression
+            let expr17 = stops[17.0] as? NSExpression
+            
+            XCTAssertEqual(expr11?.keyPath, "casing_width_z11")
+            XCTAssertEqual(expr14?.keyPath, "casing_width")
+            XCTAssertEqual(expr17?.keyPath, "casing_width_z17")
+        }
+    }
+    
+    func testBadgeOpacityExpression() {
+        let expr = TransitModalClass.badgeOpacityExpression()
+        XCTAssertEqual(expr.expressionType, .function)
+        XCTAssertEqual(expr.function, "mgl_interpolate:withCurveType:parameters:stops:")
+        
+        let stops = (expr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber]
+        XCTAssertNotNil(stops)
+        if let stops = stops {
+            XCTAssertEqual(stops[13.5]?.doubleValue ?? -1, 0.0, accuracy: 0.01, "Badge opacity must be 0.0 below z=13.5 (INV-BADGE-01)")
+            XCTAssertEqual(stops[14.5]?.doubleValue ?? -1, 1.0, accuracy: 0.01, "Badge opacity must reach 1.0 at z=14.5 (INV-BADGE-01)")
+        }
+    }
+    
+    @MainActor
+    func testCorridorBadgeRendererTokensAndRasterization() {
+        // 1. Token parsing
+        let tokens3 = CorridorBadgeRenderer.parseTokens(from: "badge_4_5_6")
+        XCTAssertEqual(tokens3, ["4", "5", "6"])
+        
+        let tokens2 = CorridorBadgeRenderer.parseTokens(from: "badge_F_M")
+        XCTAssertEqual(tokens2, ["F", "M"])
+        
+        let tokens1 = CorridorBadgeRenderer.parseTokens(from: "badge_L")
+        XCTAssertEqual(tokens1, ["L"])
+        
+        // 2. Rendering
+        let image = CorridorBadgeRenderer.badgeImage(for: "badge_4_5_6", trunkColorHex: "#00933C")
+        XCTAssertNotNil(image)
+        XCTAssertEqual(image.size.height, 18.0)
+        XCTAssertGreaterThan(image.size.width, 40.0)
+        XCTAssertEqual(image.scale, 3.0, "Renderer must generate @3x Retina images")
+    }
 }

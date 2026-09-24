@@ -143,6 +143,35 @@ public enum TransitModalClass: Int, Sendable, CaseIterable, Codable, Comparable,
         }
     }
     
+    /// Generates unified trench casing width expression per Research Doc 22 §4.2 and Wave V.3.
+    /// Regional (z=11): casing_width_z11 -> Neighborhood (z=14): casing_width -> Street (z=17): casing_width_z17.
+    public static func trenchCasingWidthExpression() -> NSExpression {
+        return NSExpression(
+            forMLNInterpolating: .zoomLevelVariable,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: [
+                11.0: NSExpression(forKeyPath: "casing_width_z11"),
+                14.0: NSExpression(forKeyPath: "casing_width"),
+                17.0: NSExpression(forKeyPath: "casing_width_z17")
+            ])
+        )
+    }
+    
+    /// Generates route badge opacity expression per Research Doc 22 §5.5 and Wave V.4.
+    /// Clamped to 0.0 for z < 13.5; smooth linear transition to full opacity 1.0 at z >= 14.5.
+    public static func badgeOpacityExpression() -> NSExpression {
+        return NSExpression(
+            forMLNInterpolating: .zoomLevelVariable,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: [
+                13.5: 0.0,
+                14.5: 1.0
+            ])
+        )
+    }
+    
     /// MapLibre dash pattern for the primary stroke line, or nil for solid lines.
     public var cartographyLineDashPattern: [Double]? {
         switch self {

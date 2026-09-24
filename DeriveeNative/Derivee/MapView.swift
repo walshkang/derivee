@@ -181,6 +181,10 @@ struct MapView: UIViewRepresentable {
         let lrtLinesCasingLayerId = MapCustomizationDefaults.lrtLinesCasingLayerId
         let lrtLinesLayerId = MapCustomizationDefaults.lrtLinesLayerId
         let ferryLinesLayerId = MapCustomizationDefaults.ferryLinesLayerId
+        let transitTrenchCasingLayerId = MapCustomizationDefaults.transitTrenchCasingLayerId
+        let transitRibbonStrokeLayerId = MapCustomizationDefaults.transitRibbonStrokeLayerId
+        let transitBadgesCenterSymbolLayerId = MapCustomizationDefaults.transitBadgesCenterSymbolLayerId
+        let transitBadgesRepeatedSymbolLayerId = MapCustomizationDefaults.transitBadgesRepeatedSymbolLayerId
         let subwayStationBulletsSourceId = MapCustomizationDefaults.subwayStationBulletsSourceId
         let subwayStationBulletsLayerId = MapCustomizationDefaults.subwayStationBulletsLayerId
         let smartZoomStationBulletsLayerId = MapCustomizationDefaults.smartZoomStationBulletsLayerId
@@ -568,8 +572,12 @@ struct MapView: UIViewRepresentable {
         
         func setupLayers(in style: MLNStyle) {
             // 0. Multi-Modal Transit Thoroughfare Network (Sub-context Layers beneath the Fog of War)
-            let subwaySource = MLNShapeSource(identifier: subwayLinesSourceId, shape: TransitCartographyLoader.loadTransitLinesShapeSync(), options: nil)
+            let transitShapeCollection = TransitCartographyLoader.loadTransitLinesShapeSync()
+            let subwaySource = MLNShapeSource(identifier: subwayLinesSourceId, shape: transitShapeCollection, options: nil)
             style.addSource(subwaySource)
+            
+            // Register dynamic in-memory CoreGraphics @3x badge images for corridor midpoints
+            CorridorBadgeRenderer.registerBadges(for: transitShapeCollection, in: style)
             
             let casingColor = UIColor(hex: "#FFFFFF")
             
@@ -584,46 +592,53 @@ struct MapView: UIViewRepresentable {
             ferryLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.addLayer(ferryLinesLayer)
             
-            // 0b. Tier 2 — Light Rail (LRT) Casing (continuous zoom interpolation, dashed casing)
-            let lrtCasingLayer = MLNLineStyleLayer(identifier: lrtLinesCasingLayerId, source: subwaySource)
-            lrtCasingLayer.predicate = NSPredicate(format: "modal_class == 1")
-            lrtCasingLayer.lineColor = Self.subwayCasingColorExpression()
-            lrtCasingLayer.lineWidth = TransitModalClass.lightRail.cartographyCasingWidthExpression()
-            lrtCasingLayer.lineDashPattern = NSExpression(forConstantValue: [3.0, 2.0])
-            lrtCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
-            lrtCasingLayer.lineCap = NSExpression(forConstantValue: "round")
-            lrtCasingLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.insertLayer(lrtCasingLayer, above: ferryLinesLayer)
+            // 0b. Wave V.3: Unified Trench Casing (round joins/caps, dynamic per-feature width)
+            let trenchCasingLayer = MLNLineStyleLayer(identifier: transitTrenchCasingLayerId, source: subwaySource)
+            trenchCasingLayer.predicate = NSPredicate(format: "modal_class == 0 OR modal_class == 1")
+            trenchCasingLayer.lineColor = Self.subwayCasingColorExpression()
+            trenchCasingLayer.lineWidth = TransitModalClass.trenchCasingWidthExpression()
+            trenchCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
+            trenchCasingLayer.lineCap = NSExpression(forConstantValue: "round")
+            trenchCasingLayer.lineJoin = NSExpression(forConstantValue: "round")
+            style.insertLayer(trenchCasingLayer, above: ferryLinesLayer)
             
-            // 0c. Tier 2 — Light Rail (LRT) Line (continuous zoom interpolation, solid 1.0 opacity)
-            let lrtLinesLayer = MLNLineStyleLayer(identifier: lrtLinesLayerId, source: subwaySource)
-            lrtLinesLayer.predicate = NSPredicate(format: "modal_class == 1")
-            lrtLinesLayer.lineColor = Self.subwayLineColorExpression()
-            lrtLinesLayer.lineWidth = TransitModalClass.lightRail.cartographyLineWidthExpression()
-            lrtLinesLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
-            lrtLinesLayer.lineCap = NSExpression(forConstantValue: "round")
-            lrtLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.insertLayer(lrtLinesLayer, above: lrtCasingLayer)
+            // 0c. Wave V.3: Multi-Ribbon Colored Strokes (bevel joins, butt caps, sort_key ordering)
+            let ribbonStrokeLayer = MLNLineStyleLayer(identifier: transitRibbonStrokeLayerId, source: subwaySource)
+            ribbonStrokeLayer.predicate = NSPredicate(format: "modal_class == 0 OR modal_class == 1")
+            ribbonStrokeLayer.lineColor = Self.subwayLineColorExpression()
+            ribbonStrokeLayer.lineWidth = TransitModalClass.subway.cartographyLineWidthExpression()
+            ribbonStrokeLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
+            ribbonStrokeLayer.lineCap = NSExpression(forConstantValue: "butt")
+            ribbonStrokeLayer.lineJoin = NSExpression(forConstantValue: "bevel")
+            ribbonStrokeLayer.lineSortKey = NSExpression(forKeyPath: "sort_key")
+            style.insertLayer(ribbonStrokeLayer, above: trenchCasingLayer)
             
-            // 0d. Tier 1 — Heavy Rail Subway & PATH Casing (continuous zoom interpolation, solid 1.0 opacity)
-            let subwayCasingLayer = MLNLineStyleLayer(identifier: subwayLinesCasingLayerId, source: subwaySource)
-            subwayCasingLayer.predicate = NSPredicate(format: "modal_class == 0")
-            subwayCasingLayer.lineColor = Self.subwayCasingColorExpression()
-            subwayCasingLayer.lineWidth = TransitModalClass.subway.cartographyCasingWidthExpression()
-            subwayCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
-            subwayCasingLayer.lineCap = NSExpression(forConstantValue: "round")
-            subwayCasingLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.insertLayer(subwayCasingLayer, above: lrtLinesLayer)
+            // 0d. Wave V.4: In-Line Badges — Line-Center for short/standard arcs (<800m)
+            let centerBadgeLayer = MLNSymbolStyleLayer(identifier: transitBadgesCenterSymbolLayerId, source: subwaySource)
+            centerBadgeLayer.predicate = NSPredicate(format: "(modal_class == 0 OR modal_class == 1) AND arc_length_m < 800")
+            centerBadgeLayer.symbolPlacement = NSExpression(forConstantValue: "line-center")
+            centerBadgeLayer.iconImageName = NSExpression(forKeyPath: "composite_key")
+            centerBadgeLayer.iconRotationAlignment = NSExpression(forConstantValue: "viewport")
+            centerBadgeLayer.iconAllowsOverlap = NSExpression(forConstantValue: false)
+            centerBadgeLayer.iconIgnoresPlacement = NSExpression(forConstantValue: false)
+            centerBadgeLayer.iconPadding = NSExpression(forConstantValue: 4.0)
+            centerBadgeLayer.iconOpacity = parent.showSubwayThoroughfares ? TransitModalClass.badgeOpacityExpression() : NSExpression(forConstantValue: 0.0)
+            centerBadgeLayer.symbolSortKey = NSExpression(forKeyPath: "sort_key")
+            style.insertLayer(centerBadgeLayer, above: ribbonStrokeLayer)
             
-            // 0e. Tier 1 — Heavy Rail Subway & PATH Line (continuous zoom interpolation, solid 1.0 opacity)
-            let subwayLinesLayer = MLNLineStyleLayer(identifier: subwayLinesLayerId, source: subwaySource)
-            subwayLinesLayer.predicate = NSPredicate(format: "modal_class == 0")
-            subwayLinesLayer.lineColor = Self.subwayLineColorExpression()
-            subwayLinesLayer.lineWidth = TransitModalClass.subway.cartographyLineWidthExpression()
-            subwayLinesLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
-            subwayLinesLayer.lineCap = NSExpression(forConstantValue: "round")
-            subwayLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.insertLayer(subwayLinesLayer, above: subwayCasingLayer)
+            // 0e. Wave V.4: In-Line Badges — Repeated along long express arcs (>=800m, 250pt spacing)
+            let repeatedBadgeLayer = MLNSymbolStyleLayer(identifier: transitBadgesRepeatedSymbolLayerId, source: subwaySource)
+            repeatedBadgeLayer.predicate = NSPredicate(format: "(modal_class == 0 OR modal_class == 1) AND arc_length_m >= 800")
+            repeatedBadgeLayer.symbolPlacement = NSExpression(forConstantValue: "line")
+            repeatedBadgeLayer.symbolSpacing = NSExpression(forConstantValue: 250.0)
+            repeatedBadgeLayer.iconImageName = NSExpression(forKeyPath: "composite_key")
+            repeatedBadgeLayer.iconRotationAlignment = NSExpression(forConstantValue: "viewport")
+            repeatedBadgeLayer.iconAllowsOverlap = NSExpression(forConstantValue: false)
+            repeatedBadgeLayer.iconIgnoresPlacement = NSExpression(forConstantValue: false)
+            repeatedBadgeLayer.iconPadding = NSExpression(forConstantValue: 4.0)
+            repeatedBadgeLayer.iconOpacity = parent.showSubwayThoroughfares ? TransitModalClass.badgeOpacityExpression() : NSExpression(forConstantValue: 0.0)
+            repeatedBadgeLayer.symbolSortKey = NSExpression(forKeyPath: "sort_key")
+            style.insertLayer(repeatedBadgeLayer, above: centerBadgeLayer)
             
             // Wave Q.3 / Q.4: Sub-Fog Station Footprints (Layer 3a) & Platforms (Layer 3b)
             stationVisualizationManager.configureSubFogLayers(in: style, citySlug: parent.spatialStore.activeCitySlug)
@@ -645,7 +660,7 @@ struct MapView: UIViewRepresentable {
             fogLayer.fillColor = NSExpression(forConstantValue: UIColor(hex: colorHex))
             fogLayer.fillOpacity = NSExpression(forConstantValue: parent.fogOpacity)
             
-            let subFogAnchor = style.layer(withIdentifier: StationTransitVisualizationManager.Config.platformLayerId) ?? subwayLinesLayer
+            let subFogAnchor = style.layer(withIdentifier: StationTransitVisualizationManager.Config.platformLayerId) ?? repeatedBadgeLayer
             style.insertLayer(fogLayer, above: subFogAnchor)
             
             // Wave O.3: Hardware-accelerated Metal Custom Style Layer
@@ -826,7 +841,7 @@ struct MapView: UIViewRepresentable {
         }
         
         nonisolated static func subwayLineColorExpression() -> NSExpression {
-            return NSExpression(forKeyPath: "color")
+            return NSExpression(forKeyPath: "trunk_color")
         }
         
         nonisolated static func subwayCasingColorExpression() -> NSExpression {
@@ -835,8 +850,11 @@ struct MapView: UIViewRepresentable {
         
         func updateTransitLines(for citySlug: String? = nil, in style: MLNStyle) {
             guard isMapStyleLoaded, let source = style.source(withIdentifier: subwayLinesSourceId) as? MLNShapeSource else { return }
-            Task { @MainActor [weak source] in
+            Task { @MainActor [weak source, weak style] in
                 let shape = await TransitCartographyLoader.loadTransitLinesShape(for: citySlug)
+                if let style = style {
+                    CorridorBadgeRenderer.registerBadges(for: shape, in: style)
+                }
                 source?.shape = shape
             }
             stationVisualizationManager.updateStationShapes(for: citySlug, in: style)
@@ -845,6 +863,32 @@ struct MapView: UIViewRepresentable {
         func updateSubwayThoroughfares(show: Bool, theme: BasemapTheme, in style: MLNStyle) {
             guard isMapStyleLoaded else { return }
             
+            // Wave V.3 Unified Trench Casing & Multi-Ribbon Layers
+            if let trenchCasing = style.layer(withIdentifier: transitTrenchCasingLayerId) as? MLNLineStyleLayer {
+                trenchCasing.lineColor = Self.subwayCasingColorExpression()
+                trenchCasing.lineWidth = TransitModalClass.trenchCasingWidthExpression()
+                trenchCasing.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
+            }
+            if let ribbonStroke = style.layer(withIdentifier: transitRibbonStrokeLayerId) as? MLNLineStyleLayer {
+                ribbonStroke.lineColor = Self.subwayLineColorExpression()
+                ribbonStroke.lineWidth = TransitModalClass.subway.cartographyLineWidthExpression()
+                ribbonStroke.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
+            }
+            
+            // Wave V.4 In-Line Badge Symbol Layers
+            if let centerBadges = style.layer(withIdentifier: transitBadgesCenterSymbolLayerId) as? MLNSymbolStyleLayer {
+                centerBadges.iconOpacity = show ? TransitModalClass.badgeOpacityExpression() : NSExpression(forConstantValue: 0.0)
+            }
+            if let repeatedBadges = style.layer(withIdentifier: transitBadgesRepeatedSymbolLayerId) as? MLNSymbolStyleLayer {
+                repeatedBadges.iconOpacity = show ? TransitModalClass.badgeOpacityExpression() : NSExpression(forConstantValue: 0.0)
+            }
+            
+            if let ferryLines = style.layer(withIdentifier: ferryLinesLayerId) as? MLNLineStyleLayer {
+                ferryLines.lineWidth = TransitModalClass.ferry.cartographyLineWidthExpression()
+                ferryLines.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
+            }
+            
+            // Fallback for legacy layers if present
             if let subwayCasing = style.layer(withIdentifier: subwayLinesCasingLayerId) as? MLNLineStyleLayer {
                 subwayCasing.lineColor = Self.subwayCasingColorExpression()
                 subwayCasing.lineWidth = TransitModalClass.subway.cartographyCasingWidthExpression()
@@ -862,10 +906,6 @@ struct MapView: UIViewRepresentable {
             if let lrtLines = style.layer(withIdentifier: lrtLinesLayerId) as? MLNLineStyleLayer {
                 lrtLines.lineWidth = TransitModalClass.lightRail.cartographyLineWidthExpression()
                 lrtLines.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
-            }
-            if let ferryLines = style.layer(withIdentifier: ferryLinesLayerId) as? MLNLineStyleLayer {
-                ferryLines.lineWidth = TransitModalClass.ferry.cartographyLineWidthExpression()
-                ferryLines.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
             }
         }
         

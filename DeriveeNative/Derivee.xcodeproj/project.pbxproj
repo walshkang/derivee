@@ -60,6 +60,7 @@
 		285AE2B6BFBEF35069FADD75 /* MapInspectionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3942798502DFE4C2EEE1834B /* MapInspectionModels.swift */; };
 		29E5E0CBBF1E51290C8C65AE /* AmbientMapDismissalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E8E5E2ED18AD504DAEA014D /* AmbientMapDismissalTests.swift */; };
 		2A54DD13314998821A60A059 /* ToggleAmbientTrackingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DCE26F505D28DC4818435C5 /* ToggleAmbientTrackingIntent.swift */; };
+		2AFA2EA9AD52191CCE18DB5F /* CorridorBadgeRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C20C2AB476384C906EC8055 /* CorridorBadgeRenderer.swift */; };
 		2E049BFE796812D652DE54AA /* DynamicRecoverySnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D847653C6AC247A7201423A /* DynamicRecoverySnapshotTests.swift */; };
 		2E18D1D1251BD85CF1D1C6F4 /* GetAmbientTrackingStatusIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E6D6F2F7535366E3DC35A3 /* GetAmbientTrackingStatusIntent.swift */; };
 		2F00088B70FBEE9C97CC246D /* testDynamicRecoveryCardViewSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = 25451BB9D752CF3F313D42EB /* testDynamicRecoveryCardViewSnapshot.1.png */; };
@@ -511,6 +512,7 @@
 		3AD8D028194D6CC8BBC702E7 /* CityPackModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPackModels.swift; sourceTree = "<group>"; };
 		3B214904FA41349F5C65F7A9 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
 		3BF9C60FCE26FEC11317A280 /* StationComplexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationComplexTests.swift; sourceTree = "<group>"; };
+		3C20C2AB476384C906EC8055 /* CorridorBadgeRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorridorBadgeRenderer.swift; sourceTree = "<group>"; };
 		3D018BBDA1F928EA07A82D14 /* BasemapTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BasemapTheme.swift; sourceTree = "<group>"; };
 		3EDA374CB9DDF6AF944ECDE0 /* CityAutoSwitchToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityAutoSwitchToast.swift; sourceTree = "<group>"; };
 		3F0CB6CA4122C28DEC7B25F6 /* testApertureMilestoneFrameSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testApertureMilestoneFrameSnapshot.1.png; sourceTree = "<group>"; };
@@ -950,6 +952,7 @@
 				A90DBE053EFE9737A7AA172F /* ConfidenceBandCanvas.swift */,
 				39D8B9513EA2FA1FBEFFE7B8 /* ConfidenceBandModels.swift */,
 				AF81045CC27721884C49C776 /* ContentView.swift */,
+				3C20C2AB476384C906EC8055 /* CorridorBadgeRenderer.swift */,
 				F0B1A9FFC125B01C0DFB401D /* CorridorPulseMapController.swift */,
 				506645539A60ED5C91F84D82 /* CrystallineAperture.swift */,
 				A88075B4AA0B331B19CDA448 /* CyclingHUDView.swift */,
@@ -1631,6 +1634,7 @@
 				B705CC82881CAE0847A4F75A /* ConfidenceBandCanvas.swift in Sources */,
 				4469647DE20E733E3576B1DD /* ConfidenceBandModels.swift in Sources */,
 				F5E76E643AE8FE5415701241 /* ContentView.swift in Sources */,
+				2AFA2EA9AD52191CCE18DB5F /* CorridorBadgeRenderer.swift in Sources */,
 				9CA400294FAD787971AE4DB7 /* CorridorPulseMapController.swift in Sources */,
 				89B639707B14C4708FFCF35F /* CrystallineAperture.swift in Sources */,
 				4315E9B0C0151A75FF78085F /* CyclingHUDView.swift in Sources */,

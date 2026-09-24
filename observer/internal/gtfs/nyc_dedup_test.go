@@ -44,9 +44,21 @@ func TestNYCTrunkDeduplicationAndCanonicalCorridors(t *testing.T) {
 		}
 		corridorCounts[props.BundleSize]++
 
-		// INV-CORR-01: Color consistency
-		if props.Color != props.TrunkColor {
-			t.Errorf("INV-CORR-01: color %s != trunk_color %s", props.Color, props.TrunkColor)
+		// INV-CORR-01: Trunk color presence
+		if props.TrunkColor == "" {
+			t.Errorf("INV-CORR-01: trunk_color missing in feature %s", props.CorridorID)
+		}
+
+		// Wave V.3+V.4 attributes check
+		if props.CasingWidth <= 0 || props.CasingWidthZ11 <= 0 || props.CasingWidthZ17 <= 0 {
+			t.Errorf("Invalid casing widths in feature %s: z11=%f, z14=%f, z17=%f",
+				props.CorridorID, props.CasingWidthZ11, props.CasingWidth, props.CasingWidthZ17)
+		}
+		if props.SortKey <= 0 {
+			t.Errorf("Invalid sort key in feature %s: %d", props.CorridorID, props.SortKey)
+		}
+		if props.ArcLengthM <= 0 {
+			t.Errorf("Invalid arc length in feature %s: %f", props.CorridorID, props.ArcLengthM)
 		}
 
 		// INV-CORR-02: Multiplicity bound

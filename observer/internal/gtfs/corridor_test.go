@@ -235,20 +235,23 @@ func TestBackwardCompatibility_GeoJSONProperties(t *testing.T) {
 	feat := fc.Features[0]
 	props := feat.Properties
 
-	// 1. Backward-compatible color keys
-	if props.Color != "#00933C" || props.ColorHex != "#00933C" {
-		t.Errorf("Color dual-key failure: color=%s, color_hex=%s", props.Color, props.ColorHex)
+	// 1. Casing and Trunk Color keys
+	if props.TrunkColor != "#00933C" || props.TrunkColorHex != "#00933C" {
+		t.Errorf("TrunkColor failure: trunk_color=%s, trunk_color_hex=%s", props.TrunkColor, props.TrunkColorHex)
 	}
 	if props.CasingColor != "#FFFFFF" || props.CasingColorHex != "#FFFFFF" {
 		t.Errorf("Casing dual-key failure: casing=%s, casing_hex=%s", props.CasingColor, props.CasingColorHex)
 	}
 
-	// 2. Wave V additive corridor keys
-	if props.TrunkColor != "#00933C" {
-		t.Errorf("TrunkColor missing or incorrect: %s", props.TrunkColor)
+	// 2. Wave V.3+V.4 casing widths, sorting, and arc length
+	if props.CasingWidth != 4.5 || props.CasingWidthZ11 != 2.5 || props.CasingWidthZ17 != 8.1 {
+		t.Errorf("Casing widths failure: z11=%f, z14=%f, z17=%f", props.CasingWidthZ11, props.CasingWidth, props.CasingWidthZ17)
 	}
-	if props.Color != props.TrunkColor {
-		t.Errorf("color (%s) must match trunk_color (%s)", props.Color, props.TrunkColor)
+	if props.SortKey <= 0 {
+		t.Errorf("Invalid sort_key: %d", props.SortKey)
+	}
+	if props.ArcLengthM <= 0 {
+		t.Errorf("Invalid arc_length_m: %f", props.ArcLengthM)
 	}
 	if props.BundleSize != 1 {
 		t.Errorf("Expected bundle_size 1, got %d", props.BundleSize)

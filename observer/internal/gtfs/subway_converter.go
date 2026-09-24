@@ -16,6 +16,8 @@ type LegacySubwayGeoJSON struct {
 			RouteName      string   `json:"route_name"`
 			ColorHex       string   `json:"color_hex"`
 			Color          string   `json:"color"`
+			TrunkColorHex  string   `json:"trunk_color_hex"`
+			TrunkColor     string   `json:"trunk_color"`
 			CasingColorHex string   `json:"casing_color_hex"`
 			Routes         []string `json:"routes"`
 		} `json:"properties"`
@@ -106,7 +108,13 @@ func ConvertLegacySubwayToDataset(geoJSONBytes []byte) (*Dataset, error) {
 			shortName = rg
 		}
 
-		color := feat.Properties.ColorHex
+		color := feat.Properties.TrunkColorHex
+		if color == "" {
+			color = feat.Properties.TrunkColor
+		}
+		if color == "" {
+			color = feat.Properties.ColorHex
+		}
 		if color == "" {
 			color = feat.Properties.Color
 		}

@@ -3,7 +3,9 @@ package gtfs
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -22,12 +24,9 @@ type GeoJSONFeature struct {
 
 // GeoJSONRouteProperties defines the styling, corridor, and modal properties expected by MapLibre & Swift
 type GeoJSONRouteProperties struct {
-	// Backward-Compatible Keys (used by current Swift NSExpression)
 	RouteID        string   `json:"route_id"`
 	RouteShortName string   `json:"route_short_name"`
 	RouteName      string   `json:"route_name"`
-	ColorHex       string   `json:"color_hex"`
-	Color          string   `json:"color"`
 	CasingColorHex string   `json:"casing_color_hex"`
 	CasingColor    string   `json:"casing_color"`
 	RouteType      int      `json:"route_type"`
@@ -35,11 +34,20 @@ type GeoJSONRouteProperties struct {
 
 	// Additive Wave V Parallel Corridor & Dedup Keys
 	TrunkColor     string   `json:"trunk_color"`
+	TrunkColorHex  string   `json:"trunk_color_hex"`
 	CorridorID     string   `json:"corridor_id"`
 	BundleSize     int      `json:"bundle_size"`
 	BundleIndex    int      `json:"bundle_index"`
 	CompositeKey   string   `json:"composite_key"`
 	Routes         []string `json:"routes"`
+
+	// Wave V.3+V.4 Casing & Sorting & Badging Keys
+	CasingWidthZ11 float64  `json:"casing_width_z11"`
+	CasingWidth    float64  `json:"casing_width"`
+	CasingWidthZ17 float64  `json:"casing_width_z17"`
+	SortKey        int      `json:"sort_key"`
+	ArcLengthM     float64  `json:"arc_length_m"`
+	IsExpress      bool     `json:"is_express"`
 }
 
 // GeoJSONGeometry represents LineString or MultiLineString geometry
@@ -168,6 +176,8 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 		}
 
 		corridorID := fmt.Sprintf("corridor_arc_%d", arcID)
+		arcLength := CalculateArcLengthM(pts)
+		isExpress := arcLength >= 800.0
 
 		for _, b := range bundles {
 			lead := b.LeadRoute
@@ -178,26 +188,32 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 			routeShortName := strings.Join(b.RouteNames, ", ")
 
 			casingColor := "#FFFFFF"
+			casingWidthZ11, casingWidthZ14, casingWidthZ17 := CalculateCasingWidths(b.BundleSize)
+			sortKey := ModalPriority(b.ModalClass)*1000 + CalculateHexHue(b.TrunkColor)
 
 			props := GeoJSONRouteProperties{
-				// Backward-Compatible Keys (used by current Swift NSExpression)
 				RouteID:        lead.RouteID,
 				RouteShortName: routeShortName,
 				RouteName:      routeName,
-				ColorHex:       b.TrunkColor,
-				Color:          b.TrunkColor,
 				CasingColorHex: casingColor,
 				CasingColor:    casingColor,
 				RouteType:      lead.RouteType,
 				ModalClass:     b.ModalClass,
 
-				// Additive Wave V Parallel Corridor & Dedup Keys
 				TrunkColor:     b.TrunkColor,
+				TrunkColorHex:  b.TrunkColor,
 				CorridorID:     corridorID,
 				BundleSize:     b.BundleSize,
 				BundleIndex:    b.BundleIndex,
 				CompositeKey:   b.CompositeKey,
 				Routes:         b.RouteNames,
+
+				CasingWidthZ11: casingWidthZ11,
+				CasingWidth:    casingWidthZ14,
+				CasingWidthZ17: casingWidthZ17,
+				SortKey:        sortKey,
+				ArcLengthM:     arcLength,
+				IsExpress:      isExpress,
 			}
 
 			features = append(features, GeoJSONFeature{
@@ -328,5 +344,86 @@ func ResolveRouteColor(route Route) string {
 	default:
 		return "#FFB300" // Electric Amber
 	}
+}
+
+// CalculateArcLengthM calculates geodesic polyline distance in meters along points
+func CalculateArcLengthM(pts []Point2D) float64 {
+	if len(pts) < 2 {
+		return 0.0
+	}
+	var total float64
+	for i := 0; i < len(pts)-1; i++ {
+		total += CalculateHaversineDistance(pts[i].Lat, pts[i].Lon, pts[i+1].Lat, pts[i+1].Lon)
+	}
+	return total
+}
+
+// CalculateCasingWidths returns zoom-indexed casing widths (z11, z14, z17) for bundle size K
+func CalculateCasingWidths(bundleSize int) (float64, float64, float64) {
+	switch bundleSize {
+	case 1:
+		return 2.5, 4.5, 8.1
+	case 2:
+		return 4.0, 7.5, 13.6
+	case 3:
+		return 5.5, 10.5, 19.1
+	default:
+		return 2.5, 4.5, 8.1
+	}
+}
+
+// ModalPriority maps GTFS modal class to deterministic sorting priority
+func ModalPriority(modalClass int) int {
+	switch modalClass {
+	case ModalClassSubway:
+		return 10
+	case ModalClassLRT:
+		return 8
+	case ModalClassFerry:
+		return 5
+	case ModalClassBus:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// CalculateHexHue computes the HSV hue angle (0-359) from a hex color string
+func CalculateHexHue(hex string) int {
+	hex = strings.TrimPrefix(strings.TrimSpace(hex), "#")
+	if len(hex) != 6 {
+		return 0
+	}
+	rVal, err1 := strconv.ParseUint(hex[0:2], 16, 8)
+	gVal, err2 := strconv.ParseUint(hex[2:4], 16, 8)
+	bVal, err3 := strconv.ParseUint(hex[4:6], 16, 8)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return 0
+	}
+	r := float64(rVal) / 255.0
+	g := float64(gVal) / 255.0
+	b := float64(bVal) / 255.0
+
+	maxVal := math.Max(r, math.Max(g, b))
+	minVal := math.Min(r, math.Min(g, b))
+	delta := maxVal - minVal
+
+	if delta == 0 {
+		return 0
+	}
+
+	var hue float64
+	if maxVal == r {
+		hue = (g - b) / delta
+		if hue < 0 {
+			hue += 6.0
+		}
+	} else if maxVal == g {
+		hue = 2.0 + (b - r) / delta
+	} else {
+		hue = 4.0 + (r - g) / delta
+	}
+	hue *= 60.0
+	return int(math.Round(hue)) % 360
 }
 
