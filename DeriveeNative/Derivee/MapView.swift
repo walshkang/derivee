@@ -577,49 +577,49 @@ struct MapView: UIViewRepresentable {
             let ferryLinesLayer = MLNLineStyleLayer(identifier: ferryLinesLayerId, source: subwaySource)
             ferryLinesLayer.predicate = NSPredicate(format: "modal_class == 3")
             ferryLinesLayer.lineColor = Self.subwayLineColorExpression()
-            ferryLinesLayer.lineWidth = NSExpression(forConstantValue: 2.5)
+            ferryLinesLayer.lineWidth = TransitModalClass.ferry.cartographyLineWidthExpression()
             ferryLinesLayer.lineDashPattern = NSExpression(forConstantValue: [4.0, 3.0])
-            ferryLinesLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 0.90 : 0.0)
+            ferryLinesLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
             ferryLinesLayer.lineCap = NSExpression(forConstantValue: "round")
             ferryLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.addLayer(ferryLinesLayer)
             
-            // 0b. Tier 2 — Light Rail (LRT) Casing (7.0pt dashed casing to distinguish surface rail)
+            // 0b. Tier 2 — Light Rail (LRT) Casing (continuous zoom interpolation, dashed casing)
             let lrtCasingLayer = MLNLineStyleLayer(identifier: lrtLinesCasingLayerId, source: subwaySource)
             lrtCasingLayer.predicate = NSPredicate(format: "modal_class == 1")
             lrtCasingLayer.lineColor = Self.subwayCasingColorExpression()
-            lrtCasingLayer.lineWidth = NSExpression(forConstantValue: TransitModalClass.lightRail.cartographyCasingWidth)
+            lrtCasingLayer.lineWidth = TransitModalClass.lightRail.cartographyCasingWidthExpression()
             lrtCasingLayer.lineDashPattern = NSExpression(forConstantValue: [3.0, 2.0])
-            lrtCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 0.95 : 0.0)
+            lrtCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
             lrtCasingLayer.lineCap = NSExpression(forConstantValue: "round")
             lrtCasingLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.insertLayer(lrtCasingLayer, above: ferryLinesLayer)
             
-            // 0c. Tier 2 — Light Rail (LRT) Line (4.0pt solid line)
+            // 0c. Tier 2 — Light Rail (LRT) Line (continuous zoom interpolation, solid 1.0 opacity)
             let lrtLinesLayer = MLNLineStyleLayer(identifier: lrtLinesLayerId, source: subwaySource)
             lrtLinesLayer.predicate = NSPredicate(format: "modal_class == 1")
             lrtLinesLayer.lineColor = Self.subwayLineColorExpression()
-            lrtLinesLayer.lineWidth = NSExpression(forConstantValue: TransitModalClass.lightRail.cartographyLineWidth)
+            lrtLinesLayer.lineWidth = TransitModalClass.lightRail.cartographyLineWidthExpression()
             lrtLinesLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
             lrtLinesLayer.lineCap = NSExpression(forConstantValue: "round")
             lrtLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.insertLayer(lrtLinesLayer, above: lrtCasingLayer)
             
-            // 0d. Tier 1 — Heavy Rail Subway & PATH Casing (7.0pt solid casing with adaptive contrast)
+            // 0d. Tier 1 — Heavy Rail Subway & PATH Casing (continuous zoom interpolation, solid 1.0 opacity)
             let subwayCasingLayer = MLNLineStyleLayer(identifier: subwayLinesCasingLayerId, source: subwaySource)
             subwayCasingLayer.predicate = NSPredicate(format: "modal_class == 0")
             subwayCasingLayer.lineColor = Self.subwayCasingColorExpression()
-            subwayCasingLayer.lineWidth = NSExpression(forConstantValue: TransitModalClass.subway.cartographyCasingWidth)
-            subwayCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 0.95 : 0.0)
+            subwayCasingLayer.lineWidth = TransitModalClass.subway.cartographyCasingWidthExpression()
+            subwayCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
             subwayCasingLayer.lineCap = NSExpression(forConstantValue: "round")
             subwayCasingLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.insertLayer(subwayCasingLayer, above: lrtLinesLayer)
             
-            // 0e. Tier 1 — Heavy Rail Subway & PATH Line (4.0pt solid line)
+            // 0e. Tier 1 — Heavy Rail Subway & PATH Line (continuous zoom interpolation, solid 1.0 opacity)
             let subwayLinesLayer = MLNLineStyleLayer(identifier: subwayLinesLayerId, source: subwaySource)
             subwayLinesLayer.predicate = NSPredicate(format: "modal_class == 0")
             subwayLinesLayer.lineColor = Self.subwayLineColorExpression()
-            subwayLinesLayer.lineWidth = NSExpression(forConstantValue: TransitModalClass.subway.cartographyLineWidth)
+            subwayLinesLayer.lineWidth = TransitModalClass.subway.cartographyLineWidthExpression()
             subwayLinesLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
             subwayLinesLayer.lineCap = NSExpression(forConstantValue: "round")
             subwayLinesLayer.lineJoin = NSExpression(forConstantValue: "round")
@@ -847,24 +847,25 @@ struct MapView: UIViewRepresentable {
             
             if let subwayCasing = style.layer(withIdentifier: subwayLinesCasingLayerId) as? MLNLineStyleLayer {
                 subwayCasing.lineColor = Self.subwayCasingColorExpression()
-                subwayCasing.lineWidth = NSExpression(forConstantValue: TransitModalClass.subway.cartographyCasingWidth)
-                subwayCasing.lineOpacity = NSExpression(forConstantValue: show ? 0.95 : 0.0)
+                subwayCasing.lineWidth = TransitModalClass.subway.cartographyCasingWidthExpression()
+                subwayCasing.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
             }
             if let subwayLines = style.layer(withIdentifier: subwayLinesLayerId) as? MLNLineStyleLayer {
-                subwayLines.lineWidth = NSExpression(forConstantValue: TransitModalClass.subway.cartographyLineWidth)
+                subwayLines.lineWidth = TransitModalClass.subway.cartographyLineWidthExpression()
                 subwayLines.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
             }
             if let lrtCasing = style.layer(withIdentifier: lrtLinesCasingLayerId) as? MLNLineStyleLayer {
                 lrtCasing.lineColor = Self.subwayCasingColorExpression()
-                lrtCasing.lineWidth = NSExpression(forConstantValue: TransitModalClass.lightRail.cartographyCasingWidth)
-                lrtCasing.lineOpacity = NSExpression(forConstantValue: show ? 0.95 : 0.0)
+                lrtCasing.lineWidth = TransitModalClass.lightRail.cartographyCasingWidthExpression()
+                lrtCasing.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
             }
             if let lrtLines = style.layer(withIdentifier: lrtLinesLayerId) as? MLNLineStyleLayer {
-                lrtLines.lineWidth = NSExpression(forConstantValue: TransitModalClass.lightRail.cartographyLineWidth)
+                lrtLines.lineWidth = TransitModalClass.lightRail.cartographyLineWidthExpression()
                 lrtLines.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
             }
             if let ferryLines = style.layer(withIdentifier: ferryLinesLayerId) as? MLNLineStyleLayer {
-                ferryLines.lineOpacity = NSExpression(forConstantValue: show ? 0.90 : 0.0)
+                ferryLines.lineWidth = TransitModalClass.ferry.cartographyLineWidthExpression()
+                ferryLines.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
             }
         }
         

@@ -38,17 +38,17 @@ final class TransitCartographyTests: XCTestCase {
     }
     
     func testTransitModalStylingMetrics() {
-        // Subway metrics
+        // Subway metrics (canonical z=14 neighborhood baseline)
         let subway = TransitModalClass.subway
-        XCTAssertEqual(subway.cartographyLineWidth, 4.0)
-        XCTAssertEqual(subway.cartographyCasingWidth, 7.0)
+        XCTAssertEqual(subway.cartographyLineWidth, 2.5)
+        XCTAssertEqual(subway.cartographyCasingWidth, 4.5)
         XCTAssertNil(subway.cartographyLineDashPattern)
         XCTAssertNil(subway.cartographyCasingDashPattern)
         
-        // Light Rail metrics (solid line, dashed casing)
+        // Light Rail metrics (canonical z=14 baseline: solid line, dashed casing)
         let lrt = TransitModalClass.lightRail
-        XCTAssertEqual(lrt.cartographyLineWidth, 4.0)
-        XCTAssertEqual(lrt.cartographyCasingWidth, 7.0)
+        XCTAssertEqual(lrt.cartographyLineWidth, 2.5)
+        XCTAssertEqual(lrt.cartographyCasingWidth, 4.5)
         XCTAssertNil(lrt.cartographyLineDashPattern)
         XCTAssertEqual(lrt.cartographyCasingDashPattern, [3.0, 2.0])
         
@@ -58,6 +58,87 @@ final class TransitCartographyTests: XCTestCase {
         XCTAssertEqual(ferry.cartographyCasingWidth, 0.0)
         XCTAssertEqual(ferry.cartographyLineDashPattern, [4.0, 3.0])
         XCTAssertNil(ferry.cartographyCasingDashPattern)
+    }
+    
+    // MARK: - Wave V.1 Tests: Continuous Zoom Interpolation & Solid Opacity (Doc 22 §4.2)
+    
+    func testTransitModalZoomInterpolatedExpressions() {
+        let subway = TransitModalClass.subway
+        let lrt = TransitModalClass.lightRail
+        let ferry = TransitModalClass.ferry
+        let bus = TransitModalClass.bus
+        
+        // 1. Subway and Light Rail expressions exist and are interpolation functions
+        let subwayLineExpr = subway.cartographyLineWidthExpression()
+        let subwayCasingExpr = subway.cartographyCasingWidthExpression()
+        let lrtLineExpr = lrt.cartographyLineWidthExpression()
+        let lrtCasingExpr = lrt.cartographyCasingWidthExpression()
+        
+        XCTAssertEqual(subwayLineExpr.expressionType, .function)
+        XCTAssertEqual(subwayLineExpr.function, "mgl_interpolate:withCurveType:parameters:stops:")
+        XCTAssertEqual(subwayCasingExpr.expressionType, .function)
+        XCTAssertEqual(subwayCasingExpr.function, "mgl_interpolate:withCurveType:parameters:stops:")
+        
+        // 2. Exact stops validation for Subway/LRT ribbon widths: z11=1.2, z14=2.5, z17=4.5
+        let subLineStops = (subwayLineExpr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber]
+        XCTAssertNotNil(subLineStops)
+        if let stops = subLineStops {
+            XCTAssertEqual(stops[11.0]?.doubleValue ?? -1, 1.2, accuracy: 0.01, "z=11 ribbon width must be 1.2pt (Doc 22 §4.2)")
+            XCTAssertEqual(stops[14.0]?.doubleValue ?? -1, 2.5, accuracy: 0.01, "z=14 ribbon width must be 2.5pt (Doc 22 §4.2)")
+            XCTAssertEqual(stops[17.0]?.doubleValue ?? -1, 4.5, accuracy: 0.01, "z=17 ribbon width must be 4.5pt (Doc 22 §4.2)")
+        }
+        
+        // 3. Exact stops validation for Subway/LRT casing widths: z11=2.5, z14=4.5, z17=8.1
+        let subCasingStops = (subwayCasingExpr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber]
+        XCTAssertNotNil(subCasingStops)
+        if let stops = subCasingStops {
+            XCTAssertEqual(stops[11.0]?.doubleValue ?? -1, 2.5, accuracy: 0.01, "z=11 casing width must be 2.5pt (Doc 22 §4.2)")
+            XCTAssertEqual(stops[14.0]?.doubleValue ?? -1, 4.5, accuracy: 0.01, "z=14 casing width must be 4.5pt (Doc 22 §4.2)")
+            XCTAssertEqual(stops[17.0]?.doubleValue ?? -1, 8.1, accuracy: 0.01, "z=17 casing width must be 8.1pt (Doc 22 §4.2)")
+            
+            // Casing margin assertions: Margin <= 1.0pt for z <= 14.0 (Wave V.1 Directive 3)
+            let margin11 = ((stops[11.0]?.doubleValue ?? 0) - 1.2) / 2.0
+            let margin14 = ((stops[14.0]?.doubleValue ?? 0) - 2.5) / 2.0
+            let margin17 = ((stops[17.0]?.doubleValue ?? 0) - 4.5) / 2.0
+            
+            XCTAssertEqual(margin11, 0.65, accuracy: 0.01, "z=11 casing margin must be 0.65pt")
+            XCTAssertEqual(margin14, 1.00, accuracy: 0.01, "z=14 casing margin must be 1.0pt")
+            XCTAssertEqual(margin17, 1.80, accuracy: 0.01, "z=17 casing margin must be 1.8pt")
+            XCTAssertLessThanOrEqual(margin11, 1.0, "Regional casing margin must be <= 1.0pt to prevent avenue choking")
+            XCTAssertLessThanOrEqual(margin14, 1.0, "Neighborhood casing margin must be <= 1.0pt")
+        }
+        
+        // 4. Light rail expressions match subway stops and structure
+        let lrtLineStops = (lrtLineExpr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber]
+        let lrtCasingStops = (lrtCasingExpr.arguments?[3] as? NSExpression)?.constantValue as? [NSNumber: NSNumber]
+        XCTAssertEqual(lrtLineStops, subLineStops)
+        XCTAssertEqual(lrtCasingStops, subCasingStops)
+        XCTAssertEqual(lrtLineExpr.function, subwayLineExpr.function)
+        XCTAssertEqual(lrtCasingExpr.function, subwayCasingExpr.function)
+        
+        // 5. Ferry and Bus modal expressions
+        XCTAssertEqual(ferry.cartographyLineWidthExpression(), NSExpression(forConstantValue: 2.5))
+        XCTAssertEqual(ferry.cartographyCasingWidthExpression(), NSExpression(forConstantValue: 0.0))
+        XCTAssertEqual(bus.cartographyLineWidthExpression(), NSExpression(forConstantValue: 0.0))
+        XCTAssertEqual(bus.cartographyCasingWidthExpression(), NSExpression(forConstantValue: 0.0))
+    }
+    
+    func testTransitLayersSolidOpacity() {
+        // Research Doc 22 §4.2 Directive 2: Keep ribbons and casings 100% solid/opaque (1.0),
+        // relying entirely on geometric scaling rather than alpha transparency to eliminate
+        // muddy color blending and anti-aliasing knots.
+        let show = true
+        let subwayCasingOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
+        let subwayLineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
+        let lrtCasingOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
+        let lrtLineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
+        let ferryLineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
+        
+        XCTAssertEqual(subwayCasingOpacity.constantValue as? Double, 1.0)
+        XCTAssertEqual(subwayLineOpacity.constantValue as? Double, 1.0)
+        XCTAssertEqual(lrtCasingOpacity.constantValue as? Double, 1.0)
+        XCTAssertEqual(lrtLineOpacity.constantValue as? Double, 1.0)
+        XCTAssertEqual(ferryLineOpacity.constantValue as? Double, 1.0)
     }
     
     func testBundledSubwayGeoJSONLoading() {

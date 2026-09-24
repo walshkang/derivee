@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import MapLibre
 
 /// Dérivée's 4-tier transit modal classification system.
 /// Normalizes standard GTFS `route_type` (0–7, 11) and Extended GTFS (Hierarchical Vehicle Types / HVT 100–1400)
@@ -70,13 +71,14 @@ public enum TransitModalClass: Int, Sendable, CaseIterable, Codable, Comparable,
         }
     }
     
-    /// MapLibre primary stroke line width in points.
+    /// Canonical reference primary stroke line width in points at neighborhood scale (z=14).
+    /// For dynamic GPU zoom-interpolated rendering, use `cartographyLineWidthExpression()`.
     public var cartographyLineWidth: CGFloat {
         switch self {
         case .subway:
-            return 4.0
+            return 2.5
         case .lightRail:
-            return 4.0
+            return 2.5
         case .bus:
             return 0.0 // Bus handled via capillary lens dots at z >= 14.5
         case .ferry:
@@ -84,15 +86,60 @@ public enum TransitModalClass: Int, Sendable, CaseIterable, Codable, Comparable,
         }
     }
     
-    /// MapLibre casing stroke line width in points (7.0pt provides 1.5pt casing border on each side of 4.0pt line).
+    /// Canonical reference casing stroke line width in points at neighborhood scale (z=14).
+    /// 4.5pt provides a clean 1.0pt casing border on each side of 2.5pt line.
+    /// For dynamic GPU zoom-interpolated rendering, use `cartographyCasingWidthExpression()`.
     public var cartographyCasingWidth: CGFloat {
         switch self {
         case .subway:
-            return 7.0
+            return 4.5
         case .lightRail:
-            return 7.0
+            return 4.5
         case .bus, .ferry:
             return 0.0
+        }
+    }
+    
+    /// Generates continuous zoom-interpolated line width expression per Research Doc 22 §4.2.
+    /// Regional (z=11): 1.2pt -> Neighborhood (z=14): 2.5pt -> Street (z=17): 4.5pt.
+    public func cartographyLineWidthExpression() -> NSExpression {
+        switch self {
+        case .subway, .lightRail:
+            return NSExpression(
+                forMLNInterpolating: .zoomLevelVariable,
+                curveType: .linear,
+                parameters: nil,
+                stops: NSExpression(forConstantValue: [
+                    11.0: 1.2,
+                    14.0: 2.5,
+                    17.0: 4.5
+                ])
+            )
+        case .ferry:
+            return NSExpression(forConstantValue: 2.5)
+        case .bus:
+            return NSExpression(forConstantValue: 0.0)
+        }
+    }
+    
+    /// Generates continuous zoom-interpolated casing width expression per Research Doc 22 §4.2.
+    /// Regional (z=11): 2.5pt -> Neighborhood (z=14): 4.5pt -> Street (z=17): 8.1pt.
+    /// Margin: 0.65pt at z=11 -> 1.0pt at z=14 -> 1.8pt at z=17.
+    public func cartographyCasingWidthExpression() -> NSExpression {
+        switch self {
+        case .subway, .lightRail:
+            return NSExpression(
+                forMLNInterpolating: .zoomLevelVariable,
+                curveType: .linear,
+                parameters: nil,
+                stops: NSExpression(forConstantValue: [
+                    11.0: 2.5,
+                    14.0: 4.5,
+                    17.0: 8.1
+                ])
+            )
+        case .ferry, .bus:
+            return NSExpression(forConstantValue: 0.0)
         }
     }
     
