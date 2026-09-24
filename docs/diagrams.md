@@ -557,10 +557,12 @@ The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/
 │   └── [Z: 2a] cloud-layer      (FillLayer: CW Bounding Polygon with CW H3 hex interior hole cutouts and interior fog islands — city-scoped or global world mask, see M.5.1)
 │       └── Opacity: 0.60..0.98 (@AppStorage) | Day: #1C1C1E | Night/OLED: #000000 | Transit: #0A0C10
 │
-├── Layer 1.5: Subway Network Thoroughfares & Sub-Fog Bullets (subway-lines-source & subway-station-bullets-source)
-│   ├── [Z: 1.5c] subway-station-bullets-layer (CircleLayer: 4.5pt day/night adaptive fill & stroke, opacity 0.0 or 0.95)
-│   ├── [Z: 1.5b] subway-lines-layer           (LineLayer: 3.0pt dynamic MTA route color expression)
-│   └── [Z: 1.5a] subway-lines-casing-layer    (LineLayer: 4.5pt day/night adaptive casing #FFFFFF / #222433)
+├── Layer 1.5: Transit Thoroughfares, Bundled Corridors & In-Line Badges (subway-lines-source & subway-station-bullets-source)
+│   ├── [Z: 1.5e] transit-badges-symbol          (SymbolLayer: composite route capsule beads, line-center / line 250pt, minZoom=13.5)
+│   ├── [Z: 1.5d] subway-station-bullets-layer   (CircleLayer: 4.5pt day/night adaptive fill & stroke, opacity 0.0 or 0.95)
+│   ├── [Z: 1.5c] station-platform-capsule-layer (Line/FillLayer: perpendicular platform capsule bridging bundled ribbons)
+│   ├── [Z: 1.5b] transit-ribbon-stroke          (LineLayer: 1.2..4.5pt pre-offset parallel ribbons, bevel join, butt cap)
+│   └── [Z: 1.5a] transit-trench-casing          (LineLayer: dynamic bundle envelope casing, round join/cap #FFFFFF / #222433)
 │
 └── Layer 1: Base Vector Style
     └── MapTiler Streets v2 (Coastlines, water, street grid, typography, and full-zoom 2D building footprints; 3D extrusions suppressed for coplanar 2D fog alignment)

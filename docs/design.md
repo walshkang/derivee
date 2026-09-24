@@ -177,10 +177,10 @@ Standard cartographic data (streets, parks, travel direction) is handled entirel
 
 | Zoom Level | Map Focus | Visible Custom Elements & Smart Zoom Behavior |
 |:---|:---|:---|
-| **0–12.5** | City / Regional Trunk | Fog layer dominates. Major transit thoroughfares render as consolidated physical rail alignments beneath the fog (e.g. solid Lexington Green `#00933C`, Broadway Yellow `#FCCC0A`, 7th Ave Red `#EE352E`). Station bullets hidden to eliminate visual noise. |
-| **13.0–14.4** | Neighborhood | Unlocked hex outlines appear. Major street names render via MapTiler. Transit stations render as subtle 4.5pt ambient discs (`subway-station-bullets-layer`) indicating station presence. |
-| **14.5–16.5** | Street / Smart Zoom Resolution | **Smart Zoom Station Badges:** Station nodes dynamically resolve into discrete route bullet clusters: <br>• *Express Station (e.g., 86th St):* `[ 4 ] [ 5 ] [ 6 ]`<br>• *Local-Only Station (e.g., 77th St):* `[ 6 ]` (dimmed 4/5 indicates express bypass).<br>Bus stop Ghost POI nodes fade in. Subway line geometries remain locked to true 2D geographic track centerlines (preventing multi-ribbon curve clipping across sidewalks/buildings). |
-| **17+** | Granular Detail | Bus stop lines and stop labels fade in. Building footprints, pedestrian paths, and exact platform footprints fully visible in exposed areas. |
+| **0–12.5** | City / Regional Trunk | Fog layer dominates. Unified trench casing + consolidated physical rail alignments beneath fog ($W_{\text{ribbon}} = 1.2\text{pt}$, casing $2.5..5.5\text{pt}$) per Research Doc 22 §4.2. Station bullets hidden to eliminate visual noise. |
+| **13.0–14.4** | Neighborhood | Unlocked hex outlines appear. Major street names render via MapTiler. Bundle emergence: parallel ribbons resolve symmetrically ($W_{\text{ribbon}} \to 2.5\text{pt}$, casing $4.5..10.5\text{pt}$). In-line composite route badge capsules fade in across $z \in [13.5, 14.5]$ at canonical arc midpoints. Transit stations render as subtle 4.5pt ambient discs (`subway-station-bullets-layer`). |
+| **14.5–16.5** | Street / Smart Zoom Resolution | **Smart Zoom Station Badges & Platform Capsules:** Pre-computed platform capsules (`station-platform-capsule-layer`) bridge multi-track bundles perpendicularly beneath station bullets. Full multi-ribbon resolution ($W_{\text{ribbon}} \to 3.5\text{pt}$). Station nodes dynamically resolve into discrete route bullet clusters: <br>• *Express Station (e.g., 86th St):* `[ 4 ] [ 5 ] [ 6 ]`<br>• *Local-Only Station (e.g., 77th St):* `[ 6 ]` (dimmed 4/5 indicates express bypass).<br>Bus stop Ghost POI nodes fade in. Diverging branches transition smoothly via tangent-continuous $C^1$ cubic Hermite fillets. |
+| **17+** | Granular Detail | Ribbon offsets clamp to metric track separation ($D_{\text{metric}} \approx 4.5\text{m}$) preventing building collision. Platform footpaths and station complexes emerge per Research Doc 20. |
 
 > **Selected Route Trace:** When any route or train is inspected in Screen 2 (`TransitRevealSheet`), only that specific route's physical polyline illuminates with full color saturation and 6px casing across the map through the fog, dissolving on dismiss.
 
@@ -213,10 +213,12 @@ The MapLibre layer stack **must** follow this exact Z-index order. All layers ar
 │       │                          hole cutouts and interior fog islands)
 │       └── Opacity: 0.60..0.98 (@AppStorage) | Day: #1C1C1E | Night/OLED: #000000
 │
-├── Layer 1.5: Transit Thoroughfares & Sub-Fog Bullets (subway-lines-source)
-│   ├── [Z: 1.5c] subway-station-bullets-layer (CircleLayer: 4.5pt adaptive fill & stroke)
-│   ├── [Z: 1.5b] subway-lines-layer           (LineLayer: 3.0pt dynamic route color)
-│   └── [Z: 1.5a] subway-lines-casing-layer    (LineLayer: 4.5pt day/night adaptive casing)
+├── Layer 1.5: Transit Thoroughfares, Bundled Corridors & In-Line Badges (subway-lines-source)
+│   ├── [Z: 1.5e] transit-badges-symbol          (SymbolLayer: composite route capsule beads, line-center / line 250pt, minZoom=13.5)
+│   ├── [Z: 1.5d] subway-station-bullets-layer   (CircleLayer: 4.5pt adaptive fill & stroke)
+│   ├── [Z: 1.5c] station-platform-capsule-layer (Line/FillLayer: perpendicular platform capsule bridging bundled ribbons)
+│   ├── [Z: 1.5b] transit-ribbon-stroke          (LineLayer: 1.2..4.5pt pre-offset parallel ribbons, bevel join, butt cap)
+│   └── [Z: 1.5a] transit-trench-casing          (LineLayer: dynamic bundle envelope casing, round join/cap)
 │
 └── Layer 1: Base Vector Style
     └── MapTiler Streets v2 (coastlines, water, street grid, typography,
