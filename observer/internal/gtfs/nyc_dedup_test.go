@@ -238,6 +238,88 @@ func TestInspectAllQueensCorridors(t *testing.T) {
 	}
 }
 
+func TestBranchServiceResolutionAccuracy(t *testing.T) {
+	rawSubwayPath := "../../../DeriveeNative/Derivee/subway-lines.geojson"
+	geoBytes, err := os.ReadFile(rawSubwayPath)
+	if err != nil {
+		t.Fatalf("Failed to read raw subway GeoJSON %s: %v", rawSubwayPath, err)
+	}
+
+	ds, err := ConvertLegacySubwayToDataset(geoBytes)
+	if err != nil {
+		t.Fatalf("ConvertLegacySubwayToDataset failed: %v", err)
+	}
+
+	dbPath := "../../../DeriveeNative/Derivee/derivee_transit.sqlite"
+	if err := HydrateStopsFromSQLite(ds, dbPath); err != nil {
+		t.Fatalf("HydrateStopsFromSQLite failed: %v", err)
+	}
+
+	routeShapes := make(map[string]map[string]bool)
+	for _, trip := range ds.Trips {
+		if trip.ShapeID == "" {
+			continue
+		}
+		route, ok := ds.Routes[trip.RouteID]
+		if !ok {
+			continue
+		}
+		modalClass := ResolveModalClass(route.RouteType)
+		if modalClass == ModalClassBus && !isBRTRoute(route) {
+			continue
+		}
+		if _, hasShape := ds.Shapes[trip.ShapeID]; !hasShape {
+			continue
+		}
+		if routeShapes[route.RouteID] == nil {
+			routeShapes[route.RouteID] = make(map[string]bool)
+		}
+		routeShapes[route.RouteID][trip.ShapeID] = true
+	}
+
+	activeShapes := make(map[string][]ShapePoint)
+	for _, shapesMap := range routeShapes {
+		for shapeID := range shapesMap {
+			activeShapes[shapeID] = ds.Shapes[shapeID]
+		}
+	}
+
+	graph := BuildTopologyGraph(activeShapes)
+	simplifiedArcs := SimplifyGraph(graph, ThresholdSubway, nil)
+
+	resolved := ResolveArcBranchRoutes(ds, graph, simplifiedArcs, routeShapes)
+	if resolved == nil {
+		t.Fatalf("ResolveArcBranchRoutes returned nil")
+	}
+
+	// Verify Queens Blvd branching accuracy
+	for arcID, leadMap := range resolved {
+		pts := simplifiedArcs[arcID]
+		inQueens := pts[0].Lon > -73.94 && pts[0].Lon < -73.70 && pts[0].Lat > 40.72 && pts[0].Lat < 40.80
+
+		if inQueens {
+			for leadID, routes := range leadMap {
+				// Orange trunk in Queens must NEVER include B or D
+				if leadID == "F" {
+					for _, r := range routes {
+						if r == "B" || r == "D" {
+							t.Errorf("Arc %d in Queens has invalid orange route %s (routes=%v)", arcID, r, routes)
+						}
+					}
+				}
+				// Blue trunk on Queens Blvd must NEVER include A or C
+				if leadID == "A" {
+					for _, r := range routes {
+						if r == "A" || r == "C" {
+							t.Errorf("Arc %d in Queens has invalid blue route %s (routes=%v)", arcID, r, routes)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 func extractGeoJSONFromZstPack(packPath string) ([]byte, error) {
 	packFile, err := os.Open(packPath)
 	if err != nil {

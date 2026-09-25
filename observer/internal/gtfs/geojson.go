@@ -145,6 +145,9 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 		}
 	}
 
+	// 6b. Resolve Arc-Level Serving Branch Routes (Station Snapping + Topology Propagation)
+	resolvedBranchRoutes := ResolveArcBranchRoutes(ds, graph, simplifiedArcs, routeShapes)
+
 	// 7. Emit Consolidated Corridor Ribbon Features (INV-CORR-01, INV-CORR-02, INV-CORR-03)
 	// Sort Arc IDs for deterministic GeoJSON output
 	sortedArcIDs := make([]int, 0, len(graph.Arcs))
@@ -174,7 +177,12 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 		// Collect unique routes traversing this arc
 		routeMap := arcRoutes[arcID]
 		routesList := make([]Route, 0, len(routeMap))
-		for _, r := range routeMap {
+		for leadID, r := range routeMap {
+			if resolvedBranchRoutes != nil {
+				if activeRoutes, ok := resolvedBranchRoutes[arcID][leadID]; ok && len(activeRoutes) > 0 {
+					r.RouteShortName = strings.Join(activeRoutes, ", ")
+				}
+			}
 			routesList = append(routesList, r)
 		}
 
