@@ -1049,3 +1049,109 @@ erDiagram
 | `timetable.bin` | mmap'd C++ buffer | City Pack | Read-only | No |
 | `ultra_transfers.csr` | mmap'd CSR arrays | City Pack | Read-only | No |
 | `walk_graph.bin` | mmap'd graph | City Pack | Read-only | No |
+
+---
+
+## 9. Run Inspection Adaptive Viewport & 30Hz Kinematic Telemetry Architecture (Pre-T.7 & Pre-T.8)
+
+### 9.1 Adaptive Viewport & 30Hz Kinematic Execution Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Commuter
+    participant Sheet as TransitRevealSheet
+    participant Insp as GuidewayRunInspector
+    participant Class as ProximityClassifier
+    participant Coord as MapView.Coordinator
+    participant Map as MLNMapView (Metal GPU)
+    participant Kin as LiveVehicleTracker (Swift)
+    participant Interp as SubwayPositionInterpolator (C++20)
+    participant RT as TransitRealtimeService
+
+    User->>Sheet: Tap upcoming departure row
+    Sheet->>Sheet: inspectingArrival = arr, detent = .medium
+    Sheet->>Insp: Mount GuidewayRunInspector
+    Insp->>RT: resolveVehicleLocation(arrival, ladder)
+    RT-->>Insp: (vehicleCoord, bearing, stopsAway)
+    
+    Insp->>Class: classify(stationCoord, vehicleCoord)
+    alt Track Distance <= 2.5 km (Close Consist)
+        Class-->>Coord: Mode: .dualFraming (z in [13.8, 15.5])
+        Coord->>Map: setCamera(bounds, padding: H_sheet + 24pt)
+    else Track Distance > 2.5 km (Distant Consist)
+        Class-->>Coord: Mode: .vehicleTracking (z = 15.2 at vehicleCoord)
+        Coord->>Map: setCamera(vehicleCoord, z: 15.2, padding: H_sheet + 24pt)
+    else No Live Telemetry (Scheduled)
+        Class-->>Coord: Mode: .stationAnchor (z = 15.5 at stationCoord)
+        Coord->>Map: setCamera(stationCoord, z: 15.5, padding: H_sheet + 24pt)
+    end
+
+    Note over Kin, Interp: ── 30Hz Kinematic Tracking Loop Activated ──
+    Coord->>Kin: startTracking(tripId, polyline, currentStatus)
+    Kin->>Interp: initialize(shape_points, ref_lat, ref_lon)
+    
+    loop Every 33ms (30Hz CADisplayLink)
+        Kin->>Interp: update(telemetry, now)
+        Interp-->>Kin: ConsistSpatialEstimate (coord, heading, lambda)
+        Kin->>Map: ephemeralVehicleSource.shape = feature(coord, heading)
+    end
+
+    Note over RT, Kin: ── 30-Second GTFS-RT Feed Ingestion ──
+    RT->>Kin: onFeedUpdate(newStatus, newEta)
+    Kin->>Kin: Critically damped 1.0s exponential spline reconciliation
+    Note over Kin: Smoothly glides to confirmed block status<br/>Zero backward snaps or teleportation
+
+    opt User Taps Ladder Row (e.g. TRAIN HERE / Station)
+        User->>Insp: Tap TRAIN HERE or Station node
+        Insp->>Coord: focusCoordinate(targetCoord, z: 15.5)
+        Coord->>Map: setCenter(targetCoord, z: 15.5)
+        Note over Sheet: Sheet remains stably at .medium detent (zero collapse)
+    end
+
+    opt User Dismisses Inspector (Back / Close)
+        User->>Sheet: Tap back chevron or (X)
+        Sheet->>Coord: onClearRouteInspection()
+        Coord->>Kin: stopTracking()
+        Note over Kin: CADisplayLink invalidated<br/>0% idle background battery drain
+    end
+```
+
+### 9.2 Inspection Camera State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> EvaluatingTelemetry: Tap Arrival Row
+
+    EvaluatingTelemetry --> DualFraming: Live vehicle within 2.5 km
+    EvaluatingTelemetry --> VehicleTracking: Live vehicle > 2.5 km away
+    EvaluatingTelemetry --> StationAnchor: Scheduled run or telemetry missing
+
+    state DualFraming {
+        [*] --> FrameBothPoints
+        FrameBothPoints: Upper viewport frames [Station, Train]
+        FrameBothPoints: Zoom clamped to z in [13.8, 15.5]
+        FrameBothPoints: Asymmetric bottom padding = H_sheet + 24pt
+    }
+
+    state VehicleTracking {
+        [*] --> CenterOnTrain
+        CenterOnTrain: Upper viewport centered on train at z = 15.2
+        CenterOnTrain: Floating Focus Capsule active above sheet
+        CenterOnTrain: Off-screen vector beacon points to train if user pans to station
+    }
+
+    state StationAnchor {
+        [*] --> CenterOnStation
+        CenterOnStation: Upper viewport centered on station at z = 15.5
+        CenterOnStation: Route polyline illuminated through fog
+    }
+
+    VehicleTracking --> DualFraming: Consist advances to D <= 2.5 km (auto-expand)
+    VehicleTracking --> StationAnchor: User taps [ 📍 Station ] in floating capsule
+    StationAnchor --> VehicleTracking: User taps [ 🚆 Train ] in floating capsule or off-screen beacon
+    DualFraming --> StationAnchor: Consist arrives at platform (Boarding)
+    DualFraming --> [*]: Inspector dismissed
+    VehicleTracking --> [*]: Inspector dismissed
+    StationAnchor --> [*]: Inspector dismissed
+```

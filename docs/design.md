@@ -811,13 +811,23 @@ The inspector answers exactly **five questions** a rider has when tapping a spec
 
 #### 10.5.2 Map Synchronization & Persistent Peek Dock
 
-When the Guideway Run Inspector opens:
-* The background map camera smoothly pans and zooms to frame the user's station and the active route polyline, dynamically adapting bottom padding based on sheet detent (`~110pt` at peek dock vs `~360pt` at `.medium`).
-* The route polyline illuminates through the fog in the agency's official line color with 4px primary stroke and 6px casing.
-* **Persistent Peek Dock (`.fraction(0.12)` ~90pt):** Commuters can lower the inspector to peek detent to inspect the unobstructed hero map. The route polyline, vehicle halo, and casing remain pinned to the map (FC-7).
-* **Non-Trapping Dismissal Ergonomics:** Dragging down on the sheet during inspection snaps back to `.inspectionPeekDetent` via `onChange(of: selectedDetent)`. Commuters are never trapped via `.interactiveDismissDisabled`. Dismissal and route teardown occur strictly on explicit user action (back chevron `< Bedford Av` or close button `(X)`).
-* **Continuous Ladder Stem & Transfer Disambiguation:** Stop ladder nodes render a continuous 4pt vertical stem through the 24×24 node background, eliminating 7pt gaps. Transfer routes are prefixed with a subtle `⇄` glyph (e.g. `⇄ [J] [Z]`) and express variants are normalized via `trunkRouteId(for:)` (suppressing `6` on `6X`, `7` on `7X`, `F` on `FX`).
-* **Live Kinematic Vehicle Marker `[Wave R]`:** Smooth inter-station animated vehicle tracking along the polyline is deferred to Wave R (`SubwayPositionInterpolator` in C++20). Until then, live vehicle positions are snapped to the approaching stop on the ladder and highlighted with vehicle pucks on the map.
+* **Proximity-Adaptive Viewport State Machine (Pre-T.7):** Rather than blindly calculating a midpoint bounding box between station and vehicle, `MapView.swift` executes a 3-state camera classification based on route track distance $D$:
+  * **Dual-Entity Visual Horizon ($D \le 2.5\text{km}$ / $\le 4\text{ min}$):** Camera frames both the commuter's station and the approaching consist in the visible upper viewport ($z \in [13.8, 15.5]$) with asymmetric bottom padding tailored to `.medium` detent ($H_{\text{sheet}} + 24\text{pt}$). Commuters see the train approaching with street-level context.
+  * **Distant Telemetry Horizon ($D > 2.5\text{km}$ / $> 4\text{ min}$):** Avoids unreadable regional scale ($z \le 11$). The camera defaults to focusing directly on the **Live Consist** at street-level resolution ($z = 15.2$), centered with asymmetric bottom padding. As the train advances and crosses $D \le 2.5\text{km}$, the camera smoothly auto-expands to `.dualFraming` (suppressed if user manually panned).
+  * **Station Platform Anchor:** When telemetry is absent or arrival is a scheduled run, the camera anchors to the station platform ($z = 15.5$) with the departure corridor polyline illuminated.
+* **Floating Focus Switcher Capsule (Pre-T.7):** An interactive frosted glass capsule docked directly above the sheet's top edge:
+  `[ 🚆 Train: \(stop) (\(eta)) ]` $\longleftrightarrow$ `[ 📍 Station: \(name) ]`
+  Styled using the engineered 3-tier optical glass stack (`.ultraThinMaterial` + `.systemBackground` attenuation + specular border per Research Doc 18). Tapping either segment glides the camera smoothly at $z=15.5$ without modifying sheet detent.
+* **Off-Screen Directional Vector Beacon (Pre-T.7):** When the camera is focused on the station and the train is outside the viewport, a compact directional chip renders at the visible map perimeter along the track bearing: `[ ↗ (Route Badge) • \(stopsAway) stops (\(eta)) ]`. Tapping the beacon smoothly flies the camera to the train.
+* **Non-Collapsing Ladder Taps (Pre-T.7):** Tapping `TRAIN HERE` or any station node in the stop progression ladder glides the map camera above to that coordinate at $z=15.5$ while keeping the sheet stably at `.medium` detent (decoupled from `inspectionPeekDetent`).
+* **30Hz C++20 Kinematic Vehicle Engine & Feed Reconciliation (Pre-T.8 / Doc 17):**
+  * Powered by `Derivee::Transit::SubwayPositionInterpolator` (C++20) compiled into `DeriveeCore`.
+  * Ingests conformal track coordinates from `shapes.txt` and GTFS-RT `VehiclePosition` / `StopTimeUpdate`.
+  * Runs a dedicated 30Hz `CADisplayLink` loop advancing consist position along the polyline via trapezoidal traction curves ($a = 1.15, d = 1.25\text{ m/s}^2$) and quintic Hermite smootherstep fallbacks.
+  * Lifecycle-gated: Active strictly while an arrival is actively inspected; destroyed immediately upon dismissal (0% idle battery drain).
+  * **Critically Damped Feed Reconciliation:** When a new 30s GTFS-RT feed packet arrives, reconciles the predicted dead-reckoning position to the newly reported block status over a 1.0s critically damped exponential curve, eliminating teleportation jumps and backward snaps.
+  * **Subsurface Signal Invariants:** Enforces terminal origin dwell clamp ($\lambda \equiv 0.0$ while staged at bumper blocks), mid-tunnel approach clamp ($\lambda = 0.85$ during signal holds), and stale feed freeze ($>90\text{s}$).
+  * **Surface Road Centerline Snapping:** For buses and maritime ferries, snaps raw GPS AVL fixes to road/waterway centerline geometries, interpolating smoothly along the street network between 15s updates.
 
 #### 10.5.3 What Is Explicitly Removed
 

@@ -540,6 +540,22 @@ In `MapView.Coordinator`:
 - **Unconditional Command State Ingestion:** The coordinator maintains `lastAppliedInspectionCommand` and `lastAppliedInspectionCommandId`. When `updateRouteInspection(command:)` receives a non-nil `RouteInspectionCommand`, it assigns `lastAppliedInspectionCommand = cmd` **unconditionally**, ensuring the latest `vehicleCoordinate` is cached even when `cmd.id` is unchanged.
 - **Detent Re-framing Guard:** When the sheet detent transitions between `.inspectionPeekDetent` (`.fraction(0.12)`), `.medium`, and `.large`, the coordinator executes detent-adaptive camera re-framing (`frameRouteAndStation`) using the freshly cached command. This prevents camera jumps caused by stale vehicle coordinates during live feed refreshes.
 
+#### 4. Proximity-Adaptive Camera State Machine & 30Hz Kinematic Vehicle Engine (Pre-T.7 & Pre-T.8)
+- **3-State Camera Classification (`InspectionCameraMode`):**
+  - **`.dualFraming` ($D \le 2.5\text{km}$ / $\le 4\text{min}$):** When the consist is within the commuter's immediate spatial horizon, calculates the bounding box enclosing `[stationCoordinate, vehicleCoordinate]`. Asymmetric bottom padding ($H_{\text{sheet}} + 24\text{pt}$) centers both points within the upper viewport with dynamic zoom clamp $z \in [13.8, 15.5]$.
+  - **`.vehicleTracking` ($D > 2.5\text{km}$ / $> 4\text{min}$):** Rather than zooming out to an unreadable regional scale ($z \le 11$), centers the camera on `vehicleCoordinate` at street-level resolution ($z = 15.2$) with asymmetric bottom padding. As the train advances and crosses $D \le 2.5\text{km}$, the camera smoothly auto-expands to `.dualFraming` unless the commuter has manually panned.
+  - **`.stationAnchor`:** Falls back to centering on the station platform ($z = 15.5$) when telemetry is missing or for scheduled departures.
+- **Floating Focus Switcher & Off-Screen Vector Beacon:**
+  - An interactive frosted glass capsule docked above the sheet's drag handle (`[ 🚆 Train: \(stop) ]` $\leftrightarrow$ `[ 📍 Station: \(name) ]`) allows 1-tap smooth camera flight at $z=15.5$ without changing sheet detent.
+  - An off-screen directional vector chip at the visible map perimeter points along the track bearing toward off-screen consists; tapping flies to the train.
+  - Ladder node taps (`TRAIN HERE` or station nodes) pan the upper map camera at $z=15.5$ without collapsing the sheet to peek detent.
+- **30Hz C++20 Kinematic Vehicle Engine (`SubwayPositionInterpolator`):**
+  - Driven by a 30Hz `CADisplayLink` in `LiveVehicleTrackingSession`, bridging the zero-overhead C++20 analytical trapezoidal solver ($a=1.15, d=1.25\text{ m/s}^2$) and Quintic Hermite smootherstep along conformal track geometries.
+  - Lifecycle: Active strictly while inspector is open; destroyed immediately on dismissal (0% idle battery drain).
+  - Updates `ephemeralVehicleSourceId` geometry and bearing attributes directly without MapLibre layer teardown.
+  - **Critically Damped Feed Reconciliation:** When a 30s GTFS-RT feed update arrives, reconciles predicted positions to reported block statuses via a 1.0s critically damped exponential curve, eliminating teleportation jumps and backward snapping.
+  - **Surface Road Centerline Snapping:** For buses and maritime ferries, snaps noisy GPS AVL fixes to road/waterway centerline polylines, interpolating smoothly along the street grid.
+
 ---
 
 ### 9.9 Transit Data Fidelity & Multi-Modal Resolution Engine
