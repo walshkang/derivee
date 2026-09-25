@@ -38,8 +38,34 @@ func TestNYCTrunkDeduplicationAndCanonicalCorridors(t *testing.T) {
 	kMax := 0
 	corridorCounts := make(map[int]int)
 
+	ribbonCount := 0
+	capsuleCount := 0
+
 	for _, feat := range fc.Features {
 		props := feat.Properties
+
+		if props.FeatureType == "platform_capsule" {
+			capsuleCount++
+			// Wave V.5 Platform Capsule Invariants:
+			if props.CasingColor != "#FFFFFF" || props.CasingColorHex != "#FFFFFF" {
+				t.Errorf("Capsule %s: casing color not #FFFFFF: %s", props.CorridorID, props.CasingColor)
+			}
+			if props.StationName == "" || props.StopID == "" {
+				t.Errorf("Capsule %s: missing station name or stop ID", props.CorridorID)
+			}
+			if props.BundleSize < 2 || props.BundleSize > 3 {
+				t.Errorf("Capsule %s: invalid bundle size %d", props.CorridorID, props.BundleSize)
+			}
+			if props.CasingWidth <= 0 || props.CasingWidthZ11 <= 0 || props.CasingWidthZ17 <= 0 {
+				t.Errorf("Capsule %s: invalid casing widths", props.CorridorID)
+			}
+			if len(props.Routes) == 0 {
+				t.Errorf("Capsule %s: empty routes", props.CorridorID)
+			}
+			continue
+		}
+
+		ribbonCount++
 		if props.BundleSize > kMax {
 			kMax = props.BundleSize
 		}
@@ -68,7 +94,7 @@ func TestNYCTrunkDeduplicationAndCanonicalCorridors(t *testing.T) {
 		}
 
 		// INV-CORR-03: Canonical direction
-		coords, ok := parseLineCoords(feat.Geometry.Coordinates)
+		coords, ok := ParseLineCoords(feat.Geometry.Coordinates)
 		if !ok || len(coords) < 2 {
 			t.Fatalf("Invalid LineString coordinates in feature %s", props.CorridorID)
 		}
@@ -106,6 +132,11 @@ func TestNYCTrunkDeduplicationAndCanonicalCorridors(t *testing.T) {
 		}
 	}
 
+	if capsuleCount == 0 {
+		t.Fatalf("Expected platform capsule features in pack, got 0")
+	}
+	t.Logf("Verified %d route ribbons and %d platform capsules", ribbonCount, capsuleCount)
+
 	// Verify parallel separation across corridors with K >= 2
 	corridorFeatures := make(map[string][]GeoJSONFeature)
 	for _, feat := range fc.Features {
@@ -124,8 +155,8 @@ func TestNYCTrunkDeduplicationAndCanonicalCorridors(t *testing.T) {
 			}
 
 			// Check that ribbon 0 and ribbon 1 have distinct, offset coordinates
-			coords0, _ := parseLineCoords(feats[0].Geometry.Coordinates)
-			coords1, _ := parseLineCoords(feats[1].Geometry.Coordinates)
+			coords0, _ := ParseLineCoords(feats[0].Geometry.Coordinates)
+			coords1, _ := ParseLineCoords(feats[1].Geometry.Coordinates)
 			if len(coords0) == len(coords1) {
 				allIdentical := true
 				for i := 0; i < len(coords0); i++ {

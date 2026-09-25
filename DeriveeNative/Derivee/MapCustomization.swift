@@ -74,6 +74,10 @@ public enum MapCustomizationDefaults {
     public static let transitBadgesCenterSymbolLayerId = "transit-badges-center-symbol"
     public static let transitBadgesRepeatedSymbolLayerId = "transit-badges-repeated-symbol"
     
+    // Wave V.5 Station Platform Capsule Layers (INV-CAPSULE-03, INV-CAPSULE-05)
+    public static let stationPlatformCapsuleLayerId = "station-platform-capsule-layer"
+    public static let stationPlatformCapsuleCasingLayerId = "station-platform-capsule-casing-layer"
+    
     // Metal Fog Engine (Wave O.3)
     public static let defaultEnableMetalFogEngine: Bool = false
     public static let metalFogLayerId = "metal-fog-layer"

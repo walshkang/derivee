@@ -3,6 +3,7 @@ package pack
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"observer/internal/gtfs"
@@ -30,14 +31,52 @@ func TestRepackNYCWithCanonicalCorridors(t *testing.T) {
 		t.Fatalf("Failed to read extracted GeoJSON: %v", err)
 	}
 
+	benchmarkStations := []struct {
+		name string
+	}{
+		{"Queens Plaza"},
+		{"Queensboro Plaza"},
+		{"Court Sq"},
+		{"4th Ave-9th St"},
+	}
+
 	ds, err := gtfs.ConvertLegacySubwayToDataset(geoBytes)
 	if err != nil {
 		t.Fatalf("ConvertLegacySubwayToDataset failed: %v", err)
 	}
 
-	_, newGeoBytes, err := gtfs.GenerateTransitLinesGeoJSON(ds)
+	if err := gtfs.HydrateStopsFromSQLite(ds, dbPath); err != nil {
+		t.Fatalf("HydrateStopsFromSQLite failed: %v", err)
+	}
+
+	fc, newGeoBytes, err := gtfs.GenerateTransitLinesGeoJSON(ds)
 	if err != nil {
 		t.Fatalf("GenerateTransitLinesGeoJSON failed: %v", err)
+	}
+
+	capsuleCount := 0
+	matchedBenchmarks := make(map[string]bool)
+	for _, f := range fc.Features {
+		if f.Properties.FeatureType == "platform_capsule" {
+			capsuleCount++
+			stName := f.Properties.StationName
+			for _, b := range benchmarkStations {
+				if strings.Contains(strings.ToLower(stName), strings.ToLower(b.name)) ||
+					(b.name == "Court Sq" && strings.Contains(stName, "Court")) ||
+					(b.name == "4th Ave-9th St" && (strings.Contains(stName, "9 St") || strings.Contains(stName, "4 Av"))) {
+					matchedBenchmarks[b.name] = true
+					t.Logf("Matched benchmark %s with capsule: %s (StopID=%s, CorridorID=%s, K=%d, Routes=%v)",
+						b.name, stName, f.Properties.StopID, f.Properties.CorridorID, f.Properties.BundleSize, f.Properties.Routes)
+				}
+			}
+		}
+	}
+	t.Logf("Generated %d transit features (%d route ribbons, %d platform capsules)",
+		len(fc.Features), len(fc.Features)-capsuleCount, capsuleCount)
+	for _, b := range benchmarkStations {
+		if !matchedBenchmarks[b.name] {
+			t.Errorf("Benchmark station %s has no generated platform capsule!", b.name)
+		}
 	}
 
 	newGeoPath := filepath.Join(tempDir, "transit-lines.geojson")

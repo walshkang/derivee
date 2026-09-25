@@ -51,6 +51,11 @@ type GeoJSONRouteProperties struct {
 
 	// Wave V.2b Parallel Offset Properties
 	DeltaOffset    float64  `json:"delta_offset"`
+
+	// Wave V.5 Station Platform Capsule Properties
+	FeatureType    string   `json:"feature_type,omitempty"`
+	StationName    string   `json:"station_name,omitempty"`
+	StopID         string   `json:"stop_id,omitempty"`
 }
 
 // GeoJSONGeometry represents LineString or MultiLineString geometry
@@ -151,6 +156,7 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 	sort.Ints(sortedArcIDs)
 
 	var features []GeoJSONFeature
+	arcBundles := make(map[int][]*TrunkBundle)
 
 	for _, arcID := range sortedArcIDs {
 		pts := simplifiedArcs[arcID]
@@ -177,6 +183,7 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 		if err != nil {
 			return nil, nil, fmt.Errorf("arc %d bundle consolidation failed: %w", arcID, err)
 		}
+		arcBundles[arcID] = bundles
 
 		corridorID := fmt.Sprintf("corridor_arc_%d", arcID)
 		arcLength := CalculateArcLengthM(pts)
@@ -260,6 +267,13 @@ func GenerateTransitLinesGeoJSON(ds *Dataset) (*GeoJSONFeatureCollection, []byte
 			})
 		}
 	}
+
+	// 8. Pre-compute Station Platform Capsules for Bundled Corridors (K >= 2)
+	capsules, err := GeneratePlatformCapsules(ds, simplifiedArcs, arcBundles, DefaultPlatformCapsuleOptions)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate platform capsules: %w", err)
+	}
+	features = append(features, capsules...)
 
 	fc := &GeoJSONFeatureCollection{
 		Type:     "FeatureCollection",

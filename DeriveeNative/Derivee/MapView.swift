@@ -183,6 +183,8 @@ struct MapView: UIViewRepresentable {
         let ferryLinesLayerId = MapCustomizationDefaults.ferryLinesLayerId
         let transitTrenchCasingLayerId = MapCustomizationDefaults.transitTrenchCasingLayerId
         let transitRibbonStrokeLayerId = MapCustomizationDefaults.transitRibbonStrokeLayerId
+        let stationPlatformCapsuleLayerId = MapCustomizationDefaults.stationPlatformCapsuleLayerId
+        let stationPlatformCapsuleCasingLayerId = MapCustomizationDefaults.stationPlatformCapsuleCasingLayerId
         let transitBadgesCenterSymbolLayerId = MapCustomizationDefaults.transitBadgesCenterSymbolLayerId
         let transitBadgesRepeatedSymbolLayerId = MapCustomizationDefaults.transitBadgesRepeatedSymbolLayerId
         let subwayStationBulletsSourceId = MapCustomizationDefaults.subwayStationBulletsSourceId
@@ -594,7 +596,7 @@ struct MapView: UIViewRepresentable {
             
             // 0b. Wave V.3: Unified Trench Casing (round joins/caps, dynamic per-feature width)
             let trenchCasingLayer = MLNLineStyleLayer(identifier: transitTrenchCasingLayerId, source: subwaySource)
-            trenchCasingLayer.predicate = NSPredicate(format: "modal_class == 0 OR modal_class == 1")
+            trenchCasingLayer.predicate = NSPredicate(format: "(modal_class == 0 OR modal_class == 1) AND feature_type != 'platform_capsule'")
             trenchCasingLayer.lineColor = Self.subwayCasingColorExpression()
             trenchCasingLayer.lineWidth = TransitModalClass.trenchCasingWidthExpression()
             trenchCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
@@ -604,7 +606,7 @@ struct MapView: UIViewRepresentable {
             
             // 0c. Wave V.3: Multi-Ribbon Colored Strokes (bevel joins, butt caps, sort_key ordering)
             let ribbonStrokeLayer = MLNLineStyleLayer(identifier: transitRibbonStrokeLayerId, source: subwaySource)
-            ribbonStrokeLayer.predicate = NSPredicate(format: "modal_class == 0 OR modal_class == 1")
+            ribbonStrokeLayer.predicate = NSPredicate(format: "(modal_class == 0 OR modal_class == 1) AND feature_type != 'platform_capsule'")
             ribbonStrokeLayer.lineColor = Self.subwayLineColorExpression()
             ribbonStrokeLayer.lineWidth = TransitModalClass.subway.cartographyLineWidthExpression()
             ribbonStrokeLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
@@ -612,10 +614,30 @@ struct MapView: UIViewRepresentable {
             ribbonStrokeLayer.lineJoin = NSExpression(forConstantValue: "bevel")
             ribbonStrokeLayer.lineSortKey = NSExpression(forKeyPath: "sort_key")
             style.insertLayer(ribbonStrokeLayer, above: trenchCasingLayer)
+
+            // 0c.1. Wave V.5: Station Platform Capsule Casing Halo (Z: 1.5c, INV-CAPSULE-03/05)
+            let capsuleCasingLayer = MLNLineStyleLayer(identifier: stationPlatformCapsuleCasingLayerId, source: subwaySource)
+            capsuleCasingLayer.predicate = NSPredicate(format: "feature_type == 'platform_capsule'")
+            capsuleCasingLayer.lineColor = NSExpression(forConstantValue: UIColor(hex: "#2C2C2E").withAlphaComponent(0.35))
+            capsuleCasingLayer.lineWidth = TransitModalClass.platformCapsuleCasingWidthExpression()
+            capsuleCasingLayer.lineOpacity = parent.showSubwayThoroughfares ? TransitModalClass.platformCapsuleOpacityExpression() : NSExpression(forConstantValue: 0.0)
+            capsuleCasingLayer.lineCap = NSExpression(forConstantValue: "round")
+            capsuleCasingLayer.lineJoin = NSExpression(forConstantValue: "round")
+            style.insertLayer(capsuleCasingLayer, above: ribbonStrokeLayer)
+            
+            // 0c.2. Wave V.5: Station Platform Capsule Core (Z: 1.5c, INV-CAPSULE-03/05)
+            let capsuleCoreLayer = MLNLineStyleLayer(identifier: stationPlatformCapsuleLayerId, source: subwaySource)
+            capsuleCoreLayer.predicate = NSPredicate(format: "feature_type == 'platform_capsule'")
+            capsuleCoreLayer.lineColor = Self.subwayCasingColorExpression()
+            capsuleCoreLayer.lineWidth = TransitModalClass.platformCapsuleWidthExpression()
+            capsuleCoreLayer.lineOpacity = parent.showSubwayThoroughfares ? TransitModalClass.platformCapsuleOpacityExpression() : NSExpression(forConstantValue: 0.0)
+            capsuleCoreLayer.lineCap = NSExpression(forConstantValue: "round")
+            capsuleCoreLayer.lineJoin = NSExpression(forConstantValue: "round")
+            style.insertLayer(capsuleCoreLayer, above: capsuleCasingLayer)
             
             // 0d. Wave V.4: In-Line Badges — Line-Center for short/standard arcs (<800m)
             let centerBadgeLayer = MLNSymbolStyleLayer(identifier: transitBadgesCenterSymbolLayerId, source: subwaySource)
-            centerBadgeLayer.predicate = NSPredicate(format: "(modal_class == 0 OR modal_class == 1) AND arc_length_m < 800")
+            centerBadgeLayer.predicate = NSPredicate(format: "(modal_class == 0 OR modal_class == 1) AND feature_type != 'platform_capsule' AND arc_length_m < 800")
             centerBadgeLayer.symbolPlacement = NSExpression(forConstantValue: "line-center")
             centerBadgeLayer.iconImageName = NSExpression(forKeyPath: "composite_key")
             centerBadgeLayer.iconRotationAlignment = NSExpression(forConstantValue: "viewport")
@@ -624,11 +646,11 @@ struct MapView: UIViewRepresentable {
             centerBadgeLayer.iconPadding = NSExpression(forConstantValue: 4.0)
             centerBadgeLayer.iconOpacity = parent.showSubwayThoroughfares ? TransitModalClass.badgeOpacityExpression() : NSExpression(forConstantValue: 0.0)
             centerBadgeLayer.symbolSortKey = NSExpression(forKeyPath: "sort_key")
-            style.insertLayer(centerBadgeLayer, above: ribbonStrokeLayer)
+            style.insertLayer(centerBadgeLayer, above: capsuleCoreLayer)
             
             // 0e. Wave V.4: In-Line Badges — Repeated along long express arcs (>=800m, 250pt spacing)
             let repeatedBadgeLayer = MLNSymbolStyleLayer(identifier: transitBadgesRepeatedSymbolLayerId, source: subwaySource)
-            repeatedBadgeLayer.predicate = NSPredicate(format: "(modal_class == 0 OR modal_class == 1) AND arc_length_m >= 800")
+            repeatedBadgeLayer.predicate = NSPredicate(format: "(modal_class == 0 OR modal_class == 1) AND feature_type != 'platform_capsule' AND arc_length_m >= 800")
             repeatedBadgeLayer.symbolPlacement = NSExpression(forConstantValue: "line")
             repeatedBadgeLayer.symbolSpacing = NSExpression(forConstantValue: 250.0)
             repeatedBadgeLayer.iconImageName = NSExpression(forKeyPath: "composite_key")
@@ -881,6 +903,17 @@ struct MapView: UIViewRepresentable {
             }
             if let repeatedBadges = style.layer(withIdentifier: transitBadgesRepeatedSymbolLayerId) as? MLNSymbolStyleLayer {
                 repeatedBadges.iconOpacity = show ? TransitModalClass.badgeOpacityExpression() : NSExpression(forConstantValue: 0.0)
+            }
+            
+            // Wave V.5 Station Platform Capsule Layers (INV-CAPSULE-03, INV-CAPSULE-04)
+            if let capsuleCore = style.layer(withIdentifier: stationPlatformCapsuleLayerId) as? MLNLineStyleLayer {
+                capsuleCore.lineColor = Self.subwayCasingColorExpression()
+                capsuleCore.lineWidth = TransitModalClass.platformCapsuleWidthExpression()
+                capsuleCore.lineOpacity = show ? TransitModalClass.platformCapsuleOpacityExpression() : NSExpression(forConstantValue: 0.0)
+            }
+            if let capsuleCasing = style.layer(withIdentifier: stationPlatformCapsuleCasingLayerId) as? MLNLineStyleLayer {
+                capsuleCasing.lineWidth = TransitModalClass.platformCapsuleCasingWidthExpression()
+                capsuleCasing.lineOpacity = show ? TransitModalClass.platformCapsuleOpacityExpression() : NSExpression(forConstantValue: 0.0)
             }
             
             if let ferryLines = style.layer(withIdentifier: ferryLinesLayerId) as? MLNLineStyleLayer {

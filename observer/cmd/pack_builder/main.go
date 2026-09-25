@@ -266,7 +266,14 @@ func main() {
 		if err != nil {
 			log.Fatalf("GenerateTransitLinesGeoJSON failed: %v", err)
 		}
-		log.Printf("Generated %d route features with 0 Z-fighting", len(fc.Features))
+		capsuleCount := 0
+		for _, f := range fc.Features {
+			if f.Properties.FeatureType == "platform_capsule" {
+				capsuleCount++
+			}
+		}
+		log.Printf("Generated %d transit features (%d route ribbons, %d platform capsules) with 0 Z-fighting",
+			len(fc.Features), len(fc.Features)-capsuleCount, capsuleCount)
 
 		if actualGeoJSONPath == "" {
 			generatedPath := filepath.Join(tempDir, "transit-lines.geojson")

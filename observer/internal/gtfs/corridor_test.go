@@ -319,7 +319,7 @@ func TestParallelCorridorBundling_MultiColorOffsets(t *testing.T) {
 
 		seenOffsets[props.DeltaOffset] = true
 
-		coords, ok := parseLineCoords(feat.Geometry.Coordinates)
+		coords, ok := ParseLineCoords(feat.Geometry.Coordinates)
 		if !ok || len(coords) < 4 {
 			t.Fatalf("Feature %d: invalid coordinates", i)
 		}

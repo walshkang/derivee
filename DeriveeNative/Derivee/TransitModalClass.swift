@@ -172,6 +172,52 @@ public enum TransitModalClass: Int, Sendable, CaseIterable, Codable, Comparable,
         )
     }
     
+    // MARK: - Wave V.5 Platform Capsule Expressions (INV-CAPSULE-03, INV-CAPSULE-04)
+    
+    /// Generates platform capsule opacity expression per Research Doc 22 §5.5 and Wave V.5 (INV-CAPSULE-04).
+    /// Clamped to 0.0 for z <= 13.5; smooth linear transition to full opacity 1.0 at z >= 14.5.
+    public static func platformCapsuleOpacityExpression() -> NSExpression {
+        return NSExpression(
+            forMLNInterpolating: .zoomLevelVariable,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: [
+                13.5: 0.0,
+                14.5: 1.0
+            ])
+        )
+    }
+    
+    /// Generates platform capsule stroke width expression (thickness along track direction) per Wave V.5.
+    /// Regional/Emergence (z=13.0): 4.0pt -> Neighborhood (z=15.0): 7.0pt -> Street (z=17.0): 10.0pt.
+    public static func platformCapsuleWidthExpression() -> NSExpression {
+        return NSExpression(
+            forMLNInterpolating: .zoomLevelVariable,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: [
+                13.0: 4.0,
+                15.0: 7.0,
+                17.0: 10.0
+            ])
+        )
+    }
+    
+    /// Generates platform capsule casing width expression with 2.0pt halo (1.0pt margin on each side) per Wave V.5.
+    /// Regional/Emergence (z=13.0): 6.0pt -> Neighborhood (z=15.0): 9.0pt -> Street (z=17.0): 12.0pt.
+    public static func platformCapsuleCasingWidthExpression() -> NSExpression {
+        return NSExpression(
+            forMLNInterpolating: .zoomLevelVariable,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: [
+                13.0: 6.0,
+                15.0: 9.0,
+                17.0: 12.0
+            ])
+        )
+    }
+    
     /// MapLibre dash pattern for the primary stroke line, or nil for solid lines.
     public var cartographyLineDashPattern: [Double]? {
         switch self {

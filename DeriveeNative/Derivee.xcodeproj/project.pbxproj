@@ -278,6 +278,7 @@
 		CC40FDBCA5CC292E93D732D0 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E762977F3C0374C7F310E72C /* SearchViewModel.swift */; };
 		CCAE0CA5045E5FE5130BABB5 /* FogPolygonMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0786225B07AB50A074567E9 /* FogPolygonMath.swift */; };
 		CD1B0E56671B294A3975748E /* GTFSRealtimeStreamProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFDD925668DD06F472F14429 /* GTFSRealtimeStreamProcessorTests.swift */; };
+		CDC526B483FED5D95F44EDBA /* StationPlatformCapsuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEDECA3A879BBA0D8C0C424 /* StationPlatformCapsuleTests.swift */; };
 		CDDCAE3518655AB14CA92272 /* TransitRevealSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 859087AC5C30D2C163F4039B /* TransitRevealSheet.swift */; };
 		CDFF389B06DC811D5AD5B9F8 /* PlaceSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C5781EC53B68B6C984EEB3 /* PlaceSearchTests.swift */; };
 		CEE2BAF304C361E7A5ECE99F /* InspectorMapSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27E066C843E437D9FC50575 /* InspectorMapSyncTests.swift */; };
@@ -480,6 +481,7 @@
 		1CD15C4C1DCCB819FDC2D21C /* RouteComparisonCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteComparisonCardView.swift; sourceTree = "<group>"; };
 		1D847653C6AC247A7201423A /* DynamicRecoverySnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicRecoverySnapshotTests.swift; sourceTree = "<group>"; };
 		1E20E68A9C4F975F00BAF8FA /* MapProjectionMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapProjectionMath.swift; sourceTree = "<group>"; };
+		1FEDECA3A879BBA0D8C0C424 /* StationPlatformCapsuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationPlatformCapsuleTests.swift; sourceTree = "<group>"; };
 		1FFA5B837A866E45F5FCCA95 /* testRouteLegDetailViewSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testRouteLegDetailViewSnapshot.1.png; sourceTree = "<group>"; };
 		21288BAF48D59BC9981D3C23 /* ConfidenceBandCanvasTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfidenceBandCanvasTests.swift; sourceTree = "<group>"; };
 		21AD6FB3518E383909502845 /* TransitRevealSheetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRevealSheetTests.swift; sourceTree = "<group>"; };
@@ -1212,6 +1214,7 @@
 				FD3018C4BA13CF89BEBFCCBA /* SpatialStoreFogTests.swift */,
 				AD49AEE5E58C52B7A99F4602 /* StatenIslandRailwayTests.swift */,
 				3BF9C60FCE26FEC11317A280 /* StationComplexTests.swift */,
+				1FEDECA3A879BBA0D8C0C424 /* StationPlatformCapsuleTests.swift */,
 				AFD0D0C312565881E81C6339 /* StationTransitionTests.swift */,
 				D9866CFA84BA574D7B57A3AD /* StopNameSanitizationTests.swift */,
 				8C620FF203F57ED5764A4BF7 /* TrackingEngineTests.swift */,
@@ -1857,6 +1860,7 @@
 				6F7AFB2044DA5AE96EB8CFB8 /* SpatialStoreFogTests.swift in Sources */,
 				E7A0C08B5F9C67EA6282D50D /* StatenIslandRailwayTests.swift in Sources */,
 				581E7B1603C43882088BD354 /* StationComplexTests.swift in Sources */,
+				CDC526B483FED5D95F44EDBA /* StationPlatformCapsuleTests.swift in Sources */,
 				022FB2E8E9FD4C606CBACE71 /* StationTransitionTests.swift in Sources */,
 				C96A52938FB8475871C7E163 /* StopNameSanitizationTests.swift in Sources */,
 				9838261106ACCE6615BCBC25 /* TrackingEngineTests.swift in Sources */,

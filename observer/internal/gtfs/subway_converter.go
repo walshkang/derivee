@@ -1,10 +1,13 @@
 package gtfs
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // LegacySubwayGeoJSON represents GeoJSON features from subway network
@@ -28,7 +31,7 @@ type LegacySubwayGeoJSON struct {
 	} `json:"features"`
 }
 
-func parseLineCoords(raw interface{}) ([][2]float64, bool) {
+func ParseLineCoords(raw interface{}) ([][2]float64, bool) {
 	if typed, ok := raw.([][2]float64); ok {
 		return typed, true
 	}
@@ -134,14 +137,14 @@ func ConvertLegacySubwayToDataset(geoJSONBytes []byte) (*Dataset, error) {
 
 		var lines [][][2]float64
 		if feat.Geometry.Type == "LineString" {
-			if line, ok := parseLineCoords(feat.Geometry.Coordinates); ok {
+			if line, ok := ParseLineCoords(feat.Geometry.Coordinates); ok {
 				lines = append(lines, line)
 			}
 		} else {
 			// MultiLineString
 			if multi, ok := feat.Geometry.Coordinates.([]interface{}); ok {
 				for _, rawLine := range multi {
-					if line, ok := parseLineCoords(rawLine); ok {
+					if line, ok := ParseLineCoords(rawLine); ok {
 						lines = append(lines, line)
 					}
 				}
@@ -172,3 +175,87 @@ func ConvertLegacySubwayToDataset(geoJSONBytes []byte) (*Dataset, error) {
 
 	return ds, nil
 }
+
+// HydrateStopsFromSQLite populates Dataset.Stops, Dataset.Trips, and Dataset.StopTimes
+// from a pre-compiled transit.sqlite database.
+func HydrateStopsFromSQLite(ds *Dataset, dbPath string) error {
+	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=OFF&_query_only=1")
+	if err != nil {
+		return fmt.Errorf("failed to open sqlite database %s: %w", dbPath, err)
+	}
+	defer db.Close()
+
+	// Hydrate routes from SQLite
+	rRows, err := db.Query("SELECT route_id, agency_id, route_short_name, route_long_name, route_type, COALESCE(route_color, '') FROM routes")
+	if err == nil {
+		routeCount := 0
+		for rRows.Next() {
+			var r Route
+			if err := rRows.Scan(&r.RouteID, &r.AgencyID, &r.RouteShortName, &r.RouteLongName, &r.RouteType, &r.RouteColor); err == nil {
+				r.RouteColor = strings.TrimPrefix(r.RouteColor, "#")
+				ds.Routes[r.RouteID] = r
+				routeCount++
+			}
+		}
+		rRows.Close()
+	}
+
+	rows, err := db.Query("SELECT stop_id, stop_name, stop_lat, stop_lon, location_type, routes, parent_station FROM stops")
+	if err != nil {
+		return fmt.Errorf("failed to query stops from %s: %w", dbPath, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var stopID, stopName, routesStr string
+		var stopLat, stopLon float64
+		var locationType int
+		var parentStation sql.NullString
+
+		if err := rows.Scan(&stopID, &stopName, &stopLat, &stopLon, &locationType, &routesStr, &parentStation); err != nil {
+			return fmt.Errorf("failed to scan stop row: %w", err)
+		}
+
+		pStation := ""
+		if parentStation.Valid {
+			pStation = parentStation.String
+		}
+
+		stop := Stop{
+			StopID:        stopID,
+			StopName:      stopName,
+			StopLat:       stopLat,
+			StopLon:       stopLon,
+			LocationType:  locationType,
+			ParentStation: pStation,
+		}
+		ds.Stops[stopID] = stop
+
+		// Parse routes string (e.g. ",1,2,3," or "A,C,E")
+		trimmed := strings.Trim(routesStr, ",")
+		if trimmed != "" {
+			parts := strings.Split(trimmed, ",")
+			for _, rID := range parts {
+				rID = strings.TrimSpace(rID)
+				if rID == "" {
+					continue
+				}
+				tripID := fmt.Sprintf("trip_stop_%s_%s", stopID, rID)
+				if _, exists := ds.Trips[tripID]; !exists {
+					ds.Trips[tripID] = Trip{
+						TripID:  tripID,
+						RouteID: rID,
+					}
+				}
+				ds.StopTimes[tripID] = append(ds.StopTimes[tripID], StopTime{
+					TripID:       tripID,
+					StopID:       stopID,
+					StopSequence: 1,
+				})
+			}
+		}
+	}
+
+	return nil
+}
+
