@@ -309,8 +309,33 @@ func isBRTRoute(route Route) bool {
 	return false
 }
 
+// CanonicalNYCColors maps route IDs and route groups to official Apple Maps / MTA vibrant hex codes
+var CanonicalNYCColors = map[string]string{
+	"1": "#EE352E", "2": "#EE352E", "3": "#EE352E", "123": "#EE352E",
+	"4": "#00933C", "5": "#00933C", "6": "#00933C", "6X": "#00933C", "456": "#00933C",
+	"7": "#B933AD", "7X": "#B933AD",
+	"A": "#0039A6", "C": "#0039A6", "E": "#0039A6", "ACE": "#0039A6",
+	"B": "#FF6319", "D": "#FF6319", "F": "#FF6319", "FX": "#FF6319", "M": "#FF6319", "BDFM": "#FF6319",
+	"G": "#6CBE45",
+	"J": "#996633", "Z": "#996633", "JZ": "#996633",
+	"L": "#A7A9AC",
+	"N": "#FCCC0A", "Q": "#FCCC0A", "R": "#FCCC0A", "W": "#FCCC0A", "NQRW": "#FCCC0A",
+	"S": "#808183", "GS": "#808183", "FS": "#808183", "H": "#808183",
+	"SIR": "#08179C", "SI": "#08179C",
+}
+
 // ResolveRouteColor returns the formatted hex color for a Route, falling back to brand modal defaults
 func ResolveRouteColor(route Route) string {
+	cleanID := strings.ToUpper(strings.TrimSpace(route.RouteID))
+	modalClass := ResolveModalClass(route.RouteType)
+
+	// For rapid transit / rail routes, apply canonical Apple Maps vibrant colors for NYC trunks
+	if modalClass != ModalClassBus {
+		if canonical, ok := CanonicalNYCColors[cleanID]; ok {
+			return canonical
+		}
+	}
+
 	color := strings.TrimSpace(route.RouteColor)
 	if color != "" {
 		if !strings.HasPrefix(color, "#") {
@@ -319,7 +344,6 @@ func ResolveRouteColor(route Route) string {
 		return color
 	}
 
-	cleanID := strings.ToUpper(strings.TrimSpace(route.RouteID))
 	cleanShort := strings.ToUpper(strings.TrimSpace(route.RouteShortName))
 
 	// Boston MBTA Trunk Colors
@@ -413,7 +437,7 @@ func ResolveRouteColor(route Route) string {
 		return "#0039A6"
 	}
 
-	modalClass := ResolveModalClass(route.RouteType)
+	modalClass = ResolveModalClass(route.RouteType)
 	switch modalClass {
 	case ModalClassFerry:
 		return "#00A3E0"

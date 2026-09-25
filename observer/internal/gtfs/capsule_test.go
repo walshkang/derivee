@@ -42,26 +42,26 @@ func TestPlatformCapsule_Orthogonality(t *testing.T) {
 }
 
 func TestPlatformCapsule_SpanBounds(t *testing.T) {
-	opts := DefaultPlatformCapsuleOptions // TrackSpacing = 3.66m, Halo = 2.5m
+	opts := DefaultPlatformCapsuleOptions // TrackSpacing = 22.0m, Halo = 2.5m
 
 	// K = 2
 	spanK2 := float64(2-1)*opts.TrackSpacingM + 2.0*opts.HaloM
-	expectedK2 := 1.0*3.66 + 5.0 // 8.66m
+	expectedK2 := 1.0*opts.TrackSpacingM + 5.0
 	if math.Abs(spanK2-expectedK2) > 1e-6 {
 		t.Fatalf("INV-CAPSULE-02: K=2 span = %f, expected %f", spanK2, expectedK2)
 	}
 	if spanK2 < float64(2-1)*opts.TrackSpacingM {
-		t.Fatalf("INV-CAPSULE-02 violation: span %f does not cover tracks %f", spanK2, 3.66)
+		t.Fatalf("INV-CAPSULE-02 violation: span %f does not cover tracks %f", spanK2, opts.TrackSpacingM)
 	}
 
 	// K = 3
 	spanK3 := float64(3-1)*opts.TrackSpacingM + 2.0*opts.HaloM
-	expectedK3 := 2.0*3.66 + 5.0 // 12.32m
+	expectedK3 := 2.0*opts.TrackSpacingM + 5.0
 	if math.Abs(spanK3-expectedK3) > 1e-6 {
 		t.Fatalf("INV-CAPSULE-02: K=3 span = %f, expected %f", spanK3, expectedK3)
 	}
 	if spanK3 < float64(3-1)*opts.TrackSpacingM {
-		t.Fatalf("INV-CAPSULE-02 violation: span %f does not cover tracks %f", spanK3, 7.32)
+		t.Fatalf("INV-CAPSULE-02 violation: span %f does not cover tracks %f", spanK3, 2.0*opts.TrackSpacingM)
 	}
 }
 

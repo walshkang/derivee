@@ -207,6 +207,9 @@ func HydrateStopsFromSQLite(ds *Dataset, dbPath string) error {
 			var r Route
 			if err := rRows.Scan(&r.RouteID, &r.AgencyID, &r.RouteShortName, &r.RouteLongName, &r.RouteType, &r.RouteColor); err == nil {
 				r.RouteColor = strings.TrimPrefix(r.RouteColor, "#")
+				if canonical, ok := CanonicalNYCColors[r.RouteID]; ok {
+					r.RouteColor = strings.TrimPrefix(canonical, "#")
+				}
 				// Preserve existing composite RouteShortName if present (e.g. "A, C, E")
 				if existing, exists := ds.Routes[r.RouteID]; exists && strings.Contains(existing.RouteShortName, ",") {
 					r.RouteShortName = existing.RouteShortName

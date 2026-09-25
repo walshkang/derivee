@@ -8,7 +8,7 @@ import (
 
 // PlatformCapsuleOptions configures platform capsule generation
 type PlatformCapsuleOptions struct {
-	TrackSpacingM    float64 // Track lateral spacing distance (default: 3.66m)
+	TrackSpacingM    float64 // Track lateral spacing distance (default: 22.0m)
 	HaloM            float64 // Halo margin extending past outer tracks (default: 2.5m)
 	MaxSnapDistanceM float64 // Maximum distance to snap station to corridor arc (default: 150.0m, INV-CAPSULE-06)
 	MergeRadiusM     float64 // Maximum distance along arc to merge adjacent platform nodes (default: 30.0m)
@@ -16,7 +16,7 @@ type PlatformCapsuleOptions struct {
 
 // DefaultPlatformCapsuleOptions provides standard production values
 var DefaultPlatformCapsuleOptions = PlatformCapsuleOptions{
-	TrackSpacingM:    BaseTrackSpacingM, // 3.66m
+	TrackSpacingM:    BaseTrackSpacingM, // 22.0m
 	HaloM:            2.5,
 	MaxSnapDistanceM: 150.0,
 	MergeRadiusM:     30.0,

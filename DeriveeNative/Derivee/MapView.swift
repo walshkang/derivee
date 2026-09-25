@@ -597,7 +597,7 @@ struct MapView: UIViewRepresentable {
             // 0b. Wave V.3: Unified Trench Casing (round joins/caps, dynamic per-feature width)
             let trenchCasingLayer = MLNLineStyleLayer(identifier: transitTrenchCasingLayerId, source: subwaySource)
             trenchCasingLayer.predicate = NSPredicate(format: "(modal_class == 0 OR modal_class == 1) AND feature_type != 'platform_capsule'")
-            trenchCasingLayer.lineColor = Self.subwayCasingColorExpression()
+            trenchCasingLayer.lineColor = NSExpression(forConstantValue: UIColor.white)
             trenchCasingLayer.lineWidth = TransitModalClass.trenchCasingWidthExpression()
             trenchCasingLayer.lineOpacity = NSExpression(forConstantValue: parent.showSubwayThoroughfares ? 1.0 : 0.0)
             trenchCasingLayer.lineCap = NSExpression(forConstantValue: "round")
@@ -628,7 +628,7 @@ struct MapView: UIViewRepresentable {
             // 0c.2. Wave V.5: Station Platform Capsule Core (Z: 1.5c, INV-CAPSULE-03/05)
             let capsuleCoreLayer = MLNLineStyleLayer(identifier: stationPlatformCapsuleLayerId, source: subwaySource)
             capsuleCoreLayer.predicate = NSPredicate(format: "feature_type == 'platform_capsule'")
-            capsuleCoreLayer.lineColor = Self.subwayCasingColorExpression()
+            capsuleCoreLayer.lineColor = NSExpression(forConstantValue: UIColor.white)
             capsuleCoreLayer.lineWidth = TransitModalClass.platformCapsuleWidthExpression()
             capsuleCoreLayer.lineOpacity = parent.showSubwayThoroughfares ? TransitModalClass.platformCapsuleOpacityExpression() : NSExpression(forConstantValue: 0.0)
             capsuleCoreLayer.lineCap = NSExpression(forConstantValue: "round")
@@ -887,7 +887,7 @@ struct MapView: UIViewRepresentable {
             
             // Wave V.3 Unified Trench Casing & Multi-Ribbon Layers
             if let trenchCasing = style.layer(withIdentifier: transitTrenchCasingLayerId) as? MLNLineStyleLayer {
-                trenchCasing.lineColor = Self.subwayCasingColorExpression()
+                trenchCasing.lineColor = NSExpression(forConstantValue: UIColor.white)
                 trenchCasing.lineWidth = TransitModalClass.trenchCasingWidthExpression()
                 trenchCasing.lineOpacity = NSExpression(forConstantValue: show ? 1.0 : 0.0)
             }
@@ -907,7 +907,7 @@ struct MapView: UIViewRepresentable {
             
             // Wave V.5 Station Platform Capsule Layers (INV-CAPSULE-03, INV-CAPSULE-04)
             if let capsuleCore = style.layer(withIdentifier: stationPlatformCapsuleLayerId) as? MLNLineStyleLayer {
-                capsuleCore.lineColor = Self.subwayCasingColorExpression()
+                capsuleCore.lineColor = NSExpression(forConstantValue: UIColor.white)
                 capsuleCore.lineWidth = TransitModalClass.platformCapsuleWidthExpression()
                 capsuleCore.lineOpacity = show ? TransitModalClass.platformCapsuleOpacityExpression() : NSExpression(forConstantValue: 0.0)
             }

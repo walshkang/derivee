@@ -8,21 +8,21 @@ import (
 // WGS84 Earth Equatorial Radius in meters
 const EarthRadiusM = 6378137.0
 
-// BaseTrackSpacingM defines the canonical physical track spacing in meters (3.66m / 12ft, Doc 22 §6.1)
-const BaseTrackSpacingM = 3.66
+// BaseTrackSpacingM defines the canonical visual corridor ribbon spacing in meters (~22.0m / 3.0pt at z=14, Doc 22 §1.3)
+const BaseTrackSpacingM = 22.0
 
 // DefaultMiterLimit defines the maximum miter apex expansion ratio before bevel truncation (INV-OFFSET-01: M <= 2.0)
 const DefaultMiterLimit = 2.0
 
-// DilationOverlapM defines the sub-pixel MSAA dilation overlap in meters (0.35m ≈ 0.25pt, Doc 22 §4.3)
-const DilationOverlapM = 0.35
+// DilationOverlapM defines the sub-pixel MSAA dilation overlap in meters (~1.5m ≈ 0.2pt, Doc 22 §4.3)
+const DilationOverlapM = 1.5
 
 // OffsetOptions configures geometric parallel offsetting
 type OffsetOptions struct {
 	MiterLimit      float64 // Maximum miter ratio before bevel truncation (default: 2.0)
-	TrackSpacingM   float64 // Track spacing distance (default: 3.66m)
+	TrackSpacingM   float64 // Track spacing distance (default: 22.0m)
 	BevelSharpEdges bool    // Clamp acute turns (theta < 60°) with bevel join
-	DilationM       float64 // Sub-pixel MSAA dilation overlap (default: 0.35m)
+	DilationM       float64 // Sub-pixel MSAA dilation overlap (default: 1.5m)
 }
 
 // DefaultOffsetOptions provides production defaults conforming to Research Doc 22

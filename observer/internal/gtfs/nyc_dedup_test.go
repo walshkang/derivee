@@ -174,11 +174,67 @@ func TestNYCTrunkDeduplicationAndCanonicalCorridors(t *testing.T) {
 
 	t.Logf("NYC Multiplicity Distribution: K=1: %d, K=2: %d, K=3: %d (K_max = %d)",
 		corridorCounts[1], corridorCounts[2], corridorCounts[3], kMax)
+
+	colorGroups := make(map[string][]string)
+	for _, f := range fc.Features {
+		if f.Properties.FeatureType != "platform_capsule" {
+			colorGroups[f.Properties.TrunkColor] = append(colorGroups[f.Properties.TrunkColor], f.Properties.CompositeKey)
+			if f.Properties.BundleSize >= 2 {
+				coords, _ := ParseLineCoords(f.Geometry.Coordinates)
+				// Print sample coords and properties for multi-ribbon corridors
+				t.Logf("Multi-ribbon arc: Corridor=%s, K=%d, idx=%d, color=%s, routes=%v, offset=%f, pts=%d, start=(%.4f, %.4f)",
+					f.Properties.CorridorID, f.Properties.BundleSize, f.Properties.BundleIndex, f.Properties.TrunkColor,
+					f.Properties.Routes, f.Properties.DeltaOffset, len(coords), coords[0][0], coords[0][1])
+			}
+		}
+	}
+	for col, keys := range colorGroups {
+		t.Logf("Trunk color %s: %d ribbons (sample: %s)", col, len(keys), keys[0])
+	}
+
 	if corridorCounts[3] == 0 {
 		t.Errorf("Expected K=3 multi-ribbon corridors (e.g. Queens Blvd E/F/R), got 0")
 	}
 	if corridorCounts[2] == 0 {
 		t.Errorf("Expected K=2 multi-ribbon corridors, got 0")
+	}
+}
+
+func TestInspectAllQueensCorridors(t *testing.T) {
+	packPath := "../../../DeriveeNative/Derivee/city-nyc.pack.zst"
+	geoBytes, err := extractGeoJSONFromZstPack(packPath)
+	if err != nil {
+		t.Skipf("Skipping: %v", err)
+		return
+	}
+
+	var fc GeoJSONFeatureCollection
+	if err := json.Unmarshal(geoBytes, &fc); err != nil {
+		t.Fatalf("Failed: %v", err)
+	}
+
+	for _, f := range fc.Features {
+		p := f.Properties
+		if p.FeatureType == "platform_capsule" {
+			continue
+		}
+		coords, _ := ParseLineCoords(f.Geometry.Coordinates)
+		if len(coords) < 2 {
+			continue
+		}
+		// Queens bounding box: Lon between -73.95 and -73.70, Lat between 40.70 and 40.80
+		inQueens := false
+		for _, c := range coords {
+			if c[0] > -73.94 && c[0] < -73.70 && c[1] > 40.72 && c[1] < 40.80 {
+				inQueens = true
+				break
+			}
+		}
+		if inQueens {
+			t.Logf("Queens Arc %s: K=%d idx=%d color=%s routes=%v name=%s start=(%.4f, %.4f) end=(%.4f, %.4f)",
+				p.CorridorID, p.BundleSize, p.BundleIndex, p.TrunkColor, p.Routes, p.RouteShortName,
+				coords[0][0], coords[0][1], coords[len(coords)-1][0], coords[len(coords)-1][1])
+		}
 	}
 }
 
