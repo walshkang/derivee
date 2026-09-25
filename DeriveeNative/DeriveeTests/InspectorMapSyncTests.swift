@@ -716,6 +716,193 @@ final class InspectorMapSyncTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(b.ne.latitude, station.latitude)
         }
     }
+
+    // MARK: - 11. Wave Pre-T.7 Adaptive Viewport, Horizon Switcher & Vector Beacon Tests (WPT7)
+
+    func testPreT7_AdaptiveCameraMode_ClassificationByTrackDistance() {
+        let station = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9772) // Grand Central
+        let closeVehicle = CLLocationCoordinate2D(latitude: 40.7460, longitude: -73.9820) // ~900m away (33rd St)
+        let distantVehicle = CLLocationCoordinate2D(latitude: 40.8525, longitude: -73.8281) // ~15km away (Pelham Bay Park)
+        
+        let trackCoords = [
+            closeVehicle,
+            CLLocationCoordinate2D(latitude: 40.7500, longitude: -73.9790),
+            station,
+            CLLocationCoordinate2D(latitude: 40.7800, longitude: -73.9500),
+            distantVehicle
+        ]
+        
+        // 1. Close vehicle (<= 2.5km) -> .dualFraming
+        let closeMode = RouteInspectionCommand.classifyCameraMode(
+            station: station,
+            vehicle: closeVehicle,
+            coordinates: trackCoords,
+            minutes: 6
+        )
+        if case .dualFraming(let dist) = closeMode {
+            XCTAssertLessThanOrEqual(dist, 2500.0, "Close vehicle must be classified as dualFraming with distance <= 2.5km")
+        } else {
+            XCTFail("Close vehicle should yield .dualFraming, got \(closeMode)")
+        }
+        
+        // 2. Imminence <= 4 min triggers dual framing even if slightly beyond 2.5km
+        let imminentMode = RouteInspectionCommand.classifyCameraMode(
+            station: station,
+            vehicle: CLLocationCoordinate2D(latitude: 40.7300, longitude: -73.9900),
+            coordinates: trackCoords,
+            minutes: 3
+        )
+        if case .dualFraming = imminentMode {
+            // Expected
+        } else {
+            XCTFail("Imminent vehicle (minutes <= 4) must yield .dualFraming, got \(imminentMode)")
+        }
+        
+        // 3. Distant vehicle (> 2.5km and minutes > 4) -> .vehicleTracking
+        let distantMode = RouteInspectionCommand.classifyCameraMode(
+            station: station,
+            vehicle: distantVehicle,
+            coordinates: trackCoords,
+            minutes: 18
+        )
+        if case .vehicleTracking(let dist) = distantMode {
+            XCTAssertGreaterThan(dist, 2500.0, "Distant vehicle must be classified as vehicleTracking with distance > 2.5km")
+        } else {
+            XCTFail("Distant vehicle should yield .vehicleTracking, got \(distantMode)")
+        }
+        
+        // 4. Missing vehicle coordinate -> .stationAnchor
+        let missingVehicleMode = RouteInspectionCommand.classifyCameraMode(
+            station: station,
+            vehicle: nil,
+            coordinates: trackCoords
+        )
+        XCTAssertEqual(missingVehicleMode, .stationAnchor, "Missing telemetry must anchor to station")
+        
+        // 5. Boarding / minutes == 0 -> .stationAnchor
+        let boardingMode = RouteInspectionCommand.classifyCameraMode(
+            station: station,
+            vehicle: closeVehicle,
+            coordinates: trackCoords,
+            minutes: 0,
+            status: "Boarding"
+        )
+        XCTAssertEqual(boardingMode, .stationAnchor, "Boarding consist at platform must anchor to station")
+    }
+
+    func testPreT7_PolylineTrackDistanceCalculation() {
+        let ptA = CLLocationCoordinate2D(latitude: 40.7500, longitude: -73.9800)
+        let ptB = CLLocationCoordinate2D(latitude: 40.7550, longitude: -73.9750)
+        let ptC = CLLocationCoordinate2D(latitude: 40.7600, longitude: -73.9700)
+        
+        let polyline = [ptA, ptB, ptC]
+        let distance = RouteInspectionCommand.calculateTrackDistance(between: ptA, and: ptC, in: polyline)
+        
+        let locA = CLLocation(latitude: ptA.latitude, longitude: ptA.longitude)
+        let locB = CLLocation(latitude: ptB.latitude, longitude: ptB.longitude)
+        let locC = CLLocation(latitude: ptC.latitude, longitude: ptC.longitude)
+        let expectedDist = locA.distance(from: locB) + locB.distance(from: locC)
+        
+        XCTAssertEqual(distance, expectedDist, accuracy: 1.0, "Track distance must accurately sum polyline segment lengths")
+    }
+
+    @MainActor
+    func testPreT7_FocusCapsuleViewConstruction() {
+        let station = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9772)
+        let vehicle = CLLocationCoordinate2D(latitude: 40.7460, longitude: -73.9820)
+        
+        var focusedCoord: CLLocationCoordinate2D? = nil
+        let capsule = TransitFocusSwitcherCapsule(
+            stationName: "Grand Central-42 St",
+            stationCoordinate: station,
+            vehicleStopName: "33rd St",
+            vehicleCoordinate: vehicle,
+            etaMinutes: 3,
+            onFocus: { coord in
+                focusedCoord = coord
+            }
+        )
+        
+        let hosting = UIHostingController(rootView: capsule)
+        XCTAssertNotNil(hosting.view)
+        
+        // Invoke focus callback directly
+        capsule.onFocus?(station)
+        guard let focused = focusedCoord else {
+            XCTFail("focusedCoord should not be nil")
+            return
+        }
+        XCTAssertEqual(focused.latitude, station.latitude, accuracy: 0.0001)
+    }
+
+    func testPreT7_OffScreenBeaconState() {
+        let beacon = OffScreenBeaconState(
+            routeId: "6",
+            routeColorHex: "#00933C",
+            stopsAway: 3,
+            minutes: 4,
+            screenPosition: CGPoint(x: 200, y: 120),
+            bearingRadians: 1.57,
+            vehicleCoordinate: CLLocationCoordinate2D(latitude: 40.78, longitude: -73.95)
+        )
+        
+        XCTAssertEqual(beacon.routeId, "6")
+        XCTAssertEqual(beacon.stopsAway, 3)
+        XCTAssertEqual(beacon.minutes, 4)
+        XCTAssertEqual(beacon.bearingRadians, 1.57, accuracy: 0.01)
+        XCTAssertEqual(beacon.screenPosition.x, 200)
+    }
+
+    func testPreT7_NonCollapsingLadderTaps_SourceCodeAudit() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let sheetFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/TransitRevealSheet.swift")
+        let content = try String(contentsOf: sheetFile, encoding: .utf8)
+        
+        // TransitRevealSheet inspectorView onFocusMap closures must not mutate selectedDetent to inspectionPeekDetent
+        // Check that inspectorView for GuidewayRunInspector and SurfaceRunInspector does not contain peek detent assignment
+        let hasForcedCollapse = content.contains("onFocusMap: { coord in\n                    onFocusMap?(coord)\n                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {\n                        selectedDetent = Self.inspectionPeekDetent")
+        XCTAssertFalse(
+            hasForcedCollapse,
+            "Pre-T.7 Violation: onFocusMap in inspectorView must NOT collapse selectedDetent to inspectionPeekDetent"
+        )
+    }
+
+    func testPreT7_SourceCodeAudit_MapView3StateEngine() throws {
+        let filePath = #filePath
+        let testsDir = URL(fileURLWithPath: filePath).deletingLastPathComponent()
+        let mapViewFile = testsDir.deletingLastPathComponent().appendingPathComponent("Derivee/MapView.swift")
+        let content = try String(contentsOf: mapViewFile, encoding: .utf8)
+        
+        // 1. Must implement centerCoordinateInUpperViewport with asymmetric bottom padding (+ 24.0)
+        XCTAssertTrue(
+            content.contains("centerCoordinateInUpperViewport"),
+            "Pre-T.7 Violation: MapView.Coordinator must implement centerCoordinateInUpperViewport"
+        )
+        XCTAssertTrue(
+            content.contains("+ 24.0"),
+            "Pre-T.7 Violation: Viewport framing must include asymmetric bottom padding H_sheet + 24pt"
+        )
+        
+        // 2. Must classify camera mode in frameRouteAndStation
+        XCTAssertTrue(
+            content.contains("classifyCameraMode"),
+            "Pre-T.7 Violation: frameRouteAndStation must classify camera mode"
+        )
+        
+        // 3. Must implement off-screen beacon tracking
+        XCTAssertTrue(
+            content.contains("updateOffScreenBeacon"),
+            "Pre-T.7 Violation: MapView.Coordinator must implement updateOffScreenBeacon"
+        )
+        
+        // 4. Must track user gestures to suppress auto-transition
+        XCTAssertTrue(
+            content.contains("hasUserPannedDuringInspection"),
+            "Pre-T.7 Violation: MapView.Coordinator must track hasUserPannedDuringInspection"
+        )
+    }
 }
+
 
 

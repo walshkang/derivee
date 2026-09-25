@@ -651,9 +651,6 @@ struct TransitRevealSheet: View {
                 },
                 onFocusMap: { coord in
                     onFocusMap?(coord)
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                        selectedDetent = Self.inspectionPeekDetent
-                    }
                 },
                 onInspectRoute: onInspectRoute,
                 onClearRouteInspection: onClearRouteInspection
@@ -675,9 +672,6 @@ struct TransitRevealSheet: View {
                 },
                 onFocusMap: { coord in
                     onFocusMap?(coord)
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                        selectedDetent = Self.inspectionPeekDetent
-                    }
                 },
                 onInspectRoute: onInspectRoute,
                 onClearRouteInspection: onClearRouteInspection

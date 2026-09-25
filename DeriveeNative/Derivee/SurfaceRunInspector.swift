@@ -85,6 +85,7 @@ public struct SurfaceRunInspector: View {
     @State private var isDisruptionDismissed: Bool = false
     @State private var isPulsing: Bool = false
     @State private var selectedStopForFocus: TrackStop? = nil
+    @State private var resolvedVehicleCoordinate: CLLocationCoordinate2D? = nil
     
     @Environment(\.dismiss) private var dismiss
     
@@ -193,6 +194,26 @@ public struct SurfaceRunInspector: View {
             .padding(.horizontal, 20)
             .padding(.top, 14)
             .padding(.bottom, 8)
+            
+            // Pre-T.7: Dual-Horizon Focus Switcher Capsule
+            if let vCoord = resolvedVehicleCoordinate {
+                let vehicleStopName = stopLadder.first(where: { $0.isVehicleHere })?.stopName ?? "En Route"
+                let stationCoord = stopLadder.first(where: { $0.isCurrent })?.coordinate ?? currentStopCoordinate
+                if let stCoord = stationCoord {
+                    TransitFocusSwitcherCapsule(
+                        stationName: currentStopName,
+                        stationCoordinate: stCoord,
+                        vehicleStopName: vehicleStopName,
+                        vehicleCoordinate: vCoord,
+                        etaMinutes: arrival.minutes,
+                        onFocus: { coord in
+                            onFocusMap?(coord)
+                        }
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+                }
+            }
             
             Divider()
             
@@ -1048,6 +1069,15 @@ public struct SurfaceRunInspector: View {
             )
             
             if let validStationCoord = stationCoord {
+                let vehicleIdx = ladder.firstIndex(where: { $0.isVehicleHere })
+                let currentIdx = ladder.firstIndex(where: { $0.isCurrent })
+                let stopsAway: Int? = {
+                    if let v = vehicleIdx, let c = currentIdx {
+                        return max(0, c - v)
+                    }
+                    return nil
+                }()
+                
                 let command = RouteInspectionCommand(
                     routeId: arrival.line,
                     lineName: lineInfo.name,
@@ -1059,17 +1089,21 @@ public struct SurfaceRunInspector: View {
                     shouldFrameCamera: true,
                     vehicleCoordinate: (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil,
                     vehicleBearing: (inspectionMode == .liveRun) ? vehicleLoc?.bearing : nil,
-                    vehicleStatus: (inspectionMode == .liveRun) ? arrival.distanceDescription : (inspectionMode.isHistoricalReplay ? "Historical" : "Scheduled")
+                    vehicleStatus: (inspectionMode == .liveRun) ? arrival.distanceDescription : (inspectionMode.isHistoricalReplay ? "Historical" : "Scheduled"),
+                    stopsAway: stopsAway,
+                    minutes: arrival.minutes
                 )
                 
                 await MainActor.run {
                     self.stopLadder = ladder
+                    self.resolvedVehicleCoordinate = (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil
                     self.isLoadingLadder = false
                     self.onInspectRoute?(command)
                 }
             } else {
                 await MainActor.run {
                     self.stopLadder = ladder
+                    self.resolvedVehicleCoordinate = (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil
                     self.isLoadingLadder = false
                 }
             }

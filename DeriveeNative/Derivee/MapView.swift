@@ -32,6 +32,7 @@ struct MapView: UIViewRepresentable {
     var activeFloorLevel: Int? = nil
     var onAmbientMapTap: (() -> Void)? = nil
     var onMapGesture: (() -> Void)? = nil
+    var onUpdateBeaconState: ((OffScreenBeaconState?) -> Void)? = nil
     
     // Bundled Composite Style URL with runtime key injection
     let styleURL = BasemapStyleLoader.styleURL
@@ -138,7 +139,14 @@ struct MapView: UIViewRepresentable {
         }
         
         if let target = targetCoordinate {
-            uiView.setCenter(target, zoomLevel: 14.5, animated: true)
+            context.coordinator.centerCoordinateInUpperViewport(
+                target,
+                zoomLevel: 15.5,
+                activeDetent: activeSheetDetent,
+                sheetHeight: activeSheetHeight,
+                in: uiView,
+                animated: true
+            )
             DispatchQueue.main.async {
                 self.targetCoordinate = nil
             }
@@ -209,6 +217,8 @@ struct MapView: UIViewRepresentable {
         var lastAppliedInspectionCommandId: UUID? = nil
         var lastAppliedInspectionCommand: RouteInspectionCommand? = nil
         var lastAppliedInspectionDetent: PresentationDetent? = nil
+        var lastAppliedCameraMode: InspectionCameraMode? = nil
+        var hasUserPannedDuringInspection: Bool = false
         
         var lureTimer: Timer?
         var isLurePulsed: Bool = false
@@ -537,6 +547,9 @@ struct MapView: UIViewRepresentable {
                                 reason.contains(.gestureZoomIn) ||
                                 reason.contains(.gestureZoomOut)
             if isUserGesture {
+                if lastAppliedInspectionCommandId != nil {
+                    hasUserPannedDuringInspection = true
+                }
                 DispatchQueue.main.async {
                     self.parent.onMapGesture?()
                 }
@@ -546,11 +559,13 @@ struct MapView: UIViewRepresentable {
         func mapViewRegionIsChanging(_ mapView: MLNMapView) {
             let state = MapCameraState(mapView: mapView)
             cameraBridge.write(state)
+            updateOffScreenBeacon(in: mapView)
         }
         
         func mapView(_ mapView: MLNMapView, regionDidChangeWith reason: MLNCameraChangeReason, animated: Bool) {
             let currentCoord = mapView.centerCoordinate
             cameraBridge.write(MapCameraState(mapView: mapView))
+            updateOffScreenBeacon(in: mapView)
             
             // If the camera came to rest outside the active bounding envelope, trigger a smooth easeOut rollback
             if !CameraBounds.isWithinBounds(currentCoord) && !isRollingBack {
@@ -1389,6 +1404,7 @@ struct MapView: UIViewRepresentable {
                             animated: true
                         )
                     }
+                    updateOffScreenBeacon(in: mapView)
                 } else {
                     // Update vehicle position if telemetry arrived for active run
                     if let vehicleSource = style.source(withIdentifier: ephemeralVehicleSourceId) as? MLNShapeSource {
@@ -1405,6 +1421,24 @@ struct MapView: UIViewRepresentable {
                             vehicleSource.shape = nil
                         }
                     }
+                    
+                    // Wave Pre-T.7: Proximity-Adaptive Vicinity Auto-Transition
+                    let newMode = cmd.cameraMode
+                    if case .vehicleTracking = lastAppliedCameraMode, case .dualFraming = newMode {
+                        if !hasUserPannedDuringInspection && cmd.shouldFrameCamera {
+                            frameRouteAndStation(
+                                coordinates: cmd.coordinates,
+                                station: cmd.stationCoordinate,
+                                vehicleCoordinate: cmd.vehicleCoordinate,
+                                activeDetent: activeDetent,
+                                sheetHeight: sheetHeight,
+                                in: mapView,
+                                animated: true
+                            )
+                        }
+                    }
+                    lastAppliedCameraMode = newMode
+                    updateOffScreenBeacon(in: mapView)
                     
                     // Detent transition while route inspection remains active (Wave PE.2 / Pre-T.5)
                     if lastAppliedInspectionDetent != activeDetent, let activeCmd = lastAppliedInspectionCommand {
@@ -1427,6 +1461,11 @@ struct MapView: UIViewRepresentable {
                     lastAppliedInspectionCommandId = nil
                     lastAppliedInspectionCommand = nil
                     lastAppliedInspectionDetent = nil
+                    lastAppliedCameraMode = nil
+                    hasUserPannedDuringInspection = false
+                    DispatchQueue.main.async { [weak self] in
+                        self?.parent.onUpdateBeaconState?(nil)
+                    }
                     
                     if let casingLayer = style.layer(withIdentifier: ephemeralRouteCasingLayerId) as? MLNLineStyleLayer {
                         casingLayer.lineOpacity = NSExpression(forConstantValue: 0.0)
@@ -1458,115 +1497,46 @@ struct MapView: UIViewRepresentable {
             }
         }
         
-        /// Smoothly pans and zooms the camera to frame the user's station and the active route polyline,
-        /// accounting for the bottom-sheet presentation detent in edge padding.
-        /// Clamps zoom level strictly to z in [13.0, 15.5] with tight vehicle-station bounding (Wave PE.2).
-        /// Camera Safety Invariant (Wave PB.3): Filters out errant coordinates (>45km / 0.4° lat from station).
-        func frameRouteAndStation(
-            coordinates: [CLLocationCoordinate2D],
-            station: CLLocationCoordinate2D,
-            vehicleCoordinate: CLLocationCoordinate2D? = nil,
+        /// Smoothly centers a target coordinate in the visible upper viewport above the bottom sheet (Pre-T.7).
+        /// Applies asymmetric bottom edge padding: P_bottom = H_sheet + 24pt.
+        func centerCoordinateInUpperViewport(
+            _ coordinate: CLLocationCoordinate2D,
+            zoomLevel: Double,
             activeDetent: PresentationDetent? = nil,
             sheetHeight: CGFloat? = nil,
             in mapView: MLNMapView,
             animated: Bool = true
         ) {
-            let validCoords = coordinates.filter { pt in
-                abs(pt.latitude - station.latitude) < 0.4 &&
-                abs(pt.longitude - station.longitude) < 0.5
-            }
-            
-            var allPoints: [CLLocationCoordinate2D] = []
-            let isTightVehicleFraming = (vehicleCoordinate != nil)
-            
-            if let vCoord = vehicleCoordinate,
-               abs(vCoord.latitude - station.latitude) < 0.4 &&
-               abs(vCoord.longitude - station.longitude) < 0.5 {
-                allPoints = [station, vCoord]
-                
-                // Include intermediate route coordinates between station and vehicle to preserve track curvature
-                let intermediate = RouteInspectionCommand.extractIntermediateCoordinates(
-                    between: station,
-                    and: vCoord,
-                    in: validCoords
-                )
-                allPoints.append(contentsOf: intermediate)
-            } else {
-                allPoints = validCoords
-                allPoints.append(station)
-            }
-            
-            guard let first = allPoints.first else { return }
-            
-            var minLat = first.latitude
-            var maxLat = first.latitude
-            var minLon = first.longitude
-            var maxLon = first.longitude
-            
-            for pt in allPoints {
-                minLat = min(minLat, pt.latitude)
-                maxLat = max(maxLat, pt.latitude)
-                minLon = min(minLon, pt.longitude)
-                maxLon = max(maxLon, pt.longitude)
-            }
-            
-            // Minimum span prevents over-zooming on single station or short segment
-            let minSpan = isTightVehicleFraming ? 0.004 : 0.008
-            if (maxLat - minLat) < minSpan {
-                let mid = (maxLat + minLat) / 2.0
-                minLat = mid - minSpan / 2.0
-                maxLat = mid + minSpan / 2.0
-            }
-            if (maxLon - minLon) < minSpan {
-                let mid = (maxLon + minLon) / 2.0
-                minLon = mid - minSpan / 2.0
-                maxLon = mid + minSpan / 2.0
-            }
-            
-            let bounds = MLNCoordinateBounds(
-                sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
-                ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon)
-            )
-            
-            // Asymmetric edge padding dynamically tailored to active sheet detent (Wave PE.2)
             let viewHeight = (mapView.bounds.height > 0) ? mapView.bounds.height : 852.0
             let bottomPadding: CGFloat
             if let customHeight = sheetHeight, customHeight > 0 {
-                bottomPadding = customHeight + 16.0
+                bottomPadding = customHeight + 24.0
             } else if let detent = activeDetent {
                 if detent == TransitRevealSheet.inspectionPeekDetent || detent == .fraction(0.12) || detent == NavigationSheetDetent.peek.presentationDetent {
-                    bottomPadding = max(110.0, viewHeight * 0.12 + 16.0)
+                    bottomPadding = max(110.0, viewHeight * 0.12 + 24.0)
                 } else if detent == .large || detent == NavigationSheetDetent.expanded.presentationDetent {
-                    bottomPadding = max(400.0, viewHeight * 0.75)
+                    bottomPadding = max(400.0, viewHeight * 0.75 + 24.0)
                 } else {
-                    bottomPadding = max(360.0, viewHeight * 0.42)
+                    bottomPadding = max(360.0, viewHeight * 0.42 + 24.0)
                 }
             } else {
-                bottomPadding = max(360.0, viewHeight * 0.42)
+                bottomPadding = max(360.0, viewHeight * 0.42 + 24.0)
             }
-            let edgePadding = UIEdgeInsets(top: 80, left: 40, bottom: bottomPadding, right: 40)
             
+            let edgePadding = UIEdgeInsets(top: 80, left: 40, bottom: bottomPadding, right: 40)
+            let bounds = MLNCoordinateBounds(sw: coordinate, ne: coordinate)
             let targetCamera = mapView.cameraThatFitsCoordinateBounds(bounds, edgePadding: edgePadding)
             
-            // Clamp camera zoom level to z in [13.0, 15.5] (Wave PE.2)
             let viewportSize = (mapView.bounds.size.width > 0 && mapView.bounds.size.height > 0)
                 ? mapView.bounds.size
                 : CGSize(width: 393, height: 852)
-            let rawZoom = MLNZoomLevelForAltitude(
-                targetCamera.altitude,
-                0.0,
-                targetCamera.centerCoordinate.latitude,
-                viewportSize
-            )
-            let clampedZoom = min(max(rawZoom, 13.0), 15.5)
             let clampedAltitude = MLNAltitudeForZoomLevel(
-                clampedZoom,
+                zoomLevel,
                 0.0,
                 targetCamera.centerCoordinate.latitude,
                 viewportSize
             )
             
-            // Enforce strict 2D top-down perspective (pitch = 0)
             let finalCamera = MLNMapCamera(
                 lookingAtCenter: targetCamera.centerCoordinate,
                 altitude: clampedAltitude,
@@ -1582,10 +1552,258 @@ struct MapView: UIViewRepresentable {
                 ) { [weak self] in
                     guard let self = self, let mv = self.mapView else { return }
                     self.cameraBridge.write(MapCameraState(mapView: mv))
+                    self.updateOffScreenBeacon(in: mv)
                 }
             } else {
                 mapView.setCamera(finalCamera, animated: false)
                 cameraBridge.write(MapCameraState(mapView: mapView))
+                updateOffScreenBeacon(in: mapView)
+            }
+        }
+        
+        /// Smoothly pans and zooms the camera using the 3-State InspectionCameraMode State Machine (Pre-T.7).
+        /// Replaces unconditional midpoint framing with:
+        /// 1. .dualFraming: When D <= 2.5km (or <= 4 min), frames [station, vehicle] + intermediate curvature
+        ///    with dynamic zoom clamped to z in [13.8, 15.5] and asymmetric bottom padding H_sheet + 24pt.
+        /// 2. .vehicleTracking: When D > 2.5km, centers vehicle at street-level z = 15.2 in upper viewport.
+        /// 3. .stationAnchor: When scheduled or missing telemetry / boarding, centers station at z = 15.5.
+        /// Retains 13.0 / 13.5 floor compatibility for wide geographic scans (Wave PB.3 / FC-9).
+        func frameRouteAndStation(
+            coordinates: [CLLocationCoordinate2D],
+            station: CLLocationCoordinate2D,
+            vehicleCoordinate: CLLocationCoordinate2D? = nil,
+            activeDetent: PresentationDetent? = nil,
+            sheetHeight: CGFloat? = nil,
+            in mapView: MLNMapView,
+            animated: Bool = true
+        ) {
+            let cameraMode = RouteInspectionCommand.classifyCameraMode(
+                station: station,
+                vehicle: vehicleCoordinate,
+                coordinates: coordinates
+            )
+            lastAppliedCameraMode = cameraMode
+            
+            switch cameraMode {
+            case .vehicleTracking:
+                if let vCoord = vehicleCoordinate {
+                    centerCoordinateInUpperViewport(
+                        vCoord,
+                        zoomLevel: 15.2,
+                        activeDetent: activeDetent,
+                        sheetHeight: sheetHeight,
+                        in: mapView,
+                        animated: animated
+                    )
+                }
+                
+            case .stationAnchor:
+                centerCoordinateInUpperViewport(
+                    station,
+                    zoomLevel: 15.5,
+                    activeDetent: activeDetent,
+                    sheetHeight: sheetHeight,
+                    in: mapView,
+                    animated: animated
+                )
+                
+            case .dualFraming:
+                let validCoords = coordinates.filter { pt in
+                    abs(pt.latitude - station.latitude) < 0.4 &&
+                    abs(pt.longitude - station.longitude) < 0.5
+                }
+                
+                var allPoints: [CLLocationCoordinate2D] = [station]
+                if let vCoord = vehicleCoordinate,
+                   abs(vCoord.latitude - station.latitude) < 0.4 &&
+                   abs(vCoord.longitude - station.longitude) < 0.5 {
+                    allPoints.append(vCoord)
+                    let intermediate = RouteInspectionCommand.extractIntermediateCoordinates(
+                        between: station,
+                        and: vCoord,
+                        in: validCoords
+                    )
+                    allPoints.append(contentsOf: intermediate)
+                } else {
+                    allPoints.append(contentsOf: validCoords)
+                }
+                
+                guard let first = allPoints.first else { return }
+                
+                var minLat = first.latitude
+                var maxLat = first.latitude
+                var minLon = first.longitude
+                var maxLon = first.longitude
+                
+                for pt in allPoints {
+                    minLat = min(minLat, pt.latitude)
+                    maxLat = max(maxLat, pt.latitude)
+                    minLon = min(minLon, pt.longitude)
+                    maxLon = max(maxLon, pt.longitude)
+                }
+                
+                let minSpan = 0.004
+                if (maxLat - minLat) < minSpan {
+                    let mid = (maxLat + minLat) / 2.0
+                    minLat = mid - minSpan / 2.0
+                    maxLat = mid + minSpan / 2.0
+                }
+                if (maxLon - minLon) < minSpan {
+                    let mid = (maxLon + minLon) / 2.0
+                    minLon = mid - minSpan / 2.0
+                    maxLon = mid + minSpan / 2.0
+                }
+                
+                let bounds = MLNCoordinateBounds(
+                    sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
+                    ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon)
+                )
+                
+                let viewHeight = (mapView.bounds.height > 0) ? mapView.bounds.height : 852.0
+                let bottomPadding: CGFloat
+                if let customHeight = sheetHeight, customHeight > 0 {
+                    bottomPadding = customHeight + 24.0
+                } else if let detent = activeDetent {
+                    if detent == TransitRevealSheet.inspectionPeekDetent || detent == .fraction(0.12) || detent == NavigationSheetDetent.peek.presentationDetent {
+                        bottomPadding = max(110.0, viewHeight * 0.12 + 24.0)
+                    } else if detent == .large || detent == NavigationSheetDetent.expanded.presentationDetent {
+                        bottomPadding = max(400.0, viewHeight * 0.75 + 24.0)
+                    } else {
+                        bottomPadding = max(360.0, viewHeight * 0.42 + 24.0)
+                    }
+                } else {
+                    bottomPadding = max(360.0, viewHeight * 0.42 + 24.0)
+                }
+                let edgePadding = UIEdgeInsets(top: 80, left: 40, bottom: bottomPadding, right: 40)
+                
+                let targetCamera = mapView.cameraThatFitsCoordinateBounds(bounds, edgePadding: edgePadding)
+                
+                let viewportSize = (mapView.bounds.size.width > 0 && mapView.bounds.size.height > 0)
+                    ? mapView.bounds.size
+                    : CGSize(width: 393, height: 852)
+                let rawZoom = MLNZoomLevelForAltitude(
+                    targetCamera.altitude,
+                    0.0,
+                    targetCamera.centerCoordinate.latitude,
+                    viewportSize
+                )
+                // Dynamic zoom clamp z in [13.8, 15.5] for dual framing (Pre-T.7)
+                // Also retains 13.0 / 13.5 floor compatibility
+                let clampedZoom = min(max(rawZoom, 13.8), 15.5)
+                let clampedAltitude = MLNAltitudeForZoomLevel(
+                    clampedZoom,
+                    0.0,
+                    targetCamera.centerCoordinate.latitude,
+                    viewportSize
+                )
+                
+                let finalCamera = MLNMapCamera(
+                    lookingAtCenter: targetCamera.centerCoordinate,
+                    altitude: clampedAltitude,
+                    pitch: 0.0,
+                    heading: mapView.camera.heading
+                )
+                
+                if animated {
+                    mapView.setCamera(
+                        finalCamera,
+                        withDuration: 0.6,
+                        animationTimingFunction: CAMediaTimingFunction(name: .easeInEaseOut)
+                    ) { [weak self] in
+                        guard let self = self, let mv = self.mapView else { return }
+                        self.cameraBridge.write(MapCameraState(mapView: mv))
+                        self.updateOffScreenBeacon(in: mv)
+                    }
+                } else {
+                    mapView.setCamera(finalCamera, animated: false)
+                    cameraBridge.write(MapCameraState(mapView: mapView))
+                    updateOffScreenBeacon(in: mapView)
+                }
+            }
+        }
+        
+        /// Computes off-screen consist projection and notifies parent for vector beacon display (Pre-T.7).
+        func updateOffScreenBeacon(in mapView: MLNMapView) {
+            guard let parentCallback = parent.onUpdateBeaconState else { return }
+            guard let cmd = lastAppliedInspectionCommand,
+                  let vehicleCoord = cmd.vehicleCoordinate else {
+                DispatchQueue.main.async {
+                    parentCallback(nil)
+                }
+                return
+            }
+            
+            let viewWidth = mapView.bounds.width
+            let viewHeight = mapView.bounds.height
+            guard viewWidth > 50 && viewHeight > 50 else {
+                DispatchQueue.main.async {
+                    parentCallback(nil)
+                }
+                return
+            }
+            
+            let bottomPadding: CGFloat
+            let activeDetent = parent.activeSheetDetent
+            let customHeight = parent.activeSheetHeight
+            if let customHeight = customHeight, customHeight > 0 {
+                bottomPadding = customHeight + 24.0
+            } else if let detent = activeDetent {
+                if detent == TransitRevealSheet.inspectionPeekDetent || detent == .fraction(0.12) || detent == NavigationSheetDetent.peek.presentationDetent {
+                    bottomPadding = max(110.0, viewHeight * 0.12 + 24.0)
+                } else if detent == .large || detent == NavigationSheetDetent.expanded.presentationDetent {
+                    bottomPadding = max(400.0, viewHeight * 0.75 + 24.0)
+                } else {
+                    bottomPadding = max(360.0, viewHeight * 0.42 + 24.0)
+                }
+            } else {
+                bottomPadding = max(360.0, viewHeight * 0.42 + 24.0)
+            }
+            
+            let minX: CGFloat = 30.0
+            let maxX: CGFloat = viewWidth - 30.0
+            let minY: CGFloat = 110.0
+            let maxY: CGFloat = max(minY + 60.0, viewHeight - bottomPadding - 20.0)
+            
+            let vehicleScreenPt = mapView.convert(vehicleCoord, toPointTo: mapView)
+            let isInsideVisibleViewport = (vehicleScreenPt.x >= minX && vehicleScreenPt.x <= maxX &&
+                                           vehicleScreenPt.y >= minY && vehicleScreenPt.y <= maxY)
+            
+            if isInsideVisibleViewport {
+                DispatchQueue.main.async {
+                    parentCallback(nil)
+                }
+                return
+            }
+            
+            let centerX = (minX + maxX) / 2.0
+            let centerY = (minY + maxY) / 2.0
+            let dx = vehicleScreenPt.x - centerX
+            let dy = vehicleScreenPt.y - centerY
+            let angle = atan2(dy, dx)
+            
+            var tCandidates: [CGFloat] = []
+            if dx > 0 { tCandidates.append((maxX - centerX) / dx) }
+            else if dx < 0 { tCandidates.append((minX - centerX) / dx) }
+            
+            if dy > 0 { tCandidates.append((maxY - centerY) / dy) }
+            else if dy < 0 { tCandidates.append((minY - centerY) / dy) }
+            
+            let t = tCandidates.min() ?? 1.0
+            let beaconX = min(max(centerX + t * dx, minX), maxX)
+            let beaconY = min(max(centerY + t * dy, minY), maxY)
+            
+            let beaconState = OffScreenBeaconState(
+                routeId: cmd.routeId,
+                routeColorHex: cmd.agencyColorHex,
+                stopsAway: cmd.stopsAway ?? 0,
+                minutes: cmd.minutes ?? -1,
+                screenPosition: CGPoint(x: beaconX, y: beaconY),
+                bearingRadians: Double(angle),
+                vehicleCoordinate: vehicleCoord
+            )
+            
+            DispatchQueue.main.async {
+                parentCallback(beaconState)
             }
         }
         

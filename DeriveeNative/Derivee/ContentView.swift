@@ -90,6 +90,7 @@ struct ContentView: View {
     @State private var activeRouteInspection: RouteInspectionCommand? = nil
     @State private var activeFloorLevel: Int? = nil
     @State private var activeTransitSheetDetent: PresentationDetent = .medium
+    @State private var activeOffScreenBeacon: OffScreenBeaconState? = nil
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
@@ -200,6 +201,11 @@ struct ContentView: View {
                                         isNearbyBusesExpanded = false
                                     }
                                 }
+                            },
+                            onUpdateBeaconState: { beacon in
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    activeOffScreenBeacon = beacon
+                                }
                             })
                         .ignoresSafeArea()
                     
@@ -268,6 +274,16 @@ struct ContentView: View {
                         }
                         .padding(.bottom, 40)
                         .allowsHitTesting(activeSheet == nil)
+                    }
+                    
+                    if let beacon = activeOffScreenBeacon, activeRouteInspection != nil {
+                        OffScreenVectorBeacon(beacon: beacon) {
+                            targetCoordinate = beacon.vehicleCoordinate
+                            isMapCentered = false
+                        }
+                        .position(beacon.screenPosition)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                        .zIndex(2)
                     }
                     
                     if let poiName = spatialStore.newlyDiscoveredPOIName, isReadyForToasts {

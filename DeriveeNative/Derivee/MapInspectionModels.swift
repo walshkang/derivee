@@ -2,6 +2,62 @@ import Foundation
 import CoreLocation
 import UIKit
 
+/// 3-State Camera Mode for Proximity-Adaptive Viewport (Wave Pre-T.7 / WPT7).
+/// Replaces unconditional midpoint framing with proximity-adaptive visual horizons.
+public enum InspectionCameraMode: Sendable, Equatable {
+    /// Track distance D <= 2.5 km (or <= 4 min): Upper viewport frames both station and oncoming consist
+    /// with dynamic zoom clamp z in [13.8, 15.5] and asymmetric bottom padding H_sheet + 24pt.
+    case dualFraming(trackDistanceMeters: Double)
+    
+    /// Track distance D > 2.5 km (or > 4 min): Camera defaults to street-level tracking of the consist
+    /// at z = 15.2 centered in the upper viewport above the bottom sheet.
+    case vehicleTracking(trackDistanceMeters: Double)
+    
+    /// Scheduled departure or missing telemetry / vehicle at platform: Anchored to station platform at z = 15.5.
+    case stationAnchor
+}
+
+/// Encapsulates positional and navigational metadata for an off-screen transit consist (Pre-T.7).
+/// Pinned to visible map perimeter along track bearing when vehicle is outside viewport.
+public struct OffScreenBeaconState: Equatable, Sendable {
+    public let routeId: String
+    public let routeColorHex: String
+    public let stopsAway: Int
+    public let minutes: Int
+    public let screenPosition: CGPoint
+    public let bearingRadians: Double
+    public let vehicleCoordinate: CLLocationCoordinate2D
+    
+    public init(
+        routeId: String,
+        routeColorHex: String,
+        stopsAway: Int,
+        minutes: Int,
+        screenPosition: CGPoint,
+        bearingRadians: Double,
+        vehicleCoordinate: CLLocationCoordinate2D
+    ) {
+        self.routeId = routeId
+        self.routeColorHex = routeColorHex
+        self.stopsAway = stopsAway
+        self.minutes = minutes
+        self.screenPosition = screenPosition
+        self.bearingRadians = bearingRadians
+        self.vehicleCoordinate = vehicleCoordinate
+    }
+    
+    public static func == (lhs: OffScreenBeaconState, rhs: OffScreenBeaconState) -> Bool {
+        return lhs.routeId == rhs.routeId &&
+               lhs.routeColorHex == rhs.routeColorHex &&
+               lhs.stopsAway == rhs.stopsAway &&
+               lhs.minutes == rhs.minutes &&
+               lhs.screenPosition == rhs.screenPosition &&
+               abs(lhs.bearingRadians - rhs.bearingRadians) < 0.001 &&
+               abs(lhs.vehicleCoordinate.latitude - rhs.vehicleCoordinate.latitude) < 0.00001 &&
+               abs(lhs.vehicleCoordinate.longitude - rhs.vehicleCoordinate.longitude) < 0.00001
+    }
+}
+
 /// Encapsulates closure-based map synchronization commands dispatched when a transit run inspector opens.
 /// Formatted according to design.md §10.5.2 & §10.6.1 for Layer 4 Ephemeral Route Inspection.
 public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
@@ -17,6 +73,8 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
     public let vehicleCoordinate: CLLocationCoordinate2D?
     public let vehicleBearing: Double?
     public let vehicleStatus: String?
+    public let stopsAway: Int?
+    public let minutes: Int?
     
     public init(
         id: UUID = UUID(),
@@ -30,7 +88,9 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         shouldFrameCamera: Bool = true,
         vehicleCoordinate: CLLocationCoordinate2D? = nil,
         vehicleBearing: Double? = nil,
-        vehicleStatus: String? = nil
+        vehicleStatus: String? = nil,
+        stopsAway: Int? = nil,
+        minutes: Int? = nil
     ) {
         self.id = id
         self.routeId = routeId
@@ -44,6 +104,8 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         self.vehicleCoordinate = vehicleCoordinate
         self.vehicleBearing = vehicleBearing
         self.vehicleStatus = vehicleStatus
+        self.stopsAway = stopsAway
+        self.minutes = minutes
     }
     
     /// Official primary line stroke color (4px).
@@ -160,6 +222,67 @@ public struct RouteInspectionCommand: Identifiable, Sendable, Equatable {
         guard start < end else { return [] }
         
         return Array(coords[start...end])
+    }
+    
+    /// Computes the track distance (in meters) along the intermediate polyline coordinates between two points.
+    /// Falls back to straight-line great-circle distance if intermediate polyline points are insufficient.
+    public static func calculateTrackDistance(
+        between coordA: CLLocationCoordinate2D,
+        and coordB: CLLocationCoordinate2D,
+        in coords: [CLLocationCoordinate2D]
+    ) -> Double {
+        let intermediate = extractIntermediateCoordinates(between: coordA, and: coordB, in: coords)
+        if intermediate.count >= 2 {
+            var totalMeters: Double = 0.0
+            for i in 0..<(intermediate.count - 1) {
+                let loc1 = CLLocation(latitude: intermediate[i].latitude, longitude: intermediate[i].longitude)
+                let loc2 = CLLocation(latitude: intermediate[i + 1].latitude, longitude: intermediate[i + 1].longitude)
+                totalMeters += loc1.distance(from: loc2)
+            }
+            return totalMeters
+        } else {
+            let locA = CLLocation(latitude: coordA.latitude, longitude: coordA.longitude)
+            let locB = CLLocation(latitude: coordB.latitude, longitude: coordB.longitude)
+            return locA.distance(from: locB)
+        }
+    }
+    
+    /// Classifies the camera mode for an inspected corridor run based on track distance and imminence (Pre-T.7).
+    public static func classifyCameraMode(
+        station: CLLocationCoordinate2D,
+        vehicle: CLLocationCoordinate2D?,
+        coordinates: [CLLocationCoordinate2D],
+        minutes: Int? = nil,
+        status: String? = nil
+    ) -> InspectionCameraMode {
+        guard let vCoord = vehicle else {
+            return .stationAnchor
+        }
+        
+        let trimmedStatus = (status ?? "").lowercased()
+        if trimmedStatus.contains("boarding") || minutes == 0 {
+            return .stationAnchor
+        }
+        
+        let distance = calculateTrackDistance(between: station, and: vCoord, in: coordinates)
+        
+        // D <= 2.5km (2500m) or imminence <= 4 min triggers dual framing of both station and vehicle
+        if distance <= 2500.0 || (minutes != nil && minutes! <= 4) {
+            return .dualFraming(trackDistanceMeters: distance)
+        } else {
+            return .vehicleTracking(trackDistanceMeters: distance)
+        }
+    }
+    
+    /// Resolves the active camera mode for this inspection command based on vehicle proximity.
+    public var cameraMode: InspectionCameraMode {
+        Self.classifyCameraMode(
+            station: stationCoordinate,
+            vehicle: vehicleCoordinate,
+            coordinates: coordinates,
+            minutes: minutes,
+            status: vehicleStatus
+        )
     }
     
     public static func == (lhs: RouteInspectionCommand, rhs: RouteInspectionCommand) -> Bool {

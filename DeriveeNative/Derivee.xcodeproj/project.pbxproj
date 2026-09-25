@@ -20,6 +20,7 @@
 		08AD633168DAF3FB4770807D /* testApertureMicroGlyphSnapshot.1.png in Resources */ = {isa = PBXBuildFile; fileRef = F2EEED6CC29A4643A5793493 /* testApertureMicroGlyphSnapshot.1.png */; };
 		094712DE5F55C5A2F994A612 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1269ACE7C6346A1302459B0 /* MapView.swift */; };
 		09CDCC94B4DD8E0721584480 /* NeighborhoodTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966E6957AA78D74369F921CC /* NeighborhoodTests.swift */; };
+		0A4B11AF2CF0A03550C9573D /* TransitFocusSwitcherCapsule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52C72C62C4AE5AAB580FD2A3 /* TransitFocusSwitcherCapsule.swift */; };
 		0AA54D4A7521029C17772177 /* LineReliabilityBadgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43088431184A49FCB01E259 /* LineReliabilityBadgeTests.swift */; };
 		0C12419B9C79C495DEFCCE71 /* ExplorationMetricsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0378D8C36819CDC25996D65 /* ExplorationMetricsWidget.swift */; };
 		0C34B57F8C639F60FFBA0027 /* TransitModalClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = E501FC4D0007B47BB43AD5D0 /* TransitModalClass.swift */; };
@@ -76,6 +77,7 @@
 		35F1BB536D21DA92D8E57BAE /* DeriveeCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4995AF0BA66896744846FCA8 /* DeriveeCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		36062D8234ADD0DDD5586A64 /* CommuterErgonomicsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAD9885D8802DD4E58CAA63B /* CommuterErgonomicsTests.swift */; };
 		37E9B03660B5F24B62FFEEC8 /* GTFSMidnightResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE91DB948D5DD024B826759 /* GTFSMidnightResolverTests.swift */; };
+		3805D9B2AE2960DF66325093 /* OffScreenVectorBeacon.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C23188B45403AFD0F89CA6 /* OffScreenVectorBeacon.swift */; };
 		38957C8F871F4CA45533E748 /* MapProjectionMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C9C2947D6DA588D5432DB24 /* MapProjectionMathTests.swift */; };
 		38E7B69313B8F60824A29BD9 /* BinaryPayloadView.hpp in Headers */ = {isa = PBXBuildFile; fileRef = A65F578EC5D73941ABCC0E28 /* BinaryPayloadView.hpp */; settings = {ATTRIBUTES = (Public, ); }; };
 		392BA3CBC2217CB684046900 /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = 2200D232CE6197087310B633 /* SwiftProtobuf */; };
@@ -535,6 +537,7 @@
 		506C0DF82966A6FB7304C38D /* BasemapStyleLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BasemapStyleLoader.swift; sourceTree = "<group>"; };
 		509820C2C372F8DA11A1B97D /* AmbientTrackingIPCService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientTrackingIPCService.swift; sourceTree = "<group>"; };
 		52B7EC31E1CA9FF5D99063CD /* TransitRealtimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitRealtimeService.swift; sourceTree = "<group>"; };
+		52C72C62C4AE5AAB580FD2A3 /* TransitFocusSwitcherCapsule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitFocusSwitcherCapsule.swift; sourceTree = "<group>"; };
 		55BAF28B3CDE80F2A121C18F /* testRouteComparisonCardWithDisruptionSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testRouteComparisonCardWithDisruptionSnapshot.1.png; sourceTree = "<group>"; };
 		56A5E3A6CBF22C5142B02F7E /* testNavigationCollapsedPeekViewNaturalWalkingApproachSignalSnapshot.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = testNavigationCollapsedPeekViewNaturalWalkingApproachSignalSnapshot.1.png; sourceTree = "<group>"; };
 		583973BC85588CB0BCFC2CEA /* MultiProfileSelectorBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiProfileSelectorBar.swift; sourceTree = "<group>"; };
@@ -704,6 +707,7 @@
 		D17F5390E1A53502E8FE8B88 /* ConfidenceBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfidenceBadgeView.swift; sourceTree = "<group>"; };
 		D1C5781EC53B68B6C984EEB3 /* PlaceSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceSearchTests.swift; sourceTree = "<group>"; };
 		D29252B85CFB08407EC3D8D8 /* GTFSRealtimeStreamProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GTFSRealtimeStreamProcessor.swift; sourceTree = "<group>"; };
+		D2C23188B45403AFD0F89CA6 /* OffScreenVectorBeacon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffScreenVectorBeacon.swift; sourceTree = "<group>"; };
 		D2D74FCE2FD2A3CF62EA38A6 /* ULTRADataStore.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ULTRADataStore.hpp; sourceTree = "<group>"; };
 		D43088431184A49FCB01E259 /* LineReliabilityBadgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineReliabilityBadgeTests.swift; sourceTree = "<group>"; };
 		D4E6D6F2F7535366E3DC35A3 /* GetAmbientTrackingStatusIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetAmbientTrackingStatusIntent.swift; sourceTree = "<group>"; };
@@ -1013,6 +1017,7 @@
 				80384B383FEE2FACF5DEF57F /* neighborhood.sqlite */,
 				97F9405AD2F0493CF5ECB925 /* neighborhood.sqlite-shm */,
 				AA1D089BD418F79AE29C57FC /* neighborhood.sqlite-wal */,
+				D2C23188B45403AFD0F89CA6 /* OffScreenVectorBeacon.swift */,
 				863A532D137F91C7E2021C95 /* OnboardingView.swift */,
 				A3A37CA71EE44E8BDD205124 /* PhilosophyView.swift */,
 				A8714A86D95B5C35D2A6F8AA /* PipelineLogger.swift */,
@@ -1056,6 +1061,7 @@
 				BA6DF0231BC4436A034E3567 /* TransitAttributionsView.swift */,
 				10DFDA8752056A7E5B048A07 /* TransitCartographyLoader.swift */,
 				9D7024D245E0C4D47FE945A4 /* TransitDatabaseEngine.swift */,
+				52C72C62C4AE5AAB580FD2A3 /* TransitFocusSwitcherCapsule.swift */,
 				EAA5953E182A617B33F3EFAB /* TransitHitTest.swift */,
 				84929F88DE3A4803334F70D9 /* TransitMatrixInspectorView.swift */,
 				E501FC4D0007B47BB43AD5D0 /* TransitModalClass.swift */,
@@ -1695,6 +1701,7 @@
 				A5A207F5568A6135AF21439D /* NavigationGuidanceSheet.swift in Sources */,
 				3DF5D1A6E6594CB35C4066F1 /* NavigationSheetDetent.swift in Sources */,
 				69236D2437F5FDB556F8B43A /* NearbyBusesCapsule.swift in Sources */,
+				3805D9B2AE2960DF66325093 /* OffScreenVectorBeacon.swift in Sources */,
 				44F838BC32769B876A0FE448 /* OnboardingView.swift in Sources */,
 				D8D7EBB0C03160723270DA6E /* POIMaskManager.swift in Sources */,
 				327375399AC87B0C9BBC32BA /* PhilosophyView.swift in Sources */,
@@ -1740,6 +1747,7 @@
 				9A062EA140C74296D0E61C6C /* TransitAttributionsView.swift in Sources */,
 				84E004CF69EA32AB21E22EE6 /* TransitCartographyLoader.swift in Sources */,
 				77492F2A3AC84DD16BCB175F /* TransitDatabaseEngine.swift in Sources */,
+				0A4B11AF2CF0A03550C9573D /* TransitFocusSwitcherCapsule.swift in Sources */,
 				495C8BF7E2995AAF50B386CC /* TransitHitTest.swift in Sources */,
 				7BB4BFAE4A8627184DB1D2D0 /* TransitMatrixInspectorView.swift in Sources */,
 				0C34B57F8C639F60FFBA0027 /* TransitModalClass.swift in Sources */,
