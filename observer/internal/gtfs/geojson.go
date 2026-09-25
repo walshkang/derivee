@@ -357,8 +357,38 @@ func ResolveRouteColor(route Route) string {
 		return "#00A3E0"
 	}
 
+	switch cleanID {
+	case "123":
+		return "#EE352E"
+	case "456":
+		return "#00933C"
+	case "7":
+		return "#B933AD"
+	case "ACE":
+		return "#0039A6"
+	case "BDFM":
+		return "#FF6319"
+	case "G":
+		return "#6CBE45"
+	case "JZ":
+		return "#996633"
+	case "L":
+		return "#A7A9AC"
+	case "NQRW":
+		return "#FCCC0A"
+	case "S":
+		return "#808183"
+	case "SIR":
+		return "#0039A6"
+	}
+
+	firstToken := cleanShort
+	if idx := strings.Index(firstToken, ","); idx != -1 {
+		firstToken = strings.TrimSpace(firstToken[:idx])
+	}
+
 	// NYC Subway Line Colors
-	switch cleanShort {
+	switch firstToken {
 	case "1", "2", "3":
 		return "#EE352E"
 	case "4", "5", "6", "6X":
@@ -377,6 +407,8 @@ func ResolveRouteColor(route Route) string {
 		return "#A7A9AC"
 	case "N", "Q", "R", "W":
 		return "#FCCC0A"
+	case "S":
+		return "#808183"
 	case "SIR":
 		return "#0039A6"
 	}

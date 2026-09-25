@@ -137,6 +137,19 @@ func ConsolidateCorridorBundles(routes []Route, colorDist ColorDistance) ([]*Tru
 				rName = r.RouteID
 			}
 
+			// Parse comma-separated route tokens if present (e.g. "A, C, E" -> ["A", "C", "E"])
+			var tokens []string
+			if strings.Contains(rName, ",") {
+				for _, part := range strings.Split(rName, ",") {
+					part = strings.TrimSpace(part)
+					if part != "" {
+						tokens = append(tokens, part)
+					}
+				}
+			} else {
+				tokens = []string{rName}
+			}
+
 			// Find matching cluster with distance <= threshold
 			var matched *Cluster
 			for _, c := range clusters {
@@ -149,21 +162,31 @@ func ConsolidateCorridorBundles(routes []Route, colorDist ColorDistance) ([]*Tru
 			if matched != nil {
 				matched.Routes = append(matched.Routes, r)
 				matched.RouteIDs = append(matched.RouteIDs, r.RouteID)
-				matched.RouteNames = append(matched.RouteNames, rName)
+				matched.RouteNames = append(matched.RouteNames, tokens...)
 			} else {
 				clusters = append(clusters, &Cluster{
 					RepColor:   color,
 					LeadRoute:  r,
 					Routes:     []Route{r},
 					RouteIDs:   []string{r.RouteID},
-					RouteNames: []string{rName},
+					RouteNames: tokens,
 				})
 			}
 		}
 
 		for _, c := range clusters {
 			sort.Strings(c.RouteIDs)
-			sort.Strings(c.RouteNames)
+			// Deduplicate RouteNames
+			nameSet := make(map[string]bool)
+			var dedupedNames []string
+			for _, n := range c.RouteNames {
+				if !nameSet[n] {
+					nameSet[n] = true
+					dedupedNames = append(dedupedNames, n)
+				}
+			}
+			sort.Strings(dedupedNames)
+			c.RouteNames = dedupedNames
 
 			// Generate deterministic composite key
 			cleanNames := make([]string, len(c.RouteNames))
@@ -222,6 +245,9 @@ func sanitizeBadgeToken(name string) string {
 		}
 	}
 	res := sb.String()
+	for strings.Contains(res, "__") {
+		res = strings.ReplaceAll(res, "__", "_")
+	}
 	res = strings.Trim(res, "_")
 	if res == "" {
 		return "x"

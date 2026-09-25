@@ -139,7 +139,24 @@ public final class CityPackManager: Sendable {
         let nycConfigURL = configURL(for: "nyc")
         let nycTransitURL = transitDatabaseURL(for: "nyc")
         
-        // If already extracted and valid with full transit database, load and return
+        // 0. Check for bundled city-nyc.pack.zst in main bundle and verify freshness against installed version
+        if let bundlePackURL = Self.locateBundledPackURL(for: "nyc") {
+            let bundleAttrs = try? fileManager.attributesOfItem(atPath: bundlePackURL.path)
+            let installedAttrs = try? fileManager.attributesOfItem(atPath: nycConfigURL.path)
+            let bundleModDate = bundleAttrs?[.modificationDate] as? Date ?? .distantPast
+            let installedModDate = installedAttrs?[.modificationDate] as? Date ?? .distantPast
+            let linesURL = transitLinesGeoJSONURL(for: "nyc")
+            let hasTransitLines = fileManager.fileExists(atPath: linesURL.path)
+            
+            // If bundled pack is newer than what's installed on disk, or transit-lines.geojson is missing, re-extract!
+            if bundleModDate > installedModDate || !hasTransitLines {
+                print("🔄 Bundled NYC pack is newer or missing cartography (bundle: \(bundleModDate), disk: \(installedModDate)), extracting fresh pack...")
+                let archiveData = try Data(contentsOf: bundlePackURL)
+                return try unpackAndInstall(archiveData: archiveData, expectedSHA256: nil)
+            }
+        }
+        
+        // 1. If already extracted and valid with full transit database, load and return
         if fileManager.fileExists(atPath: nycConfigURL.path) && fileManager.fileExists(atPath: nycTransitURL.path) {
             if Self.isValidDatabase(at: nycTransitURL) {
                 do {
@@ -170,7 +187,7 @@ public final class CityPackManager: Sendable {
             }
         }
         
-        // Check for bundled city-nyc.pack.zst in main bundle
+        // 2. Fallback check for bundled city-nyc.pack.zst in main bundle
         if let bundlePackURL = Self.locateBundledPackURL(for: "nyc") {
             let archiveData = try Data(contentsOf: bundlePackURL)
             return try unpackAndInstall(archiveData: archiveData, expectedSHA256: nil)

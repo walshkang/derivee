@@ -15,6 +15,7 @@ type LegacySubwayGeoJSON struct {
 	Type     string `json:"type"`
 	Features []struct {
 		Properties struct {
+			FeatureType    string   `json:"feature_type"`
 			RouteGroup     string   `json:"route_group"`
 			RouteName      string   `json:"route_name"`
 			ColorHex       string   `json:"color_hex"`
@@ -95,6 +96,10 @@ func ConvertLegacySubwayToDataset(geoJSONBytes []byte) (*Dataset, error) {
 	}
 
 	for featIdx, feat := range legacy.Features {
+		if feat.Properties.FeatureType == "platform_capsule" {
+			continue
+		}
+
 		rg := feat.Properties.RouteGroup
 		if rg == "" && len(feat.Properties.Routes) > 0 {
 			rg = feat.Properties.Routes[0]
@@ -125,13 +130,22 @@ func ConvertLegacySubwayToDataset(geoJSONBytes []byte) (*Dataset, error) {
 			color = feat.Properties.Color
 		}
 
+		cleanColor := strings.ToUpper(strings.TrimPrefix(color, "#"))
+		if cleanColor == "" || cleanColor == "FFFFFF" {
+			cleanColor = strings.TrimPrefix(ResolveRouteColor(Route{
+				RouteID:        leadID,
+				RouteShortName: shortName,
+				RouteType:      1,
+			}), "#")
+		}
+
 		route := Route{
 			RouteID:        leadID,
 			AgencyID:       "MTA",
 			RouteShortName: shortName,
 			RouteLongName:  feat.Properties.RouteName,
 			RouteType:      1, // Subway
-			RouteColor:     strings.TrimPrefix(color, "#"),
+			RouteColor:     cleanColor,
 		}
 		ds.Routes[leadID] = route
 
@@ -193,6 +207,10 @@ func HydrateStopsFromSQLite(ds *Dataset, dbPath string) error {
 			var r Route
 			if err := rRows.Scan(&r.RouteID, &r.AgencyID, &r.RouteShortName, &r.RouteLongName, &r.RouteType, &r.RouteColor); err == nil {
 				r.RouteColor = strings.TrimPrefix(r.RouteColor, "#")
+				// Preserve existing composite RouteShortName if present (e.g. "A, C, E")
+				if existing, exists := ds.Routes[r.RouteID]; exists && strings.Contains(existing.RouteShortName, ",") {
+					r.RouteShortName = existing.RouteShortName
+				}
 				ds.Routes[r.RouteID] = r
 				routeCount++
 			}

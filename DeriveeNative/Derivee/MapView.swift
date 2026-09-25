@@ -574,7 +574,7 @@ struct MapView: UIViewRepresentable {
         
         func setupLayers(in style: MLNStyle) {
             // 0. Multi-Modal Transit Thoroughfare Network (Sub-context Layers beneath the Fog of War)
-            let transitShapeCollection = TransitCartographyLoader.loadTransitLinesShapeSync()
+            let transitShapeCollection = TransitCartographyLoader.loadTransitLinesShapeSync(for: parent.spatialStore.activeCitySlug)
             let subwaySource = MLNShapeSource(identifier: subwayLinesSourceId, shape: transitShapeCollection, options: nil)
             style.addSource(subwaySource)
             

@@ -71,9 +71,9 @@ func TestNYCTrunkDeduplicationAndCanonicalCorridors(t *testing.T) {
 		}
 		corridorCounts[props.BundleSize]++
 
-		// INV-CORR-01: Trunk color presence
-		if props.TrunkColor == "" {
-			t.Errorf("INV-CORR-01: trunk_color missing in feature %s", props.CorridorID)
+		// INV-CORR-01: Trunk color presence (and reject white #FFFFFF on route ribbons)
+		if props.TrunkColor == "" || strings.ToUpper(props.TrunkColor) == "#FFFFFF" || strings.ToUpper(props.TrunkColorHex) == "#FFFFFF" {
+			t.Errorf("INV-CORR-01: invalid or white trunk_color in line feature %s: %s", props.CorridorID, props.TrunkColor)
 		}
 
 		// Wave V.3+V.4 attributes check
@@ -174,6 +174,12 @@ func TestNYCTrunkDeduplicationAndCanonicalCorridors(t *testing.T) {
 
 	t.Logf("NYC Multiplicity Distribution: K=1: %d, K=2: %d, K=3: %d (K_max = %d)",
 		corridorCounts[1], corridorCounts[2], corridorCounts[3], kMax)
+	if corridorCounts[3] == 0 {
+		t.Errorf("Expected K=3 multi-ribbon corridors (e.g. Queens Blvd E/F/R), got 0")
+	}
+	if corridorCounts[2] == 0 {
+		t.Errorf("Expected K=2 multi-ribbon corridors, got 0")
+	}
 }
 
 func extractGeoJSONFromZstPack(packPath string) ([]byte, error) {
