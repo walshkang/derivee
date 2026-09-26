@@ -33,6 +33,7 @@ struct MapView: UIViewRepresentable {
     var onAmbientMapTap: (() -> Void)? = nil
     var onMapGesture: (() -> Void)? = nil
     var onUpdateBeaconState: ((OffScreenBeaconState?) -> Void)? = nil
+    var vehicleFrameRelay: VehicleFrameRelay? = nil
     
     // Bundled Composite Style URL with runtime key injection
     let styleURL = BasemapStyleLoader.styleURL
@@ -59,6 +60,7 @@ struct MapView: UIViewRepresentable {
         context.coordinator.cameraSynchronizer.attach(mapView: mapView)
         context.coordinator.cameraBridge.write(MapCameraState(mapView: mapView))
         context.coordinator.setupCompass()
+        context.coordinator.attachVehicleFrameRelay(vehicleFrameRelay)
         
         // Resume tracking if enabled
         DispatchQueue.main.async {
@@ -95,6 +97,7 @@ struct MapView: UIViewRepresentable {
         context.coordinator.updateTransientHex(shape: transientHexShape, in: uiView)
         context.coordinator.updateTransientPulse(at: spatialStore.newlyUnlockedHexLocation, in: uiView)
         context.coordinator.updateTransitSheetState(showSheet: showTransitSheet, selectedStop: selectedTransitStop, in: uiView)
+        context.coordinator.attachVehicleFrameRelay(vehicleFrameRelay)
         context.coordinator.updateRouteInspection(
             activeInspectionCommand,
             activeDetent: activeSheetDetent,
@@ -219,6 +222,9 @@ struct MapView: UIViewRepresentable {
         var lastAppliedInspectionDetent: PresentationDetent? = nil
         var lastAppliedCameraMode: InspectionCameraMode? = nil
         var hasUserPannedDuringInspection: Bool = false
+        
+        // MARK: - Wave Pre-T.8a: Direct 30Hz Kinematic Vehicle Frame Relay
+        private var currentVehicleFrameRelay: VehicleFrameRelay? = nil
         
         var lureTimer: Timer?
         var isLurePulsed: Bool = false
@@ -1286,16 +1292,14 @@ struct MapView: UIViewRepresentable {
                     }
                     
                     // 5. Ephemeral Vehicle Tracking (Task PC.1 / WPC1: "Where Is My Train")
+                    let vehicleSource = ensureVehicleLayersInstalled(
+                        agencyColorHex: cmd.agencyColorHex,
+                        agencyColor: cmd.agencyColor,
+                        in: style,
+                        above: routeLayer
+                    )
+                    
                     if let vehicleCoord = cmd.vehicleCoordinate {
-                        let vehicleSource: MLNShapeSource
-                        if let existingVehicleSource = style.source(withIdentifier: ephemeralVehicleSourceId) as? MLNShapeSource {
-                            vehicleSource = existingVehicleSource
-                        } else {
-                            let newSource = MLNShapeSource(identifier: ephemeralVehicleSourceId, shape: nil, options: nil)
-                            style.addSource(newSource)
-                            vehicleSource = newSource
-                        }
-                        
                         let vehicleFeature = MLNPointFeature()
                         vehicleFeature.coordinate = vehicleCoord
                         vehicleFeature.attributes = [
@@ -1304,92 +1308,8 @@ struct MapView: UIViewRepresentable {
                             "has_bearing": (cmd.vehicleBearing != nil)
                         ]
                         vehicleSource.shape = vehicleFeature
-                        
-                        if style.image(forName: CorridorPulseMapController.Config.bearingArrowImageName) == nil {
-                            style.setImage(CorridorPulseMapController.makeBearingArrowImage(), forName: CorridorPulseMapController.Config.bearingArrowImageName)
-                        }
-                        
-                        // Halo Layer (breathing pulsing halo)
-                        let haloLayer: MLNCircleStyleLayer
-                        if let existingHalo = style.layer(withIdentifier: ephemeralVehicleHaloLayerId) as? MLNCircleStyleLayer {
-                            haloLayer = existingHalo
-                        } else {
-                            let newHalo = MLNCircleStyleLayer(identifier: ephemeralVehicleHaloLayerId, source: vehicleSource)
-                            newHalo.circlePitchAlignment = NSExpression(forConstantValue: "map")
-                            newHalo.circleOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
-                            style.insertLayer(newHalo, above: routeLayer)
-                            haloLayer = newHalo
-                        }
-                        haloLayer.circleColor = NSExpression(forConstantValue: cmd.agencyColor)
-                        haloLayer.circleRadius = NSExpression(
-                            forMLNInterpolating: NSExpression.zoomLevelVariable,
-                            curveType: .linear,
-                            parameters: nil,
-                            stops: NSExpression(forConstantValue: [
-                                11: 14.0,
-                                14: 20.0,
-                                17: 30.0
-                            ])
-                        )
-                        haloLayer.circleOpacity = NSExpression(forConstantValue: 0.40)
-                        
-                        // Puck Layer (solid circle with high-contrast 2.5pt stroke)
-                        let puckLayer: MLNCircleStyleLayer
-                        if let existingPuck = style.layer(withIdentifier: ephemeralVehiclePuckLayerId) as? MLNCircleStyleLayer {
-                            puckLayer = existingPuck
-                        } else {
-                            let newPuck = MLNCircleStyleLayer(identifier: ephemeralVehiclePuckLayerId, source: vehicleSource)
-                            newPuck.circlePitchAlignment = NSExpression(forConstantValue: "map")
-                            newPuck.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
-                            newPuck.circleStrokeWidth = NSExpression(forConstantValue: 2.5)
-                            newPuck.circleOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
-                            style.insertLayer(newPuck, above: haloLayer)
-                            puckLayer = newPuck
-                        }
-                        puckLayer.circleColor = NSExpression(forConstantValue: cmd.agencyColor)
-                        puckLayer.circleRadius = NSExpression(
-                            forMLNInterpolating: NSExpression.zoomLevelVariable,
-                            curveType: .linear,
-                            parameters: nil,
-                            stops: NSExpression(forConstantValue: [
-                                10: 5.0,
-                                13: 8.0,
-                                16: 12.0
-                            ])
-                        )
-                        puckLayer.circleOpacity = NSExpression(forConstantValue: 1.0)
-                        
-                        // Bearing Chevron Layer
-                        let bearingLayer: MLNSymbolStyleLayer
-                        if let existingBearing = style.layer(withIdentifier: ephemeralVehicleBearingLayerId) as? MLNSymbolStyleLayer {
-                            bearingLayer = existingBearing
-                        } else {
-                            let newBearing = MLNSymbolStyleLayer(identifier: ephemeralVehicleBearingLayerId, source: vehicleSource)
-                            newBearing.iconImageName = NSExpression(forConstantValue: CorridorPulseMapController.Config.bearingArrowImageName)
-                            newBearing.iconRotationAlignment = NSExpression(forConstantValue: "map")
-                            newBearing.iconAllowsOverlap = NSExpression(forConstantValue: true)
-                            newBearing.iconIgnoresPlacement = NSExpression(forConstantValue: true)
-                            newBearing.iconOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
-                            style.insertLayer(newBearing, above: puckLayer)
-                            bearingLayer = newBearing
-                        }
-                        bearingLayer.predicate = NSPredicate(format: "has_bearing == YES")
-                        bearingLayer.iconRotation = NSExpression(forKeyPath: "bearing")
-                        bearingLayer.iconScale = NSExpression(
-                            forMLNInterpolating: NSExpression.zoomLevelVariable,
-                            curveType: .linear,
-                            parameters: nil,
-                            stops: NSExpression(forConstantValue: [
-                                11: 0.45,
-                                14: 0.70,
-                                17: 1.0
-                            ])
-                        )
-                        bearingLayer.iconOpacity = NSExpression(forConstantValue: 1.0)
                     } else {
-                        if let vehicleSource = style.source(withIdentifier: ephemeralVehicleSourceId) as? MLNShapeSource {
-                            vehicleSource.shape = nil
-                        }
+                        vehicleSource.shape = nil
                     }
                     
                     // 6. Synchronized map camera framing (frames station, route, and vehicle)
@@ -1495,6 +1415,143 @@ struct MapView: UIViewRepresentable {
                     }
                 }
             }
+        }
+        
+        // MARK: - Wave Pre-T.8a: 30Hz Kinematic Guideway Vehicle Engine
+        
+        func attachVehicleFrameRelay(_ relay: VehicleFrameRelay?) {
+            guard currentVehicleFrameRelay !== relay else { return }
+            currentVehicleFrameRelay = relay
+            relay?.handler = { [weak self] coord, bearing in
+                self?.updateLiveVehiclePosition(coordinate: coord, bearing: bearing)
+            }
+        }
+        
+        /// Direct 30Hz vehicle position update from LiveVehicleTrackingSession.
+        /// Mutates MapLibre's ephemeralVehicleSourceId shape in-place with zero layer churn and zero SwiftUI body re-evaluation.
+        func updateLiveVehiclePosition(coordinate: CLLocationCoordinate2D, bearing: Double) {
+            guard let style = mapView?.style else { return }
+            
+            let vehicleSource: MLNShapeSource
+            if let existing = style.source(withIdentifier: ephemeralVehicleSourceId) as? MLNShapeSource {
+                vehicleSource = existing
+            } else if let routeLayer = style.layer(withIdentifier: ephemeralRouteLayerId) {
+                let hex = lastAppliedInspectionCommand?.agencyColorHex ?? "#00933C"
+                let color = lastAppliedInspectionCommand?.agencyColor ?? UIColor(hex: hex)
+                vehicleSource = ensureVehicleLayersInstalled(agencyColorHex: hex, agencyColor: color, in: style, above: routeLayer)
+            } else {
+                return
+            }
+            
+            let vehicleFeature = MLNPointFeature()
+            vehicleFeature.coordinate = coordinate
+            vehicleFeature.attributes = [
+                "color": lastAppliedInspectionCommand?.agencyColorHex ?? "#00933C",
+                "bearing": bearing,
+                "has_bearing": true
+            ]
+            vehicleSource.shape = vehicleFeature
+        }
+        
+        @discardableResult
+        private func ensureVehicleLayersInstalled(
+            agencyColorHex: String,
+            agencyColor: UIColor,
+            in style: MLNStyle,
+            above routeLayer: MLNStyleLayer
+        ) -> MLNShapeSource {
+            let vehicleSource: MLNShapeSource
+            if let existingVehicleSource = style.source(withIdentifier: ephemeralVehicleSourceId) as? MLNShapeSource {
+                vehicleSource = existingVehicleSource
+            } else {
+                let newSource = MLNShapeSource(identifier: ephemeralVehicleSourceId, shape: nil, options: nil)
+                style.addSource(newSource)
+                vehicleSource = newSource
+            }
+            
+            if style.image(forName: CorridorPulseMapController.Config.bearingArrowImageName) == nil {
+                style.setImage(CorridorPulseMapController.makeBearingArrowImage(), forName: CorridorPulseMapController.Config.bearingArrowImageName)
+            }
+            
+            // Halo Layer (breathing pulsing halo)
+            let haloLayer: MLNCircleStyleLayer
+            if let existingHalo = style.layer(withIdentifier: ephemeralVehicleHaloLayerId) as? MLNCircleStyleLayer {
+                haloLayer = existingHalo
+            } else {
+                let newHalo = MLNCircleStyleLayer(identifier: ephemeralVehicleHaloLayerId, source: vehicleSource)
+                newHalo.circlePitchAlignment = NSExpression(forConstantValue: "map")
+                newHalo.circleOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
+                style.insertLayer(newHalo, above: routeLayer)
+                haloLayer = newHalo
+            }
+            haloLayer.circleColor = NSExpression(forConstantValue: agencyColor)
+            haloLayer.circleRadius = NSExpression(
+                forMLNInterpolating: NSExpression.zoomLevelVariable,
+                curveType: .linear,
+                parameters: nil,
+                stops: NSExpression(forConstantValue: [
+                    11: 14.0,
+                    14: 20.0,
+                    17: 30.0
+                ])
+            )
+            haloLayer.circleOpacity = NSExpression(forConstantValue: 0.40)
+            
+            // Puck Layer (solid circle with high-contrast 2.5pt stroke)
+            let puckLayer: MLNCircleStyleLayer
+            if let existingPuck = style.layer(withIdentifier: ephemeralVehiclePuckLayerId) as? MLNCircleStyleLayer {
+                puckLayer = existingPuck
+            } else {
+                let newPuck = MLNCircleStyleLayer(identifier: ephemeralVehiclePuckLayerId, source: vehicleSource)
+                newPuck.circlePitchAlignment = NSExpression(forConstantValue: "map")
+                newPuck.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
+                newPuck.circleStrokeWidth = NSExpression(forConstantValue: 2.5)
+                newPuck.circleOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
+                style.insertLayer(newPuck, above: haloLayer)
+                puckLayer = newPuck
+            }
+            puckLayer.circleColor = NSExpression(forConstantValue: agencyColor)
+            puckLayer.circleRadius = NSExpression(
+                forMLNInterpolating: NSExpression.zoomLevelVariable,
+                curveType: .linear,
+                parameters: nil,
+                stops: NSExpression(forConstantValue: [
+                    10: 5.0,
+                    13: 8.0,
+                    16: 12.0
+                ])
+            )
+            puckLayer.circleOpacity = NSExpression(forConstantValue: 1.0)
+            
+            // Bearing Chevron Layer
+            let bearingLayer: MLNSymbolStyleLayer
+            if let existingBearing = style.layer(withIdentifier: ephemeralVehicleBearingLayerId) as? MLNSymbolStyleLayer {
+                bearingLayer = existingBearing
+            } else {
+                let newBearing = MLNSymbolStyleLayer(identifier: ephemeralVehicleBearingLayerId, source: vehicleSource)
+                newBearing.iconImageName = NSExpression(forConstantValue: CorridorPulseMapController.Config.bearingArrowImageName)
+                newBearing.iconRotationAlignment = NSExpression(forConstantValue: "map")
+                newBearing.iconAllowsOverlap = NSExpression(forConstantValue: true)
+                newBearing.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+                newBearing.iconOpacityTransition = MLNTransition(duration: 0.25, delay: 0)
+                style.insertLayer(newBearing, above: puckLayer)
+                bearingLayer = newBearing
+            }
+            bearingLayer.predicate = NSPredicate(format: "has_bearing == YES")
+            bearingLayer.iconRotation = NSExpression(forKeyPath: "bearing")
+            bearingLayer.iconScale = NSExpression(
+                forMLNInterpolating: NSExpression.zoomLevelVariable,
+                curveType: .linear,
+                parameters: nil,
+                stops: NSExpression(forConstantValue: [
+                    11: 0.45,
+                    14: 0.70,
+                    17: 1.0
+                ])
+            )
+            bearingLayer.iconOpacity = NSExpression(forConstantValue: 1.0)
+            
+            return vehicleSource
         }
         
         /// Smoothly centers a target coordinate in the visible upper viewport above the bottom sheet (Pre-T.7).

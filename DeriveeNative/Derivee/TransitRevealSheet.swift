@@ -42,6 +42,7 @@ struct TransitRevealSheet: View {
     var onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil
     var onClearRouteInspection: (() -> Void)? = nil
     var onDetentChange: ((PresentationDetent) -> Void)? = nil
+    var onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     @State private var pollProgress: Double = 0.0
     @State private var pollGeneration: Int = 0
     // Wave PD.2: 3-Detent Persistent Dock Peek Detent (~90pt)
@@ -103,7 +104,8 @@ struct TransitRevealSheet: View {
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
         onClearRouteInspection: (() -> Void)? = nil,
         onSelectFloor: ((StationFloor) -> Void)? = nil,
-        onDetentChange: ((PresentationDetent) -> Void)? = nil
+        onDetentChange: ((PresentationDetent) -> Void)? = nil,
+        onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     ) {
         self.stopId = stopId
         self._stopDetails = State(initialValue: initialDetails)
@@ -124,6 +126,7 @@ struct TransitRevealSheet: View {
         self.onClearRouteInspection = onClearRouteInspection
         self.onSelectFloor = onSelectFloor
         self.onDetentChange = onDetentChange
+        self.onVehicleFrame = onVehicleFrame
     }
     
     var displayedArrivals: [SpatialDatabaseManager.ArrivalInfo] {
@@ -653,7 +656,8 @@ struct TransitRevealSheet: View {
                     onFocusMap?(coord)
                 },
                 onInspectRoute: onInspectRoute,
-                onClearRouteInspection: onClearRouteInspection
+                onClearRouteInspection: onClearRouteInspection,
+                onVehicleFrame: onVehicleFrame
             )
         } else {
             SurfaceRunInspector(

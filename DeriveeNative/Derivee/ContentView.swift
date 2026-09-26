@@ -91,6 +91,7 @@ struct ContentView: View {
     @State private var activeFloorLevel: Int? = nil
     @State private var activeTransitSheetDetent: PresentationDetent = .medium
     @State private var activeOffScreenBeacon: OffScreenBeaconState? = nil
+    @State private var vehicleFrameRelay = VehicleFrameRelay()
     
     private var currentTheme: BasemapTheme {
         if let theme = BasemapTheme(rawValue: storedTheme) {
@@ -206,7 +207,8 @@ struct ContentView: View {
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     activeOffScreenBeacon = beacon
                                 }
-                            })
+                            },
+                            vehicleFrameRelay: vehicleFrameRelay)
                         .ignoresSafeArea()
                     
                     GeometryReader { geo in
@@ -452,6 +454,9 @@ struct ContentView: View {
                             },
                             onDetentChange: { detent in
                                 activeTransitSheetDetent = detent
+                            },
+                            onVehicleFrame: { coord, bearing in
+                                vehicleFrameRelay.emit(coordinate: coord, bearing: bearing)
                             }
                         )
                         

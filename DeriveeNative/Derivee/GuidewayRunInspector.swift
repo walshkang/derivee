@@ -20,6 +20,7 @@ public struct GuidewayRunInspector: View {
     public var onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
     public var onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil
     public var onClearRouteInspection: (() -> Void)? = nil
+    public var onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     
     @State private var stopLadder: [TrackStop] = []
     @State private var isLoadingLadder: Bool = true
@@ -31,6 +32,7 @@ public struct GuidewayRunInspector: View {
     @State private var isPulsing: Bool = false
     @State private var selectedStopForFocus: TrackStop? = nil
     @State private var resolvedVehicleCoordinate: CLLocationCoordinate2D? = nil
+    @State private var trackingSession: LiveVehicleTrackingSession? = nil
     
     @Environment(\.dismiss) private var dismiss
     
@@ -43,7 +45,8 @@ public struct GuidewayRunInspector: View {
         onBack: (() -> Void)? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
-        onClearRouteInspection: (() -> Void)? = nil
+        onClearRouteInspection: (() -> Void)? = nil,
+        onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     ) {
         self.arrival = arrival
         self.currentStopId = currentStopId
@@ -54,6 +57,7 @@ public struct GuidewayRunInspector: View {
         self.onFocusMap = onFocusMap
         self.onInspectRoute = onInspectRoute
         self.onClearRouteInspection = onClearRouteInspection
+        self.onVehicleFrame = onVehicleFrame
     }
     
     private var lineInfo: TransitRouteData.LineInfo {
@@ -73,7 +77,11 @@ public struct GuidewayRunInspector: View {
             // Pinned Navigation Header
             HStack(alignment: .center) {
                 if let onBack = onBack {
-                    Button(action: onBack) {
+                    Button {
+                        trackingSession?.stop()
+                        trackingSession = nil
+                        onBack()
+                    } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 15, weight: .bold))
@@ -93,6 +101,8 @@ public struct GuidewayRunInspector: View {
                 Spacer()
                 
                 Button {
+                    trackingSession?.stop()
+                    trackingSession = nil
                     if let onBack = onBack {
                         onBack()
                     } else {
@@ -195,6 +205,10 @@ public struct GuidewayRunInspector: View {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
+        }
+        .onDisappear {
+            trackingSession?.stop()
+            trackingSession = nil
         }
     }
     
@@ -1052,6 +1066,14 @@ public struct GuidewayRunInspector: View {
                     self.resolvedVehicleCoordinate = (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil
                     self.isLoadingLadder = false
                     self.onInspectRoute?(command)
+                    
+                    if inspectionMode == .liveRun && !polyline.isEmpty {
+                        let session = LiveVehicleTrackingSession()
+                        session.configure(polyline: polyline, arrival: arrival, ladder: ladder)
+                        session.onVehicleFrame = self.onVehicleFrame
+                        session.start()
+                        self.trackingSession = session
+                    }
                 }
             } else {
                 await MainActor.run {
