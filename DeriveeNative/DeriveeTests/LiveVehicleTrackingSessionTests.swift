@@ -402,4 +402,263 @@ final class LiveVehicleTrackingSessionTests: XCTestCase {
         XCTAssertFalse(session.isCurrentlyReconciling, "Identical feed update must not trigger unnecessary reconciliation")
         XCTAssertEqual(session.activeReconciliationError, 0.0, accuracy: 0.1)
     }
+
+    // MARK: - 7. Surface Bus Tracking & Dead-Reckoning (Wave Pre-T.8c)
+
+    func testBusTracking_InitialFixSnapsToCenterline() {
+        // Straight Eastbound bus corridor along 42nd St (lat 40.7527)
+        let busPolyline = [
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -74.0000),
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9800)
+        ]
+        let session = LiveVehicleTrackingSession(modalClass: .bus)
+        let t0 = 1700000000.0
+
+        // Bus GPS reported 15m North of 42nd St (40.7527 + 0.000135)
+        let rawGPS = CLLocationCoordinate2D(latitude: 40.7527 + 0.000135, longitude: -73.9900)
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "M42",
+            destination: "Pier 83",
+            minutes: 5,
+            distanceDescription: "5 stops away",
+            tripId: "BUS_M42_TEST",
+            vehicleCoordinate: rawGPS,
+            vehicleBearing: 90.0
+        )
+        let ladder = makeTestLadder()
+
+        session.configure(polyline: busPolyline, arrival: arrival, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+
+        XCTAssertTrue(session.isVehicleOnCorridor, "Vehicle within 15m of corridor must be flagged on-corridor (<= 50m)")
+        XCTAssertNotNil(session.currentCoordinate)
+        XCTAssertEqual(session.currentCoordinate?.latitude ?? 0, 40.7527, accuracy: 1e-5, "Latitude must snap to road centerline")
+        XCTAssertEqual(session.currentBearing, 90.0, accuracy: 2.0, "Bearing must match road segment orientation")
+        XCTAssertEqual(session.activeEstimatedSpeed, 8.0, accuracy: 0.1, "Default initial cruising speed must be nominal 8 m/s")
+    }
+
+    func testBusTracking_DeadReckoningAdvancesAlongPolylineAtClampedSpeed() {
+        let busPolyline = [
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -74.0000),
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9800)
+        ]
+        let session = LiveVehicleTrackingSession(modalClass: .bus)
+        let t0 = 1700000000.0
+
+        let rawGPS = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9950)
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "M42",
+            destination: "Pier 83",
+            minutes: 4,
+            distanceDescription: "4 stops away",
+            tripId: "BUS_M42_DEAD_RECKON",
+            vehicleCoordinate: rawGPS,
+            vehicleBearing: 90.0
+        )
+        let ladder = makeTestLadder()
+
+        session.configure(polyline: busPolyline, arrival: arrival, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+        let initialDist = session.lastRenderedDistance
+
+        // Advance simulation forward 5 seconds: dead-reckoning should advance by ~ 5s * 8 m/s = 40m
+        session.stepSimulation(at: t0 + 5.0)
+        let advancedDist = session.lastRenderedDistance
+
+        XCTAssertGreaterThan(advancedDist, initialDist)
+        XCTAssertEqual(advancedDist - initialDist, 40.0, accuracy: 2.0, "Dead-reckoning must advance along polyline at estimated speed")
+    }
+
+    func testBusTracking_SpeedClampedTo22MetersPerSecond() {
+        let busPolyline = [
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -74.0000),
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9700)
+        ]
+        let session = LiveVehicleTrackingSession(modalClass: .bus)
+        let t0 = 1700000000.0
+
+        let rawGPS1 = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9950)
+        let arrival1 = SpatialDatabaseManager.ArrivalInfo(
+            line: "M42",
+            destination: "Pier 83",
+            minutes: 6,
+            distanceDescription: "6 stops away",
+            tripId: "BUS_SPEED_CLAMP",
+            vehicleCoordinate: rawGPS1,
+            vehicleBearing: 90.0
+        )
+        let ladder = makeTestLadder()
+
+        session.configure(polyline: busPolyline, arrival: arrival1, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+
+        // New fix arrives 15s later with a 600m jump (40 m/s average speed -> exceeding 22 m/s ceiling)
+        // 600m East lon diff ~ 600 / (111139 * cos(40.75 deg)) ~ 0.0071 deg lon
+        let rawGPS2 = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9950 + 0.0071)
+        let arrival2 = SpatialDatabaseManager.ArrivalInfo(
+            line: "M42",
+            destination: "Pier 83",
+            minutes: 3,
+            distanceDescription: "3 stops away",
+            tripId: "BUS_SPEED_CLAMP",
+            vehicleCoordinate: rawGPS2,
+            vehicleBearing: 90.0
+        )
+
+        session.reconcile(arrival: arrival2, ladder: ladder, now: t0 + 15.0)
+
+        XCTAssertEqual(session.activeEstimatedSpeed, 22.0, accuracy: 1e-4, "Estimated speed must clamp to physical ceiling of 22 m/s (~49 mph)")
+    }
+
+    func testBusTracking_OffCorridorRetainsRawCoordinatesWithoutSnapping() {
+        let busPolyline = [
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -74.0000),
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9800)
+        ]
+        let session = LiveVehicleTrackingSession(modalClass: .bus)
+        let t0 = 1700000000.0
+
+        // Bus GPS reported 80m North of 42nd St (80m > 50m corridor gating)
+        let rawGPS = CLLocationCoordinate2D(latitude: 40.7527 + 0.00072, longitude: -73.9900)
+        let arrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "M42",
+            destination: "Pier 83",
+            minutes: 8,
+            distanceDescription: "8 stops away",
+            tripId: "BUS_OFF_CORRIDOR",
+            vehicleCoordinate: rawGPS,
+            vehicleBearing: 180.0
+        )
+        let ladder = makeTestLadder()
+
+        session.configure(polyline: busPolyline, arrival: arrival, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+
+        XCTAssertFalse(session.isVehicleOnCorridor, "Vehicle offset 80m must be flagged off-corridor (> 50m threshold)")
+        XCTAssertEqual(session.currentCoordinate?.latitude ?? 0, rawGPS.latitude, accuracy: 1e-7, "Off-corridor bus must retain raw GPS latitude")
+        XCTAssertEqual(session.currentCoordinate?.longitude ?? 0, rawGPS.longitude, accuracy: 1e-7, "Off-corridor bus must retain raw GPS longitude")
+        XCTAssertEqual(session.currentBearing, 180.0, accuracy: 0.1, "Off-corridor bus must retain raw GPS bearing")
+        XCTAssertEqual(session.activeEstimatedSpeed, 0.0, accuracy: 1e-4, "Dead-reckoning along polyline must be bypassed when off-corridor")
+    }
+
+    func testBusTracking_15sFixReconciliationEliminatesJumps() {
+        let busPolyline = [
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -74.0000),
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9800)
+        ]
+        let session = LiveVehicleTrackingSession(modalClass: .bus)
+        let t0 = 1700000000.0
+
+        let rawGPS1 = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9950)
+        let arrival1 = SpatialDatabaseManager.ArrivalInfo(
+            line: "M42",
+            destination: "Pier 83",
+            minutes: 5,
+            distanceDescription: "5 stops away",
+            tripId: "BUS_RECONCILE_JUMP",
+            vehicleCoordinate: rawGPS1,
+            vehicleBearing: 90.0
+        )
+        let ladder = makeTestLadder()
+
+        session.configure(polyline: busPolyline, arrival: arrival1, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+
+        // Advance 15s with dead-reckoning
+        session.stepSimulation(at: t0 + 15.0)
+        let distBeforeReconcile = session.lastRenderedDistance
+
+        // Second fix arrives at t0 + 15s with a 25m forward discrepancy
+        // ~150m total progress vs dead-reckoned ~120m
+        let rawGPS2 = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9950 + 0.0018)
+        let arrival2 = SpatialDatabaseManager.ArrivalInfo(
+            line: "M42",
+            destination: "Pier 83",
+            minutes: 3,
+            distanceDescription: "3 stops away",
+            tripId: "BUS_RECONCILE_JUMP",
+            vehicleCoordinate: rawGPS2,
+            vehicleBearing: 90.0
+        )
+
+        session.reconcile(arrival: arrival2, ladder: ladder, now: t0 + 15.0)
+
+        // At instant of reconciliation (t0 + 15s), position must match predicted exactly (zero jump)
+        session.stepSimulation(at: t0 + 15.0)
+        XCTAssertEqual(
+            session.lastRenderedDistance,
+            distBeforeReconcile,
+            accuracy: 1e-4,
+            "Reconciliation must eliminate teleportation jump at t = 0"
+        )
+        XCTAssertTrue(session.isCurrentlyReconciling)
+
+        // After 1.5s, reconciliation completes smoothly
+        session.stepSimulation(at: t0 + 16.5)
+        XCTAssertFalse(session.isCurrentlyReconciling)
+    }
+
+    func testBusTracking_MonotonicClampPreventsBackwardSnapsOnStop() {
+        let busPolyline = [
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -74.0000),
+            CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9800)
+        ]
+        let session = LiveVehicleTrackingSession(modalClass: .bus)
+        let t0 = 1700000000.0
+
+        let rawGPS1 = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9950)
+        let arrival1 = SpatialDatabaseManager.ArrivalInfo(
+            line: "M42",
+            destination: "Pier 83",
+            minutes: 4,
+            distanceDescription: "4 stops away",
+            tripId: "BUS_MONOTONIC_RED_LIGHT",
+            vehicleCoordinate: rawGPS1,
+            vehicleBearing: 90.0
+        )
+        let ladder = makeTestLadder()
+
+        session.configure(polyline: busPolyline, arrival: arrival1, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+
+        // Advance 15s
+        session.stepSimulation(at: t0 + 15.0)
+        let coastedDist = session.lastRenderedDistance
+
+        // Bus actually stopped at a red light 10m behind where dead-reckoning coasted
+        // GPS fix reports position at distance < coastedDist
+        let rawGPS2 = CLLocationCoordinate2D(latitude: 40.7527, longitude: -73.9950 + 0.0008)
+        let arrival2 = SpatialDatabaseManager.ArrivalInfo(
+            line: "M42",
+            destination: "Pier 83",
+            minutes: 4,
+            distanceDescription: "4 stops away",
+            tripId: "BUS_MONOTONIC_RED_LIGHT",
+            vehicleCoordinate: rawGPS2,
+            vehicleBearing: 90.0
+        )
+
+        session.reconcile(arrival: arrival2, ladder: ladder, now: t0 + 15.0)
+
+        // Monotonic clamp must prevent backward snap
+        var prevDist = coastedDist
+        for frame in 1...30 {
+            let simTime = (t0 + 15.0) + (Double(frame) * (1.0 / 30.0))
+            session.stepSimulation(at: simTime)
+            XCTAssertGreaterThanOrEqual(
+                session.lastRenderedDistance,
+                prevDist,
+                "Bus distance must be monotonically non-decreasing when stopped at red light"
+            )
+            prevDist = session.lastRenderedDistance
+        }
+    }
+
+    func testRunInspectorSeparation_BusDoesNotUseSubwayKinematicTrapezoid() {
+        let session = LiveVehicleTrackingSession(modalClass: .bus)
+        XCTAssertEqual(session.modalClass, .bus, "Session modal class must be .bus")
+
+        let subwaySession = LiveVehicleTrackingSession(modalClass: .subway)
+        XCTAssertEqual(subwaySession.modalClass, .subway, "Subway session modal class must be .subway")
+    }
 }

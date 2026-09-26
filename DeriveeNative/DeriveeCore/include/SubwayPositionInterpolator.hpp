@@ -135,6 +135,29 @@ struct ConsistSpatialEstimate {
     constexpr ConsistSpatialEstimate() noexcept = default;
 };
 
+/// Snapped geographic result for surface vehicles (Research Doc 17 & Wave Pre-T.8c).
+struct SnappedPointResult {
+    GeoCoordinate snapped_coordinate{0.0, 0.0};
+    double cumulative_distance{0.0};
+    double perpendicular_distance{0.0};
+    double heading_degrees{0.0};
+    bool is_on_corridor{false};
+
+    constexpr SnappedPointResult() noexcept = default;
+    constexpr SnappedPointResult(
+        GeoCoordinate coord,
+        double cum_dist,
+        double perp_dist,
+        double heading_deg,
+        bool on_corridor
+    ) noexcept
+        : snapped_coordinate(coord),
+          cumulative_distance(cum_dist),
+          perpendicular_distance(perp_dist),
+          heading_degrees(heading_deg),
+          is_on_corridor(on_corridor) {}
+};
+
 /// High-precision kinematic interpolator and orthogonal polyline linear referencing core.
 class SubwayPositionInterpolator {
 public:
@@ -238,6 +261,15 @@ public:
     /// Inverse conformal transform: Conformal Cartesian meters -> WGS-84 degrees.
     [[nodiscard]] GeoCoordinate to_geographic(const Point2D& pt) const noexcept;
 
+    /// Snaps an arbitrary WGS-84 geographic coordinate to the polyline centerline with corridor gating.
+    /// If perpendicular distance <= max_corridor_dist_m, returns the projected point on the polyline.
+    /// If perpendicular distance > max_corridor_dist_m (or geometry empty), returns the raw (lat, lon) with is_on_corridor = false.
+    [[nodiscard]] SnappedPointResult snap_geographic_point(
+        double lat,
+        double lon,
+        double max_corridor_dist_m = 50.0
+    ) const noexcept;
+
     /// Returns total cumulative length of the polyline in meters.
     [[nodiscard]] double total_shape_distance() const noexcept {
         return total_shape_distance_;
@@ -282,3 +314,4 @@ using Derivee::Transit::VisualState;
 using Derivee::Transit::GTFSVehicleStatus;
 using Derivee::Transit::IngestedTelemetry;
 using Derivee::Transit::ConsistSpatialEstimate;
+using Derivee::Transit::SnappedPointResult;

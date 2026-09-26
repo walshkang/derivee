@@ -44,7 +44,11 @@ public final class LiveVehicleTrackingSession {
     /// High-frequency frame callback dispatched directly to MapLibre Coordinator.
     public var onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     
-    // MARK: - Private Core State
+    // MARK: - Mode & Invariants
+    
+    public let modalClass: TransitModalClass
+    
+    // MARK: - Private Core State (Guideway & Shared)
     
     @ObservationIgnored private var interpolator: SubwayPositionInterpolator? = nil
     @ObservationIgnored private var currentTelemetry: IngestedTelemetry? = nil
@@ -59,12 +63,25 @@ public final class LiveVehicleTrackingSession {
     @ObservationIgnored private var isReconciling: Bool = false
     @ObservationIgnored public private(set) var lastRenderedDistance: Double = 0.0
     
+    // MARK: - Surface Dead-Reckoning & Snapping State (Pre-T.8c)
+    
+    @ObservationIgnored private var lastFixCoordinate: CLLocationCoordinate2D? = nil
+    @ObservationIgnored private var lastFixDistance: Double = 0.0
+    @ObservationIgnored private var lastFixTime: Double = 0.0
+    @ObservationIgnored private var estimatedSpeed: Double = 0.0
+    @ObservationIgnored private var isOnCorridor: Bool = true
+    @ObservationIgnored private var rawBusBearing: Double = 0.0
+    
     public var activeReconciliationError: Double { reconciliationError }
     public var isCurrentlyReconciling: Bool { isReconciling }
+    public var isVehicleOnCorridor: Bool { isOnCorridor }
+    public var activeEstimatedSpeed: Double { estimatedSpeed }
+    public var activeLastFixDistance: Double { lastFixDistance }
     
     // MARK: - Initialization & Deinitialization
     
-    public init() {
+    public init(modalClass: TransitModalClass = .subway) {
+        self.modalClass = modalClass
         setupLifecycleObservers()
     }
     
@@ -226,6 +243,10 @@ public final class LiveVehicleTrackingSession {
         ladder: [TrackStop],
         now: Double = Date().timeIntervalSince1970
     ) {
+        if modalClass == .bus {
+            updateBusTelemetry(arrival: arrival, ladder: ladder, now: now)
+            return
+        }
         guard let built = buildTelemetry(arrival: arrival, ladder: ladder, now: now) else { return }
         self.originPlatformDist = built.origDist
         self.targetPlatformDist = built.targDist
@@ -235,12 +256,82 @@ public final class LiveVehicleTrackingSession {
         self.isReconciling = false
     }
     
+    private func updateBusTelemetry(
+        arrival: SpatialDatabaseManager.ArrivalInfo,
+        ladder: [TrackStop],
+        now: Double
+    ) {
+        guard let interp = interpolator else { return }
+        
+        if let rawCoord = arrival.vehicleCoordinate {
+            let snapRes = interp.snap_geographic_point(rawCoord.latitude, rawCoord.longitude, 50.0)
+            if snapRes.is_on_corridor {
+                self.isOnCorridor = true
+                let snapped = CLLocationCoordinate2D(
+                    latitude: snapRes.snapped_coordinate.latitude,
+                    longitude: snapRes.snapped_coordinate.longitude
+                )
+                self.lastFixCoordinate = snapped
+                let dist = snapRes.cumulative_distance
+                self.lastFixDistance = dist
+                self.lastFixTime = now
+                self.lastRenderedDistance = dist
+                self.currentCoordinate = snapped
+                self.currentBearing = snapRes.heading_degrees
+                self.rawBusBearing = arrival.vehicleBearing ?? snapRes.heading_degrees
+                let isDwelling = (arrival.minutes <= 0 ||
+                                  arrival.distanceDescription == "Boarding" ||
+                                  arrival.distanceDescription == "At Platform" ||
+                                  arrival.distanceDescription == "At Stop")
+                self.estimatedSpeed = isDwelling ? 0.0 : 8.0
+                self.reconciliationError = 0.0
+                self.isReconciling = false
+            } else {
+                self.isOnCorridor = false
+                self.lastFixCoordinate = rawCoord
+                self.lastFixDistance = snapRes.cumulative_distance
+                self.lastFixTime = now
+                self.currentCoordinate = rawCoord
+                let bearing = arrival.vehicleBearing ?? 0.0
+                self.currentBearing = bearing
+                self.rawBusBearing = bearing
+                self.estimatedSpeed = 0.0
+                self.reconciliationError = 0.0
+                self.isReconciling = false
+            }
+        } else {
+            guard let built = buildTelemetry(arrival: arrival, ladder: ladder, now: now) else { return }
+            self.isOnCorridor = true
+            self.originPlatformDist = built.origDist
+            self.targetPlatformDist = built.targDist
+            self.currentTelemetry = built.telemetry
+            self.lastRenderedDistance = built.origDist
+            self.lastFixDistance = built.origDist
+            self.lastFixTime = now
+            self.estimatedSpeed = 8.0
+            self.reconciliationError = 0.0
+            self.isReconciling = false
+        }
+    }
+    
     /// Reconciles new GTFS-RT feed updates with a critically damped 1.0s exponential decay curve
     /// to eliminate teleportation jumps and backward snaps.
     public func reconcile(
         arrival: SpatialDatabaseManager.ArrivalInfo,
         ladder: [TrackStop],
         now: Double = Date().timeIntervalSince1970
+    ) {
+        if modalClass == .bus {
+            reconcileBus(arrival: arrival, ladder: ladder, now: now)
+            return
+        }
+        reconcileGuideway(arrival: arrival, ladder: ladder, now: now)
+    }
+    
+    private func reconcileGuideway(
+        arrival: SpatialDatabaseManager.ArrivalInfo,
+        ladder: [TrackStop],
+        now: Double
     ) {
         guard let interp = interpolator,
               let currentTelem = currentTelemetry else {
@@ -290,6 +381,94 @@ public final class LiveVehicleTrackingSession {
         self.lastRenderedDistance = predictedDist
     }
     
+    private func reconcileBus(
+        arrival: SpatialDatabaseManager.ArrivalInfo,
+        ladder: [TrackStop],
+        now: Double
+    ) {
+        guard let interp = interpolator else {
+            updateTelemetry(arrival: arrival, ladder: ladder, now: now)
+            return
+        }
+        
+        guard let rawCoord = arrival.vehicleCoordinate else {
+            reconcileGuideway(arrival: arrival, ladder: ladder, now: now)
+            return
+        }
+        
+        let snapRes = interp.snap_geographic_point(rawCoord.latitude, rawCoord.longitude, 50.0)
+        
+        if snapRes.is_on_corridor {
+            self.isOnCorridor = true
+            let newReportedDist = snapRes.cumulative_distance
+            
+            // 1. Calculate current predicted distance at now
+            let dtDeadReckon = min(30.0, max(0.0, now - lastFixTime))
+            let unadjustedDist = lastFixDistance + (estimatedSpeed * dtDeadReckon)
+            
+            let predictedDist: Double
+            if isReconciling {
+                let dt = max(0.0, now - reconciliationStartTime)
+                let omega: Double = 5.0
+                let currentOffset = reconciliationError * (1.0 + omega * dt) * exp(-omega * dt)
+                let candidate = unadjustedDist - currentOffset
+                predictedDist = max(lastRenderedDistance, candidate)
+            } else {
+                predictedDist = max(lastRenderedDistance, unadjustedDist)
+            }
+            
+            // 2. Estimate new speed v_est clamped to [0, 22 m/s]
+            let dtFix = now - lastFixTime
+            let ddFix = newReportedDist - lastFixDistance
+            let isDwelling = (arrival.minutes <= 0 ||
+                              arrival.distanceDescription == "Boarding" ||
+                              arrival.distanceDescription == "At Platform" ||
+                              arrival.distanceDescription == "At Stop")
+            
+            if isDwelling {
+                self.estimatedSpeed = 0.0
+            } else if dtFix > 0.0 && dtFix <= 60.0 {
+                let rawSpeed = ddFix / dtFix
+                self.estimatedSpeed = min(22.0, max(0.0, rawSpeed))
+            } else {
+                self.estimatedSpeed = 8.0
+            }
+            
+            // 3. Compute prediction error e_0 = d_reported - d_predicted
+            let e0 = newReportedDist - predictedDist
+            self.lastFixDistance = newReportedDist
+            self.lastFixTime = now
+            self.lastFixCoordinate = CLLocationCoordinate2D(
+                latitude: snapRes.snapped_coordinate.latitude,
+                longitude: snapRes.snapped_coordinate.longitude
+            )
+            self.rawBusBearing = arrival.vehicleBearing ?? snapRes.heading_degrees
+            
+            if abs(e0) > 0.05 {
+                self.reconciliationError = e0
+                self.reconciliationStartTime = now
+                self.isReconciling = true
+            } else {
+                self.reconciliationError = 0.0
+                self.isReconciling = false
+            }
+            self.lastRenderedDistance = predictedDist
+        } else {
+            // Off-corridor (>50m): Retain raw GPS fix without snapping, disable dead-reckoning
+            self.isOnCorridor = false
+            self.lastFixCoordinate = rawCoord
+            self.lastFixDistance = snapRes.cumulative_distance
+            self.lastFixTime = now
+            self.currentCoordinate = rawCoord
+            let bearing = arrival.vehicleBearing ?? 0.0
+            self.currentBearing = bearing
+            self.rawBusBearing = bearing
+            self.estimatedSpeed = 0.0
+            self.reconciliationError = 0.0
+            self.isReconciling = false
+        }
+    }
+    
     // MARK: - Simulation Frame Step (30Hz CADisplayLink & Headless Simulation)
     
     internal func step(_ link: CADisplayLink) {
@@ -298,6 +477,64 @@ public final class LiveVehicleTrackingSession {
     }
     
     internal func stepSimulation(at now: Double) {
+        if modalClass == .bus {
+            stepBusSimulation(at: now)
+        } else {
+            stepGuidewaySimulation(at: now)
+        }
+    }
+    
+    private func stepBusSimulation(at now: Double) {
+        if !isOnCorridor {
+            if let coord = lastFixCoordinate {
+                self.currentCoordinate = coord
+                self.currentBearing = rawBusBearing
+                onVehicleFrame?(coord, rawBusBearing)
+            }
+            return
+        }
+        
+        guard let interp = interpolator else { return }
+        let dtDeadReckon = min(30.0, max(0.0, now - lastFixTime))
+        let rawDist = lastFixDistance + (estimatedSpeed * dtDeadReckon)
+        
+        let displayDist: Double
+        if isReconciling {
+            let dt = max(0.0, now - reconciliationStartTime)
+            if dt >= 1.5 {
+                self.isReconciling = false
+                self.reconciliationError = 0.0
+                displayDist = max(lastRenderedDistance, rawDist)
+            } else {
+                let omega: Double = 5.0
+                let offset = reconciliationError * (1.0 + omega * dt) * exp(-omega * dt)
+                let candidateDist = rawDist - offset
+                displayDist = max(lastRenderedDistance, candidateDist)
+            }
+        } else {
+            displayDist = max(lastRenderedDistance, rawDist)
+        }
+        
+        self.lastRenderedDistance = displayDist
+        
+        var headingRad: Double = 0.0
+        let pt = interp.interpolate_point_at_distance(displayDist, &headingRad)
+        let geo = interp.to_geographic(pt)
+        var headingDeg = headingRad * (180.0 / .pi)
+        if headingDeg < 0.0 { headingDeg += 360.0 }
+        if headingDeg >= 360.0 { headingDeg -= 360.0 }
+        
+        let coord = CLLocationCoordinate2D(latitude: geo.latitude, longitude: geo.longitude)
+        self.currentCoordinate = coord
+        self.currentBearing = headingDeg
+        
+        let totalDist = interp.total_shape_distance()
+        self.linearProgress = (totalDist > 0.0) ? min(1.0, max(0.0, displayDist / totalDist)) : 0.0
+        
+        onVehicleFrame?(coord, headingDeg)
+    }
+    
+    private func stepGuidewaySimulation(at now: Double) {
         guard let interp = interpolator,
               let telem = currentTelemetry else { return }
         

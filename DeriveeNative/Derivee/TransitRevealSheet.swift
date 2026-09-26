@@ -678,7 +678,8 @@ struct TransitRevealSheet: View {
                     onFocusMap?(coord)
                 },
                 onInspectRoute: onInspectRoute,
-                onClearRouteInspection: onClearRouteInspection
+                onClearRouteInspection: onClearRouteInspection,
+                onVehicleFrame: onVehicleFrame
             )
         }
     }

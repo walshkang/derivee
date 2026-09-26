@@ -75,8 +75,12 @@ public struct SurfaceRunInspector: View {
     public var onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil
     public var onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil
     public var onClearRouteInspection: (() -> Void)? = nil
+    public var onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     
+    @State private var currentArrival: SpatialDatabaseManager.ArrivalInfo? = nil
+    @State private var baseLadder: [TrackStop] = []
     @State private var stopLadder: [TrackStop] = []
+    @State private var trackingSession: LiveVehicleTrackingSession? = nil
     @State private var isLoadingLadder: Bool = true
     @State private var isPassedStopsExpanded: Bool = false
     @State private var isApproachingStopsExpanded: Bool = false
@@ -99,7 +103,8 @@ public struct SurfaceRunInspector: View {
         onBack: (() -> Void)? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
-        onClearRouteInspection: (() -> Void)? = nil
+        onClearRouteInspection: (() -> Void)? = nil,
+        onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     ) {
         self.arrival = arrival
         self.currentStopId = currentStopId
@@ -111,6 +116,7 @@ public struct SurfaceRunInspector: View {
         self.onFocusMap = onFocusMap
         self.onInspectRoute = onInspectRoute
         self.onClearRouteInspection = onClearRouteInspection
+        self.onVehicleFrame = onVehicleFrame
     }
     
     public init(
@@ -123,7 +129,8 @@ public struct SurfaceRunInspector: View {
         onBack: (() -> Void)? = nil,
         onFocusMap: ((CLLocationCoordinate2D) -> Void)? = nil,
         onInspectRoute: ((RouteInspectionCommand) -> Void)? = nil,
-        onClearRouteInspection: (() -> Void)? = nil
+        onClearRouteInspection: (() -> Void)? = nil,
+        onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     ) {
         self.arrival = arrival
         self.currentStopId = currentStopId
@@ -135,14 +142,19 @@ public struct SurfaceRunInspector: View {
         self.onFocusMap = onFocusMap
         self.onInspectRoute = onInspectRoute
         self.onClearRouteInspection = onClearRouteInspection
+        self.onVehicleFrame = onVehicleFrame
+    }
+    
+    private var displayArrival: SpatialDatabaseManager.ArrivalInfo {
+        currentArrival ?? arrival
     }
     
     private var lineInfo: TransitRouteData.LineInfo {
-        TransitRouteData.lineInfo(for: arrival.line)
+        TransitRouteData.lineInfo(for: displayArrival.line)
     }
     
     private var directionId: Int {
-        arrival.directionId
+        displayArrival.directionId
     }
     
     private var isFerry: Bool {
@@ -158,7 +170,11 @@ public struct SurfaceRunInspector: View {
             // Pinned Navigation Header
             HStack(alignment: .center) {
                 if let onBack = onBack {
-                    Button(action: onBack) {
+                    Button {
+                        trackingSession?.stop()
+                        trackingSession = nil
+                        onBack()
+                    } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 15, weight: .bold))
@@ -178,6 +194,8 @@ public struct SurfaceRunInspector: View {
                 Spacer()
                 
                 Button {
+                    trackingSession?.stop()
+                    trackingSession = nil
                     if let onBack = onBack {
                         onBack()
                     } else {
@@ -205,7 +223,7 @@ public struct SurfaceRunInspector: View {
                         stationCoordinate: stCoord,
                         vehicleStopName: vehicleStopName,
                         vehicleCoordinate: vCoord,
-                        etaMinutes: arrival.minutes,
+                        etaMinutes: displayArrival.minutes,
                         onFocus: { coord in
                             onFocusMap?(coord)
                         }
@@ -275,11 +293,16 @@ public struct SurfaceRunInspector: View {
         }
         .task {
             await loadInspectorData()
+            await runLivePollingLoop()
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
+        }
+        .onDisappear {
+            trackingSession?.stop()
+            trackingSession = nil
         }
     }
     
@@ -289,17 +312,17 @@ public struct SurfaceRunInspector: View {
     private func renderHeroHeader() -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 14) {
-                TransitRouteBadge(routeId: arrival.line, lineInfo: lineInfo, size: .large)
+                TransitRouteBadge(routeId: displayArrival.line, lineInfo: lineInfo, size: .large)
                 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(arrival.destination)
+                        Text(displayArrival.destination)
                             .font(.system(size: 20, weight: .bold, design: .rounded))
                             .foregroundColor(.primary)
                             .lineLimit(1)
                         
-                        if inspectionMode == .liveRun && arrival.minutes == 0 {
-                            let trackSuffix = arrival.formattedTrack.map { " (\($0))" } ?? ""
+                        if inspectionMode == .liveRun && displayArrival.minutes == 0 {
+                            let trackSuffix = displayArrival.formattedTrack.map { " (\($0))" } ?? ""
                             Text("• Boarding\(trackSuffix)")
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundColor(Color(hex: "#FFB300"))
@@ -307,7 +330,7 @@ public struct SurfaceRunInspector: View {
                         }
                     }
                     
-                    if let dir = arrival.direction {
+                    if let dir = displayArrival.direction {
                         Text(dir.uppercased())
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
                             .foregroundColor(.secondary)
@@ -320,7 +343,7 @@ public struct SurfaceRunInspector: View {
                 VStack(alignment: .trailing, spacing: 2) {
                     switch inspectionMode {
                     case .historicalReplay:
-                        let timeStr = DateFormatter.localizedString(from: arrival.arrivalDate, dateStyle: .none, timeStyle: .short)
+                        let timeStr = DateFormatter.localizedString(from: displayArrival.arrivalDate, dateStyle: .none, timeStyle: .short)
                         Text(timeStr)
                             .font(.system(size: 20, weight: .bold, design: .monospaced))
                             .foregroundColor(.secondary)
@@ -335,7 +358,7 @@ public struct SurfaceRunInspector: View {
                         .clipShape(Capsule())
                         
                     case .scheduledRun:
-                        let timeStr = DateFormatter.localizedString(from: arrival.arrivalDate, dateStyle: .none, timeStyle: .short)
+                        let timeStr = DateFormatter.localizedString(from: displayArrival.arrivalDate, dateStyle: .none, timeStyle: .short)
                         Text(timeStr)
                             .font(.system(size: 20, weight: .bold, design: .monospaced))
                             .foregroundColor(.primary)
@@ -350,7 +373,7 @@ public struct SurfaceRunInspector: View {
                         .clipShape(Capsule())
                         
                     case .liveRun:
-                        if arrival.minutes == 0 {
+                        if displayArrival.minutes == 0 {
                             HStack(spacing: 4) {
                                 Circle()
                                     .fill(Color(hex: "#FFB300"))
@@ -366,7 +389,7 @@ public struct SurfaceRunInspector: View {
                             .clipShape(Capsule())
                         } else {
                             HStack(alignment: .firstTextBaseline, spacing: 2) {
-                                Text("\(arrival.minutes)")
+                                Text("\(displayArrival.minutes)")
                                     .font(.system(size: 26, weight: .black, design: .monospaced))
                                     .foregroundColor(.primary)
                                 Text("min")
@@ -375,7 +398,7 @@ public struct SurfaceRunInspector: View {
                             }
                             
                             // Stops away countdown is displayed for Bus, suppressed for Ferry (§10.6.1)
-                            if routeConfig.displaysStopsAwayCountdown, let dist = arrival.distanceDescription, !dist.isEmpty, dist.lowercased() != "boarding" {
+                            if routeConfig.displaysStopsAwayCountdown, let dist = displayArrival.distanceDescription, !dist.isEmpty, dist.lowercased() != "boarding" {
                                 Text(dist)
                                     .font(.system(size: 10, weight: .medium))
                                     .foregroundColor(.secondary)
@@ -389,7 +412,7 @@ public struct SurfaceRunInspector: View {
             HStack(spacing: 8) {
                 switch inspectionMode {
                 case .historicalReplay:
-                    let outcome = SpatialDatabaseManager.ArrivalInfo.formatHistoricalOutcome(delaySeconds: arrival.historicalDelaySeconds ?? 0)
+                    let outcome = SpatialDatabaseManager.ArrivalInfo.formatHistoricalOutcome(delaySeconds: displayArrival.historicalDelaySeconds ?? 0)
                     HStack(spacing: 5) {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 10, weight: .semibold))
@@ -420,7 +443,7 @@ public struct SurfaceRunInspector: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     
                 case .liveRun:
-                    let proximity = arrival.proximityContext(ladder: stopLadder, currentStopName: currentStopName)
+                    let proximity = displayArrival.proximityContext(ladder: stopLadder, currentStopName: currentStopName)
                     HStack(spacing: 5) {
                         Image(systemName: isFerry ? "ferry.fill" : "bus.fill")
                             .font(.system(size: 10, weight: .semibold))
@@ -457,7 +480,7 @@ public struct SurfaceRunInspector: View {
                 
                 // Station Hold / Origin Dwell (if active)
                 if inspectionMode == .liveRun {
-                    if arrival.isHoldingStation {
+                    if displayArrival.isHoldingStation {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 8.5, weight: .bold))
@@ -470,7 +493,7 @@ public struct SurfaceRunInspector: View {
                         .padding(.vertical, 3)
                         .background(Color(hex: "#FFB300").opacity(0.18))
                         .clipShape(Capsule())
-                    } else if arrival.isDwellingAtOrigin {
+                    } else if displayArrival.isDwellingAtOrigin {
                         HStack(spacing: 4) {
                             Image(systemName: isFerry ? "ferry.fill" : "bus.fill")
                                 .font(.system(size: 8.5, weight: .bold))
@@ -1095,13 +1118,23 @@ public struct SurfaceRunInspector: View {
                 )
                 
                 await MainActor.run {
+                    self.baseLadder = rawLadder
                     self.stopLadder = ladder
                     self.resolvedVehicleCoordinate = (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil
                     self.isLoadingLadder = false
                     self.onInspectRoute?(command)
+                    
+                    if inspectionMode == .liveRun && !polyline.isEmpty && routeConfig.modalClass == .bus {
+                        let session = LiveVehicleTrackingSession(modalClass: .bus)
+                        session.configure(polyline: polyline, arrival: displayArrival, ladder: ladder)
+                        session.onVehicleFrame = self.onVehicleFrame
+                        session.start()
+                        self.trackingSession = session
+                    }
                 }
             } else {
                 await MainActor.run {
+                    self.baseLadder = rawLadder
                     self.stopLadder = ladder
                     self.resolvedVehicleCoordinate = (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil
                     self.isLoadingLadder = false
@@ -1111,6 +1144,70 @@ public struct SurfaceRunInspector: View {
             await MainActor.run {
                 self.isLoadingLadder = false
             }
+        }
+    }
+    
+    // MARK: - Live Feed Polling Loop (Wave Pre-T.8c)
+    
+    @MainActor
+    private func runLivePollingLoop() async {
+        guard inspectionMode == .liveRun else { return }
+        
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+            } catch {
+                break // Clean cooperative exit on task cancellation / view dismiss
+            }
+            guard !Task.isCancelled else { break }
+            
+            await performLiveFeedRefresh()
+        }
+    }
+    
+    @MainActor
+    private func performLiveFeedRefresh() async {
+        do {
+            let arrivals = try await TransitRealtimeService.shared.fetchLiveArrivals(
+                for: currentStopId,
+                routeId: displayArrival.line
+            )
+            guard !Task.isCancelled else { return }
+            
+            // Match active bus consist by tripId or line/direction/closest minutes
+            let matched: SpatialDatabaseManager.ArrivalInfo? = {
+                if let tripId = displayArrival.tripId {
+                    return arrivals.first(where: { $0.tripId == tripId })
+                }
+                return arrivals.first(where: {
+                    $0.line == displayArrival.line &&
+                    $0.directionId == directionId &&
+                    abs($0.minutes - displayArrival.minutes) <= 15
+                })
+            }()
+            
+            guard let newArrival = matched else { return }
+            
+            self.currentArrival = newArrival
+            
+            let ladderToUse = baseLadder.isEmpty ? stopLadder : baseLadder
+            let updatedLadder = TransitRealtimeService.shared.annotateLadderWithVehicle(
+                ladder: ladderToUse,
+                arrival: newArrival
+            )
+            self.stopLadder = updatedLadder
+            
+            let vehicleLoc = TransitRealtimeService.shared.resolveVehicleLocation(
+                arrival: newArrival,
+                ladder: updatedLadder
+            )
+            self.resolvedVehicleCoordinate = vehicleLoc?.coordinate
+            
+            // Reconcile surface bus tracking session smoothly
+            trackingSession?.reconcile(arrival: newArrival, ladder: updatedLadder)
+            
+        } catch {
+            // Network hiccups are gracefully ignored in the background polling loop
         }
     }
 }

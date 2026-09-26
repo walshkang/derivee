@@ -528,4 +528,81 @@ final class SubwayPositionInterpolatorTests: XCTestCase {
         XCTAssertEqual(estZero.linear_progress, 0.0)
         XCTAssertEqual(estZero.visual_state, VisualState.STOPPED_IN_STATION)
     }
+
+    // MARK: - 11. Surface Centerline Snapping & Corridor Gating (Wave Pre-T.8c)
+
+    func testSnapGeographicPoint_OnCorridorSnapsToCenterline() {
+        // Straight Eastbound corridor along latitude 40.7527 from lon -74.0000 to -73.9800
+        let coords = [
+            GeoCoordinate(40.7527, -74.0000),
+            GeoCoordinate(40.7527, -73.9800)
+        ]
+        let interpolator = makeGeographicInterpolator(coords: coords, refLat: 40.7527, refLon: -73.9900)
+
+        // Point offset North by ~15 meters (1 deg lat ~ 111,139 m -> 15m ~ 0.000135 deg)
+        let testLat = 40.7527 + 0.000135
+        let testLon = -73.9900
+
+        let result = interpolator.snap_geographic_point(testLat, testLon, 50.0)
+
+        XCTAssertTrue(result.is_on_corridor, "Point within 15m must be on-corridor (<= 50m threshold)")
+        XCTAssertEqual(result.snapped_coordinate.latitude, 40.7527, accuracy: 1e-5, "Latitude must snap to polyline centerline")
+        XCTAssertEqual(result.perpendicular_distance, 15.0, accuracy: 1.0, "Perpendicular distance must be ~15m")
+        XCTAssertGreaterThan(result.cumulative_distance, 0.0)
+        XCTAssertEqual(result.heading_degrees, 90.0, accuracy: 2.0, "Heading along Eastbound segment must be ~90 degrees")
+    }
+
+    func testSnapGeographicPoint_OffCorridorRetainsRawGPS() {
+        // Straight Eastbound corridor along latitude 40.7527 from lon -74.0000 to -73.9800
+        let coords = [
+            GeoCoordinate(40.7527, -74.0000),
+            GeoCoordinate(40.7527, -73.9800)
+        ]
+        let interpolator = makeGeographicInterpolator(coords: coords, refLat: 40.7527, refLon: -73.9900)
+
+        // Point offset North by ~75 meters (75m ~ 0.000675 deg lat) -> beyond 50m corridor gating
+        let testLat = 40.7527 + 0.000675
+        let testLon = -73.9900
+
+        let result = interpolator.snap_geographic_point(testLat, testLon, 50.0)
+
+        XCTAssertFalse(result.is_on_corridor, "Point offset 75m must be flagged off-corridor (> 50m threshold)")
+        XCTAssertEqual(result.snapped_coordinate.latitude, testLat, accuracy: 1e-7, "Off-corridor point must retain raw GPS latitude")
+        XCTAssertEqual(result.snapped_coordinate.longitude, testLon, accuracy: 1e-7, "Off-corridor point must retain raw GPS longitude")
+        XCTAssertEqual(result.perpendicular_distance, 75.0, accuracy: 2.0, "Perpendicular distance must report true distance ~75m")
+    }
+
+    func testSnapGeographicPoint_EmptyGeometrySafeHandling() {
+        let emptyInterp = makeGeographicInterpolator(coords: [])
+        let rawLat = 40.7128
+        let rawLon = -74.0060
+
+        let result = emptyInterp.snap_geographic_point(rawLat, rawLon, 50.0)
+
+        XCTAssertFalse(result.is_on_corridor, "Empty geometry must return off-corridor")
+        XCTAssertEqual(result.snapped_coordinate.latitude, rawLat, accuracy: 1e-7)
+        XCTAssertEqual(result.snapped_coordinate.longitude, rawLon, accuracy: 1e-7)
+        XCTAssertEqual(result.cumulative_distance, 0.0)
+        XCTAssertEqual(result.perpendicular_distance, 0.0)
+    }
+
+    func testSnapGeographicPoint_ClampsAtSegmentEnds() {
+        let coords = [
+            GeoCoordinate(40.7527, -74.0000),
+            GeoCoordinate(40.7527, -73.9800)
+        ]
+        let interpolator = makeGeographicInterpolator(coords: coords, refLat: 40.7527, refLon: -73.9900)
+
+        // Point positioned East of segment end by ~20m (within 50m end cap)
+        // 20m lon at lat 40.75 ~ 20 / (111139 * cos(40.75 deg)) ~ 0.000236 deg lon
+        let testLat = 40.7527
+        let testLon = -73.9800 + 0.000236
+
+        let result = interpolator.snap_geographic_point(testLat, testLon, 50.0)
+
+        XCTAssertTrue(result.is_on_corridor, "Point 20m beyond terminus must be on-corridor (<= 50m)")
+        XCTAssertEqual(result.snapped_coordinate.latitude, 40.7527, accuracy: 1e-5)
+        XCTAssertEqual(result.snapped_coordinate.longitude, -73.9800, accuracy: 1e-5, "Snapped coordinate must clamp to terminal vertex")
+        XCTAssertEqual(result.cumulative_distance, interpolator.total_shape_distance(), accuracy: 1e-4)
+    }
 }

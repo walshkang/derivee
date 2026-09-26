@@ -169,6 +169,48 @@ double SubwayPositionInterpolator::project_geographic_point_with_distance(
     return project_point_with_distance(pt, out_perp_dist);
 }
 
+SnappedPointResult SubwayPositionInterpolator::snap_geographic_point(
+    double lat,
+    double lon,
+    double max_corridor_dist_m
+) const noexcept {
+    if (geometry_.empty()) {
+        return SnappedPointResult(GeoCoordinate(lat, lon), 0.0, 0.0, 0.0, false);
+    }
+
+    const Point2D pt = to_conformal(GeoCoordinate{lat, lon});
+    double perp_dist = 0.0;
+    const double best_linear_dist = project_point_with_distance(pt, perp_dist);
+
+    const bool on_corridor = (perp_dist <= max_corridor_dist_m);
+
+    if (on_corridor) {
+        double heading_rad = 0.0;
+        const Point2D snapped_pt = interpolate_point_at_distance(best_linear_dist, heading_rad);
+        const GeoCoordinate snapped_geo = to_geographic(snapped_pt);
+        
+        double heading_deg = heading_rad * (180.0 / M_PI);
+        if (heading_deg < 0.0) heading_deg += 360.0;
+        if (heading_deg >= 360.0) heading_deg -= 360.0;
+
+        return SnappedPointResult(
+            snapped_geo,
+            best_linear_dist,
+            perp_dist,
+            heading_deg,
+            true
+        );
+    } else {
+        return SnappedPointResult(
+            GeoCoordinate(lat, lon),
+            best_linear_dist,
+            perp_dist,
+            0.0,
+            false
+        );
+    }
+}
+
 Point2D SubwayPositionInterpolator::interpolate_point_at_distance(
     double d,
     double& out_heading
