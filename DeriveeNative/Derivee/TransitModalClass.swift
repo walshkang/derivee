@@ -160,6 +160,8 @@ public enum TransitModalClass: Int, Sendable, CaseIterable, Codable, Comparable,
     
     /// Generates route badge opacity expression per Research Doc 22 §5.5 and Wave V.4.
     /// Clamped to 0.0 for z < 13.5; smooth linear transition to full opacity 1.0 at z >= 14.5.
+    /// Gracefully fades out between z = 15.25 and z = 15.75 as street-level station platform capsules
+    /// and station bullets take visual precedence (Apple Maps cartographic standard).
     public static func badgeOpacityExpression() -> NSExpression {
         return NSExpression(
             forMLNInterpolating: .zoomLevelVariable,
@@ -167,7 +169,9 @@ public enum TransitModalClass: Int, Sendable, CaseIterable, Codable, Comparable,
             parameters: nil,
             stops: NSExpression(forConstantValue: [
                 13.5: 0.0,
-                14.5: 1.0
+                14.5: 1.0,
+                15.25: 1.0,
+                15.75: 0.0
             ])
         )
     }

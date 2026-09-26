@@ -1537,6 +1537,8 @@ final class CommuterErgonomicsTests: XCTestCase {
         if let stops = stops {
             XCTAssertEqual(stops[13.5]?.doubleValue ?? -1, 0.0, accuracy: 0.01, "Badge opacity clamped to 0.0 for z < 13.5 (INV-BADGE-01)")
             XCTAssertEqual(stops[14.5]?.doubleValue ?? -1, 1.0, accuracy: 0.01, "Badge opacity reaches full 1.0 at z >= 14.5 (INV-BADGE-01)")
+            XCTAssertEqual(stops[15.25]?.doubleValue ?? -1, 1.0, accuracy: 0.01, "Badge opacity maintains 1.0 through z = 15.25 (INV-BADGE-01)")
+            XCTAssertEqual(stops[15.75]?.doubleValue ?? -1, 0.0, accuracy: 0.01, "Badge opacity decays to 0.0 at z >= 15.75 for street-level clarity (INV-BADGE-01)")
         }
     }
 }

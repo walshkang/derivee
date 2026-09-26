@@ -303,13 +303,13 @@ Cartographic route badges displaying bullet tokens (such as MTA [E], [F], [4], o
 
 In `line` mode, symbols repeat periodically along the line based on `symbol-spacing`, with each glyph rotating to match the local polyline tangent. While suitable for long highway networks, this mode produces symbol collision and visual clutter along curved subway lines. In `line-center` mode, the renderer evaluates the full length of the geometry and places exactly one symbol at the geometric midpoint.
 
-For Dérivée’s canonical arc topology, `symbol-placement: "line-center"` is selected for all arcs with length $L_{\text{arc}} < 800\text{ m}$. Because canonical arcs are segmented between station junctions, `line-center` ensures that exactly one badge cluster appears cleanly between stations without colliding with platform markers. For long express arcs spanning river tunnels or express bypasses ($L_{\text{arc}} \ge 800\text{ m}$), the layer switches to `symbol-placement: "line"` with an explicit `symbol-spacing: 250 pt` to provide periodic route confirmation.
+For Dérivée’s canonical arc topology, `symbol-placement: "line-center"` is selected for all arcs with length $L_{\text{arc}} < 800\text{ m}$. Because canonical arcs are segmented between station junctions, `line-center` ensures that exactly one badge cluster appears cleanly between stations without colliding with platform markers. For long express arcs spanning river tunnels or express bypasses ($L_{\text{arc}} \ge 800\text{ m}$), the layer switches to `symbol-placement: "line"` with an explicit Apple Maps-grade `symbol-spacing: 700 pt` to provide sparse, unambiguous route confirmation without cluttering viewports.
 
 ### 5.2 Badge Spacing, Collision Avoidance, and Viewport Density
 
 To prevent visual clutter on mobile displays, symbol placement obeys strict layout properties:
-- `symbol-spacing: 250 pt`: On long arcs, badges repeat at 250-point intervals. This ensures that at least one badge is visible within any screen viewport during panning without cluttering tight curves.
-- `icon-padding: 4.0 pt`: Establishes the minimum clearance boundary around each badge before adjacent symbols are suppressed.
+- `symbol-spacing: 700 pt`: On long arcs, badges repeat at 700-point intervals. This ensures that at most one badge is visible within any screen viewport during panning, avoiding repetitive stutter along corridors.
+- `icon-padding: 14.0 pt`: Establishes a generous clearance boundary around each badge before adjacent symbols are suppressed, preventing collisions with cross streets and station icons.
 - `icon-rotation-alignment: "viewport"`: Badges maintain an upright orientation aligned with the screen viewport rather than rotating with track curvature, ensuring immediate legibility.
 
 ### 5.3 Dynamic In-Memory Rasterization vs. Static Sprite Sheets
@@ -336,15 +336,17 @@ The client-side engine renders a single composite horizontal capsule containing 
 
 ### 5.5 Multi-Scale Visibility Thresholds & Stroke-Width Scale Gating
 
-Placing an 18-point badge over a 1.0-point line stroke at regional zoom levels ($z \le 13$) obscures the underlying base map. Badge visibility is therefore controlled by a smooth zoom-dependent opacity ramp:
+Placing an 18-point badge over a 1.0-point line stroke at regional zoom levels ($z \le 13$) obscures the underlying base map. Conversely, maintaining in-line badges across street grids at pedestrian zoom levels ($z \ge 15.5$) duplicates station bullets and clutters street typography. Badge visibility is therefore governed by an Apple Maps-grade multi-scale envelope:
 
 $$\text{BadgeOpacity}(z) = \begin{cases} 
 0.0, & z < 13.5 \\ 
 \frac{z - 13.5}{14.5 - 13.5}, & 13.5 \le z \le 14.5 \\ 
-1.0, & z > 14.5 
+1.0, & 14.5 < z \le 15.25 \\
+1.0 - \frac{z - 15.25}{15.75 - 15.25}, & 15.25 < z \le 15.75 \\
+0.0, & z > 15.75
 \end{cases}$$
 
-At zoom levels $z \ge 14.5$, ribbon widths reach $\ge 2.5\text{ pt}$ and station platform capsules emerge, creating the necessary visual hierarchy for 18-point bullet tokens to integrate naturally with corridor linework.
+At zoom levels $z \in [14.5, 15.25]$, ribbon widths reach $\ge 2.5\text{ pt}$, creating optimal prominence for corridor identification. At $z \ge 15.5$, station platform capsules emerge and station route bullets take visual precedence, prompting in-line track badges to smoothly fade out and preserve clean street typography.
 
 ---
 
@@ -604,6 +606,6 @@ To prevent visual regressions and ensure topological integrity during automated 
 | **INV-CORR-03** | Directionality | $\text{ArcDirection}(A)$ is canonical: $\text{NodeKey}(N_{\text{start}}) < \text{NodeKey}(N_{\text{end}})$ | Directional ordering checks on serialized topology graphs |
 | **INV-FILLET-01** | Junctions | Fillet curves must maintain $C^1$ continuity: $\vec{T}_{\text{fillet}}(0) = \vec{T}_{\text{trunk}}$ and $\vec{T}_{\text{fillet}}(1) = \vec{T}_{\text{branch}}$ | Derivative dot-product check: $\vec{T}_0 \cdot \vec{T}_{\text{in}} > 0.999$ |
 | **INV-FILLET-02** | Junctions | Fillet length bounds: $20.0\text{ m} \le L_{\text{fillet}} \le \min(120.0\text{ m}, 0.35 \times L_{\text{arc}})$ | Spatial boundary checks on Hermite splines |
-| **INV-BADGE-01** | Symbolics | Route badge opacity clamped to $0.0$ for $z < 13.5$; full opacity $1.0$ at $z \ge 14.5$ | MapLibre style expression evaluation assertions |
+| **INV-BADGE-01** | Symbolics | Route badge opacity clamped to $0.0$ for $z < 13.5$; full opacity $1.0$ for $z \in [14.5, 15.25]$; decays to $0.0$ at $z \ge 15.75$ for street-level glanceability | MapLibre style expression evaluation assertions |
 
 These invariants form the automated test suite for validating Wave V cartography, ensuring Dérivée's parallel corridor bundling provides high visual clarity and geometric stability across all zoom scales.

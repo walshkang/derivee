@@ -550,6 +550,8 @@ final class TransitCartographyTests: XCTestCase {
         if let stops = stops {
             XCTAssertEqual(stops[13.5]?.doubleValue ?? -1, 0.0, accuracy: 0.01, "Badge opacity must be 0.0 below z=13.5 (INV-BADGE-01)")
             XCTAssertEqual(stops[14.5]?.doubleValue ?? -1, 1.0, accuracy: 0.01, "Badge opacity must reach 1.0 at z=14.5 (INV-BADGE-01)")
+            XCTAssertEqual(stops[15.25]?.doubleValue ?? -1, 1.0, accuracy: 0.01, "Badge opacity must maintain 1.0 through z=15.25 for corridor prominence")
+            XCTAssertEqual(stops[15.75]?.doubleValue ?? -1, 0.0, accuracy: 0.01, "Badge opacity must fade to 0.0 at z>=15.75 for street-level clarity (INV-BADGE-01)")
         }
     }
     
