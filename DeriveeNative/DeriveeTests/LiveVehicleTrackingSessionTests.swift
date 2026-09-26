@@ -182,4 +182,224 @@ final class LiveVehicleTrackingSessionTests: XCTestCase {
         session.stop()
         XCTAssertFalse(session.isRunning)
     }
+    
+    // MARK: - 7. Critically Damped Reconciliation (Wave Pre-T.8b)
+    
+    func testReconciliation_ZeroJumpContinuity() {
+        let session = LiveVehicleTrackingSession()
+        let t0 = 1700000000.0
+        
+        let initialArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 4,
+            distanceDescription: "In Transit",
+            tripId: "TRIP_RECONCILE_1",
+            progressLambda: 0.25
+        )
+        let ladder = makeTestLadder()
+        
+        session.configure(polyline: testPolyline, arrival: initialArrival, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+        let dPredicted = session.lastRenderedDistance
+        
+        // Feed update arrives at t0 with updated progress (train is further ahead)
+        let updatedArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 2,
+            distanceDescription: "Approaching",
+            tripId: "TRIP_RECONCILE_1",
+            progressLambda: 0.75
+        )
+        
+        session.reconcile(arrival: updatedArrival, ladder: ladder, now: t0)
+        XCTAssertTrue(session.isCurrentlyReconciling, "Reconciliation must be active when feed reports different position")
+        XCTAssertGreaterThan(session.activeReconciliationError, 0.0)
+        
+        // At Δt = 0 (exact moment of reconciliation), rendered distance must equal dPredicted
+        session.stepSimulation(at: t0)
+        XCTAssertEqual(
+            session.lastRenderedDistance,
+            dPredicted,
+            accuracy: 1e-4,
+            "At Δt = 0, critically damped filter must preserve exact continuity with zero frame jump"
+        )
+    }
+    
+    func testReconciliation_CriticallyDampedDecayRate() {
+        let session = LiveVehicleTrackingSession()
+        let t0 = 1700000000.0
+        
+        let initialArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 5,
+            distanceDescription: "In Transit",
+            tripId: "TRIP_RECONCILE_DECAY",
+            progressLambda: 0.2
+        )
+        let ladder = makeTestLadder()
+        session.configure(polyline: testPolyline, arrival: initialArrival, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+        
+        let updatedArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 2,
+            distanceDescription: "Approaching",
+            tripId: "TRIP_RECONCILE_DECAY",
+            progressLambda: 0.8
+        )
+        session.reconcile(arrival: updatedArrival, ladder: ladder, now: t0)
+        
+        let e0 = session.activeReconciliationError
+        XCTAssertGreaterThan(e0, 1.0)
+        
+        // Verify decay at Δt = 0.2s: theoretical offset = e0 * (1 + 5*0.2) * exp(-5*0.2) = e0 * 2 * exp(-1)
+        let dt1 = 0.2
+        let expectedOffset1 = e0 * (1.0 + 5.0 * dt1) * exp(-5.0 * dt1)
+        let ratio1 = expectedOffset1 / e0
+        XCTAssertEqual(ratio1, 2.0 * exp(-1.0), accuracy: 1e-4) // ~0.7358
+        
+        // Verify decay at Δt = 1.0s: theoretical offset = e0 * (1 + 5) * exp(-5) = e0 * 6 * exp(-5) ~ 0.0404
+        let dt2 = 1.0
+        let expectedOffset2 = e0 * (1.0 + 5.0 * dt2) * exp(-5.0 * dt2)
+        let ratio2 = expectedOffset2 / e0
+        XCTAssertEqual(ratio2, 6.0 * exp(-5.0), accuracy: 1e-4)
+        XCTAssertLessThan(ratio2, 0.05, "After 1.0s, >95% of prediction error must be absorbed")
+        
+        // Advance simulation past 1.5s -> reconciliation must complete and extinguish
+        session.stepSimulation(at: t0 + 1.5)
+        XCTAssertFalse(session.isCurrentlyReconciling, "Reconciliation must mark complete after 1.5s window")
+        XCTAssertEqual(session.activeReconciliationError, 0.0, accuracy: 1e-6)
+    }
+    
+    func testReconciliation_MonotonicClampPreventsBackwardSnaps() {
+        let session = LiveVehicleTrackingSession()
+        let t0 = 1700000000.0
+        
+        // Position vehicle near target station
+        let initialArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 1,
+            distanceDescription: "Approaching",
+            tripId: "TRIP_RECONCILE_MONOTONIC",
+            progressLambda: 0.8
+        )
+        let ladder = makeTestLadder()
+        session.configure(polyline: testPolyline, arrival: initialArrival, ladder: ladder, now: t0)
+        
+        // Advance vehicle forward
+        session.stepSimulation(at: t0 + 20.0)
+        let advancedDistance = session.lastRenderedDistance
+        XCTAssertGreaterThan(advancedDistance, 50.0)
+        
+        // Retroactive/delayed feed packet arrives reporting train earlier in corridor
+        let retroactiveArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 6,
+            distanceDescription: "6 stops away",
+            tripId: "TRIP_RECONCILE_MONOTONIC",
+            progressLambda: 0.1
+        )
+        session.reconcile(arrival: retroactiveArrival, ladder: ladder, now: t0 + 20.0)
+        
+        // Error e0 must be negative (reported < predicted)
+        XCTAssertLessThan(session.activeReconciliationError, 0.0)
+        
+        // Step simulation across 30 frames: distance must NEVER drop below advancedDistance
+        var previousDistance = advancedDistance
+        for step in 1...30 {
+            let simTime = (t0 + 20.0) + (Double(step) * (1.0 / 30.0))
+            session.stepSimulation(at: simTime)
+            
+            XCTAssertGreaterThanOrEqual(
+                session.lastRenderedDistance,
+                previousDistance,
+                "Distance must be monotonically non-decreasing (no backward snaps)"
+            )
+            XCTAssertGreaterThanOrEqual(
+                session.lastRenderedDistance,
+                advancedDistance,
+                "Monotonic clamp must prevent retroactive feed packet from pulling consist backwards"
+            )
+            previousDistance = session.lastRenderedDistance
+        }
+    }
+    
+    func testReconciliation_ChainedFeedUpdates() {
+        let session = LiveVehicleTrackingSession()
+        let t0 = 1700000000.0
+        
+        let initialArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 4,
+            distanceDescription: "4 stops away",
+            tripId: "TRIP_CHAINED",
+            progressLambda: 0.2
+        )
+        let ladder = makeTestLadder()
+        session.configure(polyline: testPolyline, arrival: initialArrival, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+        
+        // First feed update at t0 + 0.1s
+        let update1 = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 3,
+            distanceDescription: "3 stops away",
+            tripId: "TRIP_CHAINED",
+            progressLambda: 0.4
+        )
+        session.reconcile(arrival: update1, ladder: ladder, now: t0 + 0.1)
+        session.stepSimulation(at: t0 + 0.3)
+        let distBeforeSecond = session.lastRenderedDistance
+        
+        // Second feed update arrives at t0 + 0.3s while first reconciliation is still active
+        let update2 = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 2,
+            distanceDescription: "2 stops away",
+            tripId: "TRIP_CHAINED",
+            progressLambda: 0.7
+        )
+        session.reconcile(arrival: update2, ladder: ladder, now: t0 + 0.3)
+        
+        // At instant of second update, continuity must be preserved
+        session.stepSimulation(at: t0 + 0.3)
+        XCTAssertEqual(
+            session.lastRenderedDistance,
+            distBeforeSecond,
+            accuracy: 1e-4,
+            "Chained reconciliation must maintain seamless continuity without jump"
+        )
+    }
+    
+    func testReconciliation_IdempotentOnIdenticalFeed() {
+        let session = LiveVehicleTrackingSession()
+        let t0 = 1700000000.0
+        
+        let initialArrival = SpatialDatabaseManager.ArrivalInfo(
+            line: "7",
+            destination: "Flushing-Main St",
+            minutes: 3,
+            distanceDescription: "3 stops away",
+            tripId: "TRIP_IDEMPOTENT",
+            progressLambda: 0.5
+        )
+        let ladder = makeTestLadder()
+        session.configure(polyline: testPolyline, arrival: initialArrival, ladder: ladder, now: t0)
+        session.stepSimulation(at: t0)
+        
+        // Reconcile with identical arrival at t0
+        session.reconcile(arrival: initialArrival, ladder: ladder, now: t0)
+        
+        XCTAssertFalse(session.isCurrentlyReconciling, "Identical feed update must not trigger unnecessary reconciliation")
+        XCTAssertEqual(session.activeReconciliationError, 0.0, accuracy: 0.1)
+    }
 }

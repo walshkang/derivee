@@ -54,6 +54,14 @@ public final class LiveVehicleTrackingSession {
     @ObservationIgnored private var originPlatformDist: Double = 0.0
     @ObservationIgnored private var targetPlatformDist: Double = 0.0
     
+    @ObservationIgnored private var reconciliationError: Double = 0.0
+    @ObservationIgnored private var reconciliationStartTime: Double = 0.0
+    @ObservationIgnored private var isReconciling: Bool = false
+    @ObservationIgnored public private(set) var lastRenderedDistance: Double = 0.0
+    
+    public var activeReconciliationError: Double { reconciliationError }
+    public var isCurrentlyReconciling: Bool { isReconciling }
+    
     // MARK: - Initialization & Deinitialization
     
     public init() {
@@ -67,44 +75,15 @@ public final class LiveVehicleTrackingSession {
         displayLink = nil
     }
     
-    // MARK: - Configuration
+    // MARK: - Configuration & Telemetry Helpers
     
-    /// Configures the kinematic interpolator with route polyline geometry and GTFS-RT telemetry.
-    public func configure(
-        polyline: [CLLocationCoordinate2D],
+    /// Constructs IngestedTelemetry and platform projections from arrival data and stop ladder.
+    private func buildTelemetry(
         arrival: SpatialDatabaseManager.ArrivalInfo,
-        ladder: [TrackStop]
-    ) {
-        guard !polyline.isEmpty else {
-            stop()
-            return
-        }
-        
-        let refLat = polyline.first?.latitude ?? 40.7128
-        let refLon = polyline.first?.longitude ?? -74.0060
-        
-        // 1. Build C++ Conformal Geometry
-        let geoCoords = polyline.map { GeoCoordinate($0.latitude, $0.longitude) }
-        let interp = geoCoords.withUnsafeBufferPointer { buf in
-            SubwayPositionInterpolator.from_geographic_coords(
-                buf.baseAddress,
-                buf.count,
-                refLat,
-                refLon
-            )
-        }
-        self.interpolator = interp
-        
-        // 2. Resolve Station Projection Distances & Status
-        updateTelemetry(arrival: arrival, ladder: ladder)
-    }
-    
-    /// Updates the ingested telemetry from a new GTFS-RT feed update.
-    public func updateTelemetry(
-        arrival: SpatialDatabaseManager.ArrivalInfo,
-        ladder: [TrackStop]
-    ) {
-        guard let interp = interpolator else { return }
+        ladder: [TrackStop],
+        now: Double
+    ) -> (telemetry: IngestedTelemetry, origDist: Double, targDist: Double)? {
+        guard let interp = interpolator else { return nil }
         
         let currentIdx = ladder.firstIndex(where: { $0.isCurrent }) ?? 0
         let currentStop = ladder.indices.contains(currentIdx) ? ladder[currentIdx] : ladder.first
@@ -148,7 +127,6 @@ public final class LiveVehicleTrackingSession {
             }
         }
         
-        let now = Date().timeIntervalSince1970
         let feedTime = now
         
         // Platform linear distances along polyline
@@ -166,19 +144,26 @@ public final class LiveVehicleTrackingSession {
             targDist = origDist
         }
         
-        self.originPlatformDist = origDist
-        self.targetPlatformDist = targDist
-        
         // Timing derivation
-        let arrivalNextSec = now + Double(max(0, arrival.minutes) * 60)
         let interDist = max(100.0, targDist - origDist)
         let nominalDuration = max(30.0, interDist / 15.0) // ~15 m/s typical subway speed
         let departureSec: Double
+        let arrivalNextSec: Double
         
         if status == .STOPPED_AT {
             departureSec = arrival.isHoldingStation ? (now - 130.0) : now
+            arrivalNextSec = departureSec + 30.0
         } else {
-            departureSec = arrivalNextSec - nominalDuration
+            let lambda: Double
+            if arrival.progressLambda > 0.0 {
+                lambda = min(0.99, max(0.01, arrival.progressLambda))
+            } else if status == .INCOMING_AT {
+                lambda = 0.85
+            } else {
+                lambda = 0.45
+            }
+            departureSec = now - (nominalDuration * lambda)
+            arrivalNextSec = departureSec + nominalDuration
         }
         
         let seq = UInt32(targetStop?.sequenceIndex ?? 1)
@@ -186,7 +171,7 @@ public final class LiveVehicleTrackingSession {
         let routeIdStr = std.string(arrival.line)
         let stopIdStr = std.string(targetStop?.stopId ?? (currentStop?.stopId ?? ""))
         
-        self.currentTelemetry = IngestedTelemetry(
+        let telem = IngestedTelemetry(
             tripIdStr,
             routeIdStr,
             seq,
@@ -199,24 +184,166 @@ public final class LiveVehicleTrackingSession {
             origDist,
             targDist
         )
+        return (telem, origDist, targDist)
     }
     
-    // MARK: - Simulation Frame Step (30Hz CADisplayLink)
+    // MARK: - Configuration
+    
+    /// Configures the kinematic interpolator with route polyline geometry and GTFS-RT telemetry.
+    public func configure(
+        polyline: [CLLocationCoordinate2D],
+        arrival: SpatialDatabaseManager.ArrivalInfo,
+        ladder: [TrackStop],
+        now: Double = Date().timeIntervalSince1970
+    ) {
+        guard !polyline.isEmpty else {
+            stop()
+            return
+        }
+        
+        let refLat = polyline.first?.latitude ?? 40.7128
+        let refLon = polyline.first?.longitude ?? -74.0060
+        
+        // 1. Build C++ Conformal Geometry
+        let geoCoords = polyline.map { GeoCoordinate($0.latitude, $0.longitude) }
+        let interp = geoCoords.withUnsafeBufferPointer { buf in
+            SubwayPositionInterpolator.from_geographic_coords(
+                buf.baseAddress,
+                buf.count,
+                refLat,
+                refLon
+            )
+        }
+        self.interpolator = interp
+        
+        // 2. Resolve Station Projection Distances & Status
+        updateTelemetry(arrival: arrival, ladder: ladder, now: now)
+    }
+    
+    /// Updates the ingested telemetry from a new GTFS-RT feed update.
+    public func updateTelemetry(
+        arrival: SpatialDatabaseManager.ArrivalInfo,
+        ladder: [TrackStop],
+        now: Double = Date().timeIntervalSince1970
+    ) {
+        guard let built = buildTelemetry(arrival: arrival, ladder: ladder, now: now) else { return }
+        self.originPlatformDist = built.origDist
+        self.targetPlatformDist = built.targDist
+        self.currentTelemetry = built.telemetry
+        self.lastRenderedDistance = built.origDist
+        self.reconciliationError = 0.0
+        self.isReconciling = false
+    }
+    
+    /// Reconciles new GTFS-RT feed updates with a critically damped 1.0s exponential decay curve
+    /// to eliminate teleportation jumps and backward snaps.
+    public func reconcile(
+        arrival: SpatialDatabaseManager.ArrivalInfo,
+        ladder: [TrackStop],
+        now: Double = Date().timeIntervalSince1970
+    ) {
+        guard let interp = interpolator,
+              let currentTelem = currentTelemetry else {
+            updateTelemetry(arrival: arrival, ladder: ladder, now: now)
+            return
+        }
+        
+        // 1. Determine current predicted distance at this exact instant
+        let currentEst = interp.update(currentTelem, now)
+        let currentInterDist = max(0.0, targetPlatformDist - originPlatformDist)
+        let currentRawDist = originPlatformDist + (currentEst.linear_progress * currentInterDist)
+        
+        let predictedDist: Double
+        if isReconciling {
+            let dt = max(0.0, now - reconciliationStartTime)
+            let omega: Double = 5.0
+            let currentOffset = reconciliationError * (1.0 + omega * dt) * exp(-omega * dt)
+            let candidate = currentRawDist - currentOffset
+            predictedDist = max(lastRenderedDistance, candidate)
+        } else {
+            predictedDist = max(lastRenderedDistance, currentRawDist)
+        }
+        
+        // 2. Build new telemetry from feed packet
+        guard let built = buildTelemetry(arrival: arrival, ladder: ladder, now: now) else { return }
+        
+        // 3. Evaluate newly reported distance under new telemetry at now
+        let newEst = interp.update(built.telemetry, now)
+        let newInterDist = max(0.0, built.targDist - built.origDist)
+        let reportedDist = built.origDist + (newEst.linear_progress * newInterDist)
+        
+        // 4. Compute prediction error e_0 = d_reported - d_predicted
+        let e0 = reportedDist - predictedDist
+        
+        self.currentTelemetry = built.telemetry
+        self.originPlatformDist = built.origDist
+        self.targetPlatformDist = built.targDist
+        
+        if abs(e0) > 0.05 { // Discrepancies > 5cm trigger damped reconciliation
+            self.reconciliationError = e0
+            self.reconciliationStartTime = now
+            self.isReconciling = true
+        } else {
+            self.reconciliationError = 0.0
+            self.isReconciling = false
+        }
+        self.lastRenderedDistance = predictedDist
+    }
+    
+    // MARK: - Simulation Frame Step (30Hz CADisplayLink & Headless Simulation)
     
     internal func step(_ link: CADisplayLink) {
-        guard isRunning,
-              let interp = interpolator,
+        guard isRunning else { return }
+        stepSimulation(at: Date().timeIntervalSince1970)
+    }
+    
+    internal func stepSimulation(at now: Double) {
+        guard let interp = interpolator,
               let telem = currentTelemetry else { return }
         
-        let now = Date().timeIntervalSince1970
         let estimate = interp.update(telem, now)
+        let interDist = max(0.0, targetPlatformDist - originPlatformDist)
+        let rawDist = originPlatformDist + (estimate.linear_progress * interDist)
         
-        let coord = CLLocationCoordinate2D(latitude: estimate.latitude, longitude: estimate.longitude)
-        let bearing = estimate.heading_degrees
+        let displayDist: Double
+        if isReconciling {
+            let dt = max(0.0, now - reconciliationStartTime)
+            if dt >= 1.5 {
+                self.isReconciling = false
+                self.reconciliationError = 0.0
+                displayDist = max(lastRenderedDistance, rawDist)
+            } else {
+                let omega: Double = 5.0
+                let offset = reconciliationError * (1.0 + omega * dt) * exp(-omega * dt)
+                let candidateDist = rawDist - offset
+                displayDist = max(lastRenderedDistance, candidateDist)
+            }
+        } else {
+            displayDist = max(lastRenderedDistance, rawDist)
+        }
+        
+        self.lastRenderedDistance = displayDist
+        
+        let coord: CLLocationCoordinate2D
+        let bearing: Double
+        
+        if abs(displayDist - rawDist) < 1e-4 {
+            coord = CLLocationCoordinate2D(latitude: estimate.latitude, longitude: estimate.longitude)
+            bearing = estimate.heading_degrees
+        } else {
+            var headingRad: Double = 0.0
+            let pt = interp.interpolate_point_at_distance(displayDist, &headingRad)
+            let geo = interp.to_geographic(pt)
+            var headingDeg = headingRad * (180.0 / .pi)
+            if headingDeg < 0.0 { headingDeg += 360.0 }
+            if headingDeg >= 360.0 { headingDeg -= 360.0 }
+            coord = CLLocationCoordinate2D(latitude: geo.latitude, longitude: geo.longitude)
+            bearing = headingDeg
+        }
         
         self.currentCoordinate = coord
         self.currentBearing = bearing
-        self.linearProgress = estimate.linear_progress
+        self.linearProgress = (interDist > 0.0) ? min(1.0, max(0.0, (displayDist - originPlatformDist) / interDist)) : estimate.linear_progress
         
         // 1. Direct high-frequency dispatch (MapLibre render pipeline, zero SwiftUI body re-evaluation)
         onVehicleFrame?(coord, bearing)

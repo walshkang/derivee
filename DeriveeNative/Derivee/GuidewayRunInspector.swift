@@ -22,6 +22,8 @@ public struct GuidewayRunInspector: View {
     public var onClearRouteInspection: (() -> Void)? = nil
     public var onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     
+    @State private var currentArrival: SpatialDatabaseManager.ArrivalInfo
+    @State private var baseLadder: [TrackStop] = []
     @State private var stopLadder: [TrackStop] = []
     @State private var isLoadingLadder: Bool = true
     @State private var isPassedStopsExpanded: Bool = false
@@ -49,6 +51,7 @@ public struct GuidewayRunInspector: View {
         onVehicleFrame: ((CLLocationCoordinate2D, Double) -> Void)? = nil
     ) {
         self.arrival = arrival
+        self._currentArrival = State(initialValue: arrival)
         self.currentStopId = currentStopId
         self.currentStopName = currentStopName
         self.currentStopCoordinate = currentStopCoordinate
@@ -60,16 +63,20 @@ public struct GuidewayRunInspector: View {
         self.onVehicleFrame = onVehicleFrame
     }
     
+    private var displayArrival: SpatialDatabaseManager.ArrivalInfo {
+        currentArrival
+    }
+    
     private var lineInfo: TransitRouteData.LineInfo {
-        TransitRouteData.lineInfo(for: arrival.line)
+        TransitRouteData.lineInfo(for: displayArrival.line)
     }
     
     private var directionId: Int {
-        arrival.directionId
+        displayArrival.directionId
     }
     
     private var inspectionMode: SpatialDatabaseManager.ArrivalInfo.RunInspectionMode {
-        arrival.inspectionMode
+        displayArrival.inspectionMode
     }
     
     public var body: some View {
@@ -130,7 +137,7 @@ public struct GuidewayRunInspector: View {
                         stationCoordinate: stCoord,
                         vehicleStopName: vehicleStopName,
                         vehicleCoordinate: vCoord,
-                        etaMinutes: arrival.minutes,
+                        etaMinutes: displayArrival.minutes,
                         onFocus: { coord in
                             onFocusMap?(coord)
                         }
@@ -200,6 +207,7 @@ public struct GuidewayRunInspector: View {
         }
         .task {
             await loadInspectorData()
+            await runLivePollingLoop()
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
@@ -218,17 +226,17 @@ public struct GuidewayRunInspector: View {
     private func renderHeroHeader() -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 14) {
-                TransitRouteBadge(routeId: arrival.line, lineInfo: lineInfo, size: .large)
+                TransitRouteBadge(routeId: displayArrival.line, lineInfo: lineInfo, size: .large)
                 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(arrival.destination)
+                        Text(displayArrival.destination)
                             .font(.system(size: 20, weight: .bold, design: .rounded))
                             .foregroundColor(.primary)
                             .lineLimit(1)
                         
-                        if inspectionMode == .liveRun && arrival.minutes == 0 {
-                            let trackSuffix = arrival.formattedTrack.map { " (\($0))" } ?? ""
+                        if inspectionMode == .liveRun && displayArrival.minutes == 0 {
+                            let trackSuffix = displayArrival.formattedTrack.map { " (\($0))" } ?? ""
                             Text("• Boarding\(trackSuffix)")
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundColor(Color(hex: "#FFB300"))
@@ -236,7 +244,7 @@ public struct GuidewayRunInspector: View {
                         }
                     }
                     
-                    if let dir = arrival.direction {
+                    if let dir = displayArrival.direction {
                         Text(dir.uppercased())
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
                             .foregroundColor(.secondary)
@@ -249,7 +257,7 @@ public struct GuidewayRunInspector: View {
                 VStack(alignment: .trailing, spacing: 2) {
                     switch inspectionMode {
                     case .historicalReplay:
-                        let timeStr = DateFormatter.localizedString(from: arrival.arrivalDate, dateStyle: .none, timeStyle: .short)
+                        let timeStr = DateFormatter.localizedString(from: displayArrival.arrivalDate, dateStyle: .none, timeStyle: .short)
                         Text(timeStr)
                             .font(.system(size: 20, weight: .bold, design: .monospaced))
                             .foregroundColor(.secondary)
@@ -264,7 +272,7 @@ public struct GuidewayRunInspector: View {
                         .clipShape(Capsule())
                         
                     case .scheduledRun:
-                        let timeStr = DateFormatter.localizedString(from: arrival.arrivalDate, dateStyle: .none, timeStyle: .short)
+                        let timeStr = DateFormatter.localizedString(from: displayArrival.arrivalDate, dateStyle: .none, timeStyle: .short)
                         Text(timeStr)
                             .font(.system(size: 20, weight: .bold, design: .monospaced))
                             .foregroundColor(.primary)
@@ -279,7 +287,7 @@ public struct GuidewayRunInspector: View {
                         .clipShape(Capsule())
                         
                     case .liveRun:
-                        if arrival.minutes == 0 {
+                        if displayArrival.minutes == 0 {
                             HStack(spacing: 4) {
                                 Circle()
                                     .fill(Color(hex: "#FFB300"))
@@ -295,7 +303,7 @@ public struct GuidewayRunInspector: View {
                             .clipShape(Capsule())
                         } else {
                             HStack(alignment: .firstTextBaseline, spacing: 2) {
-                                Text("\(arrival.minutes)")
+                                Text("\(displayArrival.minutes)")
                                     .font(.system(size: 26, weight: .black, design: .monospaced))
                                     .foregroundColor(.primary)
                                 Text("min")
@@ -303,7 +311,7 @@ public struct GuidewayRunInspector: View {
                                     .foregroundColor(.secondary)
                             }
                             
-                            if let dist = arrival.distanceDescription, !dist.isEmpty, dist.lowercased() != "boarding" {
+                            if let dist = displayArrival.distanceDescription, !dist.isEmpty, dist.lowercased() != "boarding" {
                                 Text(dist)
                                     .font(.system(size: 10, weight: .medium))
                                     .foregroundColor(.secondary)
@@ -317,7 +325,7 @@ public struct GuidewayRunInspector: View {
             HStack(spacing: 8) {
                 switch inspectionMode {
                 case .historicalReplay:
-                    let outcome = SpatialDatabaseManager.ArrivalInfo.formatHistoricalOutcome(delaySeconds: arrival.historicalDelaySeconds ?? 0)
+                    let outcome = SpatialDatabaseManager.ArrivalInfo.formatHistoricalOutcome(delaySeconds: displayArrival.historicalDelaySeconds ?? 0)
                     HStack(spacing: 5) {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 10, weight: .semibold))
@@ -348,7 +356,7 @@ public struct GuidewayRunInspector: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     
                 case .liveRun:
-                    let proximity = arrival.proximityContext(ladder: stopLadder, currentStopName: currentStopName)
+                    let proximity = displayArrival.proximityContext(ladder: stopLadder, currentStopName: currentStopName)
                     HStack(spacing: 5) {
                         Image(systemName: "tram.fill")
                             .font(.system(size: 10, weight: .semibold))
@@ -384,7 +392,7 @@ public struct GuidewayRunInspector: View {
                 
                 // Station Hold / Origin Dwell (if active)
                 if inspectionMode == .liveRun {
-                    if arrival.isHoldingStation {
+                    if displayArrival.isHoldingStation {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 8.5, weight: .bold))
@@ -397,7 +405,7 @@ public struct GuidewayRunInspector: View {
                         .padding(.vertical, 3)
                         .background(Color(hex: "#FFB300").opacity(0.18))
                         .clipShape(Capsule())
-                    } else if arrival.isDwellingAtOrigin {
+                    } else if displayArrival.isDwellingAtOrigin {
                         HStack(spacing: 4) {
                             Image(systemName: "tram.fill")
                                 .font(.system(size: 8.5, weight: .bold))
@@ -659,12 +667,12 @@ public struct GuidewayRunInspector: View {
     /// Normalizes transfer routes by stripping self-referential routes (route == current line)
     /// and express variants matching the trunk (e.g. 6 on 6X, 7 on 7X, F on FX). (Wave Pre-T.6)
     internal func displayedTransferRoutes(for stop: TrackStop) -> [String] {
-        let currentTrunk = TransitRouteData.trunkRouteId(for: arrival.line)
+        let currentTrunk = TransitRouteData.trunkRouteId(for: displayArrival.line)
         let lineTrunk = TransitRouteData.trunkRouteId(for: lineInfo.routeId)
         return stop.transferRoutes.filter { rId in
             let transferTrunk = TransitRouteData.trunkRouteId(for: rId)
             return rId != lineInfo.routeId &&
-                   rId != arrival.line &&
+                   rId != displayArrival.line &&
                    transferTrunk != currentTrunk &&
                    transferTrunk != lineTrunk
         }
@@ -793,7 +801,7 @@ public struct GuidewayRunInspector: View {
                                     .background(Color(hex: "#FFB300"))
                                     .foregroundColor(.black)
                                     .clipShape(RoundedRectangle(cornerRadius: 3))
-                            } else if isFirst && arrival.isHoldingStation {
+                            } else if isFirst && displayArrival.isHoldingStation {
                                 Text("HELD AT TERMINUS")
                                     .font(.system(size: 8.0, weight: .black, design: .monospaced))
                                     .padding(.horizontal, 3.5)
@@ -881,7 +889,7 @@ public struct GuidewayRunInspector: View {
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundColor(.secondary)
                 
-                TransitRouteBadge(routeId: arrival.line, lineInfo: lineInfo, size: .compact)
+                TransitRouteBadge(routeId: displayArrival.line, lineInfo: lineInfo, size: .compact)
                 
                 let minText = nextArrival.minutes == 0 ? "due now" : "in \(nextArrival.minutes) min"
                 Text(minText)
@@ -941,17 +949,17 @@ public struct GuidewayRunInspector: View {
         crowdEstimate = CrowdDensityEstimate.resolve(
             gtfsOccupancy: nil,
             occupancyPercentage: nil,
-            date: arrival.arrivalDate
+            date: displayArrival.arrivalDate
         )
         
         // 2. Fetch Active Disruptions if available
-        let epoch = Int64(arrival.arrivalDate.timeIntervalSince1970)
-        var disruptions = (try? await SpatialDatabaseManager.shared.fetchDisruptions(for: arrival.line, directionId: directionId, at: epoch)) ?? []
+        let epoch = Int64(displayArrival.arrivalDate.timeIntervalSince1970)
+        var disruptions = (try? await SpatialDatabaseManager.shared.fetchDisruptions(for: displayArrival.line, directionId: directionId, at: epoch)) ?? []
         if disruptions.isEmpty {
-            disruptions = (try? await SpatialDatabaseManager.shared.fetchDisruptions(for: arrival.line, directionId: nil, at: epoch)) ?? []
+            disruptions = (try? await SpatialDatabaseManager.shared.fetchDisruptions(for: displayArrival.line, directionId: nil, at: epoch)) ?? []
         }
         if disruptions.isEmpty {
-            disruptions = (try? await SpatialDatabaseManager.shared.fetchDisruptions(for: arrival.line, directionId: nil, at: nil)) ?? []
+            disruptions = (try? await SpatialDatabaseManager.shared.fetchDisruptions(for: displayArrival.line, directionId: nil, at: nil)) ?? []
         }
         
         if let first = disruptions.first {
@@ -963,12 +971,12 @@ public struct GuidewayRunInspector: View {
         // 3. Fetch Stop Ladder & Synchronize Map Polyline (Wave PA.5 & Wave PB.3 & Wave PD.3)
         do {
             let rawLadder = try await SpatialDatabaseManager.shared.fetchRouteStopLadder(
-                routeId: arrival.line,
+                routeId: displayArrival.line,
                 directionId: directionId,
                 currentStopId: currentStopId,
-                currentArrivalMinutes: arrival.minutes,
+                currentArrivalMinutes: displayArrival.minutes,
                 tappedCoordinate: currentStopCoordinate,
-                referenceDepartureDate: arrival.arrivalDate
+                referenceDepartureDate: displayArrival.arrivalDate
             )
             
             let ladder: [TrackStop]
@@ -978,10 +986,10 @@ public struct GuidewayRunInspector: View {
             case .liveRun:
                 ladder = TransitRealtimeService.shared.annotateLadderWithVehicle(
                     ladder: rawLadder,
-                    arrival: arrival
+                    arrival: displayArrival
                 )
                 vehicleLoc = TransitRealtimeService.shared.resolveVehicleLocation(
-                    arrival: arrival,
+                    arrival: displayArrival,
                     ladder: ladder
                 )
             case .historicalReplay:
@@ -1030,7 +1038,7 @@ public struct GuidewayRunInspector: View {
             }
             
             let polyline = await TransitRouteData.resolveInspectionPolyline(
-                routeId: arrival.line,
+                routeId: displayArrival.line,
                 modalClass: lineInfo.modalClass,
                 fallbackStops: ladder.map(\.coordinate)
             )
@@ -1046,7 +1054,7 @@ public struct GuidewayRunInspector: View {
                 }()
                 
                 let command = RouteInspectionCommand(
-                    routeId: arrival.line,
+                    routeId: displayArrival.line,
                     lineName: lineInfo.name,
                     agencyColorHex: lineInfo.colorHex,
                     casingColorHex: lineInfo.casingColorHex,
@@ -1056,12 +1064,13 @@ public struct GuidewayRunInspector: View {
                     shouldFrameCamera: true,
                     vehicleCoordinate: (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil,
                     vehicleBearing: (inspectionMode == .liveRun) ? vehicleLoc?.bearing : nil,
-                    vehicleStatus: (inspectionMode == .liveRun) ? arrival.distanceDescription : (inspectionMode.isHistoricalReplay ? "Historical" : "Scheduled"),
+                    vehicleStatus: (inspectionMode == .liveRun) ? displayArrival.distanceDescription : (inspectionMode.isHistoricalReplay ? "Historical" : "Scheduled"),
                     stopsAway: stopsAway,
-                    minutes: arrival.minutes
+                    minutes: displayArrival.minutes
                 )
                 
                 await MainActor.run {
+                    self.baseLadder = rawLadder
                     self.stopLadder = ladder
                     self.resolvedVehicleCoordinate = (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil
                     self.isLoadingLadder = false
@@ -1069,7 +1078,7 @@ public struct GuidewayRunInspector: View {
                     
                     if inspectionMode == .liveRun && !polyline.isEmpty {
                         let session = LiveVehicleTrackingSession()
-                        session.configure(polyline: polyline, arrival: arrival, ladder: ladder)
+                        session.configure(polyline: polyline, arrival: displayArrival, ladder: ladder)
                         session.onVehicleFrame = self.onVehicleFrame
                         session.start()
                         self.trackingSession = session
@@ -1077,6 +1086,7 @@ public struct GuidewayRunInspector: View {
                 }
             } else {
                 await MainActor.run {
+                    self.baseLadder = rawLadder
                     self.stopLadder = ladder
                     self.resolvedVehicleCoordinate = (inspectionMode == .liveRun) ? vehicleLoc?.coordinate : nil
                     self.isLoadingLadder = false
@@ -1086,6 +1096,70 @@ public struct GuidewayRunInspector: View {
             await MainActor.run {
                 self.isLoadingLadder = false
             }
+        }
+    }
+    
+    // MARK: - Live Feed Polling Loop (Wave Pre-T.8b)
+    
+    @MainActor
+    private func runLivePollingLoop() async {
+        guard inspectionMode == .liveRun else { return }
+        
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+            } catch {
+                break // Clean cooperative exit on task cancellation / view dismiss
+            }
+            guard !Task.isCancelled else { break }
+            
+            await performLiveFeedRefresh()
+        }
+    }
+    
+    @MainActor
+    private func performLiveFeedRefresh() async {
+        do {
+            let arrivals = try await TransitRealtimeService.shared.fetchLiveArrivals(
+                for: currentStopId,
+                routeId: displayArrival.line
+            )
+            guard !Task.isCancelled else { return }
+            
+            // Match active consist by tripId or line/direction/closest minutes
+            let matched: SpatialDatabaseManager.ArrivalInfo? = {
+                if let tripId = displayArrival.tripId {
+                    return arrivals.first(where: { $0.tripId == tripId })
+                }
+                return arrivals.first(where: {
+                    $0.line == displayArrival.line &&
+                    $0.directionId == directionId &&
+                    abs($0.minutes - displayArrival.minutes) <= 15
+                })
+            }()
+            
+            guard let newArrival = matched else { return }
+            
+            self.currentArrival = newArrival
+            
+            let ladderToUse = baseLadder.isEmpty ? stopLadder : baseLadder
+            let updatedLadder = TransitRealtimeService.shared.annotateLadderWithVehicle(
+                ladder: ladderToUse,
+                arrival: newArrival
+            )
+            self.stopLadder = updatedLadder
+            
+            let vehicleLoc = TransitRealtimeService.shared.resolveVehicleLocation(
+                arrival: newArrival,
+                ladder: updatedLadder
+            )
+            self.resolvedVehicleCoordinate = vehicleLoc?.coordinate
+            
+            // Reconcile kinematic tracking session smoothly with critically damped filter
+            trackingSession?.reconcile(arrival: newArrival, ladder: updatedLadder)
+            
+        } catch {
+            // Network hiccups are gracefully ignored in the background polling loop
         }
     }
 }
