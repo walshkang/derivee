@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useState, useRef } from 'preact/hooks';
 import { registerSW } from 'virtual:pwa-register';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useIsIOSInstallable } from './hooks/useIsIOSInstallable';
@@ -9,11 +9,15 @@ import { MapPlaceholder } from './components/MapPlaceholder';
 import { SystemInfoDrawer } from './components/SystemInfoDrawer';
 import { InstallModal } from './components/InstallModal';
 import type { InstalledPackState } from './types/pack';
+import { isPackDismissed, setPackDismissed } from './utils/opfs';
 
 export function App() {
   const isOnline = useOnlineStatus();
   const { isStandalone, isOpen, openModal, closeModal } = useIsIOSInstallable();
   const [packState, setPackState] = useState<InstalledPackState | null>(null);
+  const [packDismissed, setPackDismissedState] = useState<boolean>(() => isPackDismissed());
+  const [packExpanded, setPackExpanded] = useState<boolean>(false);
+  const contentBodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -31,6 +35,29 @@ export function App() {
     }
   }, []);
 
+  const handleDismissPack = () => {
+    setPackDismissed(true);
+    setPackDismissedState(true);
+    setPackExpanded(false);
+  };
+
+  const handleOpenTransitPack = () => {
+    setPackDismissed(false);
+    setPackDismissedState(false);
+    setPackExpanded(true);
+    contentBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleToggleExpandPack = () => {
+    setPackExpanded((prev) => !prev);
+  };
+
+  const handleInstallSuccess = () => {
+    setPackDismissed(false);
+    setPackDismissedState(false);
+    setPackExpanded(false);
+  };
+
   return (
     <div class="app-layout">
       <Header
@@ -39,16 +66,25 @@ export function App() {
         onOpenInstallModal={openModal}
       />
 
-      <div class="app-content-body">
+      <div class="app-content-body" ref={contentBodyRef}>
         <SearchBar />
         <PackInstaller
           onPackStateChange={setPackState}
           isOnline={isOnline}
+          isDismissed={packDismissed}
+          isExpanded={packExpanded}
+          onDismiss={handleDismissPack}
+          onToggleExpand={handleToggleExpandPack}
+          onInstallSuccess={handleInstallSuccess}
         />
         <MapPlaceholder packState={packState} />
       </div>
 
-      <SystemInfoDrawer isOnline={isOnline} packState={packState} />
+      <SystemInfoDrawer
+        isOnline={isOnline}
+        packState={packState}
+        onOpenTransitPack={handleOpenTransitPack}
+      />
 
       <InstallModal
         isOpen={isOpen}

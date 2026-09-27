@@ -5,14 +5,42 @@ import {
   saveInstalledPackState,
   deleteCityPack,
   isOpfsSupported,
+  setPackDismissed,
 } from '../utils/opfs';
 
 interface PackInstallerProps {
   onPackStateChange?: (state: InstalledPackState | null) => void;
   isOnline: boolean;
+  isDismissed?: boolean;
+  isExpanded?: boolean;
+  onDismiss?: () => void;
+  onToggleExpand?: () => void;
+  onInstallSuccess?: () => void;
 }
 
-export function PackInstaller({ onPackStateChange, isOnline }: PackInstallerProps) {
+export function PackInstaller({
+  onPackStateChange,
+  isOnline,
+  isDismissed = false,
+  isExpanded = false,
+  onDismiss,
+  onToggleExpand,
+  onInstallSuccess,
+}: PackInstallerProps) {
+  const [internalExpanded, setInternalExpanded] = useState<boolean>(false);
+  const effectiveExpanded = onToggleExpand ? isExpanded : internalExpanded;
+
+  const handleToggleExpand = () => {
+    if (onToggleExpand) {
+      onToggleExpand();
+    } else {
+      setInternalExpanded((prev) => !prev);
+    }
+  };
+
+  const handleDismiss = () => {
+    onDismiss?.();
+  };
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [packState, setPackState] = useState<InstalledPackState | null>(null);
@@ -187,6 +215,8 @@ export function PackInstaller({ onPackStateChange, isOnline }: PackInstallerProp
           onPackStateChange?.(data.packState);
           setIsInstalling(false);
           setInstallStage(null);
+          setPackDismissed(false);
+          onInstallSuccess?.();
           await releaseWakeLock();
           worker.terminate();
           workerRef.current = null;
@@ -233,6 +263,8 @@ export function PackInstaller({ onPackStateChange, isOnline }: PackInstallerProp
       await deleteCityPack('nyc');
       setPackState(null);
       onPackStateChange?.(null);
+      setPackDismissed(false);
+      onInstallSuccess?.();
       await startInstall();
     }
   };
@@ -281,63 +313,125 @@ export function PackInstaller({ onPackStateChange, isOnline }: PackInstallerProp
     );
   }
 
-  // 2. Installed Pack Card (Detailed file list & metadata)
+  // 2. Installed Pack Card (Compact dismissible banner + expandable detail card)
   if (packState && !isInstalling) {
+    if (isDismissed) {
+      return null;
+    }
+
+    const packLabel = packState.slug === 'nyc'
+      ? 'NYC transit pack installed'
+      : `${packState.displayName} transit pack installed`;
+
     return (
-      <div class="pack-installer-card installed-card">
-        <div class="installer-header-row">
-          <div class="installed-title-group">
-            <div class="installed-status-tag">
-              <span class="status-live-dot" />
-              <span>Pack Installed</span>
-            </div>
-            <h2 class="installer-card-title">{packState.displayName} (v{packState.version})</h2>
-            <div class="installer-season-label">{packState.seasonLabel}</div>
+      <div class="pack-installed-panel">
+        <div class="pack-installed-banner" role="status" aria-live="polite">
+          <div class="pack-banner-info">
+            <span class="pack-banner-check" aria-hidden="true">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="2.5 8.5 6 12 13.5 4.5" />
+              </svg>
+            </span>
+            <span class="pack-banner-text">
+              {packLabel} · {formatBytes(packState.totalBytes)}
+            </span>
           </div>
-          <button
-            type="button"
-            class="installer-reinstall-btn"
-            onClick={handleReinstall}
-            title="Re-download and verify pack"
-          >
-            Reinstall
-          </button>
+
+          <div class="pack-banner-actions">
+            <button
+              type="button"
+              class="pack-banner-btn pack-details-btn"
+              onClick={handleToggleExpand}
+              aria-expanded={effectiveExpanded}
+              aria-label={effectiveExpanded ? 'Hide pack details' : 'Show pack details'}
+              title={effectiveExpanded ? 'Hide pack details' : 'Show pack details'}
+            >
+              <span>{effectiveExpanded ? 'Hide' : 'Details'}</span>
+              <svg
+                class={`banner-chevron ${effectiveExpanded ? 'expanded' : ''}`}
+                viewBox="0 0 16 16"
+                width="11"
+                height="11"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <polyline points="4 6 8 10 12 6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="pack-banner-btn pack-dismiss-btn"
+              onClick={handleDismiss}
+              aria-label="Dismiss transit pack banner"
+              title="Dismiss"
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <line x1="3" y1="3" x2="13" y2="13" />
+                <line x1="13" y1="3" x2="3" y2="13" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <div class="installer-meta-summary">
-          <div class="summary-pill">
-            <span class="pill-label">Total OPFS Size</span>
-            <span class="pill-val">{formatBytes(packState.totalBytes)}</span>
-          </div>
-          <div class="summary-pill">
-            <span class="pill-label">Files Verified</span>
-            <span class="pill-val">{packState.files.length} / 6</span>
-          </div>
-          <div class="summary-pill">
-            <span class="pill-label">Account</span>
-            <span class="pill-val account-email">{userEmail || 'Local'}</span>
-          </div>
-        </div>
-
-        <div class="installed-files-table-wrap">
-          <div class="files-table-header">
-            <span>Verified File</span>
-            <span>Size</span>
-          </div>
-          <div class="files-list">
-            {packState.files.map((file) => (
-              <div key={file.name} class="file-item-row">
-                <span class="file-item-name">
-                  <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <polyline points="3 8.5 6.5 12 13 4.5" />
-                  </svg>
-                  {file.name}
-                </span>
-                <span class="file-item-size">{formatBytes(file.size)}</span>
+        {effectiveExpanded && (
+          <div class="pack-installer-card installed-card pack-expanded-card">
+            <div class="installer-header-row">
+              <div class="installed-title-group">
+                <div class="installed-status-tag">
+                  <span class="status-live-dot" />
+                  <span>Pack Installed</span>
+                </div>
+                <h2 class="installer-card-title">{packState.displayName} (v{packState.version})</h2>
+                <div class="installer-season-label">{packState.seasonLabel}</div>
               </div>
-            ))}
+              <button
+                type="button"
+                class="installer-reinstall-btn"
+                onClick={handleReinstall}
+                title="Re-download and verify pack"
+              >
+                Reinstall
+              </button>
+            </div>
+
+            <div class="installer-meta-summary">
+              <div class="summary-pill">
+                <span class="pill-label">Total OPFS Size</span>
+                <span class="pill-val">{formatBytes(packState.totalBytes)}</span>
+              </div>
+              <div class="summary-pill">
+                <span class="pill-label">Files Verified</span>
+                <span class="pill-val">{packState.files.length} / 6</span>
+              </div>
+              <div class="summary-pill">
+                <span class="pill-label">Account</span>
+                <span class="pill-val account-email">{userEmail || 'Local'}</span>
+              </div>
+            </div>
+
+            <div class="installed-files-table-wrap">
+              <div class="files-table-header">
+                <span>Verified File</span>
+                <span>Size</span>
+              </div>
+              <div class="files-list">
+                {packState.files.map((file) => (
+                  <div key={file.name} class="file-item-row">
+                    <span class="file-item-name">
+                      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <polyline points="3 8.5 6.5 12 13 4.5" />
+                      </svg>
+                      {file.name}
+                    </span>
+                    <span class="file-item-size">{formatBytes(file.size)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }

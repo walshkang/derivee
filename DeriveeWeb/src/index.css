@@ -552,6 +552,35 @@ html, body {
   font-size: 0.72rem;
   color: var(--text-muted);
   z-index: 10;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.footer-clickable-item {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.footer-clickable-item:hover,
+.footer-clickable-item:focus-visible {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.footer-clickable-item:active {
+  transform: scale(0.98);
 }
 
 .footer-status-pill {
@@ -1111,6 +1140,134 @@ html, body {
   color: #f59e0b;
   text-align: center;
   padding: 6px;
+}
+
+/* Installed Pack Panel & Dismissible Compact Banner */
+.pack-installed-panel {
+  margin: 10px 16px 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  z-index: 6;
+}
+
+@media (min-width: 640px) {
+  .pack-installed-panel {
+    max-width: 460px;
+    margin: 14px auto 8px auto;
+  }
+}
+
+.pack-installed-panel .pack-installer-card {
+  margin: 0;
+  max-width: none;
+}
+
+.pack-installed-banner {
+  padding: 8px 12px;
+  background-color: rgba(13, 19, 29, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px rgba(16, 185, 129, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  animation: fade-in 0.2s ease-out;
+}
+
+.pack-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pack-banner-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+.pack-banner-text {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pack-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pack-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(28, 40, 61, 0.6);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.pack-banner-btn:hover {
+  background-color: rgba(40, 58, 87, 0.9);
+  color: #ffffff;
+  border-color: var(--border-highlight);
+}
+
+.pack-banner-btn:active {
+  transform: scale(0.97);
+}
+
+.pack-details-btn {
+  padding: 4px 8px;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.banner-chevron {
+  transition: transform 0.2s ease;
+}
+
+.banner-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.pack-dismiss-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+.pack-dismiss-btn:hover {
+  color: #f87171;
+  background-color: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.pack-expanded-card {
+  animation: fade-in 0.2s ease-out;
 }
 
 /* Installed Card Styles */

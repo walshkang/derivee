@@ -3,9 +3,10 @@ import type { InstalledPackState } from '../types/pack';
 interface SystemInfoDrawerProps {
   isOnline: boolean;
   packState?: InstalledPackState | null;
+  onOpenTransitPack?: () => void;
 }
 
-export function SystemInfoDrawer({ isOnline, packState }: SystemInfoDrawerProps) {
+export function SystemInfoDrawer({ isOnline, packState, onOpenTransitPack }: SystemInfoDrawerProps) {
   const isInstalled = Boolean(packState?.isInstalled);
 
   return (
@@ -20,10 +21,15 @@ export function SystemInfoDrawer({ isOnline, packState }: SystemInfoDrawerProps)
           <span class="meta-dot online-dot" />
           <span>Shell: Cached Offline</span>
         </div>
-        <div class="footer-meta-item">
+        <button
+          type="button"
+          class="footer-meta-item footer-clickable-item"
+          onClick={onOpenTransitPack}
+          title={isInstalled ? 'Manage transit pack' : 'Open pack installer'}
+        >
           <span class={`meta-dot ${isInstalled ? 'online-dot' : 'standby-dot'}`} />
-          <span>Pack: {isInstalled ? `NYC v${packState?.version} (Installed)` : 'Not Installed'}</span>
-        </div>
+          <span>Transit pack: {isInstalled ? `NYC v${packState?.version} (Installed)` : 'Not Installed'}</span>
+        </button>
         <div class="footer-meta-item">
           <span class={`meta-dot ${isOnline ? 'online-dot' : 'offline-dot'}`} />
           <span>Network: {isOnline ? 'Connected' : 'Offline'}</span>

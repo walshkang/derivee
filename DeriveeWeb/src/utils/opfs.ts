@@ -10,6 +10,27 @@ export const REQUIRED_PACK_FILES = [
 ] as const;
 
 export const LOCAL_STORAGE_PACK_KEY = 'derivee_pack_nyc';
+export const LOCAL_STORAGE_PACK_DISMISSED_KEY = 'derivee_pack_dismissed';
+
+export function isPackDismissed(): boolean {
+  try {
+    return localStorage.getItem(LOCAL_STORAGE_PACK_DISMISSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setPackDismissed(dismissed: boolean): void {
+  try {
+    if (dismissed) {
+      localStorage.setItem(LOCAL_STORAGE_PACK_DISMISSED_KEY, 'true');
+    } else {
+      localStorage.removeItem(LOCAL_STORAGE_PACK_DISMISSED_KEY);
+    }
+  } catch {
+    // Ignore storage quota or permission errors
+  }
+}
 
 export function isOpfsSupported(): boolean {
   return typeof navigator !== 'undefined' &&
@@ -137,6 +158,7 @@ export async function deleteCityPack(slug: string = 'nyc'): Promise<void> {
       }
     }
     localStorage.removeItem(LOCAL_STORAGE_PACK_KEY);
+    localStorage.removeItem(LOCAL_STORAGE_PACK_DISMISSED_KEY);
   } catch (err) {
     // Ignore error if directory did not exist
     // eslint-disable-next-line no-console
