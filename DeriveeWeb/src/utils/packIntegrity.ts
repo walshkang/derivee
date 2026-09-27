@@ -29,6 +29,12 @@ const SQLITE_MAGIC = new Uint8Array([
   0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00
 ]);
 
+function bytesToHex(bytes: Uint8Array, maxBytes: number = 16): string {
+  return Array.from(bytes.slice(0, maxBytes))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 /**
  * Validates that a file begins with the SQLite 3 magic header and is >= 4096 bytes.
  * Mirrors CityPackManager.isValidDatabase
@@ -44,7 +50,12 @@ export function validateSqliteDatabase(headerData: Uint8Array, physicalSize: num
 
   for (let i = 0; i < 16; i++) {
     if (headerData[i] !== SQLITE_MAGIC[i]) {
-      throw new PackIntegrityError(fileName, 'Missing SQLite format 3 magic header signature');
+      const foundHex = bytesToHex(headerData, 16);
+      const expectedHex = bytesToHex(SQLITE_MAGIC, 16);
+      throw new PackIntegrityError(
+        fileName,
+        `Missing SQLite format 3 magic header signature (found: 0x${foundHex}, expected: 0x${expectedHex})`
+      );
     }
   }
 }
@@ -77,9 +88,10 @@ export function validateMasterHeader(
   const fileSize = view.getBigUint64(16, true);
 
   if (magic !== expectedMagic) {
+    const foundHex = bytesToHex(headerData, 16);
     throw new PackIntegrityError(
       fileName,
-      `Invalid magic signature: 0x${magic.toString(16).toUpperCase().padStart(8, '0')} (expected: 0x${expectedMagic.toString(16).toUpperCase().padStart(8, '0')})`
+      `Invalid magic signature: 0x${magic.toString(16).toUpperCase().padStart(8, '0')} (expected: 0x${expectedMagic.toString(16).toUpperCase().padStart(8, '0')}, first 16 bytes: 0x${foundHex})`
     );
   }
 
@@ -131,9 +143,10 @@ export function validateBinaryHeader(
   const version = view.getUint32(4, true);
 
   if (magic !== expectedMagic) {
+    const foundHex = bytesToHex(headerData, 16);
     throw new PackIntegrityError(
       fileName,
-      `Invalid magic signature: 0x${magic.toString(16).toUpperCase().padStart(8, '0')} (expected: 0x${expectedMagic.toString(16).toUpperCase().padStart(8, '0')})`
+      `Invalid magic signature: 0x${magic.toString(16).toUpperCase().padStart(8, '0')} (expected: 0x${expectedMagic.toString(16).toUpperCase().padStart(8, '0')}, first 16 bytes: 0x${foundHex})`
     );
   }
 

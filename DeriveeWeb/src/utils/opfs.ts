@@ -65,11 +65,17 @@ export async function writeOpfsFile(
     createWritable?: () => Promise<FileSystemWritableFileStream>;
   };
 
+  // Ensure buffer starts at byteOffset 0 to guard against WebKit bug where
+  // FileSystemSyncAccessHandle.write ignores byteOffset.
+  const payload = (data.byteOffset === 0 && data.byteLength === data.buffer.byteLength)
+    ? data
+    : data.slice();
+
   if (typeof handleAny.createSyncAccessHandle === 'function' && typeof handleAny.createWritable !== 'function') {
     const accessHandle = await handleAny.createSyncAccessHandle();
     try {
       accessHandle.truncate(0);
-      accessHandle.write(data as unknown as BufferSource, { at: 0 });
+      accessHandle.write(payload as unknown as BufferSource, { at: 0 });
       accessHandle.flush();
     } finally {
       accessHandle.close();
@@ -80,7 +86,7 @@ export async function writeOpfsFile(
   // Standard FileSystemWritableFileStream
   const writable = await fileHandle.createWritable();
   try {
-    await writable.write(data as unknown as BufferSource);
+    await writable.write(payload as unknown as BufferSource);
   } finally {
     await writable.close();
   }
@@ -111,7 +117,25 @@ export async function readOpfsFileHeader(
 export async function deleteCityPack(slug: string = 'nyc'): Promise<void> {
   try {
     const root = await getOpfsRoot();
-    await root.removeEntry(slug, { recursive: true });
+    try {
+      await root.removeEntry(slug, { recursive: true });
+    } catch (dirRemoveErr) {
+      // eslint-disable-next-line no-console
+      console.warn(`[OPFS] Recursive removeEntry failed for ${slug}, attempting individual file deletion:`, dirRemoveErr);
+      try {
+        const dir = await root.getDirectoryHandle(slug);
+        for (const name of REQUIRED_PACK_FILES) {
+          try {
+            await dir.removeEntry(name);
+          } catch {
+            // Ignore missing file
+          }
+        }
+        await root.removeEntry(slug, { recursive: true });
+      } catch {
+        // Safe to ignore fallback error
+      }
+    }
     localStorage.removeItem(LOCAL_STORAGE_PACK_KEY);
   } catch (err) {
     // Ignore error if directory did not exist

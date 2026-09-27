@@ -35,11 +35,17 @@ async function writeOpfsEntry(
     createWritable?: () => Promise<FileSystemWritableFileStream>;
   };
 
+  // Ensure buffer starts at byteOffset 0 to guard against WebKit bug where
+  // FileSystemSyncAccessHandle.write ignores byteOffset.
+  const payload = (data.byteOffset === 0 && data.byteLength === data.buffer.byteLength)
+    ? data
+    : data.slice();
+
   if (typeof handleAny.createSyncAccessHandle === 'function' && typeof handleAny.createWritable !== 'function') {
     const accessHandle = await handleAny.createSyncAccessHandle();
     try {
       accessHandle.truncate(0);
-      accessHandle.write(data as unknown as BufferSource, { at: 0 });
+      accessHandle.write(payload as unknown as BufferSource, { at: 0 });
       accessHandle.flush();
     } finally {
       accessHandle.close();
@@ -50,7 +56,7 @@ async function writeOpfsEntry(
   // Standard FileSystemWritableFileStream
   const writable = await fileHandle.createWritable();
   try {
-    await writable.write(data as unknown as BufferSource);
+    await writable.write(payload as unknown as BufferSource);
   } finally {
     await writable.close();
   }
@@ -180,9 +186,9 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
 
     // 5. Parse Tar Archive
     const parsedEntries = parseTar(decompressed);
-    const validFiles = parsedEntries.filter(
-      (e) => (e.type === 'file' || !e.type) && e.name && e.data
-    );
+    const validFiles = parsedEntries
+      .filter((e) => (e.type === 'file' || !e.type) && e.name && e.data)
+      .map((e) => ({ ...e, data: e.data!.slice() })); // slice() copies → byteOffset 0
 
     if (validFiles.length === 0) {
       throw new Error('Tar archive contained no valid files.');
@@ -294,14 +300,42 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     console.error('[PackInstallerWorker] Error during installation:', err);
 
     // Atomically purge corrupt / incomplete pack files from OPFS
-    if (rootHandle && slug) {
-      try {
-        await rootHandle.removeEntry(slug, { recursive: true });
-        // eslint-disable-next-line no-console
-        console.warn(`[PackInstallerWorker] Purged partial directory /${slug} due to install failure.`);
-      } catch {
-        // Safe to ignore if directory didn't exist
+    try {
+      const root = rootHandle || (await navigator.storage?.getDirectory?.());
+      if (root && slug) {
+        try {
+          await root.removeEntry(slug, { recursive: true });
+          // eslint-disable-next-line no-console
+          console.warn(`[PackInstallerWorker] Purged partial directory /${slug} due to install failure.`);
+        } catch (dirRemoveErr) {
+          // Fallback: If recursive removeEntry fails, delete files individually to guarantee clean state
+          // eslint-disable-next-line no-console
+          console.warn(`[PackInstallerWorker] Recursive removeEntry failed for /${slug}, attempting individual file deletion:`, dirRemoveErr);
+          try {
+            const dir = packDirHandle || (await root.getDirectoryHandle(slug));
+            const knownFiles = [
+              'city_config.json',
+              'transit.sqlite',
+              'transit-lines.geojson',
+              'ultra_transfers.csr',
+              'timetable.bin',
+              'walk_graph.bin',
+            ];
+            for (const file of knownFiles) {
+              try {
+                await dir.removeEntry(file);
+              } catch {
+                // Ignore missing file
+              }
+            }
+            await root.removeEntry(slug, { recursive: true });
+          } catch {
+            // Safe to ignore fallback error
+          }
+        }
       }
+    } catch {
+      // Safe to ignore if storage inaccessible
     }
 
     const message = err instanceof PackIntegrityError
