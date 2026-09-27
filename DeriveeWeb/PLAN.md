@@ -47,10 +47,11 @@ flowchart TD
 ## M3: Offline Routing
 **Goal:** Integrate the C++ RAPTOR and A* engine via WebAssembly to compute trips 100% offline.
 **Concrete Build Steps:**
-1. Compile `DeriveeCore` to WASM using `emcc` with flags: `-std=c++20 -O3 -flto -fno-rtti -fwasm-exceptions -sWASM=1 -sFILESYSTEM=0 -sINITIAL_MEMORY=134217728 -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=536870912 -sMALLOC="dlmalloc"`.
-2. Implement C-ABI bridge with `_allocate_aligned` (using `posix_memalign(64)`).
-3. Build `routing.worker.ts` to read binaries from OPFS via `FileSystemSyncAccessHandle` and pass pointers to the WASM heap.
-4. Wire up origin/destination search UI to send `postMessage` queries to the worker.
+1. **[M3a - DONE]** Compile `DeriveeCore` to WASM using `emcc` with flags: `-std=c++20 -O3 -flto -fno-rtti -fwasm-exceptions -sWASM=1 -sFILESYSTEM=0 -sINITIAL_MEMORY=134217728 -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=536870912 -sMALLOC="dlmalloc"`.
+2. **[M3a - DONE]** Implement C-ABI bridge with `_allocate_aligned` (using `posix_memalign(64)`).
+3. **[M3a - DONE]** Node verification harness proving the engine loads real binaries and computes valid trips without crashes.
+4. **[M3b - PENDING]** Build `routing.worker.ts` to read binaries from OPFS via `FileSystemSyncAccessHandle` and pass pointers to the WASM heap.
+5. **[M3b - PENDING]** Wire up origin/destination search UI to send `postMessage` queries to the worker and parse the 24-byte `JourneySegment` array.
 **Test Procedure:**
 - On iPhone (Airplane mode), select two locations (e.g., Union Square to Barclays Center).
 - Execute the search.
