@@ -17,6 +17,12 @@ export default defineConfig({
       }
     })
   },
+  worker: {
+    format: 'es'
+  },
+  optimizeDeps: {
+    exclude: ['@bokuweb/zstd-wasm']
+  },
   plugins: [
     preact(),
     VitePWA({
@@ -73,9 +79,9 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // Precache only app shell assets
+        // Precache only app shell assets (including zstd.wasm)
         globPatterns: [
-          '**/*.{js,css,html,ico,pbf,woff,woff2}'
+          '**/*.{js,css,html,ico,pbf,woff,woff2,wasm}'
         ],
         // Explicitly exclude any data packs, binary archives, or large data payloads
         globIgnores: [
@@ -89,6 +95,7 @@ export default defineConfig({
           '**/README.md'
         ],
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api/],
         cleanupOutdatedCaches: true
       }
     })

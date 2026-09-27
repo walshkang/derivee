@@ -10,6 +10,8 @@
     "verify-precache": "node scripts/verify-precache.js"
   },
   "dependencies": {
+    "@bokuweb/zstd-wasm": "^0.0.27",
+    "nanotar": "^0.3.0",
     "preact": "^10.26.4"
   },
   "devDependencies": {

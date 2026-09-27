@@ -195,7 +195,9 @@ html, body {
   flex-direction: column;
   flex: 1;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Search Bar Section */
@@ -798,3 +800,470 @@ html, body {
     align-items: center;
   }
 }
+
+/* ==========================================================================
+   Pack Installer Styles (M2)
+   ========================================================================== */
+
+.pack-installer-card {
+  margin: 12px 16px 8px 16px;
+  padding: 20px;
+  background-color: rgba(13, 19, 29, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-highlight);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(56, 189, 248, 0.06);
+  position: relative;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 640px) {
+  .pack-installer-card {
+    max-width: 460px;
+    margin: 16px auto;
+  }
+}
+
+.card-beacon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, #101c2e, #090e18);
+  border: 1px solid var(--border-highlight);
+}
+
+.auth-beacon {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.ready-beacon {
+  color: var(--accent-sky);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.installing-beacon {
+  color: var(--accent-cyan);
+  border-color: rgba(0, 229, 255, 0.3);
+}
+
+.spinner-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  border-top-color: var(--accent-cyan);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.card-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.auth-badge {
+  background-color: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.ready-badge {
+  background-color: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: var(--accent-sky);
+}
+
+.installer-stage-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  background-color: rgba(0, 229, 255, 0.12);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: var(--accent-cyan);
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.stage-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-cyan);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.installer-card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.installer-card-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+
+.pack-specs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.spec-cell {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  background-color: rgba(18, 26, 39, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.spec-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+
+.spec-val {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.user-email-val {
+  color: var(--accent-sky);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.installer-actions-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.installer-primary-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  border: 1px solid #38bdf8;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+}
+
+.installer-primary-btn:hover:not(:disabled) {
+  opacity: 0.94;
+}
+
+.installer-primary-btn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.installer-primary-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.installer-subtext {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* Progress bar */
+.progress-bar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 14px 0;
+}
+
+.progress-bar-track {
+  width: 100%;
+  height: 8px;
+  background-color: #121a28;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0284c7, #00e5ff);
+  transition: width 0.15s ease-out;
+}
+
+.progress-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.progress-percent-val {
+  font-weight: 700;
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+}
+
+.installer-notes-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.68rem;
+}
+
+.wake-lock-status {
+  color: #10b981;
+  font-weight: 500;
+}
+
+.installer-footnote {
+  color: var(--text-muted);
+}
+
+/* Error Banner */
+.installer-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background-color: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.error-icon {
+  color: #f87171;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.error-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.error-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #f87171;
+}
+
+.error-msg {
+  font-size: 0.72rem;
+  color: #fca5a5;
+  margin-top: 2px;
+}
+
+.storage-warning {
+  font-size: 0.72rem;
+  color: #f59e0b;
+  text-align: center;
+  padding: 6px;
+}
+
+/* Installed Card Styles */
+.installer-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.installed-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.installed-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #10b981;
+  margin-bottom: 2px;
+}
+
+.status-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.installer-season-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.installer-reinstall-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  background-color: rgba(28, 40, 61, 0.5);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.installer-reinstall-btn:hover {
+  background-color: rgba(40, 58, 87, 0.8);
+  color: #ffffff;
+}
+
+.installer-meta-summary {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.summary-pill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  background-color: rgba(18, 26, 39, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.pill-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.pill-val {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.account-email {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.installed-files-table-wrap {
+  background-color: rgba(10, 15, 24, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.files-table-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background-color: rgba(18, 26, 39, 0.8);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.files-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(28, 40, 61, 0.35);
+  font-size: 0.72rem;
+}
+
+.file-item-row:last-child {
+  border-bottom: none;
+}
+
+.file-item-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  color: #cbd5e1;
+}
+
+.file-item-name svg {
+  color: #10b981;
+}
+
+.file-item-size {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.installed-badge {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #34d399 !important;
+}
+
+.badge-dot-green {
+  background-color: #10b981 !important;
+}
+

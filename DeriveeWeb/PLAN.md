@@ -27,18 +27,22 @@ flowchart TD
 **Done Criteria:** The app opens instantly offline with a clean shell and no "Network Required" Safari errors.
 
 ## M2: Pack Distribution
-**Goal:** Authenticate the user and securely download, decompress, and unpack the 28 MB city pack directly into OPFS.
+**Goal:** Authenticate the user via Cloudflare Access Email OTP, serve PWA shell and API same-origin from the Cloudflare Worker, and stream, decompress, and unpack the 29.7 MB city pack directly into OPFS with T.1b integrity verification.
 **Concrete Build Steps:**
-1. Deploy Cloudflare Worker (`derivee-api`) with `aws4fetch` presigned URL generation and Access Email OTP.
-2. Configure R2 `fog-of-transit` bucket CORS.
-3. Build a foreground Web Worker (`pack-installer.worker.ts`) using `@bokuweb/zstd-wasm` and `nanotar`.
-4. Implement download flow: `GET /api/pack-url` -> Stream R2 -> Decompress -> Tar slice -> Write to OPFS (`navigator.storage.getDirectory()`).
-5. Use Screen Wake Lock API (`navigator.wakeLock.request('screen')`) during the process.
+1. Deploy Cloudflare Worker (`derivee-api`) serving both the PWA shell (via `[assets]` binding `env.ASSETS` from `dist`) and the API same-origin at `https://derivee-api.walsh-8de.workers.dev`, ensuring `CF_Authorization` (`SameSite=Lax`) is never withheld.
+2. Direct R2 pack streaming: `GET /api/pack` streams `city-nyc.pack.zst` directly from the native `PACK` R2 binding with per-identity rate limiting (10 req/60s), eliminating presigned URLs, `aws4fetch`, and R2 bucket CORS complexity.
+3. Authenticated session endpoint: `GET /api/me` returns `{ email }` for authenticated Access sessions, or 401 unauthenticated with top-level redirect to `/` for Email OTP login.
+4. Dedicated Web Worker (`pack-installer.worker.ts`): streams download chunks, tracks live byte progress, decompresses 29.7 MB zstd payload to 65.3 MB using `@bokuweb/zstd-wasm`, extracts tar archive via `nanotar`, and writes files into OPFS (`/nyc/`) via `navigator.storage.getDirectory()`.
+5. Hold Screen Wake Lock (`navigator.wakeLock.request('screen')`) during the entire install pipeline; release gracefully upon completion or error.
+6. T.1b Swift install-time integrity validation (mirroring `CityPackManager.swift`): verify SQLite 3 magic (`SQLite format 3\0`), MasterHeader (232B, magic `0x31565244` "DRV1" / `0x4B4C4157` "WALK", version 1, endian `0x01020304`, physical file size match), and BinaryHeader (32B, magic `0x554C5452` "ULTR", version 1). On failure, delete partial files and surface retry.
+7. Launch persistence: dual-verify `localStorage` metadata and physical presence of all 6 OPFS files on every launch.
 **Test Procedure:**
-- Install app on iPhone, login via Email OTP.
-- Monitor the foreground progress bar as it downloads 28 MB and writes ~70 MB of files to OPFS.
-- Turn on Airplane Mode.
-**Done Criteria:** Files (`walk_graph.bin`, `timetable.bin`, `nyc-basemap.pmtiles`) are verified in OPFS via Web Inspector, and app state updates to "Pack Installed".
+- Open `https://derivee-api.walsh-8de.workers.dev` in iOS Safari.
+- Login via Cloudflare Access Email OTP.
+- Monitor foreground progress bar (download bytes vs Content-Length, decompression stage, files written n/6, verification).
+- Confirm "Pack Installed" status, version 3, and file breakdown table.
+- Turn on Airplane Mode, force-close Safari, and reopen: app launches offline and reports pack installed.
+**Done Criteria:** All 6 pack files (`city_config.json`, `transit.sqlite`, `transit-lines.geojson`, `ultra_transfers.csr`, `timetable.bin`, `walk_graph.bin`) are verified in OPFS, and app state reflects "Pack Installed" both online and offline.
 
 ## M3: Offline Routing
 **Goal:** Integrate the C++ RAPTOR and A* engine via WebAssembly to compute trips 100% offline.

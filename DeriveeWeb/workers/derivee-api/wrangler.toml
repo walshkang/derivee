@@ -15,3 +15,9 @@ namespace_id = "1001"
 [ratelimits.simple]
 limit = 10
 period = 60
+
+# Static Assets binding for same-origin PWA serving
+[assets]
+directory = "../../dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"

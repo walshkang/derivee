@@ -1,9 +1,11 @@
 export interface Env {
   PACK: R2Bucket;
   RATE_LIMITER?: RateLimit;
+  ASSETS?: Fetcher;
 }
 
 const ALLOWED_ORIGINS = new Set([
+  'https://derivee-api.walsh-8de.workers.dev',
   'https://9c770b10.derivee-web.pages.dev',
   'https://derivee.app',
   'http://localhost:5173',
@@ -14,6 +16,7 @@ function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return false;
   if (ALLOWED_ORIGINS.has(origin)) return true;
   if (/^https:\/\/[a-z0-9-]+\.derivee-web\.pages\.dev$/.test(origin)) return true;
+  if (/^https:\/\/[a-z0-9-]+\.walsh-8de\.workers\.dev$/.test(origin)) return true;
   return false;
 }
 
@@ -71,12 +74,25 @@ export default {
       return jsonResponse({ error: 'not_found' }, 404, origin);
     }
 
-    // 2. Health check route: GET /api/health
+    // 2. Health check route: GET /api/health (unauthenticated)
     if (url.pathname === '/api/health' && request.method === 'GET') {
       return jsonResponse({ ok: true }, 200, origin);
     }
 
-    // 3. Pack streaming route: GET /api/pack
+    // 3. Authenticated session check: GET /api/me
+    if (url.pathname === '/api/me' && request.method === 'GET') {
+      const userEmail =
+        request.headers.get('cf-access-authenticated-user-email') ||
+        request.headers.get('Cf-Access-Authenticated-User-Email');
+
+      if (!userEmail) {
+        return jsonResponse({ error: 'unauthorized' }, 401, origin);
+      }
+
+      return jsonResponse({ email: userEmail }, 200, origin);
+    }
+
+    // 4. Pack streaming route: GET /api/pack
     if (url.pathname === '/api/pack' && request.method === 'GET') {
       // Identity verification injected by Cloudflare Access edge
       const userEmail =
@@ -125,7 +141,17 @@ export default {
       });
     }
 
-    // 4. All other routes → 404 JSON
+    // 5. Any unmatched /api/* route -> 404 JSON
+    if (url.pathname.startsWith('/api/')) {
+      return jsonResponse({ error: 'not_found' }, 404, origin);
+    }
+
+    // 6. Static assets fallback (PWA shell, HTML, JS, CSS, fonts, wasm)
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+
+    // Fallback if ASSETS binding not present
     return jsonResponse({ error: 'not_found' }, 404, origin);
   },
 };
