@@ -1,0 +1,17 @@
+name = "derivee-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Native R2 Bucket Binding (for direct pack streaming)
+[[r2_buckets]]
+binding = "PACK"
+bucket_name = "fog-of-transit"
+
+# Native Edge Rate Limiting Binding (10 requests per 60s per identity)
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+[ratelimits.simple]
+limit = 10
+period = 60
