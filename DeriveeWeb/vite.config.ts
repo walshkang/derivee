@@ -79,9 +79,9 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // Precache only app shell assets (including zstd.wasm)
+        // Precache only app shell assets (including zstd.wasm and stops.json)
         globPatterns: [
-          '**/*.{js,css,html,ico,pbf,woff,woff2,wasm}'
+          '**/*.{js,css,html,ico,pbf,woff,woff2,wasm,json}'
         ],
         // Explicitly exclude any data packs, binary archives, or large data payloads
         globIgnores: [
@@ -92,6 +92,7 @@ export default defineConfig({
           '**/*.sqlite*',
           '**/*.csr',
           '**/*.tar',
+          '**/package.json',
           '**/README.md'
         ],
         navigateFallback: '/index.html',

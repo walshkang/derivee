@@ -50,12 +50,15 @@ flowchart TD
 1. **[M3a - DONE]** Compile `DeriveeCore` to WASM using `emcc` with flags: `-std=c++20 -O3 -flto -fno-rtti -fwasm-exceptions -sWASM=1 -sFILESYSTEM=0 -sINITIAL_MEMORY=134217728 -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=536870912 -sMALLOC="dlmalloc"`.
 2. **[M3a - DONE]** Implement C-ABI bridge with `_allocate_aligned` (using `posix_memalign(64)`).
 3. **[M3a - DONE]** Node verification harness proving the engine loads real binaries and computes valid trips without crashes.
-4. **[M3b - PENDING]** Build `routing.worker.ts` to read binaries from OPFS via `FileSystemSyncAccessHandle` and pass pointers to the WASM heap.
-5. **[M3b - PENDING]** Wire up origin/destination search UI to send `postMessage` queries to the worker and parse the 24-byte `JourneySegment` array.
-**Test Procedure:**
-- On iPhone (Airplane mode), select two locations (e.g., Union Square to Barclays Center).
-- Execute the search.
-**Done Criteria:** Query returns a valid transit itinerary (walk -> subway -> walk) in under 50ms.
+4. **[M3b - DONE]** Build `routing.worker.ts` to read binaries from OPFS via `FileSystemSyncAccessHandle` and pass pointers directly into WASM heap views.
+5. **[M3b - DONE]** Wire up offline origin/destination search UI (autocomplete over `stops.json`) to send `postMessage` queries to the worker and render computed `JourneySegment` legs.
+**Test Procedure (Phone Verification):**
+- Install pack in PWA.
+- Enable Airplane Mode on phone.
+- In trip planner, search "Times Sq" as origin and "Atlantic Av" as destination.
+- Tap "Route".
+- Verify itinerary appears with full legs (walk/transfer vs transit, departure and arrival times, route IDs) with zero network calls and no console errors.
+**Done Criteria:** Full offline transit routing flow is testable on-device; query returns a valid itinerary in <50ms completely offline.
 
 ## M4: Offline Maps
 **Goal:** Render the NYC vector basemap offline using PMTiles and MapLibre.
