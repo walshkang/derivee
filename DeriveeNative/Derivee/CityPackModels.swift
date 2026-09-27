@@ -574,6 +574,7 @@ public enum CityPackError: Error, LocalizedError, Sendable, Equatable {
     case invalidArchive(reason: String)
     case integrityCheckFailed(expected: String, actual: String)
     case missingRequiredFile(name: String)
+    case invalidBinaryAsset(file: String, reason: String)
     case coreMetroDeletionBlocked
     case decompressionFailed(reason: String)
     case downloadFailed(reason: String)
@@ -589,6 +590,8 @@ public enum CityPackError: Error, LocalizedError, Sendable, Equatable {
             return "Archive integrity verification failed. Expected SHA-256 \(expected), got \(actual)."
         case .missingRequiredFile(let name):
             return "City pack is missing required file: '\(name)'."
+        case .invalidBinaryAsset(let file, let reason):
+            return "Binary asset validation failed for '\(file)': \(reason)"
         case .coreMetroDeletionBlocked:
             return "Core metropolitan pack 'nyc' cannot be deleted."
         case .decompressionFailed(let reason):

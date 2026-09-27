@@ -417,9 +417,17 @@ final class CityPackManagerTests: XCTestCase {
         let configData = try JSONEncoder().encode(v2Config)
         let sqliteData = "SQLite format 3\0test_transit_db".data(using: .utf8)!
         let geojsonData = "{\"type\": \"FeatureCollection\", \"features\": []}".data(using: .utf8)!
-        let timetableData = Data(repeating: 0xAA, count: 512)
-        let ultraData = Data(repeating: 0xBB, count: 256)
-        let walkGraphData = Data(repeating: 0xCC, count: 1024)
+        
+        let ttFileSize: UInt64 = 232 + 280
+        var timetableData = createMockMasterHeader(magic: 0x31565244, fileSize: ttFileSize)
+        timetableData.append(Data(repeating: 0xAA, count: 280))
+        
+        var ultraData = createMockBinaryHeader(magic: 0x554C5452)
+        ultraData.append(Data(repeating: 0xBB, count: 224))
+        
+        let walkFileSize: UInt64 = 232 + 792
+        var walkGraphData = createMockMasterHeader(magic: 0x4B4C4157, fileSize: walkFileSize)
+        walkGraphData.append(Data(repeating: 0xCC, count: 792))
         
         let tarFiles = [
             (name: "city_config.json", data: configData),
@@ -491,5 +499,68 @@ final class CityPackManagerTests: XCTestCase {
         XCTAssertEqual(config.routing?.walkGraphFile, "custom_walk.bin")
         XCTAssertEqual(config.routing?.maxWalkMinutes, 20)
         XCTAssertEqual(config.routing?.maxRounds, 10)
+    }
+    
+    // MARK: - Binary Asset Validation Tests
+    
+    private func createMockMasterHeader(magic: UInt32, fileSize: UInt64) -> Data {
+        var data = Data(repeating: 0, count: 232)
+        data.withUnsafeMutableBytes { ptr in
+            ptr.storeBytes(of: magic, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(1), toByteOffset: 4, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(0x01020304), toByteOffset: 8, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(232), toByteOffset: 12, as: UInt32.self)
+            ptr.storeBytes(of: fileSize, toByteOffset: 16, as: UInt64.self)
+        }
+        return data
+    }
+    
+    private func createMockBinaryHeader(magic: UInt32) -> Data {
+        var data = Data(repeating: 0, count: 32)
+        data.withUnsafeMutableBytes { ptr in
+            ptr.storeBytes(of: magic, as: UInt32.self)
+            ptr.storeBytes(of: UInt32(1), toByteOffset: 4, as: UInt32.self)
+        }
+        return data
+    }
+    
+    func testCityPackV2FailsOnCorruptHeaders() throws {
+        let v2Config = CityConfig(
+            version: 2, slug: "err", displayName: "Error City", region: "Testing",
+            bounds: CityBounds(minLatitude: 0, maxLatitude: 0, minLongitude: 0, maxLongitude: 0),
+            center: CityCenter(latitude: 0, longitude: 0, defaultZoom: 13),
+            routing: CityRoutingConfig()
+        )
+        let configData = try JSONEncoder().encode(v2Config)
+        let sqliteData = "SQLite format 3\0test_transit_db".data(using: .utf8)!
+        
+        let ttFileSize: UInt64 = 232 + 280
+        // Bad magic: 0xDEADBEEF instead of 0x31565244
+        var badTimetableData = createMockMasterHeader(magic: 0xDEADBEEF, fileSize: ttFileSize)
+        badTimetableData.append(Data(repeating: 0xAA, count: 280))
+        
+        let ultraData = createMockBinaryHeader(magic: 0x554C5452)
+        let walkFileSize: UInt64 = 232
+        let walkGraphData = createMockMasterHeader(magic: 0x4B4C4157, fileSize: walkFileSize)
+        
+        let tarFiles = [
+            (name: "city_config.json", data: configData),
+            (name: "transit.sqlite", data: sqliteData),
+            (name: "timetable.bin", data: badTimetableData),
+            (name: "ultra_transfers.csr", data: ultraData),
+            (name: "walk_graph.bin", data: walkGraphData)
+        ]
+        
+        let tarData = TarExtractor.createTarArchive(files: tarFiles)
+        let compressedData = try! ZSTDProcessor().compressBuffer(tarData, compressionLevel: 3)
+        
+        XCTAssertThrowsError(try manager.unpackAndInstall(archiveData: compressedData)) { error in
+            guard case CityPackError.invalidBinaryAsset(let file, let reason) = error else {
+                XCTFail("Expected invalidBinaryAsset error, got \(error)")
+                return
+            }
+            XCTAssertEqual(file, "timetable.bin")
+            XCTAssertTrue(reason.contains("Invalid magic signature"))
+        }
     }
 }

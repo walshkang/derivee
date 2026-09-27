@@ -294,6 +294,20 @@ public final class CityPackManager: Sendable {
             throw CityPackError.invalidArchive(reason: "city_config.json contains empty slug")
         }
         
+        // 5.1. Validate Binary Routing Assets if declared in config
+        if let routing = config.routing {
+            let timetableStagingURL = stagingDir.appendingPathComponent(routing.timetableBinFile)
+            let ultraStagingURL = stagingDir.appendingPathComponent(routing.ultraCsrFile)
+            let walkStagingURL = stagingDir.appendingPathComponent(routing.walkGraphFile)
+            
+            // 0x31565244 ("DRV1"), SchemaVersion 1, MasterHeader
+            try validateBinaryAsset(at: timetableStagingURL, expectedMagic: 0x31565244, expectedVersion: 1, isMasterHeader: true)
+            // 0x554C5452 ("ULTR"), SchemaVersion 1, BinaryHeader
+            try validateBinaryAsset(at: ultraStagingURL, expectedMagic: 0x554C5452, expectedVersion: 1, isMasterHeader: false)
+            // 0x4B4C4157 ("WALK"), SchemaVersion 1, MasterHeader
+            try validateBinaryAsset(at: walkStagingURL, expectedMagic: 0x4B4C4157, expectedVersion: 1, isMasterHeader: true)
+        }
+        
         let targetDir = packDirectoryURL(for: config.slug)
         
         // 6. Atomic Replacement to Destination Directory
@@ -572,5 +586,82 @@ public final class CityPackManager: Sendable {
     private func computeSHA256(data: Data) -> String {
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+    
+    // MARK: - Binary Asset Validation
+    
+    /// Performs header-only validation of a binary routing asset.
+    /// Note: The three routing binaries total ~55 MB and are mmap'd zero-copy on device.
+    /// Reading them fully into RAM here during install to compute the XXH64 checksum over the payload
+    /// would risk exceeding the 30 MB Jetsam ceiling, so we strictly perform header-only validation.
+    private func validateBinaryAsset(at url: URL, expectedMagic: UInt32, expectedVersion: UInt32, isMasterHeader: Bool) throws {
+        let path = url.path
+        guard fileManager.fileExists(atPath: path) else {
+            throw CityPackError.missingRequiredFile(name: url.lastPathComponent)
+        }
+        
+        let attrs = try fileManager.attributesOfItem(atPath: path)
+        guard let physicalSize = attrs[.size] as? Int64 else {
+            throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "Could not read file size")
+        }
+        
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "Could not open file")
+        }
+        defer { try? handle.close() }
+        
+        if isMasterHeader {
+            // MasterHeader (e.g. walk_graph.bin, timetable.bin) is 232 bytes total.
+            // We read the first 40 bytes to validate core invariants (mirroring Go logic).
+            let headerSize = 232
+            guard physicalSize >= headerSize else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "File smaller than MasterHeader size")
+            }
+            guard let headerData = try? handle.read(upToCount: 40), headerData.count == 40 else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "Failed to read header")
+            }
+            
+            let magic = headerData.withUnsafeBytes { $0.load(fromByteOffset: 0, as: UInt32.self) }
+            let version = headerData.withUnsafeBytes { $0.load(fromByteOffset: 4, as: UInt32.self) }
+            let endian = headerData.withUnsafeBytes { $0.load(fromByteOffset: 8, as: UInt32.self) }
+            let parsedHeaderSize = headerData.withUnsafeBytes { $0.load(fromByteOffset: 12, as: UInt32.self) }
+            let fileSize = headerData.withUnsafeBytes { $0.load(fromByteOffset: 16, as: UInt64.self) }
+            // XXH64 checksum is at offset 24..32, we skip payload hashing to stay under Jetsam
+            
+            guard magic == expectedMagic else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: String(format: "Invalid magic signature: 0x%08X", magic))
+            }
+            guard version == expectedVersion else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "Schema version mismatch")
+            }
+            guard endian == 0x01020304 else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "Endianness marker mismatch")
+            }
+            guard parsedHeaderSize == 232 else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "Invalid header size")
+            }
+            guard Int64(fileSize) == physicalSize else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "Header file_size != physical file size")
+            }
+        } else {
+            // BinaryHeader (e.g. ultra_transfers.csr) is 32 bytes.
+            let headerSize = 32
+            guard physicalSize >= headerSize else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "File smaller than BinaryHeader size")
+            }
+            guard let headerData = try? handle.read(upToCount: 8), headerData.count == 8 else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "Failed to read header")
+            }
+            
+            let magic = headerData.withUnsafeBytes { $0.load(fromByteOffset: 0, as: UInt32.self) }
+            let version = headerData.withUnsafeBytes { $0.load(fromByteOffset: 4, as: UInt32.self) }
+            
+            guard magic == expectedMagic else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: String(format: "Invalid magic signature: 0x%08X", magic))
+            }
+            guard version == expectedVersion else {
+                throw CityPackError.invalidBinaryAsset(file: url.lastPathComponent, reason: "Version mismatch")
+            }
+        }
     }
 }
