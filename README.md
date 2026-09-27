@@ -63,7 +63,7 @@ Built as a **pure native iOS application** under the **Sleepy Hermes** paradigm 
 * **Fog Startup Synchronization:** On cold start, the fog polygon computation races MapLibre's style load. The initial computation runs at `.userInitiated` priority with a map-ready handshake flag to guarantee explored hexes are visible immediately — no solid fog flash.
 * **Battery & Drift Optimization:** CPU remains asleep until physical movement occurs. An implied speed filter ($\Delta d / \Delta t \leq 12$ m/s) aggressively discards urban canyon GPS multipath noise before it touches the H3 conversion step.
 * **Clean Project Generation:** The Xcode project is generated deterministically via `xcodegen`, eliminating merge conflicts in `.pbxproj` files and providing seamless Swift Package Manager integration.
-* **Unified CI/CD (GitHub Actions):** GitHub Actions orchestrates the test suite by dynamically running `xcodegen`, resolving SPM dependencies, and executing `xcodebuild test` headlessly. The project embraces a solo "vibe coding" workflow: commits are pushed directly to `main` without PRs, with CI acting as a post-push safety net to prevent regressions.
+* **Local Ergonomic Bouncer (Two-Tier Shift-Left):** Remote GitHub Actions CI has been retired and superseded by a 100% local verification harness tailored for rapid solo vibe-coding. Tier 1 (`.githooks/pre-commit`) enforces sub-100ms AST/regex invariant checks on staged Swift code, while Tier 2 (`scripts/verify-ux.sh`) runs the headless commuter ergonomics suite in <12s against an iOS simulator. Commits push directly to `main` with zero cloud runner queue friction.
 
 ---
 

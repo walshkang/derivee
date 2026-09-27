@@ -2,7 +2,7 @@
 
 This document is the **single authoritative reference** for all visual design, screen hierarchy, interaction patterns, and UI acceptance criteria. If a screen, component, or animation is not defined here, an agent **must not** invent it.
 
-For backend data flows, native constraints, and library stacks, see [architecture.md](file:///Volumes/T7ssd/derivee/docs/architecture.md).
+For backend data flows, native constraints, and library stacks, see [architecture.md](docs/architecture.md).
 
 ---
 
@@ -186,7 +186,7 @@ Standard cartographic data (streets, parks, travel direction) is handled entirel
 
 ### 2.2 The MapLibre Layer Stack
 
-The MapLibre layer stack **must** follow this exact Z-index order. All layers are defined in the bundled `composite_style.json` (vector-only, no raster satellite layers) or injected as runtime `MLNShapeSource` / `MLNStyleLayer` objects. See [architecture.md §8](file:///Volumes/T7ssd/derivee/docs/architecture.md) for implementation specifics and [diagrams.md §4](file:///Volumes/T7ssd/derivee/docs/diagrams.md) for the full annotated stack.
+The MapLibre layer stack **must** follow this exact Z-index order. All layers are defined in the bundled `composite_style.json` (vector-only, no raster satellite layers) or injected as runtime `MLNShapeSource` / `MLNStyleLayer` objects. See [architecture.md §8](docs/architecture.md) for implementation specifics and [diagrams.md §4](docs/diagrams.md) for the full annotated stack.
 
 ```
 ▲ Top of Z-Stack
@@ -230,7 +230,7 @@ The MapLibre layer stack **must** follow this exact Z-index order. All layers ar
 > **Fog Bounding Polygon (Wave M.5.1):** The fog mask uses a Global World outer polygon spanning Web Mercator limits `[-85.0511, 85.0511]` latitude and `[-179.999, 179.999]` longitude in Clockwise (CW) winding order. Explored H3 hexes anywhere on earth dissolve into interior cutout apertures, completely eliminating artificial rectangular fog edges and border lines across city margins.
 
 > [!IMPORTANT]
-> **Cold-Start Fog Contract:** On app launch after a force-quit, the Cloud Layer (Layer 2) must render with all previously explored hex holes visible **immediately** when the map finishes loading. The `SpatialStore` fog polygon computation must complete before or synchronize with MapLibre's `didFinishLoading` callback. A solid, hole-less fog flash on cold start is a rendering bug. See [architecture.md §5.2](file:///Volumes/T7ssd/derivee/docs/architecture.md) for the synchronization mechanism.
+> **Cold-Start Fog Contract:** On app launch after a force-quit, the Cloud Layer (Layer 2) must render with all previously explored hex holes visible **immediately** when the map finishes loading. The `SpatialStore` fog polygon computation must complete before or synchronize with MapLibre's `didFinishLoading` callback. A solid, hole-less fog flash on cold start is a rendering bug. See [architecture.md §5.2](docs/architecture.md) for the synchronization mechanism.
 
 ---
 
@@ -488,7 +488,7 @@ When a user uploads a heavy GPX file containing hundreds of new hexes, the bridg
 * **Implementation:** Use MapLibre's native `fill-opacity-transition` with a staggered delay per hex cluster (sorted by distance from the user's position). The fog literally "melts away" from the user outward.
 
 > [!NOTE]
-> **Design Aspiration — Metal Enhancement:** For a more dramatic volumetric sunburst effect, SwiftUI `.colorEffect` with a custom Metal shader could be introduced to render a shader-based dissolve mask. This capability is **not currently in the locked stack** (see [architecture.md §2](file:///Volumes/T7ssd/derivee/docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
+> **Design Aspiration — Metal Enhancement:** For a more dramatic volumetric sunburst effect, SwiftUI `.colorEffect` with a custom Metal shader could be introduced to render a shader-based dissolve mask. This capability is **not currently in the locked stack** (see [architecture.md §2](docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
 
 ### 5.2 Bottom Sheet Transitions
 
@@ -913,7 +913,7 @@ In multi-modal transit hubs (e.g. Atlantic Av–Barclays Center, Times Sq–42 S
 ## 11. Multi-City Screens & User Flows (Wave L)
 
 > [!NOTE]
-> All multi-city UI surfaces exist as **sub-views within the existing 5-screen hierarchy** (Screens 0–4), preserving Guardrail G10. No new top-level screens are introduced. For the complete backend architecture, database topology, and city pack format, see [docs/multi-city.md](file:///Volumes/T7ssd/derivee/docs/multi-city.md).
+> All multi-city UI surfaces exist as **sub-views within the existing 5-screen hierarchy** (Screens 0–4), preserving Guardrail G10. No new top-level screens are introduced. For the complete backend architecture, database topology, and city pack format, see [docs/multi-city.md](docs/multi-city.md).
 
 ### 11.1 City Download Prompt (`CityDownloadPromptSheet` — Screen 1 Overlay)
 
@@ -1159,7 +1159,7 @@ Before submitting or merging any PR modifying user-facing SwiftUI views in Déri
 
 ### 13.5 Automated Ergonomics Bouncer Architecture (2-Tier Shift-Left)
 
-To eliminate visual and cognitive regressions without the overhead and delay of remote cloud CI, Dérivée enforces a 100% local, two-tier ergonomic testing architecture (see [Research Document 21: `docs/research/21_mobile_map_transit_testing_invariants.md`](file:///Volumes/T7ssd/derivee/docs/research/21_mobile_map_transit_testing_invariants.md)):
+To eliminate visual and cognitive regressions without the overhead and delay of remote cloud CI, Dérivée enforces a 100% local, two-tier ergonomic testing architecture (see [Research Document 21: `docs/research/21_mobile_map_transit_testing_invariants.md`](docs/research/21_mobile_map_transit_testing_invariants.md)):
 
 ```
 Developer / Agent Commit Attempt
@@ -1190,10 +1190,10 @@ Developer / Agent Commit Attempt
 ```
 
 1. **Tier 1: Pre-Commit AST/Pattern Bouncer (`.githooks/pre-commit`)**
-   - Configured automatically via [`scripts/setup-hooks.sh`](file:///Volumes/T7ssd/derivee/scripts/setup-hooks.sh) (`git config core.hooksPath .githooks`).
+   - Configured automatically via [`scripts/setup-hooks.sh`](scripts/setup-hooks.sh) (`git config core.hooksPath .githooks`).
    - Executes in $< 100\text{ms}$ directly against staged Swift changes (`git diff --cached --name-only`).
    - Immediately aborts `git commit` if prohibited anti-patterns (e.g., hardcoded `.frame(height: 56)`, `trip_id`, nested `.sheet` in bottom sheet components) are detected.
-2. **Tier 2: Headless Commuter Ergonomics Suite ([`scripts/verify-ux.sh`](file:///Volumes/T7ssd/derivee/scripts/verify-ux.sh))**
+2. **Tier 2: Headless Commuter Ergonomics Suite ([`scripts/verify-ux.sh`](scripts/verify-ux.sh))**
    - Headless test execution targeting `DeriveeTests/CommuterErgonomicsTests` via `xcodebuild`.
    - Curates test results with an instantaneous, human-readable CLI reporter summarizing all 44 assertions across 9 ergonomic test suites.
    - Self-configures `core.hooksPath` on run, ensuring hook configuration is idempotent and never forgotten.

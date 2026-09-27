@@ -162,4 +162,4 @@ Cross-referencing the best practices of Transit App, Citymapper, Uber, and Apple
 | **III. Ergonomics & Layout** | Dynamic Type expansion, zero height clipping, single-anchor badges, unified status tokens. | *Point-Free*, *Cash App*, *Apple HIG* | `testFC3_GuidewayAndSurface_ConsolidatesBoardingAndTrackPill`, `testFC4_HourRowView_DynamicHeightExpansionWithWrappingDepartures` |
 | **IV. Navigation & Viewport** | 0.0s above-the-fold glance budget, zero nested sheet stacking, lower-third thumb zone. | *Apple Maps (MapKit)*, *Citymapper* | `testAboveTheFold_Screen2_ThreeToFourArrivalRowsVisibleAtMediumDetent`, `testFC5_TransitRevealSheet_InspectsArrivalInPlaceWithBackChevron`, `testFC6_StatsView_ThumbZoneClearOfAdministrativeButtons` |
 
-This taxonomy forms the definitive specification for [`DeriveeNative/DeriveeTests/CommuterErgonomicsTests.swift`](file:///Volumes/T7ssd/derivee/DeriveeNative/DeriveeTests) and the local verification pipeline.
+This taxonomy forms the definitive specification for [`DeriveeNative/DeriveeTests/CommuterErgonomicsTests.swift`](DeriveeNative/DeriveeTests) and the local verification pipeline.

@@ -1,6 +1,6 @@
 # Dérivée — Architecture UML Diagrams
 
-This document provides visual architectural reference diagrams for agents and developers. For prose specifications, see [architecture.md](file:///Volumes/T7ssd/derivee/docs/architecture.md) and [design.md](file:///Volumes/T7ssd/derivee/docs/design.md).
+This document provides visual architectural reference diagrams for agents and developers. For prose specifications, see [architecture.md](docs/architecture.md) and [design.md](docs/design.md).
 
 ---
 
@@ -531,7 +531,7 @@ stateDiagram-v2
 
 ## 4. MapLibre Active Layer Stack
 
-The native map rendering stack in [MapView.swift](file:///Volumes/T7ssd/derivee/DeriveeNative/Derivee/MapView.swift#L310-L421) uses a Data-Driven Styling (DDS) architecture overlaid on MapTiler vector tiles:
+The native map rendering stack in [MapView.swift](DeriveeNative/Derivee/MapView.swift#L310-L421) uses a Data-Driven Styling (DDS) architecture overlaid on MapTiler vector tiles:
 
 ```
 ▲ Top of Z-Stack
