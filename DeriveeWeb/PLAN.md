@@ -52,6 +52,12 @@ flowchart TD
 3. **[M3a - DONE]** Node verification harness proving the engine loads real binaries and computes valid trips without crashes.
 4. **[M3b - DONE]** Build `routing.worker.ts` to read binaries from OPFS via `FileSystemSyncAccessHandle` and pass pointers directly into WASM heap views.
 5. **[M3b - DONE]** Wire up offline origin/destination search UI (autocomplete over `stops.json`) to send `postMessage` queries to the worker and render computed `JourneySegment` legs.
+6. **[M3b Hotfix - DONE]** Fixed engine init hang and native transfer divergence:
+   - Replaced fragile `new Function` eval with `importScripts('/wasm/derivee_core.js')` in classic worker via `DeriveeCoreModule` factory.
+   - Fixed `instantiateWasm` error propagation so `WebAssembly.instantiate` failures reject immediately rather than hanging indefinitely.
+   - Added 30-second init timeout posting `{ type: 'ERROR', message: 'engine init timed out' }`.
+   - Aligned `is_transfer` exactly with native `JourneySegment::is_transfer_leg()` (`trip_id == 0xFFFFFFFF || route_id == 0xFFFF`), eliminating `=== 0` clauses.
+   - Extracted orchestration into `routingEngine.ts` with comprehensive unit & regression test suite (`npm test`).
 **Test Procedure (Phone Verification):**
 - Install pack in PWA.
 - Enable Airplane Mode on phone.

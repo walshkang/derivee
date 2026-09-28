@@ -73,8 +73,7 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
     setEngineError(null);
 
     const routingWorker = new Worker(
-      new URL('../workers/routing.worker.ts', import.meta.url),
-      { type: 'module' }
+      new URL('../workers/routing.worker.ts', import.meta.url)
     );
 
     routingWorker.onmessage = (event: MessageEvent<RoutingWorkerOutgoingMessage>) => {

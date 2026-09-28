@@ -7,7 +7,8 @@
     "dev": "vite --configLoader native",
     "build": "python3 DeriveeCoreWasm/scripts/gen_stops.py && tsc && vite build --configLoader native && node scripts/verify-precache.js",
     "preview": "vite preview --configLoader native",
-    "verify-precache": "node scripts/verify-precache.js"
+    "verify-precache": "node scripts/verify-precache.js",
+    "test": "node --test src/workers/__tests__/routingWorker.test.ts"
   },
   "dependencies": {
     "@bokuweb/zstd-wasm": "^0.0.27",
