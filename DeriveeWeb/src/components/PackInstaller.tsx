@@ -7,6 +7,7 @@ import {
   isOpfsSupported,
   setPackDismissed,
 } from '../utils/opfs';
+import { forceRelogin, RELOGIN_FALLBACK_MESSAGE } from '../utils/relogin';
 
 interface PackInstallerProps {
   onPackStateChange?: (state: InstalledPackState | null) => void;
@@ -57,6 +58,7 @@ export function PackInstaller({
     message?: string;
   }>({});
   const [errorMessage, setErrorMessage] = useState<{ code?: number; text: string } | null>(null);
+  const [reloginError, setReloginError] = useState<string | null>(null);
   const [wakeLockActive, setWakeLockActive] = useState<boolean>(false);
 
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -280,6 +282,19 @@ export function PackInstaller({
     return `${bytes} B`;
   };
 
+  const handleSignIn = async () => {
+    setReloginError(null);
+    try {
+      await forceRelogin(
+        typeof navigator !== 'undefined' ? navigator : undefined,
+        typeof window !== 'undefined' ? window.location : undefined,
+        setReloginError
+      );
+    } catch {
+      setReloginError(RELOGIN_FALLBACK_MESSAGE);
+    }
+  };
+
   // 1. Unauthenticated Screen (Cloudflare Access required)
   if (authStatus === 'unauthenticated') {
     return (
@@ -296,12 +311,27 @@ export function PackInstaller({
           Dérivée NYC is currently distributed as a private preview. Please sign in with your invited email via Cloudflare Access.
         </p>
 
+        {reloginError && (
+          <div class="installer-error-banner" role="alert">
+            <div class="error-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor">
+                <path
+                  fill-rule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
+            <div class="error-content">
+              <span class="error-msg">{reloginError}</span>
+            </div>
+          </div>
+        )}
+
         <button
           type="button"
           class="installer-primary-btn"
-          onClick={() => {
-            window.location.href = '/';
-          }}
+          onClick={handleSignIn}
         >
           Sign In via Cloudflare Access
         </button>
