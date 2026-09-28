@@ -194,6 +194,8 @@ html, body {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
@@ -203,10 +205,9 @@ html, body {
 }
 
 .search-section,
-.pack-installer-container,
 .pack-installer-card,
-.itinerary-planner-card,
-.itinerary-container {
+.pack-installed-panel,
+.trip-planner-card {
   pointer-events: auto;
 }
 
@@ -1614,6 +1615,7 @@ html, body {
   max-width: 440px;
   width: 100%;
   max-height: calc(100vh - 140px);
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 18px 16px;
@@ -1789,6 +1791,7 @@ html, body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
   z-index: 50;
   max-height: 200px;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   display: flex;
@@ -1954,6 +1957,7 @@ html, body {
   gap: 10px;
   width: 100%;
   max-height: 340px;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding-right: 2px;
