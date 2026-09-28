@@ -1941,3 +1941,36 @@ html, body {
   font-family: var(--font-mono);
   padding-left: 14px;
 }
+
+.itinerary-compact-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background-color: rgba(18, 26, 39, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.compact-marker {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--bg-input);
+  border: 2px solid;
+  flex-shrink: 0;
+}
+
+.itinerary-compact-text {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #f1f5f9;
+}
+
+.itinerary-compact-time {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+

@@ -5,6 +5,8 @@ import type {
   RoutingWorkerIncomingMessage,
   RoutingWorkerOutgoingMessage,
 } from '../types/routing';
+import { describeItinerary } from '../utils/itineraryDisplay';
+
 
 interface TripPlannerProps {
   isInstalled: boolean;
@@ -257,6 +259,12 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
     const m = Math.floor((sec % 3600) / 60);
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   };
+
+  const displayLegs = useMemo(() => {
+    if (!routeResult) return [];
+    return describeItinerary(routeResult, stopsMap);
+  }, [routeResult, stopsMap]);
+
 
   return (
     <div class="trip-planner-card">
@@ -519,15 +527,26 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
           </div>
 
           <div class="itinerary-legs-list">
-            {routeResult.map((leg, idx) => {
-              const boardName =
-                stopsMap.get(leg.board_stop_id)?.name || `Stop #${leg.board_stop_id}`;
-              const exitName =
-                stopsMap.get(leg.exit_stop_id)?.name || `Stop #${leg.exit_stop_id}`;
-              const legMinutes = Math.max(
-                0,
-                Math.round((leg.arrival_time - leg.departure_time) / 60)
-              );
+            {displayLegs.map((legModel, idx) => {
+              if (legModel.kind === 'start') {
+                return (
+                  <div key={idx} class="itinerary-compact-row itinerary-compact-start">
+                    <span class="compact-marker marker-board" />
+                    <span class="itinerary-compact-text">Start at {legModel.station}</span>
+                    <span class="itinerary-compact-time">{formatTime(legModel.time)}</span>
+                  </div>
+                );
+              }
+
+              if (legModel.kind === 'arrive') {
+                return (
+                  <div key={idx} class="itinerary-compact-row itinerary-compact-arrive">
+                    <span class="compact-marker marker-exit" />
+                    <span class="itinerary-compact-text">Arrive at {legModel.station}</span>
+                    <span class="itinerary-compact-time">{formatTime(legModel.time)}</span>
+                  </div>
+                );
+              }
 
               return (
                 <div key={idx} class="itinerary-leg-card">
@@ -535,17 +554,19 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
                     <span class="leg-index-badge">Leg {idx + 1}</span>
                     <span
                       class={`leg-mode-pill ${
-                        leg.is_transfer ? 'mode-pill-walk' : 'mode-pill-transit'
+                        legModel.isTransfer ? 'mode-pill-walk' : 'mode-pill-transit'
                       }`}
                     >
-                      {leg.is_transfer ? (
+                      {legModel.isTransfer ? (
                         <>🚶 Walk / Transfer</>
                       ) : (
-                        <>🚇 Route {leg.route_id}</>
+                        <>🚇 Route {legModel.routeId}</>
                       )}
                     </span>
                     <span class="leg-duration-tag">
-                      {legMinutes > 0 ? `${legMinutes} min` : '< 1 min'}
+                      {legModel.durationMinutes > 0
+                        ? `${legModel.durationMinutes} min`
+                        : '< 1 min'}
                     </span>
                   </div>
 
@@ -553,8 +574,8 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
                     <div class="leg-stop-row">
                       <div class="leg-stop-marker marker-board" />
                       <div class="leg-stop-details">
-                        <span class="leg-stop-name">{boardName}</span>
-                        <span class="leg-stop-time">{formatTime(leg.departure_time)}</span>
+                        <span class="leg-stop-name">{legModel.boardStopName}</span>
+                        <span class="leg-stop-time">{formatTime(legModel.departureTime)}</span>
                       </div>
                     </div>
 
@@ -563,21 +584,15 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
                     <div class="leg-stop-row">
                       <div class="leg-stop-marker marker-exit" />
                       <div class="leg-stop-details">
-                        <span class="leg-stop-name">{exitName}</span>
-                        <span class="leg-stop-time">{formatTime(leg.arrival_time)}</span>
+                        <span class="leg-stop-name">{legModel.exitStopName}</span>
+                        <span class="leg-stop-time">{formatTime(legModel.arrivalTime)}</span>
                       </div>
                     </div>
                   </div>
 
-                  {leg.transfer_distance_m > 0 && leg.is_transfer && (
+                  {legModel.transferDistanceM > 0 && legModel.isTransfer && (
                     <div class="leg-transfer-distance">
-                      Transfer distance: ~{leg.transfer_distance_m} m
-                    </div>
-                  )}
-
-                  {!leg.is_transfer && (
-                    <div class="leg-transit-meta">
-                      Trip ID: #{leg.trip_id}
+                      Transfer distance: ~{legModel.transferDistanceM} m
                     </div>
                   )}
                 </div>

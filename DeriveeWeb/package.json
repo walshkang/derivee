@@ -8,7 +8,7 @@
     "build": "python3 DeriveeCoreWasm/scripts/gen_stops.py && tsc && vite build --configLoader native && node scripts/verify-precache.js",
     "preview": "vite preview --configLoader native",
     "verify-precache": "node scripts/verify-precache.js",
-    "test": "node --test src/workers/__tests__/routingWorker.test.ts"
+    "test": "node --test src/workers/__tests__/routingWorker.test.ts src/utils/__tests__/itineraryDisplay.test.ts"
   },
   "dependencies": {
     "@bokuweb/zstd-wasm": "^0.0.27",

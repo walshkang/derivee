@@ -58,6 +58,11 @@ flowchart TD
    - Added 30-second init timeout posting `{ type: 'ERROR', message: 'engine init timed out' }`.
    - Aligned `is_transfer` exactly with native `JourneySegment::is_transfer_leg()` (`trip_id == 0xFFFFFFFF || route_id == 0xFFFF`), eliminating `=== 0` clauses.
    - Extracted orchestration into `routingEngine.ts` with comprehensive unit & regression test suite (`npm test`).
+7. **[M3b Display Cleanup - DONE]** Cleaned up itinerary leg presentation in `TripPlanner.tsx` and extracted display logic into `itineraryDisplay.ts`:
+   - Stripped internal engine trip IDs (`Trip ID: #...`) from all UI display models and JSX output.
+   - Collapsed zero-length origin and destination stub legs (`from_stop === to_stop` and duration < 60s) into compact "Start at {station}" and "Arrive at {station}" rows while preserving full transit leg details.
+   - Comprehensive test suite in `itineraryDisplay.test.ts` (18 total unit/regression tests passing).
+
 **Test Procedure (Phone Verification):**
 - Install pack in PWA.
 - Enable Airplane Mode on phone.
