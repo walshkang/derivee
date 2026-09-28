@@ -1773,6 +1773,31 @@ html, body {
   flex-direction: column;
   gap: 10px;
   width: 100%;
+  max-height: 340px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-highlight) transparent;
+}
+
+.itinerary-results-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.itinerary-results-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.itinerary-results-container::-webkit-scrollbar-thumb {
+  background-color: var(--border-highlight);
+  border-radius: 9999px;
+}
+
+@media (min-width: 640px) {
+  .itinerary-results-container {
+    max-height: 440px;
+  }
 }
 
 .itinerary-summary-header {

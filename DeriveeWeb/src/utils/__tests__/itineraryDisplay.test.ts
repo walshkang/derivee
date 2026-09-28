@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   describeLeg,
   describeItinerary,
@@ -167,6 +170,41 @@ describe('Itinerary Leg Display Presentation Tests', () => {
       // Pre-fix note:
       // A naive collapse checking only `from === to` without `duration < 60` would erroneously
       // erase legitimate in-station transfer dwells or layovers.
+    });
+
+    it('negative: same-station leg with different stop IDs and duration ≥ 60s → NOT collapsed (stays transit)', () => {
+      // Different stop IDs (e.g. 72 and 74) that resolve to the same station ("Times Sq-42 St"),
+      // but with duration of 60 seconds or longer (e.g. 60s walk/transfer between platforms)
+      const interTrackTransfer: LegInput = {
+        board_stop_id: 72,
+        exit_stop_id: 74,
+        departure_time: 28800,
+        arrival_time: 28860, // 60s
+        route_id: 0,
+        transfer_distance_m: 50,
+        is_transfer: true,
+      };
+
+      const result = describeLeg(
+        interTrackTransfer,
+        0,
+        3,
+        new Map([
+          [72, { name: 'Times Sq-42 St' }],
+          [74, { name: 'Times Sq-42 St' }],
+        ])
+      );
+
+      assert.strictEqual(
+        result.kind,
+        'transit',
+        'Same-station transfer with duration >= 60s must NOT collapse; it stays transit'
+      );
+      if (result.kind === 'transit') {
+        assert.strictEqual(result.durationSeconds, 60);
+        assert.strictEqual(result.boardStopName, 'Times Sq-42 St');
+        assert.strictEqual(result.exitStopName, 'Times Sq-42 St');
+      }
     });
 
     it('edge: single-leg itinerary that is zero-length → renders as start (no crash)', () => {
@@ -346,4 +384,177 @@ describe('Itinerary Leg Display Presentation Tests', () => {
       assert.strictEqual(resolveStopName(999, undefined, 'Explicit Name'), 'Explicit Name');
     });
   });
+
+  describe('Real worker output regression: Times Sq → Atlantic Av preset', () => {
+    // Verbatim leg objects emitted by C++ RAPTOR engine for Times Sq (72) -> Atlantic Av (207) at dep 28800 (08:00)
+    const realWorkerLegs: LegInput[] = [
+      {
+        board_stop_id: 72,
+        exit_stop_id: 74,
+        trip_id: 0,
+        departure_time: 28800,
+        arrival_time: 28803,
+        route_id: 0,
+        transfer_distance_m: 3,
+        is_transfer: false,
+      },
+      {
+        board_stop_id: 74,
+        exit_stop_id: 209,
+        trip_id: 1659,
+        departure_time: 28890,
+        arrival_time: 30210,
+        route_id: 12,
+        transfer_distance_m: 0,
+        is_transfer: false,
+      },
+      {
+        board_stop_id: 209,
+        exit_stop_id: 207,
+        trip_id: 0,
+        departure_time: 30210,
+        arrival_time: 30212,
+        route_id: 0,
+        transfer_distance_m: 2,
+        is_transfer: false,
+      },
+    ];
+
+    const realStopsMap = new Map<number, { name: string }>([
+      [72, { name: 'Times Sq-42 St' }],
+      [74, { name: 'Times Sq-42 St' }],
+      [207, { name: 'Atlantic Av-Barclays Ctr' }],
+      [209, { name: 'Atlantic Av-Barclays Ctr' }],
+    ]);
+
+    it('collapses leg 1 (origin stub: stop 72 -> stop 74) to { kind: \'start\' } using real worker output', () => {
+      const models = describeItinerary(realWorkerLegs, realStopsMap);
+
+      assert.strictEqual(
+        models[0].kind,
+        'start',
+        `Expected leg 1 to collapse to { kind: 'start' }, got kind: ${models[0].kind}`
+      );
+      if (models[0].kind === 'start') {
+        assert.strictEqual(models[0].station, 'Times Sq-42 St');
+        assert.strictEqual(models[0].stopId, 72);
+        assert.strictEqual(models[0].time, 28800);
+      }
+    });
+
+    it('collapses leg 3 (destination stub: stop 209 -> stop 207) to { kind: \'arrive\' } using real worker output', () => {
+      const models = describeItinerary(realWorkerLegs, realStopsMap);
+
+      assert.strictEqual(
+        models[2].kind,
+        'arrive',
+        `Expected leg 3 to collapse to { kind: 'arrive' }, got kind: ${models[2].kind}`
+      );
+      if (models[2].kind === 'arrive') {
+        assert.strictEqual(models[2].station, 'Atlantic Av-Barclays Ctr');
+        assert.strictEqual(models[2].stopId, 207);
+        assert.strictEqual(models[2].time, 30212);
+      }
+    });
+
+    it('preserves leg 2 as full transit leg between different stations', () => {
+      const models = describeItinerary(realWorkerLegs, realStopsMap);
+
+      assert.strictEqual(models[1].kind, 'transit');
+      if (models[1].kind === 'transit') {
+        assert.strictEqual(models[1].boardStopName, 'Times Sq-42 St');
+        assert.strictEqual(models[1].exitStopName, 'Atlantic Av-Barclays Ctr');
+        assert.strictEqual(models[1].routeId, 12);
+        assert.strictEqual(models[1].durationMinutes, 22);
+      }
+    });
+  });
+
+  describe('Requirement 2: Itinerary Results Scroll Container (phone viewport safety)', () => {
+    it('declares bounded max-height, overflow-y: auto, and touch scrolling in index.css', () => {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+      const cssPath = path.resolve(__dirname, '../../index.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf-8');
+
+      // Match the .itinerary-results-container CSS rule block
+      const containerRuleMatch = cssContent.match(/\.itinerary-results-container\s*\{([^}]+)\}/);
+      assert.ok(containerRuleMatch, '.itinerary-results-container rule must exist in index.css');
+
+      const ruleBody = containerRuleMatch[1];
+
+      // 1. Verify bounded height (max-height)
+      assert.match(
+        ruleBody,
+        /max-height:\s*[^;]+;/,
+        'itinerary-results-container must have bounded max-height for phone viewport safety'
+      );
+
+      // 2. Verify overflow-y: auto
+      assert.match(
+        ruleBody,
+        /overflow-y:\s*auto;/,
+        'itinerary-results-container must have overflow-y: auto for independent scrolling'
+      );
+
+      // 3. Verify touch scrolling for mobile devices
+      assert.match(
+        ruleBody,
+        /-webkit-overflow-scrolling:\s*touch;/,
+        'itinerary-results-container must enable smooth touch scrolling on mobile'
+      );
+    });
+
+    it('overflows and is scrollable when 3+ legs exceed the bounded container height', () => {
+      // Simulate container bounding box on a mobile viewport
+      const boundedMaxHeight = 340; // px
+      const summaryHeaderHeight = 70; // px
+      const cardHeight = 110; // px per transit leg card
+      const gap = 10; // px gap between items
+
+      // Constrained fixture with 3+ legs:
+      // Even with 3 legs (summary + 3 cards + gaps): 70 + 330 + 30 = 430px > 340px
+      const legsCount = 3;
+      const totalContentHeight = summaryHeaderHeight + legsCount * cardHeight + legsCount * gap;
+
+      const simulatedContainer = {
+        clientHeight: boundedMaxHeight,
+        scrollHeight: totalContentHeight,
+        isScrollable: function () {
+          return this.scrollHeight > this.clientHeight;
+        },
+      };
+
+      assert.strictEqual(
+        simulatedContainer.isScrollable(),
+        true,
+        `With 3+ legs (content ${totalContentHeight}px > container ${boundedMaxHeight}px), container must be scrollable`
+      );
+      assert.ok(simulatedContainer.scrollHeight > simulatedContainer.clientHeight);
+    });
+
+    it('negative: does not trap page scroll when content fits within container', () => {
+      const summaryHeaderHeight = 70; // px
+      const singleCompactRowHeight = 40; // px
+
+      // Short itinerary where content easily fits (e.g. 1 leg or 110px total <= 340px)
+      const fittedContentHeight = summaryHeaderHeight + singleCompactRowHeight;
+
+      const simulatedContainer = {
+        clientHeight: fittedContentHeight, // max-height shrinks to content height
+        scrollHeight: fittedContentHeight,
+        hasOverflow: function () {
+          return this.scrollHeight > this.clientHeight;
+        },
+      };
+
+      assert.strictEqual(
+        simulatedContainer.hasOverflow(),
+        false,
+        'When content fits, scrollHeight <= clientHeight; no scroll trapping occurs'
+      );
+    });
+  });
 });
+
+

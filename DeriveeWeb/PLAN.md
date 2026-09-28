@@ -60,8 +60,13 @@ flowchart TD
    - Extracted orchestration into `routingEngine.ts` with comprehensive unit & regression test suite (`npm test`).
 7. **[M3b Display Cleanup - DONE]** Cleaned up itinerary leg presentation in `TripPlanner.tsx` and extracted display logic into `itineraryDisplay.ts`:
    - Stripped internal engine trip IDs (`Trip ID: #...`) from all UI display models and JSX output.
-   - Collapsed zero-length origin and destination stub legs (`from_stop === to_stop` and duration < 60s) into compact "Start at {station}" and "Arrive at {station}" rows while preserving full transit leg details.
-   - Comprehensive test suite in `itineraryDisplay.test.ts` (18 total unit/regression tests passing).
+   - Collapsed zero-length origin and destination stub legs into compact "Start at {station}" and "Arrive at {station}" rows while preserving full transit leg details.
+   - Comprehensive test suite in `itineraryDisplay.test.ts`.
+8. **[M3b Itinerary Panel Fix - DONE]** Resolved production itinerary panel rendering bugs (collapse + scroll):
+   - Aligned zero-length stub leg collapse predicate in `itineraryDisplay.ts` against real C++ RAPTOR worker output: matches legs where departure and arrival resolve to the same station name (e.g. Times Sq-42 St complex platform transfer) and duration < 60s, collapsing Leg 1 to compact "Start at {station}" and Leg 3 to "Arrive at {station}".
+   - Made itinerary panel scrollable and phone-viewport safe: bounded `.itinerary-results-container` with `max-height: 340px`, `overflow-y: auto`, and `-webkit-overflow-scrolling: touch`, ensuring all legs are reachable without trapping page scroll when content fits.
+   - Full test suite green (25 tests passing) with real worker output fixture regression and scroll container assertions.
+
 
 **Test Procedure (Phone Verification):**
 - Install pack in PWA.

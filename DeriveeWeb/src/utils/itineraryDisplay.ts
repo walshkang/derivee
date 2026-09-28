@@ -92,19 +92,56 @@ export type LegDisplayModel =
   | TransitLegDisplay;
 
 /**
- * Checks whether a leg is a zero-length stub (from_stop === to_stop and duration < 60s).
+ * Normalizes a station name for comparison by removing punctuation variations and extra whitespace.
  */
-export function isZeroLengthLeg(leg: LegInput): boolean {
+function normalizeStationName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s*-\s*/g, '-').replace(/\s+/g, ' ');
+}
+
+/**
+ * Checks whether a leg is a zero-length stub:
+ * - duration < 60s AND
+ * - either from_stop === to_stop OR both stops resolve to the same station name.
+ */
+export function isZeroLengthLeg(leg: LegInput, resolver?: StopNameResolver): boolean {
   const fromStop = leg.from_stop !== undefined ? leg.from_stop : leg.board_stop_id;
   const toStop = leg.to_stop !== undefined ? leg.to_stop : leg.exit_stop_id;
   if (fromStop === undefined || toStop === undefined) {
     return false;
   }
-  if (fromStop !== toStop) {
+  const duration = Math.abs(leg.arrival_time - leg.departure_time);
+  if (duration >= 60) {
     return false;
   }
-  const duration = Math.abs(leg.arrival_time - leg.departure_time);
-  return duration < 60;
+  if (fromStop === toStop) {
+    return true;
+  }
+
+  const explicitBoardName =
+    leg.board_name ??
+    leg.boardStopName ??
+    leg.board_stop_name ??
+    leg.station ??
+    leg.stationName ??
+    leg.station_name;
+  const explicitExitName =
+    leg.exit_name ??
+    leg.exitStopName ??
+    leg.exit_stop_name;
+
+  const boardName = resolveStopName(fromStop, resolver, explicitBoardName);
+  const exitName = resolveStopName(toStop, resolver, explicitExitName);
+
+  if (boardName && exitName) {
+    const normBoard = normalizeStationName(boardName);
+    const normExit = normalizeStationName(exitName);
+    // Same station if normalized names match and are not unresolved fallbacks (e.g. Stop #72 vs Stop #74)
+    if (normBoard === normExit && !normBoard.startsWith('stop #')) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -157,7 +194,7 @@ export function describeLeg(
   const fromStop = leg.from_stop !== undefined ? leg.from_stop : leg.board_stop_id ?? 0;
   const toStop = leg.to_stop !== undefined ? leg.to_stop : leg.exit_stop_id ?? 0;
 
-  if (isZeroLengthLeg(leg)) {
+  if (isZeroLengthLeg(leg, resolver)) {
     if (index === 0) {
       const explicitName =
         leg.station ??
