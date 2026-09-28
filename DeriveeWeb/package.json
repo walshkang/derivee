@@ -7,12 +7,15 @@
     "dev": "vite --configLoader native",
     "build": "python3 DeriveeCoreWasm/scripts/gen_stops.py && tsc && vite build --configLoader native && node scripts/verify-precache.js",
     "preview": "vite preview --configLoader native",
-    "verify-precache": "node scripts/verify-precache.js",
-    "test": "node --test src/workers/__tests__/routingWorker.test.ts src/utils/__tests__/itineraryDisplay.test.ts"
+    "test": "node --test src/workers/__tests__/*.test.ts src/utils/__tests__/*.test.ts"
   },
   "dependencies": {
     "@bokuweb/zstd-wasm": "^0.0.27",
+    "@mapbox/vector-tile": "^3.0.0",
+    "maplibre-gl": "^6.11.2",
     "nanotar": "^0.3.0",
+    "pbf": "^5.1.2",
+    "pmtiles": "^4.5.0",
     "preact": "^10.26.4",
     "sqlite3": "^6.0.1"
   },

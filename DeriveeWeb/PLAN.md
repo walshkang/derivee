@@ -77,16 +77,35 @@ flowchart TD
 **Done Criteria:** Full offline transit routing flow is testable on-device; query returns a valid itinerary in <50ms completely offline.
 
 ## M4: Offline Maps
-**Goal:** Render the NYC vector basemap offline using PMTiles and MapLibre.
-**Concrete Build Steps:**
-1. Generate `nyc-basemap.pmtiles` (~22 MB) using `pmtiles extract`.
-2. Integrate `maplibre-gl` and the `pmtiles` JS library.
-3. Register the custom protocol and load the PMTiles file from OPFS using `pmtiles.FileSource`.
-4. Apply custom dark/fog styling (pruned to ~25 layers) and render transit routes (GeoJSON) from the M3 itinerary.
-**Test Procedure:**
-- On iPhone (Airplane mode), search a route.
-- Pan and zoom the map along the route.
-**Done Criteria:** MapLibre renders the vector tiles smoothly at 60fps with zero network requests, using local glyphs and sprites.
+**Goal:** Render the NYC vector basemap offline using PMTiles and MapLibre, followed by transit layers and fog overlay.
+
+### M4a: Offline NYC basemap (MapLibre + PMTiles) — DONE
+1. **PMTiles NYC extract (24.9 MB, budget ≤ ~30 MB):**
+   - Acquired and clustered OSM NYC extract covering all 5 boroughs plus margin (z0–z14). Pruned heavy building footprints and POIs to produce an optimized 24,991,495 byte archive.
+   - Uploaded to Cloudflare R2 bucket `fog-of-transit` as `basemap-nyc.pmtiles`.
+   - Added Cloudflare Worker endpoint `GET /api/basemap?city=nyc` with HTTP 206 Partial Content / Range header streaming and identity rate limiting.
+   - Dedicated Web Worker (`basemap-installer.worker.ts`) downloads and streams the extract into OPFS at `cities/nyc/basemap.pmtiles` using `FileSystemSyncAccessHandle` / `createWritable`.
+   - Screen Wake Lock (`navigator.wakeLock`) held during download to prevent mobile sleep.
+2. **PMTiles v3 Integrity Verification (`pmtilesIntegrity.ts`):**
+   - Validates 127-byte binary header: 7-byte ASCII magic `"PMTiles"`, spec version `3`, physical size ≤ 35 MB budget ceiling, tile data section within physical bounds, positive tile entry count, MVT tile type (1), and valid zoom hierarchy.
+   - On error or corruption, partial files are immediately purged from OPFS and a clean user error state is triggered.
+3. **MapLibre GL JS Offline Rendering (`maplibreAdapter.ts`):**
+   - Custom `pmtiles://` protocol registered with MapLibre GL JS v6.
+   - OPFS `File` handle wrapped in `pmtiles.FileSource` — zero network after install.
+   - Unlimited camera viewport: no camera clamps or `maxBounds`.
+   - Precached local vector cartography: `map-style-dark.json`, local Noto Sans glyph ranges (`fonts/Noto Sans {Regular,Bold}/0-255.pbf`), and local dark sprites.
+4. **Layout & Overlay:**
+   - Full-screen base map (`#map-container`) in `BasemapView.tsx`.
+   - Header, search, and TripPlanner overlay unchanged with touch/pointer passthrough.
+5. **Rule 11 States & Transitions:**
+   - Enforces `map-loading` (progress %), `map-ready` (canvas active), `map-error` (retry button), and `map-cached` (instant load on revisit with zero flash).
+6. **Rule 12 UI Copy:** Zero internal identifiers in progress, error, and status copy.
+7. **Rule 13–14 Tests:** Full test suite green with `node:test` covering integrity, download state machine, tile protocol offline serving, and UI copy.
+
+### M4b: Transit Cartography & Fog Toggle — UPCOMING
+- GeoJSON transit lines and station overlays.
+- Fog of war reveal canvas overlay.
+- Transit vs Fog mode toggle.
 
 ## M5: Realtime Overlay
 **Goal:** Overlay live delays and vehicle positions when the device has connectivity.

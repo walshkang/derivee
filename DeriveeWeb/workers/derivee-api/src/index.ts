@@ -141,7 +141,54 @@ export default {
       });
     }
 
-    // 5. Any unmatched /api/* route -> 404 JSON
+    // 5. Basemap streaming route: GET /api/basemap
+    if (url.pathname === '/api/basemap' && request.method === 'GET') {
+      const city = url.searchParams.get('city') || 'nyc';
+      const key = `basemap-${city}.pmtiles`;
+
+      const obj = await env.PACK.get(key, {
+        range: request.headers,
+        onlyIf: request.headers,
+      });
+
+      if (!obj) {
+        return jsonResponse({ error: 'not_found' }, 404, origin);
+      }
+
+      const headers = new Headers({
+        'Content-Type': 'application/vnd.pmtiles',
+        'Cache-Control': 'public, max-age=86400',
+        ...getCorsHeaders(origin),
+      });
+
+      if (obj.httpEtag) {
+        headers.set('ETag', obj.httpEtag);
+      }
+
+      if (!('body' in obj)) {
+        return new Response(null, { status: 304, headers });
+      }
+
+      if ('range' in obj && obj.range) {
+        const r = obj.range as { offset: number; length: number };
+        headers.set('Content-Range', `bytes ${r.offset}-${r.offset + r.length - 1}/${obj.size}`);
+        headers.set('Content-Length', r.length.toString());
+        return new Response(obj.body, {
+          status: 206,
+          headers,
+        });
+      }
+
+      headers.set('Content-Length', obj.size.toString());
+      headers.set('Content-Disposition', `attachment; filename="${city}-basemap.pmtiles"`);
+
+      return new Response(obj.body, {
+        status: 200,
+        headers,
+      });
+    }
+
+    // 6. Any unmatched /api/* route -> 404 JSON
     if (url.pathname.startsWith('/api/')) {
       return jsonResponse({ error: 'not_found' }, 404, origin);
     }

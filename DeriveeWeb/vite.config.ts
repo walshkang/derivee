@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
@@ -5,6 +6,46 @@ import preact from '@preact/preset-vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function basemapDevMiddleware() {
+  return {
+    name: 'basemap-dev-middleware',
+    configureServer(server: any) {
+      server.middlewares.use('/api/basemap', (req: any, res: any) => {
+        const filePath = path.resolve(__dirname, '../DeriveeNative/Derivee/basemap-nyc.pmtiles');
+        if (!fs.existsSync(filePath)) {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ error: 'not_found' }));
+          return;
+        }
+        const stat = fs.statSync(filePath);
+        const totalSize = stat.size;
+        const range = req.headers.range;
+
+        res.setHeader('Content-Type', 'application/vnd.pmtiles');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, ETag');
+
+        if (range) {
+          const parts = range.replace(/bytes=/, '').split('-');
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+          const chunksize = (end - start) + 1;
+          res.statusCode = 206;
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+          res.setHeader('Content-Length', chunksize);
+          const stream = fs.createReadStream(filePath, { start, end });
+          stream.pipe(res);
+        } else {
+          res.statusCode = 200;
+          res.setHeader('Content-Length', totalSize);
+          const stream = fs.createReadStream(filePath);
+          stream.pipe(res);
+        }
+      });
+    }
+  };
+}
 
 export default defineConfig({
   root: __dirname,
@@ -25,6 +66,7 @@ export default defineConfig({
   },
   plugins: [
     preact(),
+    basemapDevMiddleware(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',

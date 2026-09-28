@@ -5,7 +5,8 @@ import { useIsIOSInstallable } from './hooks/useIsIOSInstallable';
 import { Header } from './components/Header';
 import { SearchBar } from './components/SearchBar';
 import { PackInstaller } from './components/PackInstaller';
-import { MapPlaceholder } from './components/MapPlaceholder';
+import { BasemapView } from './components/BasemapView';
+import { TripPlanner } from './components/TripPlanner';
 import { SystemInfoDrawer } from './components/SystemInfoDrawer';
 import { InstallModal } from './components/InstallModal';
 import type { InstalledPackState } from './types/pack';
@@ -60,6 +61,9 @@ export function App() {
 
   return (
     <div class="app-layout">
+      {/* Full-screen offline vector basemap base layer */}
+      <BasemapView />
+
       <Header
         isOnline={isOnline}
         isStandalone={isStandalone}
@@ -77,7 +81,9 @@ export function App() {
           onToggleExpand={handleToggleExpandPack}
           onInstallSuccess={handleInstallSuccess}
         />
-        <MapPlaceholder packState={packState} />
+        {Boolean(packState?.isInstalled) && (
+          <TripPlanner isInstalled={true} />
+        )}
       </div>
 
       <SystemInfoDrawer

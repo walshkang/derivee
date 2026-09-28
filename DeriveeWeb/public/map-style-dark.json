@@ -1,0 +1,184 @@
+{
+  "version": 8,
+  "name": "Derivee Dark",
+  "glyphs": "/fonts/{fontstack}/{range}.pbf",
+  "sprite": "/sprites/dark",
+  "sources": {
+    "basemap": {
+      "type": "vector",
+      "url": "pmtiles://basemap.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#080c14"
+      }
+    },
+    {
+      "id": "land",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "land",
+      "paint": {
+        "fill-color": [
+          "match",
+          ["get", "kind"],
+          "park", "#111815",
+          "forest", "#111815",
+          "cemetery", "#111815",
+          "residential", "#0c111c",
+          "commercial", "#0d131f",
+          "#0a0e17"
+        ]
+      }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "water_polygons",
+      "paint": {
+        "fill-color": "#04060a"
+      }
+    },
+    {
+      "id": "ocean",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "ocean",
+      "paint": {
+        "fill-color": "#04060a"
+      }
+    },
+    {
+      "id": "water-lines",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "water_lines",
+      "paint": {
+        "line-color": "#04060a",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "pier-polygons",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "pier_polygons",
+      "paint": {
+        "fill-color": "#141c2b"
+      }
+    },
+    {
+      "id": "street-polygons",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "street_polygons",
+      "paint": {
+        "fill-color": "#121927"
+      }
+    },
+    {
+      "id": "streets-casing",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "streets",
+      "filter": ["in", "kind", "motorway", "trunk", "primary"],
+      "paint": {
+        "line-color": "#080d17",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 14, 5]
+      }
+    },
+    {
+      "id": "streets-major",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "streets",
+      "filter": ["in", "kind", "motorway", "trunk", "primary"],
+      "paint": {
+        "line-color": "#222c3d",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 14, 3.5]
+      }
+    },
+    {
+      "id": "streets-secondary",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "streets",
+      "filter": ["in", "kind", "secondary", "tertiary"],
+      "paint": {
+        "line-color": "#1a2332",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1, 14, 2.5]
+      }
+    },
+    {
+      "id": "streets-minor",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "streets",
+      "filter": ["!in", "kind", "motorway", "trunk", "primary", "secondary", "tertiary", "rail"],
+      "paint": {
+        "line-color": "#131b28",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.5, 14, 1.5]
+      }
+    },
+    {
+      "id": "bridges",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "bridges",
+      "paint": {
+        "line-color": "#28374d",
+        "line-width": 2
+      }
+    },
+    {
+      "id": "boundaries",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "boundaries",
+      "paint": {
+        "line-color": "#1f2b3e",
+        "line-dasharray": [2, 2],
+        "line-width": 1
+      }
+    },
+    {
+      "id": "place-labels",
+      "type": "symbol",
+      "source": "basemap",
+      "source-layer": "place_labels",
+      "layout": {
+        "text-field": ["get", "name"],
+        "text-font": ["Noto Sans Bold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 10, 11, 14, 15],
+        "text-letter-spacing": 0.05
+      },
+      "paint": {
+        "text-color": "#8a9bb5",
+        "text-halo-color": "#080c14",
+        "text-halo-width": 1.5
+      }
+    },
+    {
+      "id": "street-labels",
+      "type": "symbol",
+      "source": "basemap",
+      "source-layer": "street_labels",
+      "layout": {
+        "text-field": ["get", "name"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 10,
+        "symbol-placement": "line"
+      },
+      "paint": {
+        "text-color": "#5b6e89",
+        "text-halo-color": "#080c14",
+        "text-halo-width": 1
+      }
+    }
+  ]
+}

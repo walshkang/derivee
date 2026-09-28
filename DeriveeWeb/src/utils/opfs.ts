@@ -243,3 +243,85 @@ export function saveInstalledPackState(state: InstalledPackState | null): void {
     localStorage.setItem(LOCAL_STORAGE_PACK_KEY, JSON.stringify(state));
   }
 }
+
+// ============================================================================
+// M4a: Offline NYC Basemap OPFS Storage
+// Path: cities/nyc/basemap.pmtiles
+// ============================================================================
+
+export const BASEMAP_DIR = 'cities';
+export const BASEMAP_CITY = 'nyc';
+export const BASEMAP_FILENAME = 'basemap.pmtiles';
+export const BASEMAP_OPFS_PATH = 'cities/nyc/basemap.pmtiles';
+
+/**
+ * Returns the directory handle for cities/<city>/ in OPFS.
+ */
+export async function getBasemapDirectory(
+  city: string = 'nyc',
+  create: boolean = false
+): Promise<FileSystemDirectoryHandle | null> {
+  const root = await getOpfsRoot();
+  try {
+    const citiesDir = await root.getDirectoryHandle(BASEMAP_DIR, { create });
+    return await citiesDir.getDirectoryHandle(city, { create });
+  } catch (err) {
+    if (!create) return null;
+    throw err;
+  }
+}
+
+/**
+ * Returns the File object for cities/<city>/basemap.pmtiles, or null if missing.
+ */
+export async function getBasemapFile(
+  city: string = 'nyc'
+): Promise<File | null> {
+  const dir = await getBasemapDirectory(city, false);
+  if (!dir) return null;
+  try {
+    const handle = await dir.getFileHandle(BASEMAP_FILENAME);
+    return await handle.getFile();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Deletes the basemap file cities/<city>/basemap.pmtiles if present.
+ */
+export async function deleteBasemap(city: string = 'nyc'): Promise<void> {
+  try {
+    const root = await getOpfsRoot();
+    try {
+      const citiesDir = await root.getDirectoryHandle(BASEMAP_DIR, { create: false });
+      const cityDir = await citiesDir.getDirectoryHandle(city, { create: false });
+      await cityDir.removeEntry(BASEMAP_FILENAME);
+    } catch {
+      // Safe to ignore if missing
+    }
+  } catch {
+    // Safe to ignore if OPFS unavailable
+  }
+}
+
+/**
+ * Validates that the basemap file exists in OPFS and has a valid PMTiles v3 header.
+ */
+export async function checkBasemapInstalled(city: string = 'nyc'): Promise<boolean> {
+  if (!isOpfsSupported()) return false;
+
+  try {
+    const file = await getBasemapFile(city);
+    if (!file || file.size < 127) return false;
+
+    const slice = file.slice(0, 127);
+    const arrayBuffer = await slice.arrayBuffer();
+    const { validatePMTilesHeader } = await import('./pmtilesIntegrity');
+    validatePMTilesHeader(new Uint8Array(arrayBuffer), file.size, `cities/${city}/${BASEMAP_FILENAME}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+

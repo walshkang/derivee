@@ -45,8 +45,9 @@ architecture decisions).
 ## Testable milestones
 - [x] M1: PWA shell installable on iPhone, opens offline (app shell only).
 - [x] M2: Pack downloads through the gated Worker, unpacks in-browser into OPFS.
-- [ ] M3: Offline trip query in-browser (WASM RAPTOR): A→B with no network.
-- [ ] M4: Offline vector map renders under the route.
+- [x] M3: Offline trip query in-browser (WASM RAPTOR): A→B with no network.
+- [x] M4a: Offline NYC vector basemap (MapLibre GL + PMTiles from OPFS).
+- [ ] M4b: Transit cartography overlay & fog-of-war toggle.
 - [ ] M5: Realtime departures overlay when online.
 - [ ] M6: Friend invites via Cloudflare Access; fog-of-war syncs.
 
