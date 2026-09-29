@@ -9,8 +9,11 @@ import { BasemapView } from './components/BasemapView';
 import { TripPlanner } from './components/TripPlanner';
 import { SystemInfoDrawer } from './components/SystemInfoDrawer';
 import { InstallModal } from './components/InstallModal';
+import { BottomSheet } from './components/BottomSheet';
+import { TransitOverlays } from './components/TransitOverlays';
 import type { InstalledPackState } from './types/pack';
 import { isPackDismissed, setPackDismissed } from './utils/opfs';
+import type { Map } from 'maplibre-gl';
 
 export function App() {
   const isOnline = useOnlineStatus();
@@ -18,7 +21,7 @@ export function App() {
   const [packState, setPackState] = useState<InstalledPackState | null>(null);
   const [packDismissed, setPackDismissedState] = useState<boolean>(() => isPackDismissed());
   const [packExpanded, setPackExpanded] = useState<boolean>(false);
-  const contentBodyRef = useRef<HTMLDivElement | null>(null);
+  const [mapInstance, setMapInstance] = useState<Map | null>(null);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -46,7 +49,6 @@ export function App() {
     setPackDismissed(false);
     setPackDismissedState(false);
     setPackExpanded(true);
-    contentBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleToggleExpandPack = () => {
@@ -62,7 +64,9 @@ export function App() {
   return (
     <div class="app-layout">
       {/* Full-screen offline vector basemap base layer */}
-      <BasemapView />
+      <BasemapView onMapLoaded={setMapInstance} />
+
+      <TransitOverlays map={mapInstance} isPackInstalled={Boolean(packState?.isInstalled)} />
 
       <Header
         isOnline={isOnline}
@@ -70,7 +74,7 @@ export function App() {
         onOpenInstallModal={openModal}
       />
 
-      <div class="app-content-body" ref={contentBodyRef}>
+      <BottomSheet isOpen={true} detents={[15, 50, 90]} defaultDetent={15}>
         <SearchBar />
         <PackInstaller
           onPackStateChange={setPackState}
@@ -84,7 +88,7 @@ export function App() {
         {Boolean(packState?.isInstalled) && (
           <TripPlanner isInstalled={true} />
         )}
-      </div>
+      </BottomSheet>
 
       <SystemInfoDrawer
         isOnline={isOnline}
