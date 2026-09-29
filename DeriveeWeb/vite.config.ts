@@ -47,6 +47,42 @@ function basemapDevMiddleware() {
   };
 }
 
+export const workboxConfig = {
+  // Precache only app shell assets (including zstd.wasm and stops.json)
+  globPatterns: [
+    '**/*.{js,css,html,ico,pbf,woff,woff2,wasm,json}'
+  ],
+  // Explicitly exclude any data packs, binary archives, or large data payloads
+  globIgnores: [
+    '**/*.pack*',
+    '**/*.zst',
+    '**/*.pmtiles',
+    '**/*.bin',
+    '**/*.sqlite*',
+    '**/*.csr',
+    '**/*.tar',
+    '**/package.json',
+    '**/README.md'
+  ],
+  navigateFallback: null,
+  runtimeCaching: [
+    {
+      urlPattern: ({ request, url }: { request: Request; url?: URL }) =>
+        request.mode === 'navigate' && !url?.pathname.startsWith('/api'),
+      handler: 'NetworkFirst' as const,
+      options: {
+        cacheName: 'navigations',
+        networkTimeoutSeconds: 3,
+        expiration: {
+          maxEntries: 50,
+          maxAgeSeconds: 24 * 60 * 60
+        }
+      }
+    }
+  ],
+  cleanupOutdatedCaches: true
+};
+
 export default defineConfig({
   root: __dirname,
   esbuild: {
@@ -120,27 +156,7 @@ export default defineConfig({
           }
         ]
       },
-      workbox: {
-        // Precache only app shell assets (including zstd.wasm and stops.json)
-        globPatterns: [
-          '**/*.{js,css,html,ico,pbf,woff,woff2,wasm,json}'
-        ],
-        // Explicitly exclude any data packs, binary archives, or large data payloads
-        globIgnores: [
-          '**/*.pack*',
-          '**/*.zst',
-          '**/*.pmtiles',
-          '**/*.bin',
-          '**/*.sqlite*',
-          '**/*.csr',
-          '**/*.tar',
-          '**/package.json',
-          '**/README.md'
-        ],
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api/],
-        cleanupOutdatedCaches: true
-      }
+      workbox: workboxConfig
     })
   ]
 });
