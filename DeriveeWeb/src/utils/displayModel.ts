@@ -1,6 +1,6 @@
 export type UIState = 'loading' | 'ready' | 'error';
 
-export function getTransitLayerDisplayState(state: UIState, rawError?: string): { badge: string; text: string } {
+export function getTransitLayerDisplayState(state: UIState, _rawError?: string): { badge: string; text: string } {
   if (state === 'loading') {
     return { badge: 'loading', text: 'Loading Transit Layer' };
   }

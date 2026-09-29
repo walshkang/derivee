@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, type ComponentChildren } from 'preact/hooks';
+import { useState, useRef, useEffect } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 
 interface BottomSheetProps {
   children: ComponentChildren;

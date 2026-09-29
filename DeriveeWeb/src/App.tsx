@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { registerSW } from 'virtual:pwa-register';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useIsIOSInstallable } from './hooks/useIsIOSInstallable';

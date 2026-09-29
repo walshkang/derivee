@@ -2249,3 +2249,78 @@ html, body {
   font-weight: 500;
   color: var(--text-primary);
 }
+
+.transit-selected-station-overlay {
+  position: absolute;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  pointer-events: auto;
+}
+
+.transit-selected-station-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(7, 10, 15, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.transit-selected-station-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.transit-selected-station-name {
+  white-space: nowrap;
+}
+
+.transit-selected-station-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  margin-left: 4px;
+}
+
+.transit-selected-station-close:hover {
+  color: var(--text-primary);
+}
+
+/* MapLibre station bullet popup */
+.station-bullet-popup .maplibregl-popup-content {
+  background: rgba(7, 10, 15, 0.9);
+  color: #f3f4f6;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  font-family: inherit;
+}
+
+.station-bullet-popup .maplibregl-popup-tip {
+  border-top-color: rgba(7, 10, 15, 0.9);
+  border-bottom-color: rgba(7, 10, 15, 0.9);
+}
+
+.station-bullet-popup-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #ffffff;
+}
+
