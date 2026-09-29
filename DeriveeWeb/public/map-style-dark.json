@@ -2,7 +2,6 @@
   "version": 8,
   "name": "Derivee Dark",
   "glyphs": "/fonts/{fontstack}/{range}.pbf",
-  "sprite": "/sprites/dark",
   "sources": {
     "basemap": {
       "type": "vector",
