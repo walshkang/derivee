@@ -115,9 +115,9 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
           stateMachine.setReady();
           onMapLoaded?.(loadedMap);
         },
-        onError: () => {
+        onError: (err) => {
           // If vector tile source fails fatally
-          stateMachine.setError('Unable to display offline map. Please check your connection and try again.');
+          stateMachine.setError('Unable to display offline map. Please check your connection and try again.', err.message);
         },
       });
       mapInstanceRef.current = map;
@@ -240,6 +240,15 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
             <p class="map-state-desc">
               {snapshot.errorMessage || 'Check your connection and try again.'}
             </p>
+
+            {snapshot.errorDetails && (
+              <details class="map-error-details" style={{ marginTop: '1rem', marginBottom: '1rem', fontSize: '0.85rem', color: '#9ca3af', textAlign: 'left' }}>
+                <summary style={{ cursor: 'pointer', marginBottom: '0.5rem' }}>Error Details</summary>
+                <div style={{ padding: '0.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
+                  {snapshot.errorDetails}
+                </div>
+              </details>
+            )}
 
             <button
               type="button"

@@ -1,5 +1,6 @@
 import { Map, addProtocol, type ErrorEvent } from 'maplibre-gl';
 import { Protocol, PMTiles, FileSource } from 'pmtiles';
+import { isFatalMapError } from './mapErrorClassification.ts';
 
 let protocolInstance: Protocol | null = null;
 let isProtocolAdded = false;
@@ -57,7 +58,7 @@ export function initOfflineMap({
   map.on('error', (e: ErrorEvent) => {
     // eslint-disable-next-line no-console
     console.warn('[MapLibre] Map error:', e.error);
-    if (e.error) {
+    if (e.error && isFatalMapError(e.error)) {
       const err = e.error instanceof Error ? e.error : new Error(e.error.message || 'Map error');
       onError?.(err);
     }

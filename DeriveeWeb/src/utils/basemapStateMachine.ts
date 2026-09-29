@@ -6,6 +6,7 @@ export interface BasemapStateSnapshot {
   loadedBytes: number;
   totalBytes: number;
   errorMessage: string | null;
+  errorDetails?: string | null;
 }
 
 export type BasemapStateListener = (snapshot: BasemapStateSnapshot) => void;
@@ -24,6 +25,7 @@ export class BasemapStateMachine {
   private loadedBytes: number = 0;
   private totalBytes: number = 0;
   private errorMessage: string | null = null;
+  private errorDetails: string | null = null;
   private listeners = new Set<BasemapStateListener>();
 
   constructor(initialState: MapState = 'map-loading') {
@@ -37,6 +39,7 @@ export class BasemapStateMachine {
       loadedBytes: this.loadedBytes,
       totalBytes: this.totalBytes,
       errorMessage: this.errorMessage,
+      errorDetails: this.errorDetails,
     };
   }
 
@@ -62,6 +65,7 @@ export class BasemapStateMachine {
   setCached(): void {
     this.currentState = 'map-cached';
     this.errorMessage = null;
+    this.errorDetails = null;
     this.notify();
   }
 
@@ -74,6 +78,7 @@ export class BasemapStateMachine {
     this.loadedBytes = 0;
     this.totalBytes = totalExpectedBytes;
     this.errorMessage = null;
+    this.errorDetails = null;
     this.notify();
   }
 
@@ -95,15 +100,17 @@ export class BasemapStateMachine {
     this.currentState = 'map-ready';
     this.percent = 100;
     this.errorMessage = null;
+    this.errorDetails = null;
     this.notify();
   }
 
   /**
    * Called when download, integrity check, or tile rendering fails.
    */
-  setError(message: string): void {
+  setError(message: string, details?: string): void {
     this.currentState = 'map-error';
     this.errorMessage = message;
+    this.errorDetails = details || null;
     this.notify();
   }
 
