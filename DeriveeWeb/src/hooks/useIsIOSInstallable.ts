@@ -1,64 +1,111 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useState, useRef } from 'preact/hooks';
+import {
+  checkIsStandalone,
+  checkIsIOS,
+  shouldShowIOSCoachmark,
+  isIOSCoachmarkDismissed,
+  setIOSCoachmarkDismissed,
+} from '../utils/installPrompt';
 
-const DISMISSED_KEY = 'derivee_ios_install_dismissed';
+export interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: string[];
+  readonly userChoice: Promise<{
+    outcome: 'accepted' | 'dismissed';
+    platform: string;
+  }>;
+  prompt(): Promise<void>;
+}
 
 export interface IOSInstallState {
   isIOS: boolean;
   isStandalone: boolean;
+  canPromptNative: boolean;
+  canShowIOSCoachmark: boolean;
   isOpen: boolean;
   openModal: () => void;
   closeModal: () => void;
+  promptInstall: () => Promise<void>;
 }
 
 export function useIsIOSInstallable(): IOSInstallState {
   const [isIOS, setIsIOS] = useState<boolean>(false);
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
+  const [canPromptNative, setCanPromptNative] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState<boolean>(false);
+  const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return;
 
     // Detect standalone mode (already installed PWA)
-    const isStandaloneMode =
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-      window.matchMedia('(display-mode: standalone)').matches ||
-      window.matchMedia('(display-mode: fullscreen)').matches;
-
-    setIsStandalone(isStandaloneMode);
+    const standaloneMode = checkIsStandalone();
+    setIsStandalone(standaloneMode);
 
     // Detect iOS devices (iPhone, iPad, iPod, iPadOS on MacIntel)
-    const ua = navigator.userAgent;
-    const isIOSDevice =
-      /iPad|iPhone|iPod/.test(ua) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const iosDevice = checkIsIOS();
+    setIsIOS(iosDevice);
 
-    setIsIOS(isIOSDevice);
+    // Listen for standard beforeinstallprompt on supported platforms (Android / Chrome / Edge)
+    const handleBeforeInstallPrompt = (e: Event) => {
+      // Prevent browser default mini-infobar on mobile Chrome
+      e.preventDefault();
+      deferredPromptRef.current = e as BeforeInstallPromptEvent;
+      setCanPromptNative(true);
+    };
 
-    // Auto-prompt only if on iOS Safari, not standalone, and not previously dismissed
-    if (isIOSDevice && !isStandaloneMode) {
-      const previouslyDismissed = localStorage.getItem(DISMISSED_KEY);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Auto-prompt iOS coachmark only if on iOS Safari, NOT standalone, and not previously dismissed
+    if (iosDevice && !standaloneMode) {
+      const previouslyDismissed = isIOSCoachmarkDismissed();
       if (!previouslyDismissed) {
         setIsOpen(true);
       }
     }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   const openModal = () => setIsOpen(true);
 
   const closeModal = () => {
     setIsOpen(false);
-    try {
-      localStorage.setItem(DISMISSED_KEY, 'true');
-    } catch {
-      // Storage unavailable in private browsing
+    setIOSCoachmarkDismissed();
+  };
+
+  const promptInstall = async () => {
+    if (deferredPromptRef.current) {
+      try {
+        await deferredPromptRef.current.prompt();
+        const choice = await deferredPromptRef.current.userChoice;
+        if (choice.outcome === 'accepted') {
+          deferredPromptRef.current = null;
+          setCanPromptNative(false);
+        }
+      } catch {
+        // Safe to ignore prompt errors
+      }
+    } else if (isIOS && !isStandalone) {
+      setIsOpen(true);
     }
   };
+
+  const canShowCoachmark = shouldShowIOSCoachmark({
+    isIOS,
+    isStandalone,
+    hasNativePromptSupport: canPromptNative,
+  });
 
   return {
     isIOS,
     isStandalone,
-    isOpen,
+    canPromptNative,
+    canShowIOSCoachmark: canShowCoachmark,
+    isOpen: isOpen && canShowCoachmark,
     openModal,
-    closeModal
+    closeModal,
+    promptInstall,
   };
 }

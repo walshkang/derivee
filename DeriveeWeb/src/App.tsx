@@ -17,7 +17,7 @@ import type { Map } from 'maplibre-gl';
 
 export function App() {
   const isOnline = useOnlineStatus();
-  const { isStandalone, isOpen, openModal, closeModal } = useIsIOSInstallable();
+  const { isStandalone, isIOS, canPromptNative, isOpen, closeModal, promptInstall } = useIsIOSInstallable();
   const [packState, setPackState] = useState<InstalledPackState | null>(null);
   const [packDismissed, setPackDismissedState] = useState<boolean>(() => isPackDismissed());
   const [packExpanded, setPackExpanded] = useState<boolean>(false);
@@ -71,7 +71,8 @@ export function App() {
       <Header
         isOnline={isOnline}
         isStandalone={isStandalone}
-        onOpenInstallModal={openModal}
+        canInstall={isIOS || canPromptNative}
+        onTriggerInstall={promptInstall}
       />
 
       <BottomSheet isOpen={true} detents={[15, 50, 90]} defaultDetent={15}>

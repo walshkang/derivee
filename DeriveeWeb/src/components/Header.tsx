@@ -3,10 +3,14 @@ import { OfflineStatusPill } from './OfflineStatusPill';
 interface HeaderProps {
   isOnline: boolean;
   isStandalone: boolean;
-  onOpenInstallModal: () => void;
+  canInstall?: boolean;
+  onTriggerInstall: () => void;
 }
 
-export function Header({ isOnline, isStandalone, onOpenInstallModal }: HeaderProps) {
+export function Header({ isOnline, isStandalone, canInstall = false, onTriggerInstall }: HeaderProps) {
+  // Never show install button in standalone mode or when platform cannot install
+  const showInstallBtn = !isStandalone && canInstall;
+
   return (
     <header class="app-header">
       <div class="header-branding">
@@ -34,13 +38,13 @@ export function Header({ isOnline, isStandalone, onOpenInstallModal }: HeaderPro
       <div class="header-actions">
         <OfflineStatusPill isOnline={isOnline} />
 
-        {!isStandalone && (
+        {showInstallBtn && (
           <button
             type="button"
             class="install-trigger-btn"
-            onClick={onOpenInstallModal}
+            onClick={onTriggerInstall}
             title="Add to Home Screen"
-            aria-label="Add to Home Screen instructions"
+            aria-label="Add Dérivée to Home Screen"
           >
             <svg
               viewBox="0 0 20 20"

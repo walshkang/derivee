@@ -1006,9 +1006,27 @@ html, body {
   opacity: 0.92;
 }
 
+.coachmark-pointer-arrow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 10px;
+  margin-bottom: -6px;
+  color: var(--accent-sky);
+  animation: coachmark-bounce 1.5s infinite ease-in-out;
+}
+
+@keyframes coachmark-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.8; }
+  50% { transform: translateY(4px); opacity: 1; }
+}
+
 @media (min-width: 640px) {
   .modal-backdrop {
     align-items: center;
+  }
+  .coachmark-pointer-arrow {
+    display: none;
   }
 }
 
