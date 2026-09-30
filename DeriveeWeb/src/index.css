@@ -2372,6 +2372,33 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   color: #38bdf8;
 }
 
+.route-badge-container {
+  display: inline-flex;
+  align-items: center;
+}
+
+.route-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  user-select: none;
+}
+
+.route-pill-fallback {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
 .leg-duration-tag {
   font-family: var(--font-mono);
   font-size: 0.68rem;

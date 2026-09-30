@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'preact/hooks';
 import type {
   StopItem,
+  RouteItem,
   RoutingSegment,
   RoutingWorkerIncomingMessage,
   RoutingWorkerOutgoingMessage,
@@ -12,6 +13,7 @@ import {
   buildRankedItineraries,
 } from '../utils/routeComparison';
 import { RoutingQueryWatchdog } from '../utils/tabSuspension';
+import { createRoutesMap } from '../utils/routeBadge';
 
 interface TripPlannerProps {
   isInstalled: boolean;
@@ -28,6 +30,9 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
   // Stop data from stops.json
   const [stops, setStops] = useState<StopItem[]>([]);
   const [stopsMap, setStopsMap] = useState<Map<number, StopItem>>(new Map());
+
+  // Route metadata from routes.json
+  const [routesMap, setRoutesMap] = useState<Map<string, RouteItem>>(new Map());
 
   // Search input state
   const [originInput, setOriginInput] = useState<string>('');
@@ -51,7 +56,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
   const destContainerRef = useRef<HTMLDivElement | null>(null);
   const routingWatchdogRef = useRef<RoutingQueryWatchdog | null>(null);
 
-  // 1. Fetch stops.json offline
+  // 1. Fetch stops.json and routes.json offline
   useEffect(() => {
     let isMounted = true;
     fetch('/data/stops.json')
@@ -71,6 +76,20 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
       .catch((err) => {
         // eslint-disable-next-line no-console
         console.error('[TripPlanner] Failed to load stops.json:', err);
+      });
+
+    fetch('/data/routes.json')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: Record<string, RouteItem>) => {
+        if (!isMounted) return;
+        setRoutesMap(createRoutesMap(data));
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error('[TripPlanner] Failed to load routes.json:', err);
       });
 
     return () => {
@@ -552,6 +571,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
         activeProfile={activeProfile}
         onSelectProfile={setActiveProfile}
         stopsMap={stopsMap}
+        routesMap={routesMap}
         isRouting={isRouting}
         routeError={routeError}
         hasQueried={hasQueried}

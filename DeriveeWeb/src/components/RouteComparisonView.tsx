@@ -12,6 +12,7 @@
 
 import type {
   StopItem,
+  RouteItem,
   RoutingProfile,
   RankedItinerary,
 } from '../types/routing';
@@ -24,12 +25,14 @@ import {
   formatArrivalTime,
   getRouteComparisonUIState,
 } from '../utils/routeComparison';
+import { getRouteBadge } from '../utils/routeBadge';
 
 interface RouteComparisonViewProps {
   rankedCards: RankedItinerary[];
   activeProfile: RoutingProfile;
   onSelectProfile: (profile: RoutingProfile) => void;
   stopsMap: Map<number, StopItem>;
+  routesMap?: Map<string, RouteItem>;
   isRouting: boolean;
   routeError: string | null;
   hasQueried: boolean;
@@ -40,6 +43,7 @@ export function RouteComparisonView({
   activeProfile,
   onSelectProfile,
   stopsMap,
+  routesMap,
   isRouting,
   routeError,
   hasQueried,
@@ -188,24 +192,33 @@ export function RouteComparisonView({
                     );
                   }
 
+                  const routeBadge = !legModel.isTransfer
+                    ? getRouteBadge(legModel.routeId, routesMap)
+                    : null;
+
                   return (
                     <div key={legIdx} class="itinerary-leg-card">
                       <div class="leg-card-header">
                         <span class="leg-index-badge">Leg {legIdx + 1}</span>
-                        <span
-                          class={`leg-mode-pill ${
-                            legModel.isTransfer ? 'mode-pill-walk' : 'mode-pill-transit'
-                          }`}
-                        >
-                          {legModel.isTransfer ? (
-                            <>🚶 Walk / Transfer</>
-                          ) : (
-                            <span class="route-id-container">
-                              {/* Structured for M5b route badge swap */}
-                              <span class="route-id-display">🚇 Route {legModel.routeId}</span>
+                        {legModel.isTransfer ? (
+                          <span class="leg-mode-pill mode-pill-walk">🚶 Walk / Transfer</span>
+                        ) : routeBadge ? (
+                          <span class="route-badge-container">
+                            <span
+                              class={`route-pill-badge ${
+                                routeBadge.isFallback ? 'route-pill-fallback' : ''
+                              }`}
+                              style={{
+                                backgroundColor: routeBadge.backgroundColor,
+                                color: routeBadge.textColor,
+                              }}
+                              data-route-id={String(legModel.routeId)}
+                              aria-label={`Line ${routeBadge.label}`}
+                            >
+                              {routeBadge.label}
                             </span>
-                          )}
-                        </span>
+                          </span>
+                        ) : null}
                         <span class="leg-duration-tag">
                           {legModel.durationMinutes > 0
                             ? `${legModel.durationMinutes} min`

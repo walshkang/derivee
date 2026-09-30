@@ -5,6 +5,19 @@ export interface StopItem {
   lon: number;
 }
 
+export interface RouteItem {
+  shortName: string;
+  color: string;
+  textColor: string;
+}
+
+export interface RouteBadgeModel {
+  label: string;
+  backgroundColor: string;
+  textColor: string;
+  isFallback: boolean;
+}
+
 export interface RoutingSegment {
   board_stop_id: number;
   exit_stop_id: number;
