@@ -2027,6 +2027,259 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   }
 }
 
+/* Screen 4B Profile Selector Bar (design.md §12.3 / §13.2) */
+.route-comparison-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.profile-selector-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.profile-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.profile-pill:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.profile-pill.profile-pill-active {
+  background-color: rgba(56, 189, 248, 0.18);
+  border-color: var(--accent-sky);
+  color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+.profile-pill-icon {
+  font-size: 0.85rem;
+}
+
+.profile-pill-label {
+  font-size: 0.78rem;
+}
+
+/* Screen 4B Ranked Itinerary Cards */
+.itinerary-ranked-card {
+  padding: 14px;
+  background-color: rgba(18, 26, 39, 0.85);
+  border: 1px solid var(--border-highlight);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.15s ease-in-out;
+}
+
+.itinerary-ranked-card:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.itinerary-ranked-card.ranked-card-optimal {
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+.itinerary-ranked-card.ranked-card-selected {
+  border-color: var(--accent-sky);
+}
+
+.ranked-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ranked-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rank-number-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+}
+
+.profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+
+.badge-fastest {
+  background-color: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+}
+
+.badge-transfers {
+  background-color: rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.badge-optimal-pill {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.ranked-arrival-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.arrival-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.arrival-time-hero {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+
+.ranked-glance-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: rgba(7, 10, 15, 0.55);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.glance-duration {
+  font-weight: 700;
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+}
+
+.glance-dot {
+  color: var(--border-highlight);
+}
+
+.glance-time-range {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.glance-transfers {
+  color: #f1f5f9;
+  font-weight: 500;
+}
+
+.route-id-container {
+  display: inline-flex;
+  align-items: center;
+}
+
+.route-id-display {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Loading & Empty States (design.md §12.3) */
+.route-comparison-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background-color: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 10px;
+  margin-top: 14px;
+}
+
+.loading-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.loading-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-sky);
+}
+
+.loading-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.route-comparison-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  padding: 24px 16px;
+  background-color: rgba(18, 26, 39, 0.5);
+  border: 1px dashed var(--border-subtle);
+  border-radius: 12px;
+  margin-top: 14px;
+}
+
+.empty-icon {
+  font-size: 1.5rem;
+}
+
+.empty-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.empty-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 .itinerary-summary-header {
   padding: 10px 12px;
   background-color: rgba(7, 10, 15, 0.65);

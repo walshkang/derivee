@@ -4,16 +4,21 @@ import type {
   RoutingSegment,
   RoutingWorkerIncomingMessage,
   RoutingWorkerOutgoingMessage,
+  RoutingProfile,
 } from '../types/routing';
-import { describeItinerary } from '../utils/itineraryDisplay';
+import { RouteComparisonView } from './RouteComparisonView';
+import {
+  executeDualProfileRouting,
+  buildRankedItineraries,
+} from '../utils/routeComparison';
 import { RoutingQueryWatchdog } from '../utils/tabSuspension';
-
 
 interface TripPlannerProps {
   isInstalled: boolean;
+  onRoutesFound?: () => void;
 }
 
-export function TripPlanner({ isInstalled }: TripPlannerProps) {
+export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
   // Worker & Engine state
   const [worker, setWorker] = useState<Worker | null>(null);
   const [engineStatus, setEngineStatus] = useState<'warming_up' | 'ready' | 'error'>('warming_up');
@@ -33,10 +38,14 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
   const [showDestDropdown, setShowDestDropdown] = useState<boolean>(false);
   const [departureTime, setDepartureTime] = useState<string>('08:00');
 
-  // Routing state
+  // Screen 4B Dual-Profile Routing State
   const [isRouting, setIsRouting] = useState<boolean>(false);
-  const [routeResult, setRouteResult] = useState<RoutingSegment[] | null>(null);
+  const [fastestSegments, setFastestSegments] = useState<RoutingSegment[] | null>(null);
+  const [fewestTransfersSegments, setFewestTransfersSegments] = useState<RoutingSegment[] | null>(null);
+  const [activeProfile, setActiveProfile] = useState<RoutingProfile>('fastest');
+  const [hasQueried, setHasQueried] = useState<boolean>(false);
   const [routeError, setRouteError] = useState<string | null>(null);
+
 
   const originContainerRef = useRef<HTMLDivElement | null>(null);
   const destContainerRef = useRef<HTMLDivElement | null>(null);
@@ -85,24 +94,15 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
       if (data.type === 'READY') {
         setEngineStatus('ready');
         setLoadTimeMs(data.loadTimeMs);
-      } else if (data.type === 'ERROR') {
+      } else if (data.type === 'ERROR' && data.queryId === undefined) {
         routingWatchdogRef.current?.stop();
         routingWatchdogRef.current = null;
         setEngineStatus('error');
         setEngineError(data.message);
         setIsRouting(false);
-      } else if (data.type === 'RESULT') {
-        routingWatchdogRef.current?.stop();
-        routingWatchdogRef.current = null;
-        setIsRouting(false);
-        setRouteResult(data.segments);
-        if (data.segments.length === 0) {
-          setRouteError('No route found between selected stops at this departure time.');
-        } else {
-          setRouteError(null);
-        }
       }
     };
+
 
     routingWorker.onerror = (err) => {
       routingWatchdogRef.current?.stop();
@@ -198,18 +198,25 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
     return matches;
   }, [destInput, stops, selectedDest]);
 
+  const resetRoutes = () => {
+    setFastestSegments(null);
+    setFewestTransfersSegments(null);
+    setRouteError(null);
+    setHasQueried(false);
+  };
+
   const handleSelectOrigin = (stop: StopItem) => {
     setSelectedOrigin(stop);
     setOriginInput(stop.name);
     setShowOriginDropdown(false);
-    setRouteResult(null);
+    resetRoutes();
   };
 
   const handleSelectDest = (stop: StopItem) => {
     setSelectedDest(stop);
     setDestInput(stop.name);
     setShowDestDropdown(false);
-    setRouteResult(null);
+    resetRoutes();
   };
 
   const handleSwapStops = () => {
@@ -219,7 +226,7 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
     setOriginInput(destInput);
     setSelectedDest(tempStop);
     setDestInput(tempInput);
-    setRouteResult(null);
+    resetRoutes();
   };
 
   const handleApplyPreset = (origName: string, dstName: string) => {
@@ -233,7 +240,7 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
       setSelectedDest(d);
       setDestInput(d.name);
     }
-    setRouteResult(null);
+    resetRoutes();
   };
 
   const getDepartureSeconds = (timeStr: string): number => {
@@ -273,13 +280,15 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
     };
   }, [isRouting]);
 
-  const handleRoute = () => {
+  const handleRoute = async () => {
     if (!worker || !selectedOrigin || !selectedDest || engineStatus !== 'ready' || isRouting) {
       return;
     }
     setIsRouting(true);
-    setRouteResult(null);
+    setFastestSegments(null);
+    setFewestTransfersSegments(null);
     setRouteError(null);
+    setHasQueried(true);
 
     const watchdog = new RoutingQueryWatchdog(8_000, (reason) => {
       setIsRouting(false);
@@ -289,25 +298,36 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
     watchdog.start();
 
     const depSec = getDepartureSeconds(departureTime);
-    const msg: RoutingWorkerIncomingMessage = {
-      type: 'ROUTE',
-      origin_stop_id: selectedOrigin.id,
-      dest_stop_id: selectedDest.id,
-      departure_timestamp: depSec,
-    };
-    worker.postMessage(msg);
+
+    try {
+      const { fastest, fewestTransfers } = await executeDualProfileRouting(
+        worker,
+        selectedOrigin.id,
+        selectedDest.id,
+        depSec
+      );
+
+      setFastestSegments(fastest);
+      setFewestTransfersSegments(fewestTransfers);
+
+      if (fastest.length === 0 && fewestTransfers.length === 0) {
+        setRouteError('No route found between selected stops at this departure time.');
+      } else {
+        setRouteError(null);
+        onRoutesFound?.();
+      }
+    } catch (err: any) {
+      setRouteError(err?.message || 'Failed to compute routes');
+    } finally {
+      routingWatchdogRef.current?.stop();
+      routingWatchdogRef.current = null;
+      setIsRouting(false);
+    }
   };
 
-  const formatTime = (sec: number): string => {
-    const h = Math.floor(sec / 3600) % 24;
-    const m = Math.floor((sec % 3600) / 60);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-  };
-
-  const displayLegs = useMemo(() => {
-    if (!routeResult) return [];
-    return describeItinerary(routeResult, stopsMap);
-  }, [routeResult, stopsMap]);
+  const rankedCards = useMemo(() => {
+    return buildRankedItineraries(fastestSegments, fewestTransfersSegments, activeProfile);
+  }, [fastestSegments, fewestTransfersSegments, activeProfile]);
 
 
   return (
@@ -363,6 +383,7 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
                 setShowOriginDropdown(true);
                 if (selectedOrigin && val !== selectedOrigin.name) {
                   setSelectedOrigin(null);
+                  resetRoutes();
                 }
               }}
               onFocus={() => setShowOriginDropdown(true)}
@@ -374,7 +395,7 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
                 onClick={() => {
                   setOriginInput('');
                   setSelectedOrigin(null);
-                  setRouteResult(null);
+                  resetRoutes();
                 }}
                 aria-label="Clear origin"
               >
@@ -434,6 +455,7 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
                 setShowDestDropdown(true);
                 if (selectedDest && val !== selectedDest.name) {
                   setSelectedDest(null);
+                  resetRoutes();
                 }
               }}
               onFocus={() => setShowDestDropdown(true)}
@@ -445,7 +467,7 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
                 onClick={() => {
                   setDestInput('');
                   setSelectedDest(null);
-                  setRouteResult(null);
+                  resetRoutes();
                 }}
                 aria-label="Clear destination"
               >
@@ -524,127 +546,16 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
         </button>
       </div>
 
-      {/* Routing Error Notice */}
-      {routeError && (
-        <div class="itinerary-error-box">
-          <span>⚠️ {routeError}</span>
-        </div>
-      )}
-
-      {/* Itinerary Results */}
-      {routeResult && routeResult.length > 0 && (
-        <div class="itinerary-results-container">
-          <div class="itinerary-summary-header">
-            <div class="summary-route-endpoints">
-              <span class="summary-endpoint-name">
-                {selectedOrigin?.name || stopsMap.get(routeResult[0].board_stop_id)?.name}
-              </span>
-              <span class="summary-arrow">➔</span>
-              <span class="summary-endpoint-name">
-                {selectedDest?.name ||
-                  stopsMap.get(routeResult[routeResult.length - 1].exit_stop_id)?.name}
-              </span>
-            </div>
-
-            <div class="summary-stats-bar">
-              <span class="summary-time">
-                {formatTime(routeResult[0].departure_time)} –{' '}
-                {formatTime(routeResult[routeResult.length - 1].arrival_time)}
-              </span>
-              <span class="summary-dot">•</span>
-              <span class="summary-duration">
-                {Math.max(
-                  1,
-                  Math.round(
-                    (routeResult[routeResult.length - 1].arrival_time -
-                      routeResult[0].departure_time) /
-                      60
-                  )
-                )}{' '}
-                min
-              </span>
-              <span class="summary-dot">•</span>
-              <span class="summary-legs-count">
-                {routeResult.length} {routeResult.length === 1 ? 'leg' : 'legs'}
-              </span>
-            </div>
-          </div>
-
-          <div class="itinerary-legs-list">
-            {displayLegs.map((legModel, idx) => {
-              if (legModel.kind === 'start') {
-                return (
-                  <div key={idx} class="itinerary-compact-row itinerary-compact-start">
-                    <span class="compact-marker marker-board" />
-                    <span class="itinerary-compact-text">Start at {legModel.station}</span>
-                    <span class="itinerary-compact-time">{formatTime(legModel.time)}</span>
-                  </div>
-                );
-              }
-
-              if (legModel.kind === 'arrive') {
-                return (
-                  <div key={idx} class="itinerary-compact-row itinerary-compact-arrive">
-                    <span class="compact-marker marker-exit" />
-                    <span class="itinerary-compact-text">Arrive at {legModel.station}</span>
-                    <span class="itinerary-compact-time">{formatTime(legModel.time)}</span>
-                  </div>
-                );
-              }
-
-              return (
-                <div key={idx} class="itinerary-leg-card">
-                  <div class="leg-card-header">
-                    <span class="leg-index-badge">Leg {idx + 1}</span>
-                    <span
-                      class={`leg-mode-pill ${
-                        legModel.isTransfer ? 'mode-pill-walk' : 'mode-pill-transit'
-                      }`}
-                    >
-                      {legModel.isTransfer ? (
-                        <>🚶 Walk / Transfer</>
-                      ) : (
-                        <>🚇 Route {legModel.routeId}</>
-                      )}
-                    </span>
-                    <span class="leg-duration-tag">
-                      {legModel.durationMinutes > 0
-                        ? `${legModel.durationMinutes} min`
-                        : '< 1 min'}
-                    </span>
-                  </div>
-
-                  <div class="leg-stops-flow">
-                    <div class="leg-stop-row">
-                      <div class="leg-stop-marker marker-board" />
-                      <div class="leg-stop-details">
-                        <span class="leg-stop-name">{legModel.boardStopName}</span>
-                        <span class="leg-stop-time">{formatTime(legModel.departureTime)}</span>
-                      </div>
-                    </div>
-
-                    <div class="leg-connector-line" />
-
-                    <div class="leg-stop-row">
-                      <div class="leg-stop-marker marker-exit" />
-                      <div class="leg-stop-details">
-                        <span class="leg-stop-name">{legModel.exitStopName}</span>
-                        <span class="leg-stop-time">{formatTime(legModel.arrivalTime)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {legModel.transferDistanceM > 0 && legModel.isTransfer && (
-                    <div class="leg-transfer-distance">
-                      Transfer distance: ~{legModel.transferDistanceM} m
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Screen 4B Route Comparison & Profile Cards */}
+      <RouteComparisonView
+        rankedCards={rankedCards}
+        activeProfile={activeProfile}
+        onSelectProfile={setActiveProfile}
+        stopsMap={stopsMap}
+        isRouting={isRouting}
+        routeError={routeError}
+        hasQueried={hasQueried}
+      />
     </div>
   );
 }

@@ -5,14 +5,25 @@ interface BottomSheetProps {
   children: ComponentChildren;
   detents?: number[]; // percentages, e.g. [15, 50, 90]
   defaultDetent?: number;
+  activeDetent?: number;
+  onDetentChange?: (detent: number) => void;
   isOpen: boolean;
 }
 
-export function BottomSheet({ children, detents = [15, 50, 90], defaultDetent = 15, isOpen }: BottomSheetProps) {
+export function BottomSheet({
+  children,
+  detents = [15, 50, 90],
+  defaultDetent = 15,
+  activeDetent,
+  onDetentChange,
+  isOpen,
+}: BottomSheetProps) {
   const [currentDetentIndex, setCurrentDetentIndex] = useState(() => {
-    const idx = detents.indexOf(defaultDetent);
+    const initial = activeDetent !== undefined ? activeDetent : defaultDetent;
+    const idx = detents.indexOf(initial);
     return idx !== -1 ? idx : 0;
   });
+
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
   const currentY = useRef(0);
@@ -85,9 +96,23 @@ export function BottomSheet({ children, detents = [15, 50, 90], defaultDetent = 
       }
       
       setCurrentDetentIndex(nextIndex);
+      onDetentChange?.(detents[nextIndex]);
       sheetRef.current.style.height = `${detents[nextIndex]}dvh`;
     }
   };
+
+  useEffect(() => {
+    if (activeDetent !== undefined) {
+      const idx = detents.indexOf(activeDetent);
+      if (idx !== -1 && idx !== currentDetentIndex) {
+        setCurrentDetentIndex(idx);
+        if (sheetRef.current) {
+          sheetRef.current.style.transition = 'height 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+          sheetRef.current.style.height = `${detents[idx]}dvh`;
+        }
+      }
+    }
+  }, [activeDetent, detents]);
 
   useEffect(() => {
     const sheet = sheetRef.current;
@@ -102,6 +127,7 @@ export function BottomSheet({ children, detents = [15, 50, 90], defaultDetent = 
       };
     }
   }, [currentDetentIndex]);
+
 
   return (
     <div 

@@ -7,10 +7,18 @@ import type {
   RoutingSegment,
   RoutingWorkerIncomingMessage,
   RoutingWorkerOutgoingMessage,
-} from '../types/routing';
+  RoutingProfile,
+} from '../types/routing.ts';
+import {
+  ROUTING_FLAG_NONE,
+  ROUTING_FLAG_AVOID_TRANSFERS,
+} from '../types/routing.ts';
 
+
+export { ROUTING_FLAG_NONE, ROUTING_FLAG_AVOID_TRANSFERS };
 export const TRIP_TRANSFER = 0xFFFFFFFF;
 export const ROUTE_TRANSFER = 0xFFFF;
+
 
 export interface DeriveeWasmModule {
   HEAPU8: Uint8Array;
@@ -191,7 +199,8 @@ export function computeJourneySegments(
   enginePtr: number,
   originStopId: number,
   destStopId: number,
-  departureTimestamp: number
+  departureTimestamp: number,
+  flags: number = ROUTING_FLAG_NONE
 ): RoutingSegment[] {
   // QueryParams struct: origin(4) + dest(4) + dep(4) + max_transfers(2) + flags(2) = 16 bytes
   const qPtr = wasm._malloc(16);
@@ -205,7 +214,8 @@ export function computeJourneySegments(
     qDv.setUint32(4, destStopId, true);
     qDv.setUint32(8, departureTimestamp, true);
     qDv.setUint16(12, 4, true); // max_transfers: 4
-    qDv.setUint16(14, 0, true); // flags: 0
+    qDv.setUint16(14, flags, true); // flags: 0 (Fastest) or 2 (Fewest Transfers)
+
 
     const resPtr = wasm._engine_compute_journey(enginePtr, qPtr);
     if (!resPtr) {
@@ -325,14 +335,25 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
           if (!wasmModule || !enginePtr || !isInitialized) {
             throw new Error('Routing engine is not initialized');
           }
+          const flags = msg.flags !== undefined
+            ? msg.flags
+            : (msg.profile === 'fewest_transfers' ? ROUTING_FLAG_AVOID_TRANSFERS : ROUTING_FLAG_NONE);
+          const profile: RoutingProfile = msg.profile ?? (flags === ROUTING_FLAG_AVOID_TRANSFERS ? 'fewest_transfers' : 'fastest');
           const segments = computeJourneySegments(
             wasmModule,
             enginePtr,
             msg.origin_stop_id,
             msg.dest_stop_id,
-            msg.departure_timestamp
+            msg.departure_timestamp,
+            flags
           );
-          options.postMessage({ type: 'RESULT', segments });
+          options.postMessage({
+            type: 'RESULT',
+            segments,
+            profile,
+            flags,
+            queryId: msg.queryId,
+          });
           break;
         }
 
@@ -343,7 +364,9 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
       options.postMessage({
         type: 'ERROR',
         message: err?.message || String(err),
+        queryId: (msg as any)?.queryId,
       });
     }
+
   };
 }

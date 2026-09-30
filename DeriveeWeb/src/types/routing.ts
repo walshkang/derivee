@@ -16,6 +16,24 @@ export interface RoutingSegment {
   is_transfer: boolean;
 }
 
+export type RoutingProfile = 'fastest' | 'fewest_transfers';
+
+export const ROUTING_FLAG_NONE = 0;
+export const ROUTING_FLAG_AVOID_TRANSFERS = 2; // 1 << 1
+
+export interface RankedItinerary {
+  id: string;
+  profile: RoutingProfile;
+  profiles: RoutingProfile[];
+  segments: RoutingSegment[];
+  departureTime: number;
+  arrivalTime: number;
+  durationSeconds: number;
+  durationMinutes: number;
+  transferCount: number;
+  isDeduped: boolean;
+}
+
 export type RoutingWorkerIncomingMessage =
   | { type: 'INIT'; city?: string }
   | {
@@ -23,9 +41,19 @@ export type RoutingWorkerIncomingMessage =
       origin_stop_id: number;
       dest_stop_id: number;
       departure_timestamp: number;
+      profile?: RoutingProfile;
+      flags?: number;
+      queryId?: string | number;
     };
 
 export type RoutingWorkerOutgoingMessage =
   | { type: 'READY'; loadTimeMs: number }
-  | { type: 'ERROR'; message: string }
-  | { type: 'RESULT'; segments: RoutingSegment[] };
+  | { type: 'ERROR'; message: string; queryId?: string | number }
+  | {
+      type: 'RESULT';
+      segments: RoutingSegment[];
+      profile?: RoutingProfile;
+      flags?: number;
+      queryId?: string | number;
+    };
+
