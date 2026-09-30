@@ -116,8 +116,11 @@ export default {
         }
       }
 
+      const city = url.searchParams.get('city') || 'nyc';
+      const key = `city-${city}.pack.zst`;
+
       // Fetch pack object from R2
-      const obj = await env.PACK.get('city-nyc.pack.zst');
+      const obj = await env.PACK.get(key);
       if (!obj) {
         return jsonResponse({ error: 'not_found' }, 404, origin);
       }
@@ -126,7 +129,56 @@ export default {
       const headers = new Headers({
         'Content-Type': 'application/zstd',
         'Content-Length': obj.size.toString(),
-        'Content-Disposition': 'attachment; filename="city-nyc.pack.zst"',
+        'Content-Disposition': `attachment; filename="${key}"`,
+        'Cache-Control': 'no-store',
+        ...getCorsHeaders(origin),
+      });
+
+      if (obj.httpEtag) {
+        headers.set('ETag', obj.httpEtag);
+      }
+
+      return new Response(obj.body, {
+        status: 200,
+        headers,
+      });
+    }
+
+    // 5. Cities manifest streaming route: GET /api/cities
+    if (url.pathname === '/api/cities' && request.method === 'GET') {
+      // Identity verification injected by Cloudflare Access edge
+      const userEmail =
+        request.headers.get('cf-access-authenticated-user-email') ||
+        request.headers.get('Cf-Access-Authenticated-User-Email');
+
+      if (!userEmail) {
+        return jsonResponse({ error: 'unauthorized' }, 401, origin);
+      }
+
+      // Per-identity rate limiting via ratelimits binding
+      if (env.RATE_LIMITER) {
+        const { success } = await env.RATE_LIMITER.limit({ key: userEmail });
+        if (!success) {
+          return jsonResponse(
+            { error: 'rate_limited' },
+            429,
+            origin,
+            { 'Retry-After': '60' }
+          );
+        }
+      }
+
+      // Fetch cities manifest object from R2
+      const obj = await env.PACK.get('cities.json');
+      if (!obj) {
+        return jsonResponse({ error: 'not_found' }, 404, origin);
+      }
+
+      // Stream object body back directly without buffering
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+        'Content-Length': obj.size.toString(),
+        'Content-Disposition': 'inline; filename="cities.json"',
         'Cache-Control': 'no-store',
         ...getCorsHeaders(origin),
       });

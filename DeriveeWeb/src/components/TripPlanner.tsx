@@ -14,6 +14,10 @@ import {
 } from '../utils/routeComparison';
 import { RoutingQueryWatchdog } from '../utils/tabSuspension';
 import { createRoutesMap } from '../utils/routeBadge';
+import { CityPicker } from './CityPicker';
+import type { CityPickerState } from '../types/cityPicker';
+import { reduceCityPickerState, fetchCitiesManifest } from '../utils/cityPicker';
+import type { WorkerToMainMessage } from '../types/pack';
 
 interface TripPlannerProps {
   isInstalled: boolean;
@@ -97,9 +101,23 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
     };
   }, []);
 
-  // 2. Manage Routing Worker lifecycle (lazy on installed, terminate on unmount)
-  useEffect(() => {
-    if (!isInstalled) return;
+  // City Picker State (Wave M5c)
+  const [cityPickerState, setCityPickerState] = useState<CityPickerState>({
+    status: 'loading',
+    activeCitySlug: 'nyc',
+    cities: [],
+    errorMessage: null,
+    switchProgress: null,
+  });
+
+  const routingWorkerRef = useRef<Worker | null>(null);
+  const installerWorkerRef = useRef<Worker | null>(null);
+
+  const startRoutingWorker = (slug: string) => {
+    if (routingWorkerRef.current) {
+      routingWorkerRef.current.terminate();
+      routingWorkerRef.current = null;
+    }
 
     setEngineStatus('warming_up');
     setEngineError(null);
@@ -107,6 +125,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
     const routingWorker = new Worker(
       new URL('../workers/routing.worker.ts', import.meta.url)
     );
+    routingWorkerRef.current = routingWorker;
 
     routingWorker.onmessage = (event: MessageEvent<RoutingWorkerOutgoingMessage>) => {
       const data = event.data;
@@ -122,7 +141,6 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
       }
     };
 
-
     routingWorker.onerror = (err) => {
       routingWatchdogRef.current?.stop();
       routingWatchdogRef.current = null;
@@ -133,12 +151,48 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
       setIsRouting(false);
     };
 
-    const initMsg: RoutingWorkerIncomingMessage = { type: 'INIT' };
+    const initMsg: RoutingWorkerIncomingMessage = { type: 'INIT', city: slug };
     routingWorker.postMessage(initMsg);
     setWorker(routingWorker);
+  };
+
+  const loadCities = async () => {
+    setCityPickerState((prev) => reduceCityPickerState(prev, { type: 'FETCH_START' }));
+    try {
+      const cities = await fetchCitiesManifest('/api/cities');
+      setCityPickerState((prev) =>
+        reduceCityPickerState(prev, { type: 'FETCH_SUCCESS', cities })
+      );
+    } catch (err: any) {
+      setCityPickerState((prev) =>
+        reduceCityPickerState(prev, {
+          type: 'FETCH_ERROR',
+          error: err?.message || 'Failed to load cities',
+        })
+      );
+    }
+  };
+
+  // 2. Fetch cities manifest on mount
+  useEffect(() => {
+    loadCities();
+  }, []);
+
+  // 3. Manage Routing Worker lifecycle (lazy on installed, terminate on unmount)
+  useEffect(() => {
+    if (!isInstalled) return;
+
+    startRoutingWorker(cityPickerState.activeCitySlug);
 
     return () => {
-      routingWorker.terminate();
+      if (routingWorkerRef.current) {
+        routingWorkerRef.current.terminate();
+        routingWorkerRef.current = null;
+      }
+      if (installerWorkerRef.current) {
+        installerWorkerRef.current.terminate();
+        installerWorkerRef.current = null;
+      }
       setWorker(null);
       setEngineStatus('warming_up');
       if (routingWatchdogRef.current) {
@@ -147,6 +201,100 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
       }
     };
   }, [isInstalled]);
+
+  // 4. Handle city switch flow (clear engine, install pack, re-hydrate)
+  const handleSelectCity = (targetSlug: string) => {
+    if (targetSlug === cityPickerState.activeCitySlug || cityPickerState.status === 'switching') {
+      return;
+    }
+
+    const targetCity = cityPickerState.cities.find((c) => c.slug === targetSlug);
+    const targetName = targetCity?.name || targetSlug.toUpperCase();
+
+    setCityPickerState((prev) =>
+      reduceCityPickerState(prev, { type: 'START_SWITCH', targetSlug, targetName })
+    );
+
+    // Clear current WASM engine instance and reset query state
+    if (routingWorkerRef.current) {
+      routingWorkerRef.current.terminate();
+      routingWorkerRef.current = null;
+      setWorker(null);
+    }
+    setEngineStatus('warming_up');
+    resetRoutes();
+    setSelectedOrigin(null);
+    setSelectedDest(null);
+    setOriginInput('');
+    setDestInput('');
+
+    // Spawn pack-installer worker
+    if (installerWorkerRef.current) {
+      installerWorkerRef.current.terminate();
+      installerWorkerRef.current = null;
+    }
+
+    const installer = new Worker(
+      new URL('../workers/pack-installer.worker.ts', import.meta.url),
+      { type: 'module' }
+    );
+    installerWorkerRef.current = installer;
+
+    installer.onmessage = (event: MessageEvent<WorkerToMainMessage>) => {
+      const data = event.data;
+      if (data.type === 'PROGRESS') {
+        setCityPickerState((prev) =>
+          reduceCityPickerState(prev, {
+            type: 'SWITCH_PROGRESS',
+            stage: data.stage,
+            percent: data.percent,
+            message: data.message,
+          })
+        );
+      } else if (data.type === 'SUCCESS') {
+        installer.terminate();
+        installerWorkerRef.current = null;
+        setCityPickerState((prev) =>
+          reduceCityPickerState(prev, {
+            type: 'SWITCH_SUCCESS',
+            newActiveSlug: targetSlug,
+          })
+        );
+        // Re-hydrate WASM engine with new city slug
+        startRoutingWorker(targetSlug);
+      } else if (data.type === 'ERROR') {
+        installer.terminate();
+        installerWorkerRef.current = null;
+        setCityPickerState((prev) =>
+          reduceCityPickerState(prev, {
+            type: 'SWITCH_ERROR',
+            error: data.message,
+          })
+        );
+        setEngineStatus('error');
+        setEngineError(data.message);
+      }
+    };
+
+    installer.onerror = (err) => {
+      installer.terminate();
+      installerWorkerRef.current = null;
+      setCityPickerState((prev) =>
+        reduceCityPickerState(prev, {
+          type: 'SWITCH_ERROR',
+          error: err.message || 'Installer error',
+        })
+      );
+      setEngineStatus('error');
+      setEngineError(err.message || 'Pack installer error');
+    };
+
+    installer.postMessage({
+      type: 'START_INSTALL',
+      slug: targetSlug,
+      packUrl: targetSlug === 'nyc' ? '/api/pack' : `/api/pack?city=${encodeURIComponent(targetSlug)}`,
+    });
+  };
 
   // Click outside listener for autocomplete dropdowns
   useEffect(() => {
@@ -375,6 +523,13 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
           </div>
         )}
       </div>
+
+      {/* City Picker / Pack Manager UI (Wave M5c) */}
+      <CityPicker
+        state={cityPickerState}
+        onSelectCity={handleSelectCity}
+        onRetry={loadCities}
+      />
 
       <h2 class="trip-planner-title">Offline Transit Router</h2>
       <p class="trip-planner-subtitle">

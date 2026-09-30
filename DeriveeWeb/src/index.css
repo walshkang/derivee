@@ -1725,6 +1725,111 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   background-color: #ef4444;
 }
 
+/* City Picker Component Styles (Wave M5c) */
+.city-picker-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.city-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.city-picker-title {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.city-picker-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.city-picker-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  padding: 2px 0;
+}
+
+.city-picker-status-text {
+  color: #e2e8f0;
+  font-size: 0.78rem;
+}
+
+.city-picker-single {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.city-pill-icon {
+  font-size: 0.82rem;
+}
+
+.city-active-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.city-picker-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.city-picker-select {
+  width: 100%;
+  appearance: none;
+  background-color: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #f8fafc;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 6px 10px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.city-picker-select:focus {
+  border-color: #38bdf8;
+}
+
+.city-picker-retry-btn {
+  margin-left: auto;
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.city-picker-retry-btn:hover {
+  background-color: rgba(239, 68, 68, 0.25);
+}
+
+.city-picker-switching {
+  color: #38bdf8;
+}
+
 .trip-planner-title {
   font-size: 1.15rem;
   font-weight: 700;
