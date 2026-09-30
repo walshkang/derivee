@@ -8,6 +8,7 @@ import {
   setPackDismissed,
 } from '../utils/opfs';
 import { forceRelogin, RELOGIN_FALLBACK_MESSAGE } from '../utils/relogin';
+import { PackInstallWatchdog } from '../utils/tabSuspension';
 
 interface PackInstallerProps {
   onPackStateChange?: (state: InstalledPackState | null) => void;
@@ -63,6 +64,7 @@ export function PackInstaller({
 
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const workerRef = useRef<Worker | null>(null);
+  const watchdogRef = useRef<PackInstallWatchdog | null>(null);
 
   // 1. Check OPFS for already installed pack on every launch
   useEffect(() => {
@@ -125,7 +127,7 @@ export function PackInstaller({
     };
   }, [isOnline]);
 
-  // Cleanup worker and wake lock on unmount
+  // Cleanup worker, wake lock, and watchdog on unmount
   useEffect(() => {
     return () => {
       if (workerRef.current) {
@@ -136,12 +138,16 @@ export function PackInstaller({
         wakeLockRef.current.release().catch(() => {});
         wakeLockRef.current = null;
       }
+      if (watchdogRef.current) {
+        watchdogRef.current.stop();
+        watchdogRef.current = null;
+      }
     };
   }, []);
 
   // Screen Wake Lock helper
   const acquireWakeLock = async () => {
-    if ('wakeLock' in navigator) {
+    if ('wakeLock' in navigator && !wakeLockRef.current) {
       try {
         const lock = await navigator.wakeLock.request('screen');
         wakeLockRef.current = lock;
@@ -149,8 +155,10 @@ export function PackInstaller({
         // eslint-disable-next-line no-console
         console.info('[PackInstaller] Screen wake lock acquired');
         lock.addEventListener('release', () => {
-          setWakeLockActive(false);
-          wakeLockRef.current = null;
+          if (wakeLockRef.current === lock) {
+            setWakeLockActive(false);
+            wakeLockRef.current = null;
+          }
         });
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -161,16 +169,43 @@ export function PackInstaller({
 
   const releaseWakeLock = async () => {
     if (wakeLockRef.current) {
+      const lock = wakeLockRef.current;
+      wakeLockRef.current = null;
+      setWakeLockActive(false);
       try {
-        await wakeLockRef.current.release();
+        await lock.release();
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn('[PackInstaller] Wake lock release error:', err);
       }
-      wakeLockRef.current = null;
-      setWakeLockActive(false);
     }
   };
+
+  // Re-acquire wake lock and monitor background suspension during pack install
+  useEffect(() => {
+    let lastHidden = 0;
+
+    const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+
+      if (document.visibilityState === 'hidden') {
+        lastHidden = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        const suspendedMs = lastHidden > 0 ? Date.now() - lastHidden : 0;
+        lastHidden = 0;
+
+        if (isInstalling) {
+          acquireWakeLock();
+          watchdogRef.current?.handleResume(suspendedMs);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isInstalling]);
 
   const startInstall = async () => {
     setErrorMessage(null);
@@ -184,6 +219,19 @@ export function PackInstaller({
     });
 
     await acquireWakeLock();
+
+    const watchdog = new PackInstallWatchdog(20_000, async (diagnostic) => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      await releaseWakeLock();
+      setIsInstalling(false);
+      setInstallStage(null);
+      setErrorMessage({ text: diagnostic });
+    });
+    watchdogRef.current = watchdog;
+    watchdog.start();
 
     try {
       if (workerRef.current) {
@@ -201,6 +249,7 @@ export function PackInstaller({
         const data = event.data;
 
         if (data.type === 'PROGRESS') {
+          watchdogRef.current?.recordProgress();
           setInstallStage(data.stage);
           setProgress({
             loadedBytes: data.loadedBytes,
@@ -212,6 +261,8 @@ export function PackInstaller({
             message: data.message,
           });
         } else if (data.type === 'SUCCESS') {
+          watchdogRef.current?.stop();
+          watchdogRef.current = null;
           saveInstalledPackState(data.packState);
           setPackState(data.packState);
           onPackStateChange?.(data.packState);
@@ -223,6 +274,8 @@ export function PackInstaller({
           worker.terminate();
           workerRef.current = null;
         } else if (data.type === 'ERROR') {
+          watchdogRef.current?.stop();
+          watchdogRef.current = null;
           setIsInstalling(false);
           setInstallStage(null);
           setErrorMessage({ code: data.code, text: data.message });
@@ -233,6 +286,8 @@ export function PackInstaller({
       };
 
       worker.onerror = async (err) => {
+        watchdogRef.current?.stop();
+        watchdogRef.current = null;
         // eslint-disable-next-line no-console
         console.error('[PackInstaller] Worker runtime error:', err);
         setIsInstalling(false);
@@ -251,6 +306,8 @@ export function PackInstaller({
         packUrl: '/api/pack',
       });
     } catch (err) {
+      watchdogRef.current?.stop();
+      watchdogRef.current = null;
       setIsInstalling(false);
       setInstallStage(null);
       await releaseWakeLock();

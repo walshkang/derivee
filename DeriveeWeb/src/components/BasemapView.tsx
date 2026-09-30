@@ -34,7 +34,15 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
   const acquireWakeLock = async () => {
     if ('wakeLock' in navigator && !wakeLockRef.current) {
       try {
-        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        const lock = await navigator.wakeLock.request('screen');
+        wakeLockRef.current = lock;
+        if (typeof lock.addEventListener === 'function') {
+          lock.addEventListener('release', () => {
+            if (wakeLockRef.current === lock) {
+              wakeLockRef.current = null;
+            }
+          });
+        }
       } catch {
         // Wake lock can fail if window is backgrounded; safe to ignore
       }
@@ -52,6 +60,38 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
       }
     }
   };
+
+  // Re-acquire wake lock and complement watchdog on tab visibility resume
+  useEffect(() => {
+    let lastHidden = 0;
+
+    const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+
+      if (document.visibilityState === 'hidden') {
+        lastHidden = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        const suspendedMs = lastHidden > 0 ? Date.now() - lastHidden : 0;
+        lastHidden = 0;
+
+        if (stateMachine.snapshot.state === 'map-loading') {
+          acquireWakeLock();
+
+          // If backgrounded for more than stall threshold (20s) without progress,
+          // invoke stall handler immediately rather than waiting for next watchdog tick
+          if (suspendedMs >= 20_000) {
+            const currentStage = watchdogRef.current?.getStage() || 'DOWNLOADING';
+            handleStall(currentStage);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [stateMachine]);
 
   const handleStall = (stalledStage: BasemapStage) => {
     if (workerRef.current) {

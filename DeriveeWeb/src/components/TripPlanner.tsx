@@ -6,6 +6,7 @@ import type {
   RoutingWorkerOutgoingMessage,
 } from '../types/routing';
 import { describeItinerary } from '../utils/itineraryDisplay';
+import { RoutingQueryWatchdog } from '../utils/tabSuspension';
 
 
 interface TripPlannerProps {
@@ -39,6 +40,7 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
 
   const originContainerRef = useRef<HTMLDivElement | null>(null);
   const destContainerRef = useRef<HTMLDivElement | null>(null);
+  const routingWatchdogRef = useRef<RoutingQueryWatchdog | null>(null);
 
   // 1. Fetch stops.json offline
   useEffect(() => {
@@ -84,10 +86,14 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
         setEngineStatus('ready');
         setLoadTimeMs(data.loadTimeMs);
       } else if (data.type === 'ERROR') {
+        routingWatchdogRef.current?.stop();
+        routingWatchdogRef.current = null;
         setEngineStatus('error');
         setEngineError(data.message);
         setIsRouting(false);
       } else if (data.type === 'RESULT') {
+        routingWatchdogRef.current?.stop();
+        routingWatchdogRef.current = null;
         setIsRouting(false);
         setRouteResult(data.segments);
         if (data.segments.length === 0) {
@@ -99,6 +105,8 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
     };
 
     routingWorker.onerror = (err) => {
+      routingWatchdogRef.current?.stop();
+      routingWatchdogRef.current = null;
       // eslint-disable-next-line no-console
       console.error('[TripPlanner] Worker thread error:', err);
       setEngineStatus('error');
@@ -114,6 +122,10 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
       routingWorker.terminate();
       setWorker(null);
       setEngineStatus('warming_up');
+      if (routingWatchdogRef.current) {
+        routingWatchdogRef.current.stop();
+        routingWatchdogRef.current = null;
+      }
     };
   }, [isInstalled]);
 
@@ -236,6 +248,31 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
     return 28800; // 8:00 AM fallback
   };
 
+  // Monitor tab backgrounding and suspension during route query calculation
+  useEffect(() => {
+    let lastHidden = 0;
+
+    const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+
+      if (document.visibilityState === 'hidden') {
+        lastHidden = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        const suspendedMs = lastHidden > 0 ? Date.now() - lastHidden : 0;
+        lastHidden = 0;
+
+        if (isRouting) {
+          routingWatchdogRef.current?.handleResume(suspendedMs);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isRouting]);
+
   const handleRoute = () => {
     if (!worker || !selectedOrigin || !selectedDest || engineStatus !== 'ready' || isRouting) {
       return;
@@ -243,6 +280,13 @@ export function TripPlanner({ isInstalled }: TripPlannerProps) {
     setIsRouting(true);
     setRouteResult(null);
     setRouteError(null);
+
+    const watchdog = new RoutingQueryWatchdog(8_000, (reason) => {
+      setIsRouting(false);
+      setRouteError(reason);
+    });
+    routingWatchdogRef.current = watchdog;
+    watchdog.start();
 
     const depSec = getDepartureSeconds(departureTime);
     const msg: RoutingWorkerIncomingMessage = {
