@@ -227,4 +227,67 @@ describe('Basemap Worker Stall Watchdog & Boundary Timeouts', () => {
       'VERIFYING',
     ]);
   });
+
+  it('Candidate 9: initial fetch fails with WebKit "Load failed" -> retries with bounded backoff and names resource in Diagnostic on exhaustion', async () => {
+    const messages: BasemapWorkerToMainMessage[] = [];
+    const mockFs = createMockFs();
+    let fetchCalls = 0;
+
+    await runBasemapInstall('nyc', '/api/basemap?city=nyc', {
+      postMessage: (msg) => messages.push(msg),
+      fetch: async () => {
+        fetchCalls++;
+        throw new TypeError('Load failed');
+      },
+      getCityDirectoryHandle: mockFs.getCityDirectoryHandle,
+      deletePartialFile: async () => {},
+      fetchRetries: 2,
+      retryDelayMs: 5,
+    });
+
+    const errorMsg = messages.find((m) => m.type === 'ERROR');
+    assert.ok(errorMsg, 'Worker must post ERROR message when fetch exhausts retries');
+    if (errorMsg?.type === 'ERROR') {
+      assert.strictEqual(errorMsg.stage, 'STARTING_DOWNLOAD', 'Must fail at STARTING_DOWNLOAD stage');
+      assert.ok(
+        errorMsg.details?.includes('/api/basemap?city=nyc'),
+        `Error details must explicitly name the resource URL (got "${errorMsg.details}")`
+      );
+      assert.strictEqual(
+        errorMsg.details?.includes('Diagnostic: Load failed\n') || errorMsg.details?.endsWith('Diagnostic: Load failed'),
+        false,
+        'Diagnostic must not surface raw engine message "Load failed" verbatim'
+      );
+    }
+    assert.strictEqual(fetchCalls, 3, 'Must attempt initial fetch plus 2 bounded retries');
+  });
+
+  it('Negative case: initial fetch fails with transient "Load failed" but recovers on retry -> completes READY', async () => {
+    const messages: BasemapWorkerToMainMessage[] = [];
+    const chunk = new Uint8Array(100);
+    const mockFs = createMockFs();
+    let fetchCalls = 0;
+
+    await runBasemapInstall('nyc', '/api/basemap?city=nyc', {
+      postMessage: (msg) => messages.push(msg),
+      fetch: async () => {
+        fetchCalls++;
+        if (fetchCalls === 1) {
+          throw new TypeError('Load failed');
+        }
+        return createMockResponse(100, [chunk], false);
+      },
+      getCityDirectoryHandle: mockFs.getCityDirectoryHandle,
+      deletePartialFile: async () => {},
+      fetchRetries: 2,
+      retryDelayMs: 5,
+    });
+
+    const errorMsg = messages.find((m) => m.type === 'ERROR');
+    assert.strictEqual(errorMsg, undefined, 'Worker must not post ERROR when transient failure recovers on retry');
+
+    const readyMsg = messages.find((m) => m.type === 'READY');
+    assert.ok(readyMsg, 'Worker must complete and post READY after recovering on retry');
+    assert.strictEqual(fetchCalls, 2, 'Should succeed on second attempt');
+  });
 });

@@ -5,6 +5,7 @@ import { checkBasemapInstalled, getBasemapFile } from '../utils/opfs';
 import { initOfflineMap } from '../utils/maplibreAdapter';
 import { BasemapWatchdog } from '../utils/basemapWatchdog';
 import { withTimeout } from '../utils/withTimeout';
+import { createWorkerWithRetry } from '../utils/workerLoader';
 import type { Map } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -126,10 +127,16 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
     await acquireWakeLock();
     stateMachine.startDownloading();
 
+    const workerUrl = new URL('../workers/basemap-installer.worker.ts', import.meta.url);
+
     try {
-      const worker = new Worker(
-        new URL('../workers/basemap-installer.worker.ts', import.meta.url),
-        { type: 'module' }
+      const worker = await createWorkerWithRetry(
+        () =>
+          new Worker(
+            new URL('../workers/basemap-installer.worker.ts', import.meta.url),
+            { type: 'module' }
+          ),
+        workerUrl
       );
       workerRef.current = worker;
 
@@ -174,9 +181,10 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
         }
         await releaseWakeLock();
         const stage = watchdogRef.current?.getStage() || 'DOWNLOADING';
+        const scriptName = workerUrl.pathname.split('/').pop() || workerUrl.href;
         stateMachine.setError(
           'Download was interrupted. Please check your connection and try again.',
-          `Stage: ${stage}\nDiagnostic: Worker thread failed or crashed.`,
+          `Stage: ${stage}\nDiagnostic: Worker script failed to load or thread crashed (${scriptName}).`,
           stage
         );
       };
@@ -187,9 +195,12 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
       await releaseWakeLock();
       const stage = watchdogRef.current?.getStage() || 'STARTING_DOWNLOAD';
       const raw = err instanceof Error ? err.message : String(err);
+      const diagnosticMsg = (raw === 'Load failed' || raw === 'Failed to fetch')
+        ? `Failed to load worker script (${workerUrl.pathname || workerUrl.href}): network connection failed (${raw}).`
+        : raw;
       stateMachine.setError(
         'Unable to initialize map download. Please check your connection and try again.',
-        `Stage: ${stage}\nDiagnostic: ${raw}`,
+        `Stage: ${stage}\nDiagnostic: ${diagnosticMsg}`,
         stage
       );
     }

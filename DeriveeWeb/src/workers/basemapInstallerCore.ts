@@ -15,6 +15,8 @@ export interface BasemapInstallerDependencies {
   getFileTimeoutMs?: number;
   readHeaderTimeoutMs?: number;
   cleanupTimeoutMs?: number;
+  fetchRetries?: number;
+  retryDelayMs?: number;
 }
 
 async function defaultGetCityDirectoryHandle(slug: string = 'nyc'): Promise<FileSystemDirectoryHandle> {
@@ -59,14 +61,40 @@ export async function runBasemapInstall(
       percent: 0,
     });
 
-    const response = await fetchFn(basemapUrl, {
-      credentials: 'include',
-      headers: {
-        Accept: 'application/vnd.pmtiles, application/octet-stream',
-      },
-    });
+    let response: Response | null = null;
+    const maxFetchRetries = deps.fetchRetries ?? 2;
+    let lastFetchError: unknown = null;
 
-    if (!response.ok || !response.body) {
+    for (let attempt = 0; attempt <= maxFetchRetries; attempt++) {
+      try {
+        response = await fetchFn(basemapUrl, {
+          credentials: 'include',
+          headers: {
+            Accept: 'application/vnd.pmtiles, application/octet-stream',
+          },
+        });
+
+        if (response.ok && response.body) {
+          lastFetchError = null;
+          break;
+        }
+
+        throw new Error(
+          `Download request failed with status ${response.status}. Please check your connection.`
+        );
+      } catch (err: unknown) {
+        lastFetchError = err;
+        if (attempt < maxFetchRetries) {
+          const delay = (deps.retryDelayMs ?? 500) * Math.pow(2, attempt);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    }
+
+    if (!response || !response.ok || !response.body) {
+      if (lastFetchError) {
+        throw lastFetchError;
+      }
       throw new Error('Download request failed. Please check your connection.');
     }
 
@@ -242,6 +270,10 @@ export async function runBasemapInstall(
     }
 
     const rawMessage = err instanceof Error ? err.message : String(err);
+    const diagnosticMessage = (rawMessage === 'Load failed' || rawMessage === 'Failed to fetch')
+      ? `Failed to load map extract resource (${basemapUrl}): network connection failed (${rawMessage}).`
+      : rawMessage;
+
     const userMessage = rawMessage.includes('corrupt') || rawMessage.includes('verification failed') || rawMessage.includes('magic')
       ? 'The downloaded map file is corrupt. Please try again.'
       : rawMessage.includes('stalled') || rawMessage.includes('timed out')
@@ -252,7 +284,7 @@ export async function runBasemapInstall(
       type: 'ERROR',
       message: userMessage,
       stage: currentStage,
-      details: `Stage: ${currentStage}\nDiagnostic: ${rawMessage}`,
+      details: `Stage: ${currentStage}\nDiagnostic: ${diagnosticMessage}`,
     });
   }
 }
