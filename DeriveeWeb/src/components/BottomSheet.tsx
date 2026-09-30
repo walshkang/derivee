@@ -62,7 +62,7 @@ export function BottomSheet({ children, detents = [15, 50, 90], defaultDetent = 
       const currentHeightPx = (detents[currentDetentIndex] / 100) * vh;
       const newHeightPx = currentHeightPx - deltaY;
       const newHeightPercent = Math.max(0, Math.min(100, (newHeightPx / vh) * 100));
-      sheetRef.current.style.height = `${newHeightPercent}vh`;
+      sheetRef.current.style.height = `${newHeightPercent}dvh`;
     }
   };
 
@@ -85,7 +85,7 @@ export function BottomSheet({ children, detents = [15, 50, 90], defaultDetent = 
       }
       
       setCurrentDetentIndex(nextIndex);
-      sheetRef.current.style.height = `${detents[nextIndex]}vh`;
+      sheetRef.current.style.height = `${detents[nextIndex]}dvh`;
     }
   };
 
@@ -108,7 +108,7 @@ export function BottomSheet({ children, detents = [15, 50, 90], defaultDetent = 
       ref={sheetRef}
       class="bottom-sheet"
       style={{
-        height: `${currentHeight}vh`,
+        height: `${currentHeight}dvh`,
         transition: 'height 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
         visibility: currentHeight === 0 ? 'hidden' : 'visible'
       }}
