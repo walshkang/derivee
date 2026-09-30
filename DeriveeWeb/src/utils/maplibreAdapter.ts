@@ -20,8 +20,10 @@ export interface InitMapOptions {
   container: HTMLElement | string;
   file: File;
   styleUrl?: string;
+  mountTimeoutMs?: number;
   onLoad?: (map: Map) => void;
   onError?: (err: Error) => void;
+  onTimeout?: () => void;
 }
 
 /**
@@ -33,8 +35,10 @@ export function initOfflineMap({
   container,
   file,
   styleUrl = '/map-style-dark.json',
+  mountTimeoutMs = 20_000,
   onLoad,
   onError,
+  onTimeout,
 }: InitMapOptions): Map {
   const protocol = getGlobalPMTilesProtocol();
   const pmtiles = new PMTiles(new FileSource(file));
@@ -51,7 +55,29 @@ export function initOfflineMap({
     // Unlimited viewport: no maxBounds per locked design specification
   });
 
+  let isSettled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  if (mountTimeoutMs > 0) {
+    timer = setTimeout(() => {
+      if (!isSettled) {
+        isSettled = true;
+        if (onTimeout) {
+          onTimeout();
+        } else if (onError) {
+          onError(new Error('Map load timed out waiting for style and tiles.'));
+        }
+      }
+    }, mountTimeoutMs);
+  }
+
   map.once('load', () => {
+    if (isSettled) return;
+    isSettled = true;
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
     onLoad?.(map);
   });
 
@@ -59,6 +85,12 @@ export function initOfflineMap({
     // eslint-disable-next-line no-console
     console.warn('[MapLibre] Map error:', e.error);
     if (e.error && isFatalMapError(e.error)) {
+      if (isSettled) return;
+      isSettled = true;
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
       const err = e.error instanceof Error ? e.error : new Error(e.error.message || 'Map error');
       onError?.(err);
     }

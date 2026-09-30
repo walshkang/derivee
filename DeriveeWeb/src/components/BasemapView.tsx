@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { BasemapWorkerToMainMessage } from '../types/basemap';
+import type { BasemapWorkerToMainMessage, BasemapStage } from '../types/basemap';
 import { BasemapStateMachine, type BasemapStateSnapshot } from '../utils/basemapStateMachine';
 import { checkBasemapInstalled, getBasemapFile } from '../utils/opfs';
 import { initOfflineMap } from '../utils/maplibreAdapter';
+import { BasemapWatchdog } from '../utils/basemapWatchdog';
+import { withTimeout } from '../utils/withTimeout';
 import type { Map } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -16,6 +18,11 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
   const mapInstanceRef = useRef<Map | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const watchdogRef = useRef<BasemapWatchdog | null>(null);
+
+  if (!watchdogRef.current) {
+    watchdogRef.current = new BasemapWatchdog(20_000);
+  }
 
   const [stateMachine] = useState(() => new BasemapStateMachine('map-loading'));
   const [snapshot, setSnapshot] = useState<BasemapStateSnapshot>(() => stateMachine.snapshot);
@@ -36,13 +43,31 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
 
   const releaseWakeLock = async () => {
     if (wakeLockRef.current) {
+      const lock = wakeLockRef.current;
+      wakeLockRef.current = null;
       try {
-        await wakeLockRef.current.release();
+        await withTimeout(lock.release(), 5000, 'Release wake lock timed out');
       } catch {
         // Safe to ignore
       }
-      wakeLockRef.current = null;
     }
+  };
+
+  const handleStall = (stalledStage: BasemapStage) => {
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
+    releaseWakeLock();
+    stateMachine.setError(
+      `Map setup stalled (stage: ${stalledStage}). Please tap Retry.`,
+      `Stage: ${stalledStage}\nDiagnostic: Operation timed out after 20s of inactivity with no forward progress.`,
+      stalledStage
+    );
   };
 
   const startWorkerDownload = async () => {
@@ -50,6 +75,13 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
       workerRef.current.terminate();
       workerRef.current = null;
     }
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
+
+    watchdogRef.current?.reset('STARTING_DOWNLOAD');
+    watchdogRef.current?.start(handleStall);
 
     await acquireWakeLock();
     stateMachine.startDownloading();
@@ -63,32 +95,63 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
 
       worker.onmessage = async (e: MessageEvent<BasemapWorkerToMainMessage>) => {
         const msg = e.data;
-        if (msg.type === 'PROGRESS') {
+        if (msg.type === 'STAGE') {
+          watchdogRef.current?.recordProgress(msg.stage);
+          stateMachine.setStage(msg.stage);
+        } else if (msg.type === 'PROGRESS') {
+          watchdogRef.current?.recordProgress('DOWNLOADING');
           stateMachine.updateProgress(msg.loadedBytes, msg.totalBytes, msg.percent);
         } else if (msg.type === 'READY') {
+          watchdogRef.current?.recordProgress('WORKER_READY');
+          stateMachine.setStage('WORKER_READY');
+          if (workerRef.current) {
+            workerRef.current.terminate();
+            workerRef.current = null;
+          }
           await releaseWakeLock();
-          worker.terminate();
-          workerRef.current = null;
           await mountMapFromOpfs();
         } else if (msg.type === 'ERROR') {
+          watchdogRef.current?.stop();
+          if (workerRef.current) {
+            workerRef.current.terminate();
+            workerRef.current = null;
+          }
           await releaseWakeLock();
-          worker.terminate();
-          workerRef.current = null;
-          stateMachine.setError(msg.message);
+          const stage = msg.stage || watchdogRef.current?.getStage() || 'DOWNLOADING';
+          stateMachine.setError(
+            msg.message,
+            msg.details || `Stage: ${stage}\nDiagnostic: Map installer encountered an error.`,
+            stage
+          );
         }
       };
 
       worker.onerror = async () => {
+        watchdogRef.current?.stop();
+        if (workerRef.current) {
+          workerRef.current.terminate();
+          workerRef.current = null;
+        }
         await releaseWakeLock();
-        worker.terminate();
-        workerRef.current = null;
-        stateMachine.setError('Download was interrupted. Please check your connection and try again.');
+        const stage = watchdogRef.current?.getStage() || 'DOWNLOADING';
+        stateMachine.setError(
+          'Download was interrupted. Please check your connection and try again.',
+          `Stage: ${stage}\nDiagnostic: Worker thread failed or crashed.`,
+          stage
+        );
       };
 
       worker.postMessage({ type: 'START_INSTALL', slug });
-    } catch {
+    } catch (err: unknown) {
+      watchdogRef.current?.stop();
       await releaseWakeLock();
-      stateMachine.setError('Unable to initialize map download. Please check your connection and try again.');
+      const stage = watchdogRef.current?.getStage() || 'STARTING_DOWNLOAD';
+      const raw = err instanceof Error ? err.message : String(err);
+      stateMachine.setError(
+        'Unable to initialize map download. Please check your connection and try again.',
+        `Stage: ${stage}\nDiagnostic: ${raw}`,
+        stage
+      );
     }
   };
 
@@ -99,30 +162,72 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
       mapInstanceRef.current = null;
     }
 
+    watchdogRef.current?.recordProgress('READING_STORAGE');
+    stateMachine.setStage('READING_STORAGE');
+
     try {
-      const file = await getBasemapFile(slug);
+      const file = await withTimeout(
+        getBasemapFile(slug),
+        10_000,
+        'Reading offline map file from storage timed out.'
+      );
       if (!file) {
-        stateMachine.setError('Offline map file is not available. Please retry download.');
+        watchdogRef.current?.stop();
+        stateMachine.setError(
+          'Offline map file is not available. Please retry download.',
+          'Stage: READING_STORAGE\nDiagnostic: Basemap file not found in storage.',
+          'READING_STORAGE'
+        );
         return;
       }
+
+      watchdogRef.current?.recordProgress('INITIALIZING_MAP');
+      stateMachine.setStage('INITIALIZING_MAP');
+
+      watchdogRef.current?.recordProgress('MAP_MOUNTING');
+      stateMachine.setStage('MAP_MOUNTING');
 
       const map = initOfflineMap({
         container: mapContainerRef.current,
         file,
         styleUrl: '/map-style-dark.json',
+        mountTimeoutMs: 20_000,
         onLoad: (loadedMap) => {
+          watchdogRef.current?.stop();
           mapInstanceRef.current = loadedMap;
           stateMachine.setReady();
           onMapLoaded?.(loadedMap);
         },
         onError: (err) => {
-          // If vector tile source fails fatally
-          stateMachine.setError('Unable to display offline map. Please check your connection and try again.', err.message);
+          watchdogRef.current?.stop();
+          stateMachine.setError(
+            'Unable to display offline map. Please check your connection and try again.',
+            `Stage: MAP_MOUNTING\nDiagnostic: ${err.message}`,
+            'MAP_MOUNTING'
+          );
+        },
+        onTimeout: () => {
+          watchdogRef.current?.stop();
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+            mapInstanceRef.current = null;
+          }
+          stateMachine.setError(
+            'Map setup stalled (stage: MAP_MOUNTING). Please tap Retry.',
+            'Stage: MAP_MOUNTING\nDiagnostic: MapLibre failed to load style and tiles within 20s.',
+            'MAP_MOUNTING'
+          );
         },
       });
       mapInstanceRef.current = map;
-    } catch {
-      stateMachine.setError('Unable to load offline map from storage. Please retry download.');
+    } catch (err: unknown) {
+      watchdogRef.current?.stop();
+      const raw = err instanceof Error ? err.message : String(err);
+      stateMachine.setError(
+        'Unable to load offline map from storage. Please retry download.',
+        `Stage: READING_STORAGE\nDiagnostic: ${raw}`,
+        'READING_STORAGE'
+      );
     }
   };
 
@@ -136,6 +241,8 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
       if (isCached) {
         // Returning visit: instant render from OPFS, no download flash
         stateMachine.setCached();
+        watchdogRef.current?.reset('READING_STORAGE');
+        watchdogRef.current?.start(handleStall);
         await mountMapFromOpfs();
       } else {
         // First run: download PMTiles extract with progress
@@ -147,6 +254,7 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
 
     return () => {
       isCancelled = true;
+      watchdogRef.current?.stop();
       releaseWakeLock();
       if (workerRef.current) {
         workerRef.current.terminate();
@@ -160,6 +268,7 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
   }, [slug]);
 
   const handleRetry = () => {
+    watchdogRef.current?.reset('STARTING_DOWNLOAD');
     startWorkerDownload();
   };
 

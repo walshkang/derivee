@@ -55,6 +55,12 @@ describe('UI Copy Cleanliness & Retrospective Rule 12 Enforcement', () => {
     'Offline map file is not available. Please retry download.',
     'Unable to display offline map. Please check your connection and try again.',
     'Unable to load offline map from storage. Please retry download.',
+    // Watchdog stall diagnostic strings
+    'Map setup stalled (stage: DOWNLOAD_COMPLETE). Please tap Retry.',
+    'Map setup stalled (stage: MAP_MOUNTING). Please tap Retry.',
+    'Map setup stalled (stage: CLOSING_FILE). Please tap Retry.',
+    'Map setup stalled (stage: VERIFYING). Please tap Retry.',
+    'Map download stalled (stage: DOWNLOADING). Please tap Retry.',
   ];
 
   it('all UI copy strings contain zero forbidden technical tokens or internal identifiers', () => {

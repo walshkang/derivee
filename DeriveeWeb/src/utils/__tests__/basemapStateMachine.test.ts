@@ -156,4 +156,34 @@ describe('Basemap Download State Machine Tests', () => {
       assert.strictEqual(callCount, 2, 'No further notifications after unsubscription');
     });
   });
+
+  describe('Stage Telemetry Tracking', () => {
+    it('tracks stage advances and includes lastStage in snapshot', () => {
+      const sm = new BasemapStateMachine();
+      assert.strictEqual(sm.snapshot.lastStage, null);
+
+      sm.startDownloading(1000);
+      assert.strictEqual(sm.snapshot.lastStage, 'STARTING_DOWNLOAD');
+
+      sm.setStage('DOWNLOADING');
+      assert.strictEqual(sm.snapshot.lastStage, 'DOWNLOADING');
+
+      sm.setStage('DOWNLOAD_COMPLETE');
+      assert.strictEqual(sm.snapshot.lastStage, 'DOWNLOAD_COMPLETE');
+
+      sm.setError('Stalled', 'Diagnostic details', 'CLOSING_FILE');
+      assert.strictEqual(sm.snapshot.state, 'map-error');
+      assert.strictEqual(sm.snapshot.lastStage, 'CLOSING_FILE');
+      assert.strictEqual(sm.snapshot.errorDetails, 'Diagnostic details');
+    });
+
+    it('sets lastStage to READING_STORAGE on cached visit and MAP_READY on ready', () => {
+      const sm = new BasemapStateMachine();
+      sm.setCached();
+      assert.strictEqual(sm.snapshot.lastStage, 'READING_STORAGE');
+
+      sm.setReady();
+      assert.strictEqual(sm.snapshot.lastStage, 'MAP_READY');
+    });
+  });
 });

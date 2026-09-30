@@ -1,4 +1,4 @@
-import type { MapState } from '../types/basemap';
+import type { MapState, BasemapStage } from '../types/basemap';
 
 export interface BasemapStateSnapshot {
   state: MapState;
@@ -7,6 +7,7 @@ export interface BasemapStateSnapshot {
   totalBytes: number;
   errorMessage: string | null;
   errorDetails?: string | null;
+  lastStage?: BasemapStage | null;
 }
 
 export type BasemapStateListener = (snapshot: BasemapStateSnapshot) => void;
@@ -26,6 +27,7 @@ export class BasemapStateMachine {
   private totalBytes: number = 0;
   private errorMessage: string | null = null;
   private errorDetails: string | null = null;
+  private lastStage: BasemapStage | null = null;
   private listeners = new Set<BasemapStateListener>();
 
   constructor(initialState: MapState = 'map-loading') {
@@ -40,6 +42,7 @@ export class BasemapStateMachine {
       totalBytes: this.totalBytes,
       errorMessage: this.errorMessage,
       errorDetails: this.errorDetails,
+      lastStage: this.lastStage,
     };
   }
 
@@ -59,6 +62,14 @@ export class BasemapStateMachine {
   }
 
   /**
+   * Called to update the active telemetry stage.
+   */
+  setStage(stage: BasemapStage): void {
+    this.lastStage = stage;
+    this.notify();
+  }
+
+  /**
    * Called when OPFS already contains a valid basemap.pmtiles file.
    * Instant transition with zero network and no download flash.
    */
@@ -66,6 +77,7 @@ export class BasemapStateMachine {
     this.currentState = 'map-cached';
     this.errorMessage = null;
     this.errorDetails = null;
+    this.lastStage = 'READING_STORAGE';
     this.notify();
   }
 
@@ -79,6 +91,7 @@ export class BasemapStateMachine {
     this.totalBytes = totalExpectedBytes;
     this.errorMessage = null;
     this.errorDetails = null;
+    this.lastStage = 'STARTING_DOWNLOAD';
     this.notify();
   }
 
@@ -90,6 +103,7 @@ export class BasemapStateMachine {
     this.loadedBytes = loadedBytes;
     this.totalBytes = totalBytes;
     this.percent = Math.min(100, Math.max(0, percent));
+    this.lastStage = 'DOWNLOADING';
     this.notify();
   }
 
@@ -101,16 +115,20 @@ export class BasemapStateMachine {
     this.percent = 100;
     this.errorMessage = null;
     this.errorDetails = null;
+    this.lastStage = 'MAP_READY';
     this.notify();
   }
 
   /**
    * Called when download, integrity check, or tile rendering fails.
    */
-  setError(message: string, details?: string): void {
+  setError(message: string, details?: string, stage?: BasemapStage): void {
     this.currentState = 'map-error';
     this.errorMessage = message;
     this.errorDetails = details || null;
+    if (stage !== undefined) {
+      this.lastStage = stage;
+    }
     this.notify();
   }
 
