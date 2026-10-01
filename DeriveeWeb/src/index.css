@@ -2139,6 +2139,7 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   gap: 12px;
   width: 100%;
   margin-top: 10px;
+  flex-shrink: 0;
 }
 
 .profile-selector-bar {
