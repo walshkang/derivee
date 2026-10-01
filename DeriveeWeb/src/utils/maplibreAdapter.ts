@@ -1,6 +1,12 @@
-import { Map, addProtocol, type ErrorEvent } from 'maplibre-gl';
+import { Map, addProtocol, setWorkerUrl, type ErrorEvent } from 'maplibre-gl';
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { Protocol, PMTiles, FileSource } from 'pmtiles';
-import { isFatalMapError } from './mapErrorClassification.ts';
+import { isFatalMapError, formatMapWorkerError } from './mapErrorClassification.ts';
+
+// Configure MapLibre worker asset URL before any Map instance is created
+setWorkerUrl(maplibreWorkerUrl);
+
+export { maplibreWorkerUrl };
 
 let protocolInstance: Protocol | null = null;
 let isProtocolAdded = false;
@@ -91,7 +97,8 @@ export function initOfflineMap({
         clearTimeout(timer);
         timer = undefined;
       }
-      const err = e.error instanceof Error ? e.error : new Error(e.error.message || 'Map error');
+      const workerUrl = typeof maplibreWorkerUrl === 'string' ? maplibreWorkerUrl : '';
+      const err = formatMapWorkerError(e.error, workerUrl);
       onError?.(err);
     }
   });

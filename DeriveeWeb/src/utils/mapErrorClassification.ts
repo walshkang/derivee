@@ -24,3 +24,27 @@ export function isFatalMapError(err: Error | any): boolean {
 
   return true;
 }
+
+/**
+ * Formats map worker errors to include the attempted worker URL in the diagnostic message.
+ * If the error message mentions "worker" and does not already include the attempted URL,
+ * the URL is appended for troubleshooting.
+ */
+export function formatMapWorkerError(err: unknown, attemptedWorkerUrl: string): Error {
+  const baseMessage =
+    err instanceof Error
+      ? err.message
+      : err && typeof err === 'object' && 'message' in err
+        ? String((err as any).message)
+        : String(err || 'Map error');
+
+  if (
+    baseMessage.toLowerCase().includes('worker') &&
+    attemptedWorkerUrl &&
+    !baseMessage.includes(attemptedWorkerUrl)
+  ) {
+    return new Error(`${baseMessage} (Worker URL: ${attemptedWorkerUrl})`);
+  }
+  return err instanceof Error ? err : new Error(baseMessage);
+}
+
