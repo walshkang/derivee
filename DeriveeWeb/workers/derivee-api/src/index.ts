@@ -1,7 +1,10 @@
+import { fetchFeeds, getArrivalsForStop } from './gtfs.js';
+
 export interface Env {
   PACK: R2Bucket;
   RATE_LIMITER?: RateLimit;
   ASSETS?: Fetcher;
+  KV_REALTIME: KVNamespace;
 }
 
 const ALLOWED_ORIGINS = new Set([
@@ -59,6 +62,10 @@ function jsonResponse(
 }
 
 export default {
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(fetchFeeds(env.KV_REALTIME));
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin');
@@ -77,6 +84,24 @@ export default {
     // 2. Health check route: GET /api/health (unauthenticated)
     if (url.pathname === '/api/health' && request.method === 'GET') {
       return jsonResponse({ ok: true }, 200, origin);
+    }
+
+    // 2.5 Realtime arrivals: GET /api/realtime/arrivals?stop=XXX
+    if (url.pathname === '/api/realtime/arrivals' && request.method === 'GET') {
+      const stop = url.searchParams.get('stop');
+      if (!stop) {
+        return jsonResponse({ error: 'missing_stop' }, 400, origin);
+      }
+      const data = await getArrivalsForStop(env.KV_REALTIME, stop);
+      if (!data) {
+        return jsonResponse({ error: 'not_found' }, 404, origin);
+      }
+      // Check freshness
+      const now = Math.floor(Date.now() / 1000);
+      if (now - data.updated_at > 90) {
+        return jsonResponse({ error: 'stale', stale: true }, 503, origin);
+      }
+      return jsonResponse(data, 200, origin);
     }
 
     // 3. Authenticated session check: GET /api/me

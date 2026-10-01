@@ -4,10 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "tsx --test test/gtfs.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250224.0",
+    "protobufjs-cli": "^2.7.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "protobufjs": "^8.8.0"
   }
 }

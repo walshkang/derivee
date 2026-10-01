@@ -21,3 +21,12 @@ period = 60
 directory = "../../dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+
+# KV namespace for GTFS-RT cache
+[[kv_namespaces]]
+binding = "KV_REALTIME"
+id = "YOUR_KV_NAMESPACE_ID"
+preview_id = "YOUR_KV_NAMESPACE_PREVIEW_ID"
+
+[triggers]
+crons = ["* * * * *"] # Every minute
