@@ -1,4 +1,4 @@
-import type { MapState, BasemapStage } from '../types/basemap';
+import type { MapState, BasemapStage, MountSubStage } from '../types/basemap';
 
 export interface BasemapStateSnapshot {
   state: MapState;
@@ -8,6 +8,7 @@ export interface BasemapStateSnapshot {
   errorMessage: string | null;
   errorDetails?: string | null;
   lastStage?: BasemapStage | null;
+  mountSubStage?: MountSubStage | null;
 }
 
 export type BasemapStateListener = (snapshot: BasemapStateSnapshot) => void;
@@ -28,6 +29,7 @@ export class BasemapStateMachine {
   private errorMessage: string | null = null;
   private errorDetails: string | null = null;
   private lastStage: BasemapStage | null = null;
+  private mountSubStage: MountSubStage | null = null;
   private listeners = new Set<BasemapStateListener>();
 
   constructor(initialState: MapState = 'map-loading') {
@@ -43,6 +45,7 @@ export class BasemapStateMachine {
       errorMessage: this.errorMessage,
       errorDetails: this.errorDetails,
       lastStage: this.lastStage,
+      mountSubStage: this.mountSubStage,
     };
   }
 
@@ -70,6 +73,14 @@ export class BasemapStateMachine {
   }
 
   /**
+   * Called to update the active mount sub-stage.
+   */
+  setMountSubStage(subStage: MountSubStage): void {
+    this.mountSubStage = subStage;
+    this.notify();
+  }
+
+  /**
    * Called when OPFS already contains a valid basemap.pmtiles file.
    * Instant transition with zero network and no download flash.
    */
@@ -78,6 +89,7 @@ export class BasemapStateMachine {
     this.errorMessage = null;
     this.errorDetails = null;
     this.lastStage = 'READING_STORAGE';
+    this.mountSubStage = null;
     this.notify();
   }
 
@@ -92,6 +104,7 @@ export class BasemapStateMachine {
     this.errorMessage = null;
     this.errorDetails = null;
     this.lastStage = 'STARTING_DOWNLOAD';
+    this.mountSubStage = null;
     this.notify();
   }
 
@@ -116,6 +129,7 @@ export class BasemapStateMachine {
     this.errorMessage = null;
     this.errorDetails = null;
     this.lastStage = 'MAP_READY';
+    this.mountSubStage = null;
     this.notify();
   }
 

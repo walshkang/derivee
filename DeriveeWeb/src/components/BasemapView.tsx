@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { BasemapWorkerToMainMessage, BasemapStage } from '../types/basemap';
 import { BasemapStateMachine, type BasemapStateSnapshot } from '../utils/basemapStateMachine';
 import { checkBasemapInstalled, getBasemapFile } from '../utils/opfs';
-import { initOfflineMap } from '../utils/maplibreAdapter';
+import { initOfflineMap, formatMountDiagnostic, type MountDiagnostic } from '../utils/maplibreAdapter';
 import { BasemapWatchdog } from '../utils/basemapWatchdog';
 import { withTimeout } from '../utils/withTimeout';
 import { createWorkerWithRetry } from '../utils/workerLoader';
@@ -20,6 +20,7 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
   const workerRef = useRef<Worker | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const watchdogRef = useRef<BasemapWatchdog | null>(null);
+  const mountDiagnosticRef = useRef<MountDiagnostic | null>(null);
 
   if (!watchdogRef.current) {
     watchdogRef.current = new BasemapWatchdog(20_000);
@@ -104,6 +105,14 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
       mapInstanceRef.current = null;
     }
     releaseWakeLock();
+    if (stalledStage === 'MAP_MOUNTING' && mountDiagnosticRef.current) {
+      stateMachine.setError(
+        `Map setup stalled (stage: ${stalledStage}). Please tap Retry.`,
+        formatMountDiagnostic(mountDiagnosticRef.current),
+        stalledStage
+      );
+      return;
+    }
     stateMachine.setError(
       `Map setup stalled (stage: ${stalledStage}). Please tap Retry.`,
       `Stage: ${stalledStage}\nDiagnostic: Operation timed out after 20s of inactivity with no forward progress.`,
@@ -120,6 +129,7 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
     }
+    mountDiagnosticRef.current = null;
 
     watchdogRef.current?.reset('STARTING_DOWNLOAD');
     watchdogRef.current?.start(handleStall);
@@ -237,12 +247,26 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
 
       watchdogRef.current?.recordProgress('MAP_MOUNTING');
       stateMachine.setStage('MAP_MOUNTING');
+      stateMachine.setMountSubStage('MOUNT_STYLE_LOADING');
+      mountDiagnosticRef.current = {
+        subStage: 'MOUNT_STYLE_LOADING',
+        tilesRequested: 0,
+        tilesLoaded: 0,
+        tilesErrored: 0,
+        firstTileError: null,
+      };
 
       const map = initOfflineMap({
         container: mapContainerRef.current,
         file,
         styleUrl: '/map-style-dark.json',
         mountTimeoutMs: 20_000,
+        onSubStageChange: (subStage) => {
+          stateMachine.setMountSubStage(subStage);
+        },
+        onDiagnosticUpdate: (diag) => {
+          mountDiagnosticRef.current = diag;
+        },
         onLoad: (loadedMap) => {
           watchdogRef.current?.stop();
           mapInstanceRef.current = loadedMap;
@@ -257,15 +281,16 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
             'MAP_MOUNTING'
           );
         },
-        onTimeout: () => {
+        onTimeout: (diag) => {
           watchdogRef.current?.stop();
           if (mapInstanceRef.current) {
             mapInstanceRef.current.remove();
             mapInstanceRef.current = null;
           }
+          const diagDetail = formatMountDiagnostic(diag || mountDiagnosticRef.current);
           stateMachine.setError(
             'Map setup stalled (stage: MAP_MOUNTING). Please tap Retry.',
-            'Stage: MAP_MOUNTING\nDiagnostic: MapLibre failed to load style and tiles within 20s.',
+            diagDetail,
             'MAP_MOUNTING'
           );
         },
@@ -315,6 +340,7 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
+      mountDiagnosticRef.current = null;
     };
   }, [slug]);
 

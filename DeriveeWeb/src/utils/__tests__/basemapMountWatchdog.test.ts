@@ -1,8 +1,10 @@
+import '../maplibreEnv.ts';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { withTimeout } from '../withTimeout.ts';
 import { BasemapStateMachine } from '../basemapStateMachine.ts';
 import { BasemapWatchdog } from '../basemapWatchdog.ts';
+import { formatMountDiagnostic } from '../maplibreAdapter.ts';
 
 describe('Basemap Main Thread Mount & Watchdog Regression Tests', () => {
   it('Candidate 5: releaseWakeLock() never settles -> times out safely without blocking or hanging', async () => {
@@ -70,7 +72,13 @@ describe('Basemap Main Thread Mount & Watchdog Regression Tests', () => {
         timedOut = true;
         sm.setError(
           'Map setup stalled (stage: MAP_MOUNTING). Please tap Retry.',
-          'Stage: MAP_MOUNTING\nDiagnostic: MapLibre failed to load style and tiles within 20s.',
+          formatMountDiagnostic({
+            subStage: 'MOUNT_FIRST_TILE_REQUESTED',
+            tilesRequested: 12,
+            tilesLoaded: 0,
+            tilesErrored: 12,
+            firstTileError: 'Could not load tile',
+          }),
           'MAP_MOUNTING'
         );
       }
@@ -84,6 +92,9 @@ describe('Basemap Main Thread Mount & Watchdog Regression Tests', () => {
     assert.strictEqual(sm.snapshot.lastStage, 'MAP_MOUNTING');
     assert.ok(sm.snapshot.errorMessage?.includes('MAP_MOUNTING'));
     assert.ok(sm.snapshot.errorDetails?.includes('MAP_MOUNTING'));
+    assert.ok(sm.snapshot.errorDetails?.includes('sub-stage: MOUNT_FIRST_TILE_REQUESTED'));
+    assert.ok(sm.snapshot.errorDetails?.includes('tiles requested: 12, loaded: 0, errored: 12'));
+    assert.ok(sm.snapshot.errorDetails?.includes('first error: Could not load tile'));
 
     clearTimeout(timer);
   });
