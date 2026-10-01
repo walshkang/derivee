@@ -29,7 +29,7 @@ export async function fetchFeeds(kv: KVNamespace) {
   const updated_at = Math.floor(Date.now() / 1000);
   const stopArrivals = new Map<string, ArrivalPrediction[]>();
 
-  const results = await Promise.allSettled(
+  await Promise.allSettled(
     MTA_FEEDS.map(async (url) => {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), 20000);

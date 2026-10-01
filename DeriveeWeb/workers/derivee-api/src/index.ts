@@ -1,4 +1,4 @@
-import { fetchFeeds, getArrivalsForStop } from './gtfs.js';
+import { fetchFeeds, getArrivalsForStop } from './gtfs.ts';
 
 export interface Env {
   PACK: R2Bucket;
@@ -62,7 +62,7 @@ function jsonResponse(
 }
 
 export default {
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(fetchFeeds(env.KV_REALTIME));
   },
 
