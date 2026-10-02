@@ -1,4 +1,5 @@
 import type { InstalledPackState } from '../types/pack';
+import { formatBuildInfo } from '../utils/buildInfo';
 
 interface SystemInfoDrawerProps {
   isOnline: boolean;
@@ -8,6 +9,7 @@ interface SystemInfoDrawerProps {
 
 export function SystemInfoDrawer({ isOnline, packState, onOpenTransitPack }: SystemInfoDrawerProps) {
   const isInstalled = Boolean(packState?.isInstalled);
+  const buildInfo = formatBuildInfo();
 
   return (
     <footer class="system-footer-drawer">
@@ -34,7 +36,12 @@ export function SystemInfoDrawer({ isOnline, packState, onOpenTransitPack }: Sys
           <span class={`meta-dot ${isOnline ? 'online-dot' : 'offline-dot'}`} />
           <span>Network: {isOnline ? 'Connected' : 'Offline'}</span>
         </div>
+        <div class="footer-meta-item footer-build-item" title={`Build: ${buildInfo}`}>
+          <span class="meta-dot standby-dot" />
+          <span>Build: <span class="footer-build-hash">{buildInfo}</span></span>
+        </div>
       </div>
     </footer>
   );
 }
+

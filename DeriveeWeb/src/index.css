@@ -808,12 +808,17 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .footer-meta-item {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.footer-build-hash {
+  font-family: var(--font-mono);
 }
 
 .meta-dot {

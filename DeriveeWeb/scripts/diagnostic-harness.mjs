@@ -288,6 +288,14 @@ try {
       });
       console.log('[Harness] Map diagnostics after ready:', mapDiagnostics);
 
+      const footerBuildText = await page.evaluate(() => {
+        return document.querySelector('.footer-build-item')?.textContent || null;
+      });
+      console.log('[Harness] Footer Build Info:', footerBuildText);
+      if (!footerBuildText || !footerBuildText.includes('Build:')) {
+        throw new Error(`Expected footer build identity to be rendered, got: ${footerBuildText}`);
+      }
+
       const screenshotPath = '/tmp/map-ready.png';
       await page.screenshot({ path: screenshotPath });
       console.log(`[Harness] Saved screenshot to ${screenshotPath}`);

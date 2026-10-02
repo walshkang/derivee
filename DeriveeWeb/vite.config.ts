@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +7,37 @@ import preact from '@preact/preset-vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function getGitCommitHash(): string {
+  if (process.env.CF_PAGES_COMMIT_SHA) {
+    return process.env.CF_PAGES_COMMIT_SHA.slice(0, 7);
+  }
+  if (process.env.VITE_COMMIT_HASH) {
+    return process.env.VITE_COMMIT_HASH.slice(0, 7);
+  }
+  if (process.env.COMMIT_HASH) {
+    return process.env.COMMIT_HASH.slice(0, 7);
+  }
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+function getBuildTimestamp(): string {
+  if (process.env.VITE_BUILD_TIME) {
+    return process.env.VITE_BUILD_TIME;
+  }
+  if (process.env.BUILD_TIME) {
+    return process.env.BUILD_TIME;
+  }
+  return new Date().toISOString();
+}
+
+const buildCommitHash = getGitCommitHash();
+const buildTimestamp = getBuildTimestamp();
+
 
 function basemapDevMiddleware() {
   return {
@@ -85,6 +117,10 @@ export const workboxConfig = {
 
 export default defineConfig({
   root: __dirname,
+  define: {
+    __BUILD_HASH__: JSON.stringify(buildCommitHash),
+    __BUILD_TIME__: JSON.stringify(buildTimestamp),
+  },
   esbuild: {
     tsconfigRaw: JSON.stringify({
       compilerOptions: {
