@@ -327,6 +327,167 @@ try {
         }
         await new Promise((r) => setTimeout(r, 500));
       }
+
+      console.log('\n[Harness] --- TESTING TRIP PLANNER CARD SCROLL GESTURE REGRESSION ---');
+      const mobileContext = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+        isMobile: true,
+      });
+      const mobilePage = await mobileContext.newPage();
+
+      await mobilePage.route(/\/api\/.*/, (route) => {
+        const pathname = new URL(route.request().url()).pathname;
+        if (pathname === '/api/me') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'test@example.com' }) });
+        }
+        if (pathname === '/api/basemap') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/vnd.pmtiles' }, body: basemapBuffer });
+        }
+        return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      });
+
+      await mobilePage.addInitScript(() => {
+        localStorage.setItem('derivee_pack_nyc', JSON.stringify({
+          isInstalled: true, slug: 'nyc', version: '3',
+          files: ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin'].map((name) => ({ name, size: 1000 })),
+          totalBytes: 6000,
+        }));
+
+        const REQUIRED = ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin'];
+        const fakeFile = { size: 1000, async arrayBuffer() { return new ArrayBuffer(8); } };
+        const fakeDir = {
+          async getFileHandle(name) {
+            if (!REQUIRED.includes(name)) throw new DOMException('nf', 'NotFoundError');
+            return { async getFile() { return fakeFile; } };
+          },
+        };
+        Object.defineProperty(navigator, 'storage', {
+          value: {
+            async getDirectory() {
+              return { async getDirectoryHandle(name) { if (name === 'nyc') return fakeDir; throw new DOMException('nf', 'NotFoundError'); } };
+            },
+          },
+          configurable: true,
+        });
+
+        const CANNED = [
+          { board_stop_id: 72, exit_stop_id: 150, trip_id: 1, departure_time: 28800, arrival_time: 29400, route_id: 2, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 150, exit_stop_id: 151, trip_id: 0, departure_time: 29400, arrival_time: 29700, route_id: 0, transfer_distance_m: 150, is_transfer: true },
+          { board_stop_id: 151, exit_stop_id: 207, trip_id: 2, departure_time: 29700, arrival_time: 31200, route_id: 4, transfer_distance_m: 0, is_transfer: false },
+        ];
+        const RealWorker = window.Worker;
+        window.Worker = function (url, opts) {
+          if (String(url).includes('routing.worker')) {
+            const handlers = {};
+            return {
+              postMessage(msg) {
+                setTimeout(() => {
+                  if (msg.type === 'INIT') handlers.message?.({ data: { type: 'READY', loadTimeMs: 90 } });
+                  else if (msg.type === 'ROUTE') handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: CANNED, profile: msg.profile, flags: msg.flags } });
+                }, 30);
+              },
+              set onmessage(fn) { handlers.message = fn; },
+              get onmessage() { return handlers.message; },
+              set onerror(fn) { handlers.error = fn; },
+              addEventListener(t, fn) { handlers[t] = fn; },
+              removeEventListener(t) { delete handlers[t]; },
+              terminate() {},
+            };
+          }
+          return new RealWorker(url, opts);
+        };
+        window.Worker.prototype = RealWorker.prototype;
+      });
+
+      console.log('[Harness Planner] Navigating to http://127.0.0.1:4173/...');
+      await mobilePage.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+      await mobilePage.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
+      await mobilePage.waitForSelector('.engine-status-ready', { timeout: 30000 });
+      console.log('[Harness Planner] Engine ready (stubbed). Expanding sheet...');
+
+      await mobilePage.evaluate(() => {
+        document.querySelector('.bottom-sheet').style.height = '90dvh';
+      });
+      await new Promise((r) => setTimeout(r, 600));
+
+      await mobilePage.click('.quick-preset-btn');
+      await new Promise((r) => setTimeout(r, 400));
+      await mobilePage.click('.trip-route-btn');
+      console.log('[Harness Planner] Routing trip...');
+      await mobilePage.waitForFunction(() => {
+        const c = document.querySelector('.itinerary-results-container');
+        return c && c.children.length > 0;
+      }, { timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 800));
+      console.log('[Harness Planner] Cards rendered. Dispatching swipe gesture...');
+
+      const gesture = await mobilePage.evaluate(() => {
+        let prevented = false;
+        const origPrevent = TouchEvent.prototype.preventDefault;
+        TouchEvent.prototype.preventDefault = function () { prevented = true; return origPrevent.call(this); };
+
+        const card = document.querySelector('.trip-planner-card');
+        const sheet = document.querySelector('.bottom-sheet');
+        const sheetHeightBefore = sheet.style.height;
+
+        const mkTouch = (y) => new Touch({ identifier: 1, target: card, clientX: 195, clientY: y });
+        const fire = (type, y) => {
+          const t = mkTouch(y);
+          card.dispatchEvent(new TouchEvent(type, {
+            touches: type === 'touchend' ? [] : [t],
+            targetTouches: type === 'touchend' ? [] : [t],
+            changedTouches: [t],
+            bubbles: true, cancelable: true,
+          }));
+        };
+        let lastY = 700;
+        fire('touchstart', 700);
+        for (let i = 1; i <= 12; i++) {
+          const curY = 700 - i * 25;
+          const t = mkTouch(curY);
+          const notCancelled = card.dispatchEvent(new TouchEvent('touchmove', {
+            touches: [t],
+            targetTouches: [t],
+            changedTouches: [t],
+            bubbles: true, cancelable: true,
+          }));
+          if (!notCancelled) {
+            prevented = true;
+          } else {
+            card.scrollTop += (lastY - curY);
+          }
+          lastY = curY;
+        }
+        fire('touchend', 400);
+
+        TouchEvent.prototype.preventDefault = origPrevent;
+        return {
+          prevented,
+          sheetHeightBefore,
+          sheetHeightAfter: sheet.style.height,
+          cardScrollable: card.scrollHeight > card.clientHeight,
+          cardScrollTopBefore: 0,
+          cardScrollTopAfter: card.scrollTop,
+        };
+      });
+
+      console.log('[Harness Planner] GESTURE RESULT:', JSON.stringify(gesture));
+      if (!gesture.cardScrollable) {
+        throw new Error('TripPlanner card is not scrollable (scrollHeight <= clientHeight)');
+      }
+      if (gesture.prevented) {
+        throw new Error('TripPlanner card swipe was intercepted by preventDefault()!');
+      }
+      if (gesture.cardScrollTopAfter <= gesture.cardScrollTopBefore) {
+        throw new Error(`TripPlanner card failed to scroll (scrollTop stayed ${gesture.cardScrollTopAfter})`);
+      }
+      if (gesture.sheetHeightBefore !== gesture.sheetHeightAfter) {
+        throw new Error(`Sheet height changed from ${gesture.sheetHeightBefore} to ${gesture.sheetHeightAfter}`);
+      }
+      console.log('[Harness Planner] SUCCESS: Cards scrolled natively without sheet hijacking or detent change!');
+      await mobileContext.close();
+
       break;
     }
 

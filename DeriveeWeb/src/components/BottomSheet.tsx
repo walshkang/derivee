@@ -10,6 +10,8 @@ interface BottomSheetProps {
   isOpen: boolean;
 }
 
+import { findScrollableAncestor, shouldYieldToScroll } from '../utils/bottomSheetScroll';
+
 export function BottomSheet({
   children,
   detents = [15, 50, 90],
@@ -28,43 +30,59 @@ export function BottomSheet({
   const startY = useRef(0);
   const currentY = useRef(0);
   const isDragging = useRef(false);
+  const isInnerScroll = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // We map detent percentages to viewport heights
   const currentHeight = isOpen ? detents[currentDetentIndex] : 0;
 
   const handleTouchStart = (e: TouchEvent) => {
-    // If the target is within scrollable content and we're at a larger detent,
-    // let it scroll if not at the top.
-    const target = e.target as HTMLElement;
-    if (contentRef.current?.contains(target)) {
-      if (contentRef.current.scrollTop > 0) {
-        return; // Let native scroll handle it
-      }
-    }
-    
-    isDragging.current = true;
+    if (!e.touches || e.touches.length === 0) return;
+    const target = e.target as HTMLElement | null;
     startY.current = e.touches[0].clientY;
     currentY.current = e.touches[0].clientY;
-    if (sheetRef.current) {
-      sheetRef.current.style.transition = 'none';
+    isInnerScroll.current = false;
+
+    const isHandle = Boolean(target && (target as Element).closest?.('.bottom-sheet-handle-container'));
+    if (isHandle) {
+      isDragging.current = true;
+      if (sheetRef.current) {
+        sheetRef.current.style.transition = 'none';
+      }
+    } else {
+      isDragging.current = false;
     }
   };
 
   const handleTouchMove = (e: TouchEvent) => {
-    if (!isDragging.current) return;
+    if (!e.touches || e.touches.length === 0) return;
     const deltaY = e.touches[0].clientY - startY.current;
-    
-    // Prevent default scroll if dragging sheet
+
+    if (isInnerScroll.current) {
+      return; // Committed to native scroll for this gesture
+    }
+
+    if (!isDragging.current) {
+      const target = e.target as HTMLElement | null;
+      const scrollable = findScrollableAncestor(target, contentRef.current);
+      if (shouldYieldToScroll(scrollable, deltaY)) {
+        isInnerScroll.current = true;
+        return; // Yield to native scroll — do not set isDragging, do not preventDefault
+      }
+
+      // If we don't yield (inner container at scroll edge or not scrollable), engage sheet drag
+      if (Math.abs(deltaY) > 0) {
+        isDragging.current = true;
+        if (sheetRef.current) {
+          sheetRef.current.style.transition = 'none';
+        }
+      }
+    }
+
+    if (!isDragging.current) return;
+
     if (Math.abs(deltaY) > 0) {
-       // if we are scrolling up but at the top of content, we might drag sheet down
-       const target = e.target as HTMLElement;
-       if (contentRef.current?.contains(target)) {
-         if (contentRef.current.scrollTop > 0) {
-           return;
-         }
-       }
-       e.preventDefault();
+      e.preventDefault();
     }
     
     currentY.current = e.touches[0].clientY;
@@ -78,6 +96,7 @@ export function BottomSheet({
   };
 
   const handleTouchEnd = () => {
+    isInnerScroll.current = false;
     if (!isDragging.current) return;
     isDragging.current = false;
     if (sheetRef.current) {
