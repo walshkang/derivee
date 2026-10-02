@@ -192,17 +192,18 @@ export function RouteComparisonView({
                     );
                   }
 
-                  const routeBadge = !legModel.isTransfer
-                    ? getRouteBadge(legModel.routeId, routesMap)
-                    : null;
+                  const routeBadge =
+                    legModel.mode === 'transit'
+                      ? getRouteBadge(legModel.routeId, routesMap)
+                      : null;
 
                   return (
                     <div key={legIdx} class="itinerary-leg-card">
                       <div class="leg-card-header">
                         <span class="leg-index-badge">Leg {legIdx + 1}</span>
-                        {legModel.isTransfer ? (
+                        {legModel.mode === 'walk' || legModel.mode === 'transfer' ? (
                           <span class="leg-mode-pill mode-pill-walk">🚶 Walk / Transfer</span>
-                        ) : routeBadge ? (
+                        ) : legModel.mode === 'transit' && routeBadge ? (
                           <span class="route-badge-container">
                             <span
                               class={`route-pill-badge ${
@@ -212,7 +213,7 @@ export function RouteComparisonView({
                                 backgroundColor: routeBadge.backgroundColor,
                                 color: routeBadge.textColor,
                               }}
-                              data-route-id={String(legModel.routeId)}
+                              data-route-id={String(routeBadge.label)}
                               aria-label={`Line ${routeBadge.label}`}
                             >
                               {routeBadge.label}
@@ -250,7 +251,8 @@ export function RouteComparisonView({
                         </div>
                       </div>
 
-                      {legModel.transferDistanceM > 0 && legModel.isTransfer && (
+                      {legModel.transferDistanceM > 0 &&
+                        (legModel.mode === 'transfer' || legModel.mode === 'walk') && (
                         <div class="leg-transfer-distance">
                           Transfer distance: ~{legModel.transferDistanceM} m
                         </div>

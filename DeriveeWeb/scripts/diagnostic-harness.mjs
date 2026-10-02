@@ -734,6 +734,148 @@ try {
     }
   });
 
+  // SCENARIO 5: No raw route IDs in leg badges
+  await recordScenario('No raw route IDs in leg badges', 'trip planning', async ({ takeScreenshot }) => {
+    console.log('\n[Harness] --- TESTING ROUTE BADGE LEAK REGRESSION (FC-2) ---');
+    const badgeContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const badgePage = await badgeContext.newPage();
+
+    try {
+      await badgePage.route(/\/api\/.*/, (route) => {
+        const pathname = new URL(route.request().url()).pathname;
+        if (pathname === '/api/me') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'test@example.com' }) });
+        }
+        if (pathname === '/api/basemap') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/vnd.pmtiles' }, body: basemapBuffer });
+        }
+        return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      });
+
+      await badgePage.addInitScript(() => {
+        localStorage.setItem('derivee_pack_nyc', JSON.stringify({
+          isInstalled: true, slug: 'nyc', version: '3',
+          files: ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin'].map((name) => ({ name, size: 1000 })),
+          totalBytes: 6000,
+        }));
+
+        const REQUIRED = ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin'];
+        const fakeFile = { size: 1000, async arrayBuffer() { return new ArrayBuffer(8); } };
+        const fakeDir = {
+          async getFileHandle(name) {
+            if (!REQUIRED.includes(name)) throw new DOMException('nf', 'NotFoundError');
+            return { async getFile() { return fakeFile; } };
+          },
+        };
+        Object.defineProperty(navigator, 'storage', {
+          value: {
+            async getDirectory() {
+              return { async getDirectoryHandle(name) { if (name === 'nyc') return fakeDir; throw new DOMException('nf', 'NotFoundError'); } };
+            },
+          },
+          configurable: true,
+        });
+
+        // Real engine-shaped segments: route_id as uint16 RAPTOR pattern index (e.g. 167, 36)
+        // One leg with route_id undefined (missing route info)
+        // One transfer leg
+        const REAL_SHAPED_SEGMENTS = [
+          { board_stop_id: 72, exit_stop_id: 150, trip_id: 1045, departure_time: 28800, arrival_time: 29400, route_id: 167, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 150, exit_stop_id: 151, trip_id: 0, departure_time: 29400, arrival_time: 29700, route_id: 0, transfer_distance_m: 150, is_transfer: true },
+          { board_stop_id: 151, exit_stop_id: 180, trip_id: 2099, departure_time: 29700, arrival_time: 30300, route_id: 36, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 180, exit_stop_id: 207, trip_id: 3144, departure_time: 30300, arrival_time: 31200, route_id: undefined, transfer_distance_m: 0, is_transfer: false },
+        ];
+        const RealWorker = window.Worker;
+        window.Worker = function (url, opts) {
+          if (String(url).includes('routing.worker')) {
+            const handlers = {};
+            return {
+              postMessage(msg) {
+                setTimeout(() => {
+                  if (msg.type === 'INIT') handlers.message?.({ data: { type: 'READY', loadTimeMs: 90 } });
+                  else if (msg.type === 'ROUTE') handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: REAL_SHAPED_SEGMENTS, profile: msg.profile, flags: msg.flags } });
+                }, 30);
+              },
+              set onmessage(fn) { handlers.message = fn; },
+              get onmessage() { return handlers.message; },
+              set onerror(fn) { handlers.error = fn; },
+              addEventListener(t, fn) { handlers[t] = fn; },
+              removeEventListener(t) { delete handlers[t]; },
+              terminate() {},
+            };
+          }
+          return new RealWorker(url, opts);
+        };
+        window.Worker.prototype = RealWorker.prototype;
+      });
+
+      console.log('[Harness Badges] Navigating to http://127.0.0.1:4173/...');
+      await badgePage.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+      await badgePage.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
+      await badgePage.waitForSelector('.engine-status-ready', { timeout: 30000 });
+
+      await badgePage.evaluate(() => {
+        document.querySelector('.bottom-sheet').style.height = '90dvh';
+      });
+      await new Promise((r) => setTimeout(r, 600));
+
+      await badgePage.click('.quick-preset-btn');
+      await new Promise((r) => setTimeout(r, 400));
+      await badgePage.click('.trip-route-btn');
+      console.log('[Harness Badges] Routing trip with real engine-shaped segments...');
+      await badgePage.waitForFunction(() => {
+        const c = document.querySelector('.itinerary-results-container');
+        return c && c.children.length > 0;
+      }, { timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 800));
+
+      const badgeAudit = await badgePage.evaluate(() => {
+        const routePills = Array.from(document.querySelectorAll('.route-pill-badge'));
+        const badgeTexts = routePills.map((el) => (el.textContent || '').trim());
+        const transferPills = Array.from(document.querySelectorAll('.leg-mode-pill.mode-pill-walk'));
+        const transferTexts = transferPills.map((el) => (el.textContent || '').trim());
+        const allCopy = document.querySelector('.itinerary-results-container')?.textContent || '';
+
+        // Check for raw internal IDs
+        const rawIdsFound = badgeTexts.filter((txt) => /^\d{2,}$/.test(txt) || txt === '0' || txt === '167' || txt === '36');
+
+        return {
+          badgeCount: routePills.length,
+          badgeTexts,
+          transferCount: transferPills.length,
+          transferTexts,
+          rawIdsFound,
+          hasNumericTripLeaks: /trip[_\s]?id|#\d{4,}/i.test(allCopy),
+        };
+      });
+
+      console.log('[Harness Badges] Route Badge Audit Result:', JSON.stringify(badgeAudit));
+      await takeScreenshot(badgePage, 'leg-badges.png');
+
+      if (badgeAudit.rawIdsFound.length > 0) {
+        throw new Error(
+          `Raw internal route IDs leaked into leg badges: ${JSON.stringify(badgeAudit.rawIdsFound)}. All badge texts: ${JSON.stringify(badgeAudit.badgeTexts)}`
+        );
+      }
+      if (badgeAudit.badgeTexts.some((txt) => /^\d{2,}$/.test(txt))) {
+        throw new Error(`Harness regression: found leg badge matching /^\\d{2,}$/: ${JSON.stringify(badgeAudit.badgeTexts)}`);
+      }
+      if (badgeAudit.transferCount === 0) {
+        throw new Error('Expected transfer legs to render walk/transfer UI pill (.mode-pill-walk)');
+      }
+      console.log('[Harness Badges] SUCCESS: Zero raw internal route IDs leaked into leg badges!');
+    } catch (err) {
+      await takeScreenshot(badgePage, 'leg-badges-failed.png').catch(() => {});
+      throw err;
+    } finally {
+      await badgeContext.close();
+    }
+  });
+
 } finally {
   if (browser) await browser.close();
   server.close();

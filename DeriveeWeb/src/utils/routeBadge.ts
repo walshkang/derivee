@@ -76,31 +76,21 @@ export function sanitizeBadgeLabel(rawLabel: string): string {
  *
  * Guarantees:
  * - Pure function with zero side effects.
- * - Always returns a non-empty label (never an empty pill).
- * - Degrades gracefully to neutral styling on missing data or fetch failure.
+ * - FC-2: Never leaks raw internal identifiers (e.g. pattern indices, route_ids) into UI copy.
+ * - Missing or unresolvable route returns null (no badge pill rendered).
  * - Never throws/crashes on malformed, null, or undefined input.
  */
 export function getRouteBadge(
   routeId: string | number | undefined | null,
   routesMap?: Map<string, RouteItem> | Record<string, RouteItem> | null
-): RouteBadgeModel {
+): RouteBadgeModel | null {
   if (routeId == null || routeId === '') {
-    return {
-      label: 'Transit',
-      backgroundColor: FALLBACK_ROUTE_COLOR,
-      textColor: FALLBACK_TEXT_COLOR,
-      isFallback: true,
-    };
+    return null;
   }
 
   const idStr = String(routeId).trim();
   if (!idStr) {
-    return {
-      label: 'Transit',
-      backgroundColor: FALLBACK_ROUTE_COLOR,
-      textColor: FALLBACK_TEXT_COLOR,
-      isFallback: true,
-    };
+    return null;
   }
 
   let foundItem: RouteItem | undefined;
@@ -140,12 +130,7 @@ export function getRouteBadge(
     };
   }
 
-  // Graceful fallback: neutral badge with sanitized short name or ID
-  const fallbackLabel = sanitizeBadgeLabel(idStr);
-  return {
-    label: fallbackLabel,
-    backgroundColor: FALLBACK_ROUTE_COLOR,
-    textColor: FALLBACK_TEXT_COLOR,
-    isFallback: true,
-  };
+  // Fallback: unresolvable or missing route -> no badge pill at all
+  // A missing badge is honest; a wrong badge is a lie.
+  return null;
 }

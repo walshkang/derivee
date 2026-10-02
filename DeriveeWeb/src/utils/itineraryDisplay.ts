@@ -7,6 +7,8 @@
  *   are collapsed into compact "Start at {station}" and "Arrive at {station}" rows.
  */
 
+export type LegMode = 'transit' | 'walk' | 'transfer';
+
 export interface LegInput {
   board_stop_id?: number;
   exit_stop_id?: number;
@@ -17,6 +19,7 @@ export interface LegInput {
   route_id?: number;
   transfer_distance_m?: number;
   is_transfer?: boolean;
+  mode?: LegMode;
   trip_id?: number;
   station_name?: string;
   stationName?: string;
@@ -60,6 +63,7 @@ export interface ArriveLegDisplay {
 
 export interface TransitLegDisplay {
   kind: 'transit';
+  mode: LegMode;
   legIndex: number;
   leg_index: number;
   boardStopId: number;
@@ -78,8 +82,8 @@ export interface TransitLegDisplay {
   duration_minutes: number;
   durationSeconds: number;
   duration_seconds: number;
-  routeId: number;
-  route_id: number;
+  routeId?: number;
+  route_id?: number;
   transferDistanceM: number;
   transfer_distance_m: number;
   isTransfer: boolean;
@@ -255,8 +259,11 @@ export function describeLeg(
   const durationSec = Math.max(0, leg.arrival_time - leg.departure_time);
   const durationMin = Math.max(0, Math.round(durationSec / 60));
 
+  const mode: LegMode = leg.mode ?? (leg.is_transfer ? 'transfer' : 'transit');
+
   return {
     kind: 'transit',
+    mode,
     legIndex: index,
     leg_index: index,
     boardStopId: fromStop,
@@ -275,12 +282,12 @@ export function describeLeg(
     duration_minutes: durationMin,
     durationSeconds: durationSec,
     duration_seconds: durationSec,
-    routeId: leg.route_id ?? 0,
-    route_id: leg.route_id ?? 0,
+    routeId: leg.route_id,
+    route_id: leg.route_id,
     transferDistanceM: leg.transfer_distance_m ?? 0,
     transfer_distance_m: leg.transfer_distance_m ?? 0,
-    isTransfer: Boolean(leg.is_transfer),
-    is_transfer: Boolean(leg.is_transfer),
+    isTransfer: Boolean(leg.is_transfer || mode === 'transfer' || mode === 'walk'),
+    is_transfer: Boolean(leg.is_transfer || mode === 'transfer' || mode === 'walk'),
   };
 }
 

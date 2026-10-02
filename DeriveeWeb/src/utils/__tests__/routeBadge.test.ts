@@ -9,7 +9,6 @@ import {
   formatHexColor,
   sanitizeBadgeLabel,
   FALLBACK_ROUTE_COLOR,
-  FALLBACK_TEXT_COLOR,
 } from '../routeBadge.ts';
 import type { RouteItem } from '../../types/routing.ts';
 
@@ -153,18 +152,21 @@ describe('M5b Route Badges & FC-2 Invariant Tests', () => {
 
     it('known route: renders exact colors and short name badge', () => {
       const badge7 = getRouteBadge('7', fixtureMap);
+      assert.ok(badge7, 'badge7 must not be null');
       assert.strictEqual(badge7.label, '7');
       assert.strictEqual(badge7.backgroundColor, '#9A38A1');
       assert.strictEqual(badge7.textColor, '#FFFFFF');
       assert.strictEqual(badge7.isFallback, false);
 
       const badgeN = getRouteBadge('N', fixtureMap);
+      assert.ok(badgeN, 'badgeN must not be null');
       assert.strictEqual(badgeN.label, 'N');
       assert.strictEqual(badgeN.backgroundColor, '#F6BC26');
       assert.strictEqual(badgeN.textColor, '#000000');
       assert.strictEqual(badgeN.isFallback, false);
 
       const badgeSIR = getRouteBadge('SI', fixtureMap);
+      assert.ok(badgeSIR, 'badgeSIR must not be null');
       assert.strictEqual(badgeSIR.label, 'SIR');
       assert.strictEqual(badgeSIR.backgroundColor, '#08179C');
       assert.strictEqual(badgeSIR.textColor, '#FFFFFF');
@@ -173,6 +175,7 @@ describe('M5b Route Badges & FC-2 Invariant Tests', () => {
 
     it('numeric route ID: matches numeric lookup key cleanly', () => {
       const badge1 = getRouteBadge(1, fixtureMap);
+      assert.ok(badge1, 'badge1 must not be null');
       assert.strictEqual(badge1.label, '1');
       assert.strictEqual(badge1.backgroundColor, '#D82233');
       assert.strictEqual(badge1.textColor, '#FFFFFF');
@@ -181,54 +184,42 @@ describe('M5b Route Badges & FC-2 Invariant Tests', () => {
 
     it('short name lookup: resolves route when passed short name directly', () => {
       const badgeSIR = getRouteBadge('SIR', fixtureMap);
+      assert.ok(badgeSIR, 'badgeSIR must not be null');
       assert.strictEqual(badgeSIR.label, 'SIR');
       assert.strictEqual(badgeSIR.backgroundColor, '#08179C');
       assert.strictEqual(badgeSIR.isFallback, false);
     });
 
-    it('fallback for unknown route ID: degrades gracefully to neutral badge', () => {
+    it('fallback for unknown route ID: returns null (no badge pill)', () => {
       const badgeUnknown = getRouteBadge('12', fixtureMap);
-      assert.strictEqual(badgeUnknown.label, '12');
-      assert.strictEqual(badgeUnknown.backgroundColor, FALLBACK_ROUTE_COLOR);
-      assert.strictEqual(badgeUnknown.textColor, FALLBACK_TEXT_COLOR);
-      assert.strictEqual(badgeUnknown.isFallback, true);
+      assert.strictEqual(badgeUnknown, null);
 
       const badgeNumericUnknown = getRouteBadge(999, fixtureMap);
-      assert.strictEqual(badgeNumericUnknown.label, '999');
-      assert.strictEqual(badgeNumericUnknown.backgroundColor, FALLBACK_ROUTE_COLOR);
-      assert.strictEqual(badgeNumericUnknown.isFallback, true);
+      assert.strictEqual(badgeNumericUnknown, null);
+
+      // Real RAPTOR uint16 pattern indices must NEVER leak as badge pills
+      const badge167 = getRouteBadge(167, fixtureMap);
+      assert.strictEqual(badge167, null);
+
+      const badge36 = getRouteBadge(36, fixtureMap);
+      assert.strictEqual(badge36, null);
     });
 
-    it('fetch failure fallback: degrades gracefully when map is empty, null, or undefined', () => {
+    it('fetch failure fallback: returns null when map is empty, null, or undefined', () => {
       const badgeNoMap = getRouteBadge('7', undefined);
-      assert.strictEqual(badgeNoMap.label, '7');
-      assert.strictEqual(badgeNoMap.backgroundColor, FALLBACK_ROUTE_COLOR);
-      assert.strictEqual(badgeNoMap.textColor, FALLBACK_TEXT_COLOR);
-      assert.strictEqual(badgeNoMap.isFallback, true);
+      assert.strictEqual(badgeNoMap, null);
 
       const badgeEmptyMap = getRouteBadge('A', new Map());
-      assert.strictEqual(badgeEmptyMap.label, 'A');
-      assert.strictEqual(badgeEmptyMap.backgroundColor, FALLBACK_ROUTE_COLOR);
-      assert.strictEqual(badgeEmptyMap.isFallback, true);
+      assert.strictEqual(badgeEmptyMap, null);
     });
 
-    it('negative cases: never crashes, never returns an empty pill', () => {
-      const badgeNull = getRouteBadge(null, fixtureMap);
-      assert.ok(badgeNull.label.length > 0, 'Must never be empty label');
-      assert.strictEqual(badgeNull.backgroundColor, FALLBACK_ROUTE_COLOR);
-      assert.strictEqual(badgeNull.isFallback, true);
-
-      const badgeUndefined = getRouteBadge(undefined, fixtureMap);
-      assert.ok(badgeUndefined.label.length > 0, 'Must never be empty label');
-      assert.strictEqual(badgeUndefined.isFallback, true);
-
-      const badgeEmpty = getRouteBadge('', fixtureMap);
-      assert.ok(badgeEmpty.label.length > 0, 'Must never be empty label');
-      assert.strictEqual(badgeEmpty.isFallback, true);
-
-      const badgeWhitespace = getRouteBadge('   ', fixtureMap);
-      assert.ok(badgeWhitespace.label.length > 0, 'Must never be empty label');
-      assert.strictEqual(badgeWhitespace.isFallback, true);
+    it('negative cases: missing, null, undefined, or empty route ID returns null (never raw ID or "0")', () => {
+      assert.strictEqual(getRouteBadge(null, fixtureMap), null);
+      assert.strictEqual(getRouteBadge(undefined, fixtureMap), null);
+      assert.strictEqual(getRouteBadge('', fixtureMap), null);
+      assert.strictEqual(getRouteBadge('   ', fixtureMap), null);
+      assert.strictEqual(getRouteBadge(0, fixtureMap), null);
+      assert.strictEqual(getRouteBadge('0', fixtureMap), null);
     });
   });
 
@@ -242,10 +233,9 @@ describe('M5b Route Badges & FC-2 Invariant Tests', () => {
       assert.strictEqual(sanitizeBadgeLabel(''), 'Transit');
     });
 
-    it('getRouteBadge strips internal prefix tokens from fallback labels', () => {
+    it('getRouteBadge returns null instead of leaking raw route_id_ or numeric strings', () => {
       const badge = getRouteBadge('route_id_101', undefined);
-      assert.strictEqual(badge.label, '101');
-      assert.ok(!badge.label.toLowerCase().includes('route_id'));
+      assert.strictEqual(badge, null, 'Unresolvable route ID must return null, never leak raw ID');
     });
 
     it('RouteComparisonView.tsx contains zero raw route-id displays', () => {

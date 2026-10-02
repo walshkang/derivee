@@ -555,6 +555,141 @@ describe('Itinerary Leg Display Presentation Tests', () => {
       );
     });
   });
+
+  describe('M5d: Leg Mode Foundation & Zero Internal ID Leaks', () => {
+    it('discriminates leg modes: transit, transfer, and walk', () => {
+      // 1. Normal transit leg
+      const transitLeg: LegInput = {
+        board_stop_id: 101,
+        exit_stop_id: 202,
+        departure_time: 28800,
+        arrival_time: 29400,
+        route_id: 167, // RAPTOR uint16 pattern index
+        is_transfer: false,
+      };
+      const transitModel = describeLeg(transitLeg, 1, 4, mockStopsMap);
+      assert.strictEqual(transitModel.kind, 'transit');
+      if (transitModel.kind === 'transit') {
+        assert.strictEqual(transitModel.mode, 'transit');
+        assert.strictEqual(transitModel.routeId, 167);
+      }
+
+      // 2. Transfer leg derived from is_transfer: true
+      const transferLeg: LegInput = {
+        board_stop_id: 202,
+        exit_stop_id: 203,
+        departure_time: 29400,
+        arrival_time: 29550,
+        route_id: 0,
+        transfer_distance_m: 120,
+        is_transfer: true,
+      };
+      const transferModel = describeLeg(transferLeg, 2, 4, mockStopsMap);
+      assert.strictEqual(transferModel.kind, 'transit');
+      if (transferModel.kind === 'transit') {
+        assert.strictEqual(transferModel.mode, 'transfer');
+        assert.strictEqual(transferModel.isTransfer, true);
+        assert.strictEqual(transferModel.transferDistanceM, 120);
+      }
+
+      // 3. Explicit walk leg
+      const walkLeg: LegInput = {
+        board_stop_id: 203,
+        exit_stop_id: 204,
+        departure_time: 29550,
+        arrival_time: 29700,
+        mode: 'walk',
+        transfer_distance_m: 100,
+      };
+      const walkModel = describeLeg(walkLeg, 3, 5, mockStopsMap);
+      assert.strictEqual(walkModel.kind, 'transit');
+      if (walkModel.kind === 'transit') {
+        assert.strictEqual(walkModel.mode, 'walk');
+      }
+    });
+
+    it('missing route_id stays undefined and does NOT default to 0', () => {
+      const missingRouteLeg: LegInput = {
+        board_stop_id: 101,
+        exit_stop_id: 202,
+        departure_time: 28800,
+        arrival_time: 29400,
+        route_id: undefined,
+        is_transfer: false,
+      };
+      const model = describeLeg(missingRouteLeg, 1, 3, mockStopsMap);
+      assert.strictEqual(model.kind, 'transit');
+      if (model.kind === 'transit') {
+        assert.strictEqual(model.routeId, undefined, 'routeId must be undefined when missing, not 0');
+        assert.strictEqual(model.route_id, undefined, 'route_id must be undefined when missing, not 0');
+      }
+    });
+
+    it('negative: zero raw pattern indices (e.g. 167, 36) or trip_ids leak into any string property', () => {
+      const realEngineLegs: LegInput[] = [
+        {
+          board_stop_id: 101,
+          exit_stop_id: 101,
+          departure_time: 28800,
+          arrival_time: 28800,
+          is_transfer: false,
+          trip_id: 998877,
+        },
+        {
+          board_stop_id: 101,
+          exit_stop_id: 202,
+          departure_time: 28800,
+          arrival_time: 29400,
+          route_id: 167,
+          trip_id: 1045,
+          is_transfer: false,
+        },
+        {
+          board_stop_id: 202,
+          exit_stop_id: 203,
+          departure_time: 29400,
+          arrival_time: 29550,
+          route_id: 0,
+          transfer_distance_m: 150,
+          trip_id: 0,
+          is_transfer: true,
+        },
+        {
+          board_stop_id: 203,
+          exit_stop_id: 303,
+          departure_time: 29550,
+          arrival_time: 30300,
+          route_id: 36,
+          trip_id: 2099,
+          is_transfer: false,
+        },
+        {
+          board_stop_id: 303,
+          exit_stop_id: 303,
+          departure_time: 30300,
+          arrival_time: 30300,
+          is_transfer: false,
+          trip_id: 0,
+        },
+      ];
+
+      const models = describeItinerary(realEngineLegs, mockStopsMap);
+
+      // Check all string properties across all models
+      for (const m of models) {
+        for (const [key, val] of Object.entries(m)) {
+          if (typeof val === 'string') {
+            assert.ok(!val.includes('167'), `String property "${key}" contains raw route pattern 167: "${val}"`);
+            assert.ok(!val.includes('36'), `String property "${key}" contains raw route pattern 36: "${val}"`);
+            assert.ok(!val.includes('1045'), `String property "${key}" contains raw trip_id 1045: "${val}"`);
+            assert.ok(!val.includes('2099'), `String property "${key}" contains raw trip_id 2099: "${val}"`);
+            assert.ok(!val.includes('998877'), `String property "${key}" contains raw trip_id 998877: "${val}"`);
+          }
+        }
+      }
+    });
+  });
 });
+
 
 
