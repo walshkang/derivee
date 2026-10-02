@@ -22,11 +22,13 @@ directory = "../../dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# KV namespace for GTFS-RT cache
-[[kv_namespaces]]
-binding = "KV_REALTIME"
-id = "YOUR_KV_NAMESPACE_ID"
-preview_id = "YOUR_KV_NAMESPACE_PREVIEW_ID"
+# KV namespace for GTFS-RT cache — DISABLED pending M7a Gate 4
+# (real namespace IDs not yet provisioned; placeholder IDs fail deploy).
+# Re-enable when M7a is reviewed and the namespace exists.
+# [[kv_namespaces]]
+# binding = "KV_REALTIME"
+# id = "YOUR_KV_NAMESPACE_ID"
+# preview_id = "YOUR_KV_NAMESPACE_PREVIEW_ID"
 
-[triggers]
-crons = ["* * * * *"] # Every minute
+# [triggers]
+# crons = ["* * * * *"] # Every minute
