@@ -1,8 +1,10 @@
+#!/usr/bin/env node
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import child_process from 'node:child_process';
 import { firefox } from 'playwright';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +25,168 @@ const MIME_TYPES = {
   '.wasm': 'application/wasm',
 };
 
+export function resolveRunContext(args = process.argv.slice(2)) {
+  const repoRoot = path.resolve(__dirname, '../..');
+  const auditsDir = process.env.AUDITS_DIR || path.resolve(repoRoot, '../derivee-audits');
+  const runsDir = path.join(auditsDir, 'runs');
+
+  let runId = process.env.RUN_ID || null;
+  let reportDirArg = null;
+  let screenshotsDirArg = null;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--run-id' && args[i + 1]) {
+      runId = args[i + 1];
+      i++;
+    } else if (args[i] === '--report-dir' && args[i + 1]) {
+      reportDirArg = args[i + 1];
+      i++;
+    } else if (args[i] === '--screenshots-dir' && args[i + 1]) {
+      screenshotsDirArg = args[i + 1];
+      i++;
+    }
+  }
+
+  if (!runId && fs.existsSync(runsDir)) {
+    const entries = fs.readdirSync(runsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+      .map((d) => {
+        const fullPath = path.join(runsDir, d.name);
+        const stat = fs.statSync(fullPath);
+        return { name: d.name, fullPath, mtimeMs: stat.mtimeMs };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    if (entries.length > 0 && (Date.now() - entries[0].mtimeMs < 3 * 3600 * 1000)) {
+      runId = entries[0].name;
+    }
+  }
+
+  if (!runId) {
+    const now = new Date();
+    const ts = now.toISOString().replace(/[-:T]/g, '').slice(0, 15);
+    runId = `r${ts}`;
+  }
+
+  const runDir = path.join(runsDir, runId);
+  fs.mkdirSync(runDir, { recursive: true });
+
+  const reportDir = reportDirArg ? path.resolve(reportDirArg) : path.join(runDir, 'report');
+  const screenshotsDir = screenshotsDirArg ? path.resolve(screenshotsDirArg) : path.join(runDir, 'screenshots');
+
+  fs.mkdirSync(reportDir, { recursive: true });
+  fs.mkdirSync(screenshotsDir, { recursive: true });
+
+  let commit = 'unknown';
+  try {
+    commit = child_process.execSync('git rev-parse --short HEAD', { cwd: repoRoot, stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
+  } catch {}
+
+  return { repoRoot, auditsDir, runsDir, runId, runDir, reportDir, screenshotsDir, commit };
+}
+
+function generateHtmlReport({ runId, commit, timestamp, stats, scenarios }) {
+  const statusColor = (status) => status === 'passed' ? '#10b981' : '#ef4444';
+  const statusBadge = (status) => status === 'passed' ? '✅ PASSED' : '❌ FAILED';
+
+  const scenarioCards = scenarios.map((s) => {
+    const shotImgs = s.screenshots.map((shotPath) => {
+      const relShot = `../screenshots/${path.basename(shotPath)}`;
+      return `
+        <div style="margin-top: 10px;">
+          <a href="${relShot}" target="_blank" style="color: #60a5fa; text-decoration: none;">
+            <img src="${relShot}" alt="${s.name}" style="max-width: 100%; max-height: 400px; border-radius: 6px; border: 1px solid #374151; display: block;" />
+            <span style="font-size: 12px; display: block; margin-top: 4px;">🔍 View full image (${path.basename(shotPath)})</span>
+          </a>
+        </div>
+      `;
+    }).join('');
+
+    const errorBlock = s.error ? `
+      <div style="background: #1f1212; border: 1px solid #ef4444; border-radius: 6px; padding: 12px; margin-top: 10px; color: #fca5a5; font-family: monospace; font-size: 12px; white-space: pre-wrap;">
+        <strong>Error:</strong> ${s.error.message}\n\n${s.error.stack || ''}
+      </div>
+    ` : '';
+
+    return `
+      <div style="background: #1e293b; border-radius: 8px; padding: 16px; margin-bottom: 16px; border: 1px solid #334155;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h3 style="margin: 0; font-size: 16px; color: #f8fafc;">${s.name}</h3>
+          <span style="background: ${statusColor(s.status)}22; color: ${statusColor(s.status)}; border: 1px solid ${statusColor(s.status)}; border-radius: 4px; padding: 2px 8px; font-weight: bold; font-size: 12px;">
+            ${statusBadge(s.status)}
+          </span>
+        </div>
+        <div style="font-size: 13px; color: #94a3b8; margin-bottom: 8px;">
+          <span>Flow: <strong style="color: #cbd5e1;">${s.flow}</strong></span> &bull;
+          <span>Duration: <strong style="color: #cbd5e1;">${s.durationMs}ms</strong></span>
+        </div>
+        ${errorBlock}
+        ${shotImgs ? `<div style="margin-top: 12px;"><h4 style="margin: 0 0 6px 0; font-size: 13px; color: #94a3b8;">Screenshots</h4>${shotImgs}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Diagnostic Harness Report — ${runId}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 24px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .header {
+      border-bottom: 1px solid #334155;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .stat-pill {
+      background: #1e293b;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 14px;
+      border: 1px solid #334155;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="margin: 0 0 8px 0; font-size: 24px;">Diagnostic Harness Report</h1>
+      <div style="color: #94a3b8; font-size: 13px;">
+        <span>Run ID: <strong style="color: #f1f5f9;">${runId}</strong></span> &bull;
+        <span>Commit: <strong style="color: #f1f5f9;">${commit}</strong></span> &bull;
+        <span>Date: <strong style="color: #f1f5f9;">${timestamp}</strong></span>
+      </div>
+      <div class="stats-bar">
+        <div class="stat-pill">Total: <strong>${stats.total}</strong></div>
+        <div class="stat-pill" style="border-color: #10b981; color: #10b981;">Passed: <strong>${stats.passed}</strong></div>
+        <div class="stat-pill" style="${stats.failed > 0 ? 'border-color: #ef4444; color: #ef4444;' : 'color: #94a3b8;'}">Failed: <strong>${stats.failed}</strong></div>
+        <div class="stat-pill">Duration: <strong>${stats.durationMs}ms</strong></div>
+      </div>
+    </div>
+    <div class="scenarios-list">
+      ${scenarioCards}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 // 1. Start Xvfb if DISPLAY is not set
 let xvfbProc = null;
 if (!process.env.DISPLAY) {
@@ -42,7 +206,6 @@ function startServer(port = 4173) {
       if (reqPath === '/') reqPath = '/index.html';
 
       const filePath = path.join(DIST_DIR, reqPath);
-      // Security check
       if (!filePath.startsWith(DIST_DIR)) {
         res.writeHead(403);
         res.end('Forbidden');
@@ -80,9 +243,60 @@ function startServer(port = 4173) {
 }
 
 const server = await startServer(4173);
+const runContext = resolveRunContext();
+const { runId, commit, reportDir, screenshotsDir } = runContext;
+console.log(`[Harness] Target Run ID: ${runId}`);
+console.log(`[Harness] Report Directory: ${reportDir}`);
+console.log(`[Harness] Screenshots Directory: ${screenshotsDir}`);
 
-// 3. Launch Firefox and run test
-let browser;
+const scenarioResults = [];
+
+async function recordScenario(name, flow, fn) {
+  console.log(`\n========================================`);
+  console.log(`[Harness] Scenario: ${name} (flow: ${flow})`);
+  console.log(`========================================`);
+  const startTime = Date.now();
+  const screenshots = [];
+
+  const takeScreenshot = async (pageInstance, filename) => {
+    const filePath = path.join(screenshotsDir, filename);
+    await pageInstance.screenshot({ path: filePath });
+    console.log(`[Harness] Saved screenshot to ${filePath}`);
+    screenshots.push(filePath);
+    return filePath;
+  };
+
+  try {
+    await fn({ takeScreenshot });
+    const durationMs = Date.now() - startTime;
+    console.log(`[Harness] ✅ PASSED: ${name} (${durationMs}ms)`);
+    scenarioResults.push({
+      name,
+      flow,
+      status: 'passed',
+      durationMs,
+      error: null,
+      screenshots,
+    });
+  } catch (err) {
+    const durationMs = Date.now() - startTime;
+    console.error(`[Harness] ❌ FAILED: ${name} (${durationMs}ms) - ${err.message}`);
+    scenarioResults.push({
+      name,
+      flow,
+      status: 'failed',
+      durationMs,
+      error: {
+        message: err.message,
+        stack: err.stack,
+      },
+      screenshots,
+    });
+  }
+}
+
+let browser = null;
+
 try {
   console.log('[Harness] Launching Firefox...');
   browser = await firefox.launch({
@@ -113,7 +327,6 @@ try {
     console.error(text);
   });
 
-  const allRequests = [];
   page.on('request', (req) => {
     pendingRequests.set(req, {
       url: req.url(),
@@ -126,18 +339,12 @@ try {
     pendingRequests.delete(req);
     const resp = await req.response();
     const info = `${req.method()} ${req.url()} -> ${resp ? resp.status() : 'no-resp'}`;
-    allRequests.push(info);
     console.log(`[Request Finished] ${info}`);
   });
 
   page.on('requestfailed', (req) => {
     const failure = req.failure()?.errorText || 'Unknown failure';
-    const entry = {
-      url: req.url(),
-      method: req.method(),
-      error: failure,
-    };
-    failedRequests.push(entry);
+    failedRequests.push({ url: req.url(), method: req.method(), error: failure });
     pendingRequests.delete(req);
     console.warn(`[Request Failed] ${req.method()} ${req.url()}: ${failure}`);
   });
@@ -149,12 +356,11 @@ try {
   const basemapBuffer = fs.readFileSync(FIXTURE_PATH);
   console.log(`[Harness] Loaded PMTiles fixture (${basemapBuffer.length} bytes)`);
 
-  // Route mocking: Mocks EVERY /api/* request
+  // Route mocking: Mocks /api/* requests
   await page.route(/\/api\/.*/, (route) => {
     const req = route.request();
     const parsed = new URL(req.url());
     if (parsed.pathname === '/api/basemap') {
-      console.log(`[Route Intercept] Serving /api/basemap (${basemapBuffer.length} bytes)`);
       route.fulfill({
         status: 200,
         headers: {
@@ -165,7 +371,6 @@ try {
         body: basemapBuffer,
       });
     } else if (parsed.pathname === '/api/cities') {
-      console.log('[Route Intercept] Serving /api/cities');
       route.fulfill({
         status: 200,
         headers: {
@@ -184,7 +389,6 @@ try {
         }),
       });
     } else if (parsed.pathname === '/api/me') {
-      console.log('[Route Intercept] Serving /api/me');
       route.fulfill({
         status: 200,
         headers: {
@@ -196,7 +400,6 @@ try {
         }),
       });
     } else {
-      console.warn(`[Route Intercept UNEXPECTED] ${req.method()} ${req.url()}`);
       route.fulfill({
         status: 200,
         headers: {
@@ -208,142 +411,170 @@ try {
     }
   });
 
-  console.log('[Harness] Navigating to http://127.0.0.1:4173/...');
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  // SCENARIO 1: Map mounts to ready
+  await recordScenario('Map mounts to ready', 'map', async ({ takeScreenshot }) => {
+    console.log('[Harness] Navigating to http://127.0.0.1:4173/...');
+    await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+    console.log('[Harness] Page loaded. Watching for basemap download and mount...');
 
-  console.log('[Harness] Page loaded. Watching for basemap download and mount...');
-
-  // Check WebGL in page
-  const webglStatus = await page.evaluate(() => {
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    if (!gl) return { ok: false, error: 'No WebGL context' };
-    return { ok: true, renderer: gl.getParameter(gl.RENDERER) };
-  });
-  console.log('[Harness] In-page WebGL check:', webglStatus);
-
-  // Check if Retry button exists (if already in error state)
-  const retryBtn = page.locator('.map-retry-btn');
-  if (await retryBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-    console.log('[Harness] Retry button visible. Clicking it...');
-    await retryBtn.click();
-  }
-
-  // Poll for state change up to 60 seconds
-  const startTime = Date.now();
-  let settled = false;
-  let finalState = null;
-  let errorDesc = null;
-  let errorDetails = null;
-
-  while (Date.now() - startTime < 60_000) {
-    const state = await page.evaluate(() => {
-      const wrapper = document.querySelector('.basemap-view-wrapper');
-      const desc = document.querySelector('.map-state-desc')?.textContent || null;
-      const details = document.querySelector('.map-error-details div')?.textContent || null;
-      const hasCanvas = !!document.querySelector('#map-container canvas');
-      return {
-        state: wrapper ? wrapper.getAttribute('data-state') : null,
-        desc,
-        details,
-        hasCanvas,
-      };
+    const webglStatus = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) return { ok: false, error: 'No WebGL context' };
+      return { ok: true, renderer: gl.getParameter(gl.RENDERER) };
     });
+    console.log('[Harness] In-page WebGL check:', webglStatus);
 
-    if (state.state !== finalState) {
-      console.log(`[Harness] State transition: ${finalState} -> ${state.state} (canvas: ${state.hasCanvas})`);
-      finalState = state.state;
+    const retryBtn = page.locator('.map-retry-btn');
+    if (await retryBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      console.log('[Harness] Retry button visible. Clicking it...');
+      await retryBtn.click();
     }
 
-    if (state.state === 'map-ready') {
-      settled = true;
-      console.log('[Harness] SUCCESS: Basemap reached map-ready state!');
-      
-      const mapDiagnostics = await page.evaluate(() => {
-        const canvas = document.querySelector('#map-container canvas');
-        let nonZeroPixels = 0;
-        let totalPixels = 0;
-        let contextType = null;
-        if (canvas) {
-          const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-          if (gl) {
-            contextType = gl instanceof WebGL2RenderingContext ? 'webgl2' : 'webgl';
-            const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
-            gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-            totalPixels = pixels.length / 4;
-            for (let i = 0; i < pixels.length; i += 4) {
-              if (pixels[i] !== 0 || pixels[i+1] !== 0 || pixels[i+2] !== 0 || pixels[i+3] !== 0) {
-                nonZeroPixels++;
+    const startTime = Date.now();
+    let settled = false;
+    let finalState = null;
+    let errorDesc = null;
+    let errorDetails = null;
+
+    while (Date.now() - startTime < 60_000) {
+      const state = await page.evaluate(() => {
+        const wrapper = document.querySelector('.basemap-view-wrapper');
+        const desc = document.querySelector('.map-state-desc')?.textContent || null;
+        const details = document.querySelector('.map-error-details div')?.textContent || null;
+        const hasCanvas = !!document.querySelector('#map-container canvas');
+        return {
+          state: wrapper ? wrapper.getAttribute('data-state') : null,
+          desc,
+          details,
+          hasCanvas,
+        };
+      });
+
+      if (state.state !== finalState) {
+        console.log(`[Harness] State transition: ${finalState} -> ${state.state} (canvas: ${state.hasCanvas})`);
+        finalState = state.state;
+      }
+
+      if (state.state === 'map-ready') {
+        settled = true;
+        console.log('[Harness] SUCCESS: Basemap reached map-ready state!');
+
+        const mapDiagnostics = await page.evaluate(() => {
+          const canvas = document.querySelector('#map-container canvas');
+          let nonZeroPixels = 0;
+          let totalPixels = 0;
+          let contextType = null;
+          if (canvas) {
+            const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            if (gl) {
+              contextType = gl instanceof WebGL2RenderingContext ? 'webgl2' : 'webgl';
+              const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+              gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+              totalPixels = pixels.length / 4;
+              for (let i = 0; i < pixels.length; i += 4) {
+                if (pixels[i] !== 0 || pixels[i+1] !== 0 || pixels[i+2] !== 0 || pixels[i+3] !== 0) {
+                  nonZeroPixels++;
+                }
               }
             }
           }
-        }
-        return {
-          canvasWidth: canvas?.width,
-          canvasHeight: canvas?.height,
-          contextType,
-          totalPixels,
-          nonZeroPixels,
-        };
-      });
-      console.log('[Harness] Map diagnostics after ready:', mapDiagnostics);
-
-      const footerBuildText = await page.evaluate(() => {
-        return document.querySelector('.footer-build-item')?.textContent || null;
-      });
-      console.log('[Harness] Footer Build Info:', footerBuildText);
-      if (!footerBuildText || !footerBuildText.includes('Build:')) {
-        throw new Error(`Expected footer build identity to be rendered, got: ${footerBuildText}`);
-      }
-
-      const screenshotPath = '/tmp/map-ready.png';
-      await page.screenshot({ path: screenshotPath });
-      console.log(`[Harness] Saved screenshot to ${screenshotPath}`);
-
-      // Wait a moment for any background tile loading or rendering
-      await new Promise((r) => setTimeout(r, 2000));
-
-      console.log('\n[Harness] --- TESTING CACHED VISIT (RELOAD) ---');
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      console.log('[Harness] Page reloaded. Waiting for cached mount...');
-
-      let reloadSettled = false;
-      const reloadStart = Date.now();
-      let reloadState = null;
-      while (Date.now() - reloadStart < 30_000) {
-        const cur = await page.evaluate(() => {
-          const wrapper = document.querySelector('.basemap-view-wrapper');
           return {
-            state: wrapper ? wrapper.getAttribute('data-state') : null,
-            desc: document.querySelector('.map-state-desc')?.textContent || null,
-            details: document.querySelector('.map-error-details div')?.textContent || null,
+            canvasWidth: canvas?.width,
+            canvasHeight: canvas?.height,
+            contextType,
+            totalPixels,
+            nonZeroPixels,
           };
         });
-        if (cur.state !== reloadState) {
-          console.log(`[Harness Reload] State transition: ${reloadState} -> ${cur.state}`);
-          reloadState = cur.state;
-        }
-        if (cur.state === 'map-ready') {
-          reloadSettled = true;
-          console.log('[Harness Reload] SUCCESS: Cached basemap reached map-ready state!');
-          break;
-        }
-        if (cur.state === 'map-error') {
-          console.log(`[Harness Reload] FAILURE: Cached basemap entered map-error!`);
-          console.log(`[Harness Reload] Details: ${cur.details}`);
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 500));
+        console.log('[Harness] Map diagnostics after ready:', mapDiagnostics);
+
+        await takeScreenshot(page, 'map-ready.png');
+        break;
       }
 
-      console.log('\n[Harness] --- TESTING TRIP PLANNER CARD SCROLL GESTURE REGRESSION ---');
-      const mobileContext = await browser.newContext({
-        viewport: { width: 390, height: 844 },
-        hasTouch: true,
-        isMobile: true,
-      });
-      const mobilePage = await mobileContext.newPage();
+      if (state.state === 'map-error') {
+        settled = true;
+        errorDesc = state.desc;
+        errorDetails = state.details;
+        await takeScreenshot(page, 'map-ready-failed.png').catch(() => {});
+        throw new Error(`Basemap entered map-error state: ${errorDesc}\n${errorDetails}`);
+      }
 
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    if (!settled) {
+      await takeScreenshot(page, 'map-ready-failed.png').catch(() => {});
+      throw new Error('Timeout: 60s elapsed without reaching map-ready or map-error');
+    }
+  });
+
+  // SCENARIO 2: Footer shows build hash
+  await recordScenario('Footer shows build hash', 'system info', async ({ takeScreenshot }) => {
+    const footerBuildText = await page.evaluate(() => {
+      return document.querySelector('.footer-build-item')?.textContent || null;
+    });
+    console.log('[Harness] Footer Build Info:', footerBuildText);
+    if (!footerBuildText || !footerBuildText.includes('Build:')) {
+      await takeScreenshot(page, 'footer-build-failed.png').catch(() => {});
+      throw new Error(`Expected footer build identity to be rendered, got: ${footerBuildText}`);
+    }
+    await takeScreenshot(page, 'footer-build.png');
+  });
+
+  // SCENARIO 3: Cached reload reaches ready
+  await recordScenario('Cached reload reaches ready', 'map', async ({ takeScreenshot }) => {
+    console.log('\n[Harness] --- TESTING CACHED VISIT (RELOAD) ---');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    console.log('[Harness] Page reloaded. Waiting for cached mount...');
+
+    let reloadSettled = false;
+    const reloadStart = Date.now();
+    let reloadState = null;
+    while (Date.now() - reloadStart < 30_000) {
+      const cur = await page.evaluate(() => {
+        const wrapper = document.querySelector('.basemap-view-wrapper');
+        return {
+          state: wrapper ? wrapper.getAttribute('data-state') : null,
+          desc: document.querySelector('.map-state-desc')?.textContent || null,
+          details: document.querySelector('.map-error-details div')?.textContent || null,
+        };
+      });
+      if (cur.state !== reloadState) {
+        console.log(`[Harness Reload] State transition: ${reloadState} -> ${cur.state}`);
+        reloadState = cur.state;
+      }
+      if (cur.state === 'map-ready') {
+        reloadSettled = true;
+        console.log('[Harness Reload] SUCCESS: Cached basemap reached map-ready state!');
+        await takeScreenshot(page, 'cached-reload.png');
+        break;
+      }
+      if (cur.state === 'map-error') {
+        await takeScreenshot(page, 'cached-reload-failed.png').catch(() => {});
+        throw new Error(`Cached basemap entered map-error: ${cur.details || cur.desc}`);
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    if (!reloadSettled) {
+      await takeScreenshot(page, 'cached-reload-failed.png').catch(() => {});
+      throw new Error('Timeout: 30s elapsed without reaching cached map-ready');
+    }
+  });
+
+  // SCENARIO 4: Route cards scroll on swipe, sheet stays put
+  await recordScenario('Route cards scroll on swipe, sheet stays put', 'trip planning', async ({ takeScreenshot }) => {
+    console.log('\n[Harness] --- TESTING TRIP PLANNER CARD SCROLL GESTURE REGRESSION ---');
+    const mobileContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const mobilePage = await mobileContext.newPage();
+
+    try {
       await mobilePage.route(/\/api\/.*/, (route) => {
         const pathname = new URL(route.request().url()).pathname;
         if (pathname === '/api/me') {
@@ -494,61 +725,76 @@ try {
         throw new Error(`Sheet height changed from ${gesture.sheetHeightBefore} to ${gesture.sheetHeightAfter}`);
       }
       console.log('[Harness Planner] SUCCESS: Cards scrolled natively without sheet hijacking or detent change!');
+      await takeScreenshot(mobilePage, 'trip-cards-scrolled.png');
+    } catch (err) {
+      await takeScreenshot(mobilePage, 'trip-cards-scrolled-failed.png').catch(() => {});
+      throw err;
+    } finally {
       await mobileContext.close();
-
-      break;
     }
+  });
 
-    if (state.state === 'map-error') {
-      settled = true;
-      errorDesc = state.desc;
-      errorDetails = state.details;
-      console.log(`[Harness] FAILURE: Basemap entered map-error state!`);
-      console.log(`[Harness] Error Desc: ${errorDesc}`);
-      console.log(`[Harness] Error Details:\n${errorDetails}`);
-      break;
-    }
-
-    await new Promise((r) => setTimeout(r, 500));
-  }
-
-  if (!settled) {
-    console.log('[Harness] TIMEOUT: 60s elapsed without reaching map-ready or map-error.');
-  }
-
-  // Report pending requests
-  console.log('\n--- PENDING REQUESTS AT SETTLE/TIMEOUT ---');
-  if (pendingRequests.size === 0) {
-    console.log('None.');
-  } else {
-    for (const [, info] of pendingRequests) {
-      console.log(`- ${info.method} ${info.url} (pending for ${Date.now() - info.startTime}ms)`);
-    }
-  }
-
-  console.log('\n--- FAILED REQUESTS ---');
-  if (failedRequests.length === 0) {
-    console.log('None.');
-  } else {
-    for (const f of failedRequests) {
-      console.log(`- ${f.method} ${f.url}: ${f.error}`);
-    }
-  }
-
-  console.log('\n--- PAGE ERRORS ---');
-  if (pageErrors.length === 0) {
-    console.log('None.');
-  } else {
-    for (const pe of pageErrors) {
-      console.log(`- ${pe}`);
-    }
-  }
-
-  console.log('\n--- HARNESS COMPLETE ---');
 } finally {
   if (browser) await browser.close();
   server.close();
   if (xvfbProc) {
     xvfbProc.kill();
+  }
+
+  // Generate Reports
+  const reportData = {
+    runId,
+    commit,
+    timestamp: new Date().toISOString(),
+    stats: {
+      total: scenarioResults.length,
+      passed: scenarioResults.filter((s) => s.status === 'passed').length,
+      failed: scenarioResults.filter((s) => s.status === 'failed').length,
+      durationMs: scenarioResults.reduce((acc, s) => acc + s.durationMs, 0),
+    },
+    reportPath: path.join(reportDir, 'index.html'),
+    scenarios: scenarioResults,
+    suites: [
+      {
+        title: 'Diagnostic Harness',
+        specs: scenarioResults.map((s) => ({
+          title: s.name,
+          ok: s.status === 'passed',
+          tests: [
+            {
+              timeout: 60000,
+              annotations: [{ type: 'flow', description: s.flow }],
+              expectedStatus: 'passed',
+              status: s.status === 'passed' ? 'expected' : 'unexpected',
+              results: [
+                {
+                  status: s.status,
+                  duration: s.durationMs,
+                  errors: s.error ? [s.error] : [],
+                  attachments: s.screenshots.map((shot) => ({
+                    name: 'screenshot',
+                    contentType: 'image/png',
+                    path: shot,
+                  })),
+                },
+              ],
+            },
+          ],
+        })),
+      },
+    ],
+  };
+
+  const jsonReportPath = path.join(reportDir, 'report.json');
+  fs.writeFileSync(jsonReportPath, JSON.stringify(reportData, null, 2), 'utf8');
+  console.log(`[Harness] Wrote JSON report to: ${jsonReportPath}`);
+
+  const htmlReport = generateHtmlReport(reportData);
+  const htmlReportPath = path.join(reportDir, 'index.html');
+  fs.writeFileSync(htmlReportPath, htmlReport, 'utf8');
+  console.log(`[Harness] Wrote HTML report to: ${htmlReportPath}`);
+
+  if (scenarioResults.some((s) => s.status === 'failed')) {
+    process.exitCode = 1;
   }
 }
