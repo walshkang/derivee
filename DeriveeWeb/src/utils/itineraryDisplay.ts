@@ -88,11 +88,53 @@ export interface TransitLegDisplay {
   transfer_distance_m: number;
   isTransfer: boolean;
   is_transfer: boolean;
+  intermediateStopsCount?: number;
+  stopCount?: number;
+}
+
+export interface TransferConnectorDisplay {
+  kind: 'connector';
+  station: string;
+  stationName: string;
+  stopId: number;
+  stop_id: number;
+  text: string;
+  durationMinutes: number;
+  duration_minutes: number;
+  durationSeconds: number;
+  duration_seconds: number;
+  transferDistanceM: number;
+  transfer_distance_m: number;
+}
+
+export interface WalkAccessDisplay {
+  kind: 'walk';
+  mode: 'walk';
+  boardStopId: number;
+  board_stop_id: number;
+  exitStopId: number;
+  exit_stop_id: number;
+  boardStopName: string;
+  board_stop_name: string;
+  exitStopName: string;
+  exit_stop_name: string;
+  departureTime: number;
+  departure_time: number;
+  arrivalTime: number;
+  arrival_time: number;
+  durationMinutes: number;
+  duration_minutes: number;
+  durationSeconds: number;
+  duration_seconds: number;
+  transferDistanceM: number;
+  transfer_distance_m: number;
 }
 
 export type LegDisplayModel =
   | StartLegDisplay
   | ArriveLegDisplay
+  | TransferConnectorDisplay
+  | WalkAccessDisplay
   | TransitLegDisplay;
 
 /**
@@ -288,15 +330,351 @@ export function describeLeg(
     transfer_distance_m: leg.transfer_distance_m ?? 0,
     isTransfer: Boolean(leg.is_transfer || mode === 'transfer' || mode === 'walk'),
     is_transfer: Boolean(leg.is_transfer || mode === 'transfer' || mode === 'walk'),
+    intermediateStopsCount: 0,
+    stopCount: 0,
   };
 }
 
+export const TRIP_TRANSFER = 0xFFFFFFFF;
+export const ROUTE_TRANSFER = 0xFFFF;
+
+export function isTransferLeg(tripId?: number, routeId?: number): boolean {
+  return tripId === TRIP_TRANSFER || routeId === ROUTE_TRANSFER;
+}
+
+export function isTransitLeg(leg: LegInput): boolean {
+  if (leg.mode === 'transit') return true;
+  if (leg.mode === 'walk' || leg.mode === 'transfer') return false;
+  if (leg.is_transfer) return false;
+  if (isTransferLeg(leg.trip_id, leg.route_id)) return false;
+  if (leg.trip_id === 0 && leg.route_id === 0 && (leg.transfer_distance_m ?? 0) > 0) return false;
+  if ((leg.trip_id !== undefined && leg.trip_id > 0) || (leg.route_id !== undefined && leg.route_id > 0)) {
+    return true;
+  }
+  const fromStop = leg.from_stop !== undefined ? leg.from_stop : leg.board_stop_id;
+  const toStop = leg.to_stop !== undefined ? leg.to_stop : leg.exit_stop_id;
+  if (!leg.is_transfer && fromStop !== undefined && toStop !== undefined && fromStop !== toStop) {
+    return true;
+  }
+  return false;
+}
+
+export function isPhantomTransfer(leg: LegInput, _resolver?: StopNameResolver): boolean {
+  const dur = Math.abs(leg.arrival_time - leg.departure_time);
+  const dist = leg.transfer_distance_m ?? 0;
+  if (dur === 0 && dist === 0) return true;
+  const fromStop = leg.from_stop !== undefined ? leg.from_stop : leg.board_stop_id;
+  const toStop = leg.to_stop !== undefined ? leg.to_stop : leg.exit_stop_id;
+  if (fromStop === toStop && dur < 60 && dist === 0 && (!leg.trip_id || leg.trip_id === 0)) {
+    return true;
+  }
+  return false;
+}
+
+export function canMergeTransitLegs(
+  prev: LegInput,
+  curr: LegInput,
+  resolver?: StopNameResolver
+): boolean {
+  if (
+    prev.trip_id !== undefined &&
+    curr.trip_id !== undefined &&
+    prev.trip_id > 0 &&
+    curr.trip_id > 0
+  ) {
+    return prev.trip_id === curr.trip_id;
+  }
+  if (
+    prev.trip_id !== undefined &&
+    curr.trip_id !== undefined &&
+    prev.trip_id !== curr.trip_id &&
+    prev.trip_id > 0 &&
+    curr.trip_id > 0
+  ) {
+    return false;
+  }
+  if (
+    prev.route_id !== undefined &&
+    curr.route_id !== undefined &&
+    prev.route_id === curr.route_id
+  ) {
+    const prevTo = prev.to_stop !== undefined ? prev.to_stop : prev.exit_stop_id;
+    const currFrom = curr.from_stop !== undefined ? curr.from_stop : curr.board_stop_id;
+    const continuousStops =
+      prevTo !== undefined &&
+      currFrom !== undefined &&
+      (prevTo === currFrom ||
+        (resolveStopName(prevTo, resolver) === resolveStopName(currFrom, resolver) &&
+          !resolveStopName(prevTo, resolver).toLowerCase().startsWith('stop #')));
+    const noAlighting =
+      curr.departure_time >= prev.arrival_time &&
+      curr.departure_time - prev.arrival_time <= 180;
+    return continuousStops && noAlighting;
+  }
+  return false;
+}
+
 /**
- * Transforms an array of itinerary legs into display models.
+ * Transforms an array of itinerary legs into grouped presentation display models.
+ * Groups consecutive transit hops on the same vehicle into a single ride leg.
+ * Renders transfers as connector rows between ride legs.
  */
 export function describeItinerary(
   legs: LegInput[],
   resolver?: StopNameResolver
 ): LegDisplayModel[] {
-  return legs.map((leg, index) => describeLeg(leg, index, legs.length, resolver));
+  if (!legs || legs.length === 0) return [];
+
+  const hasStartStub = isZeroLengthLeg(legs[0], resolver);
+  const hasArriveStub = legs.length > 1 && isZeroLengthLeg(legs[legs.length - 1], resolver);
+
+  const startLeg = hasStartStub ? describeLeg(legs[0], 0, legs.length, resolver) : null;
+  const arriveLeg = hasArriveStub
+    ? describeLeg(legs[legs.length - 1], legs.length - 1, legs.length, resolver)
+    : null;
+
+  const startIndex = hasStartStub ? 1 : 0;
+  const endIndex = hasArriveStub ? legs.length - 1 : legs.length;
+  const middle = legs.slice(startIndex, endIndex);
+
+  if (middle.length === 0) {
+    const res: LegDisplayModel[] = [];
+    if (startLeg) res.push(startLeg);
+    if (arriveLeg) res.push(arriveLeg);
+    return res;
+  }
+
+  const activeLegs = middle.filter((leg) => !isPhantomTransfer(leg, resolver));
+  const operationalLegs = activeLegs.length > 0 ? activeLegs : middle;
+
+  interface GroupedBlock {
+    type: 'transit' | 'transfer' | 'walk';
+    legs: LegInput[];
+  }
+
+  const blocks: GroupedBlock[] = [];
+  for (const leg of operationalLegs) {
+    const isTransit = isTransitLeg(leg);
+    const blockType = isTransit ? 'transit' : (leg.mode === 'walk' ? 'walk' : 'transfer');
+
+    if (blocks.length === 0) {
+      blocks.push({ type: blockType, legs: [leg] });
+      continue;
+    }
+
+    const lastBlock = blocks[blocks.length - 1];
+    if (lastBlock.type === 'transit' && blockType === 'transit') {
+      const prevLeg = lastBlock.legs[lastBlock.legs.length - 1];
+      if (canMergeTransitLegs(prevLeg, leg, resolver)) {
+        lastBlock.legs.push(leg);
+        continue;
+      }
+    }
+
+    if (lastBlock.type === blockType && blockType !== 'transit') {
+      lastBlock.legs.push(leg);
+      continue;
+    }
+
+    blocks.push({ type: blockType, legs: [leg] });
+  }
+
+  const result: LegDisplayModel[] = [];
+  if (startLeg) {
+    result.push(startLeg);
+  }
+
+  let transitRideIndex = 0;
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+
+    if (block.type === 'transit') {
+      const first = block.legs[0];
+      const last = block.legs[block.legs.length - 1];
+      const fromStop = first.from_stop !== undefined ? first.from_stop : first.board_stop_id ?? 0;
+      const toStop = last.to_stop !== undefined ? last.to_stop : last.exit_stop_id ?? 0;
+
+      const explicitBoardName =
+        first.board_name ??
+        first.boardStopName ??
+        first.board_stop_name ??
+        first.station ??
+        first.stationName ??
+        first.station_name;
+      const explicitExitName =
+        last.exit_name ??
+        last.exitStopName ??
+        last.exit_stop_name ??
+        last.station ??
+        last.stationName ??
+        last.station_name;
+
+      const boardName = resolveStopName(fromStop, resolver, explicitBoardName);
+      const exitName = resolveStopName(toStop, resolver, explicitExitName);
+
+      const depTime = first.departure_time;
+      const arrTime = last.arrival_time;
+      const durationSec = Math.max(0, arrTime - depTime);
+      const durationMin = Math.max(0, Math.round(durationSec / 60));
+      const intermediateStopsCount = block.legs.length - 1;
+
+      const transitModel: TransitLegDisplay = {
+        kind: 'transit',
+        mode: 'transit',
+        legIndex: transitRideIndex,
+        leg_index: transitRideIndex,
+        boardStopId: fromStop,
+        board_stop_id: fromStop,
+        exitStopId: toStop,
+        exit_stop_id: toStop,
+        boardStopName: boardName,
+        board_stop_name: boardName,
+        exitStopName: exitName,
+        exit_stop_name: exitName,
+        departureTime: depTime,
+        departure_time: depTime,
+        arrivalTime: arrTime,
+        arrival_time: arrTime,
+        durationMinutes: durationMin,
+        duration_minutes: durationMin,
+        durationSeconds: durationSec,
+        duration_seconds: durationSec,
+        routeId: first.route_id,
+        route_id: first.route_id,
+        transferDistanceM: 0,
+        transfer_distance_m: 0,
+        isTransfer: false,
+        is_transfer: false,
+        intermediateStopsCount,
+        stopCount: intermediateStopsCount,
+      };
+
+      result.push(transitModel);
+      transitRideIndex++;
+    } else {
+      const prevBlock = i > 0 ? blocks[i - 1] : null;
+      const nextBlock = i + 1 < blocks.length ? blocks[i + 1] : null;
+
+      if (prevBlock && prevBlock.type === 'transit' && nextBlock && nextBlock.type === 'transit') {
+        const first = block.legs[0];
+        const last = block.legs[block.legs.length - 1];
+        const prevTransitLast = prevBlock.legs[prevBlock.legs.length - 1];
+        const changeStopId =
+          first.board_stop_id ??
+          first.from_stop ??
+          prevTransitLast.exit_stop_id ??
+          prevTransitLast.to_stop ??
+          0;
+        const station = resolveStopName(changeStopId, resolver);
+        const totalDist = block.legs.reduce((acc, l) => acc + (l.transfer_distance_m ?? 0), 0);
+        const depTime = first.departure_time;
+        const arrTime = last.arrival_time;
+        const durSec = Math.max(0, arrTime - depTime);
+        const durMin = Math.max(0, Math.round(durSec / 60));
+
+        const connector: TransferConnectorDisplay = {
+          kind: 'connector',
+          station,
+          stationName: station,
+          stopId: changeStopId,
+          stop_id: changeStopId,
+          text: `Change at ${station}`,
+          durationMinutes: durMin,
+          duration_minutes: durMin,
+          durationSeconds: durSec,
+          duration_seconds: durSec,
+          transferDistanceM: totalDist,
+          transfer_distance_m: totalDist,
+        };
+        result.push(connector);
+      } else {
+        const first = block.legs[0];
+        const last = block.legs[block.legs.length - 1];
+        const fromStop = first.board_stop_id ?? first.from_stop ?? 0;
+        const toStop = last.exit_stop_id ?? last.to_stop ?? 0;
+        const boardName = resolveStopName(fromStop, resolver);
+        const exitName = resolveStopName(toStop, resolver);
+        const totalDist = block.legs.reduce((acc, l) => acc + (l.transfer_distance_m ?? 0), 0);
+        const depTime = first.departure_time;
+        const arrTime = last.arrival_time;
+        const durSec = Math.max(0, arrTime - depTime);
+        const durMin = Math.max(0, Math.round(durSec / 60));
+
+        const walkModel: WalkAccessDisplay = {
+          kind: 'walk',
+          mode: 'walk',
+          boardStopId: fromStop,
+          board_stop_id: fromStop,
+          exitStopId: toStop,
+          exit_stop_id: toStop,
+          boardStopName: boardName,
+          board_stop_name: boardName,
+          exitStopName: exitName,
+          exit_stop_name: exitName,
+          departureTime: depTime,
+          departure_time: depTime,
+          arrivalTime: arrTime,
+          arrival_time: arrTime,
+          durationMinutes: durMin,
+          duration_minutes: durMin,
+          durationSeconds: durSec,
+          duration_seconds: durSec,
+          transferDistanceM: totalDist,
+          transfer_distance_m: totalDist,
+        };
+        result.push(walkModel);
+      }
+    }
+  }
+
+  // Insert transfer connector if two transit blocks were adjacent without explicit transfer leg
+  const finalResult: LegDisplayModel[] = [];
+  for (let j = 0; j < result.length; j++) {
+    finalResult.push(result[j]);
+    if (
+      result[j].kind === 'transit' &&
+      j + 1 < result.length &&
+      result[j + 1].kind === 'transit'
+    ) {
+      const prevTransit = result[j] as TransitLegDisplay;
+      const nextTransit = result[j + 1] as TransitLegDisplay;
+      const changeStation = prevTransit.exitStopName;
+      const durSec = Math.max(0, nextTransit.departureTime - prevTransit.arrivalTime);
+      const durMin = Math.max(0, Math.round(durSec / 60));
+
+      finalResult.push({
+        kind: 'connector',
+        station: changeStation,
+        stationName: changeStation,
+        stopId: prevTransit.exitStopId,
+        stop_id: prevTransit.exitStopId,
+        text: `Change at ${changeStation}`,
+        durationMinutes: durMin,
+        duration_minutes: durMin,
+        durationSeconds: durSec,
+        duration_seconds: durSec,
+        transferDistanceM: 0,
+        transfer_distance_m: 0,
+      });
+    }
+  }
+
+  if (arriveLeg) {
+    finalResult.push(arriveLeg);
+  }
+
+  return finalResult;
 }
+
+/**
+ * Calculates true commuter transfer count from itinerary legs.
+ * Commuter transfers = actual vehicle changes = (transit ride legs - 1).
+ */
+export function countTransfers(legs: LegInput[], resolver?: StopNameResolver): number {
+  if (!legs || legs.length === 0) return 0;
+  const models = describeItinerary(legs, resolver);
+  const transitLegs = models.filter((m) => m.kind === 'transit');
+  return Math.max(0, transitLegs.length - 1);
+}
+

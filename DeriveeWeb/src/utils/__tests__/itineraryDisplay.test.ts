@@ -8,6 +8,10 @@ import {
   describeItinerary,
   isZeroLengthLeg,
   resolveStopName,
+  countTransfers,
+  canMergeTransitLegs,
+  isPhantomTransfer,
+  isTransitLeg,
   type LegInput,
 } from '../itineraryDisplay.ts';
 
@@ -689,7 +693,177 @@ describe('Itinerary Leg Display Presentation Tests', () => {
       }
     });
   });
+
+  describe('M5e: Itinerary Leg Grouping & Transfer Model', () => {
+    const stopsResolver = new Map<number, { name: string }>([
+      [101, { name: 'Times Sq - 42 St' }],
+      [102, { name: '34 St - Penn Station' }],
+      [103, { name: '14 St - Union Sq' }],
+      [201, { name: '14 St - Union Sq' }],
+      [202, { name: 'Astor Pl' }],
+      [203, { name: 'Bleecker St' }],
+      [1246, { name: 'Bowery' }],
+      [1247, { name: 'Bowery' }],
+      [1250, { name: 'Canal St' }],
+      [1288, { name: 'Canal St' }],
+      [1336, { name: '34 St - Herald Sq' }],
+      [76, { name: '34 St - Penn Station' }],
+      [67, { name: '59 St - Columbus Circle' }],
+      [66, { name: '59 St - Columbus Circle' }],
+    ]);
+
+    it('groups consecutive transit segments on the same vehicle (same trip_id) into one ride leg', () => {
+      const perStopSegments: LegInput[] = [
+        // Origin stub
+        { board_stop_id: 101, exit_stop_id: 101, departure_time: 28800, arrival_time: 28800, trip_id: 0, route_id: 0, transfer_distance_m: 0 },
+        // Hop 1: Times Sq -> 34 St (same train, trip 5001)
+        { board_stop_id: 101, exit_stop_id: 102, departure_time: 28860, arrival_time: 28980, trip_id: 5001, route_id: 1, transfer_distance_m: 0 },
+        // Hop 2: 34 St -> 14 St (same train, trip 5001)
+        { board_stop_id: 102, exit_stop_id: 103, departure_time: 28980, arrival_time: 29160, trip_id: 5001, route_id: 1, transfer_distance_m: 0 },
+        // Destination stub
+        { board_stop_id: 103, exit_stop_id: 103, departure_time: 29160, arrival_time: 29160, trip_id: 0, route_id: 0, transfer_distance_m: 0 },
+      ];
+
+      const models = describeItinerary(perStopSegments, stopsResolver);
+
+      // Must produce: start row, exactly 1 grouped transit leg, arrive row
+      assert.strictEqual(models.length, 3, `Expected 3 models (start, 1 ride, arrive), got ${models.length}`);
+      assert.strictEqual(models[0].kind, 'start');
+      assert.strictEqual(models[1].kind, 'transit');
+      assert.strictEqual(models[2].kind, 'arrive');
+
+      if (models[1].kind === 'transit') {
+        assert.strictEqual(models[1].boardStopName, 'Times Sq - 42 St');
+        assert.strictEqual(models[1].exitStopName, '14 St - Union Sq');
+        assert.strictEqual(models[1].intermediateStopsCount, 1, 'Should record 1 intermediate stop');
+        assert.strictEqual(models[1].stopCount, 1);
+        assert.strictEqual(models[1].durationMinutes, 5, 'Total ride duration should be 29160 - 28860 = 300s = 5m');
+        assert.strictEqual(models[1].mode, 'transit');
+        assert.strictEqual(models[1].legIndex, 0);
+      }
+
+      assert.strictEqual(countTransfers(perStopSegments, stopsResolver), 0, 'Single-seat ride must have 0 transfers');
+    });
+
+    it('renders transfers between ride legs as connector rows ("Change at {station}")', () => {
+      const multiRideJourney: LegInput[] = [
+        // Origin stub
+        { board_stop_id: 101, exit_stop_id: 101, departure_time: 28800, arrival_time: 28800, trip_id: 0, route_id: 0 },
+        // Ride 1: Times Sq -> 14 St
+        { board_stop_id: 101, exit_stop_id: 103, departure_time: 28860, arrival_time: 29160, trip_id: 5001, route_id: 1, transfer_distance_m: 0 },
+        // Station transfer walk within 14 St complex: 103 -> 201
+        { board_stop_id: 103, exit_stop_id: 201, departure_time: 29160, arrival_time: 29280, trip_id: 0, route_id: 0, transfer_distance_m: 85, is_transfer: true },
+        // Ride 2: 14 St -> Bleecker St
+        { board_stop_id: 201, exit_stop_id: 203, departure_time: 29340, arrival_time: 29580, trip_id: 6002, route_id: 6, transfer_distance_m: 0 },
+        // Dest stub
+        { board_stop_id: 203, exit_stop_id: 203, departure_time: 29580, arrival_time: 29580, trip_id: 0, route_id: 0 },
+      ];
+
+      const models = describeItinerary(multiRideJourney, stopsResolver);
+
+      assert.strictEqual(models.length, 5, 'Must produce: start, ride 1, connector, ride 2, arrive');
+      assert.strictEqual(models[0].kind, 'start');
+      assert.strictEqual(models[1].kind, 'transit');
+      assert.strictEqual(models[2].kind, 'connector');
+      assert.strictEqual(models[3].kind, 'transit');
+      assert.strictEqual(models[4].kind, 'arrive');
+
+      if (models[2].kind === 'connector') {
+        assert.match(models[2].text, /Change at 14 St/i, 'Connector text must announce Change at 14 St');
+        assert.strictEqual(models[2].transferDistanceM, 85);
+        assert.strictEqual(models[2].durationMinutes, 2);
+      }
+
+      assert.strictEqual(countTransfers(multiRideJourney, stopsResolver), 1, 'Two rides with connection = exactly 1 transfer');
+    });
+
+    it('real engine output fixture (Bowery -> Columbus Circle): groups rides, inserts connectors, 2 transfers', () => {
+      const BOWERY_COLUMBUS_SEGMENTS: LegInput[] = [
+        { board_stop_id: 1246, exit_stop_id: 1247, trip_id: 0, departure_time: 28800, arrival_time: 28802, route_id: 0, transfer_distance_m: 2, is_transfer: false },
+        { board_stop_id: 1247, exit_stop_id: 1250, trip_id: 20615, departure_time: 28920, arrival_time: 29010, route_id: 217, transfer_distance_m: 0, is_transfer: false },
+        { board_stop_id: 1250, exit_stop_id: 1288, trip_id: 0, departure_time: 29010, arrival_time: 29067, route_id: 0, transfer_distance_m: 74, is_transfer: false },
+        { board_stop_id: 1288, exit_stop_id: 1336, trip_id: 18522, departure_time: 29130, arrival_time: 29520, route_id: 190, transfer_distance_m: 0, is_transfer: false },
+        { board_stop_id: 1336, exit_stop_id: 76, trip_id: 0, departure_time: 29520, arrival_time: 29611, route_id: 0, transfer_distance_m: 118, is_transfer: false },
+        { board_stop_id: 76, exit_stop_id: 67, trip_id: 89, departure_time: 29700, arrival_time: 30030, route_id: 3, transfer_distance_m: 0, is_transfer: false },
+        { board_stop_id: 67, exit_stop_id: 66, trip_id: 0, departure_time: 30030, arrival_time: 30038, route_id: 0, transfer_distance_m: 10, is_transfer: false },
+      ];
+
+      const models = describeItinerary(BOWERY_COLUMBUS_SEGMENTS, stopsResolver);
+
+      const transitModels = models.filter((m) => m.kind === 'transit');
+      const connectorModels = models.filter((m) => m.kind === 'connector');
+
+      assert.strictEqual(transitModels.length, 3, 'Must yield exactly 3 transit ride legs');
+      assert.strictEqual(connectorModels.length, 2, 'Must yield exactly 2 connector rows');
+      assert.strictEqual(countTransfers(BOWERY_COLUMBUS_SEGMENTS, stopsResolver), 2, 'Bowery -> Columbus Circle must count as 2 transfers');
+
+      // Verify connector content
+      assert.match(connectorModels[0].text, /Change at Canal St/i);
+      assert.strictEqual(connectorModels[0].transferDistanceM, 74);
+      assert.match(connectorModels[1].text, /Change at 34 St/i);
+      assert.strictEqual(connectorModels[1].transferDistanceM, 118);
+    });
+
+    it('negative case: two different trip_ids on the same route do NOT merge', () => {
+      const legA: LegInput = {
+        board_stop_id: 101,
+        exit_stop_id: 102,
+        departure_time: 28800,
+        arrival_time: 29000,
+        route_id: 1,
+        trip_id: 1001,
+      };
+      const legB: LegInput = {
+        board_stop_id: 102,
+        exit_stop_id: 103,
+        departure_time: 29060,
+        arrival_time: 29260,
+        route_id: 1,
+        trip_id: 1002, // Different trip!
+      };
+
+      assert.strictEqual(
+        canMergeTransitLegs(legA, legB, stopsResolver),
+        false,
+        'Legs with different trip_ids must NOT merge even if on the same route'
+      );
+
+      const models = describeItinerary([legA, legB], stopsResolver);
+      const transitModels = models.filter((m) => m.kind === 'transit');
+      assert.strictEqual(transitModels.length, 2, 'Different trip_ids must remain 2 separate ride legs');
+      assert.strictEqual(countTransfers([legA, legB], stopsResolver), 1, 'Changing trains on same route is 1 transfer');
+    });
+
+    it('negative case: zero-minute phantom transfer does NOT inflate transfer count', () => {
+      const journeyWithPhantom: LegInput[] = [
+        // Single transit ride
+        { board_stop_id: 101, exit_stop_id: 102, departure_time: 28800, arrival_time: 29400, trip_id: 501, route_id: 1, transfer_distance_m: 0 },
+        // Phantom 0-duration, 0-distance transfer
+        { board_stop_id: 102, exit_stop_id: 102, departure_time: 29400, arrival_time: 29400, trip_id: 0, route_id: 0, transfer_distance_m: 0, is_transfer: true },
+      ];
+
+      assert.strictEqual(isTransitLeg(journeyWithPhantom[0]), true, 'Transit leg must be recognized by isTransitLeg');
+      assert.strictEqual(isTransitLeg(journeyWithPhantom[1]), false, 'Phantom transfer must not be recognized as transit leg');
+      assert.strictEqual(isPhantomTransfer(journeyWithPhantom[1], stopsResolver), true, 'Zero-duration zero-dist leg must be detected as phantom transfer');
+      assert.strictEqual(countTransfers(journeyWithPhantom, stopsResolver), 0, 'Zero-minute phantom transfer must NOT inflate transfer count');
+    });
+
+    it('inserts connector row when two transit rides are adjacent without explicit transfer leg', () => {
+      const adjacentRides: LegInput[] = [
+        { board_stop_id: 101, exit_stop_id: 102, departure_time: 28800, arrival_time: 29000, trip_id: 101, route_id: 1 },
+        { board_stop_id: 102, exit_stop_id: 203, departure_time: 29120, arrival_time: 29400, trip_id: 202, route_id: 2 },
+      ];
+
+      const models = describeItinerary(adjacentRides, stopsResolver);
+      assert.strictEqual(models.length, 3, 'Must have ride 1, auto-inserted connector, ride 2');
+      assert.strictEqual(models[0].kind, 'transit');
+      assert.strictEqual(models[1].kind, 'connector');
+      assert.strictEqual(models[2].kind, 'transit');
+      if (models[1].kind === 'connector') {
+        assert.match(models[1].text, /Change at 34 St/i);
+        assert.strictEqual(models[1].durationMinutes, 2, 'Layover 29120 - 29000 = 120s = 2m');
+      }
+      assert.strictEqual(countTransfers(adjacentRides, stopsResolver), 1);
+    });
+  });
 });
-
-
-

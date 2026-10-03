@@ -18,6 +18,7 @@ import type {
 } from '../types/routing';
 import {
   describeItinerary,
+  countTransfers,
 } from '../utils/itineraryDisplay';
 import {
   formatTransferCount,
@@ -116,6 +117,8 @@ export function RouteComparisonView({
       <div class="itinerary-results-container">
         {rankedCards.map((card, idx) => {
           const isSelected = card.profile === activeProfile || card.isDeduped;
+          const legModels = describeItinerary(card.segments, stopsMap);
+          const transferCount = countTransfers(card.segments, stopsMap);
           return (
             <div
               key={card.id}
@@ -162,12 +165,12 @@ export function RouteComparisonView({
                   {formatClockTime(card.departureTime)} – {formatClockTime(card.arrivalTime)}
                 </span>
                 <span class="glance-dot">•</span>
-                <span class="glance-transfers">{formatTransferCount(card.transferCount)}</span>
+                <span class="glance-transfers">{formatTransferCount(transferCount)}</span>
               </div>
 
               {/* Leg Breakdown */}
               <div class="itinerary-legs-list">
-                {describeItinerary(card.segments, stopsMap).map((legModel, legIdx) => {
+                {legModels.map((legModel, legIdx) => {
                   if (legModel.kind === 'start') {
                     return (
                       <div key={legIdx} class="itinerary-compact-row itinerary-compact-start">
@@ -192,18 +195,79 @@ export function RouteComparisonView({
                     );
                   }
 
-                  const routeBadge =
-                    legModel.mode === 'transit'
-                      ? getRouteBadge(legModel.routeId, routesMap)
-                      : null;
+                  if (legModel.kind === 'connector') {
+                    return (
+                      <div
+                        key={legIdx}
+                        class="itinerary-compact-row transfer-connector-row itinerary-transfer-connector"
+                      >
+                        <span
+                          class="compact-marker marker-transfer"
+                          style={{ borderColor: '#f59e0b' }}
+                        />
+                        <span class="itinerary-compact-text">
+                          <span class="leg-mode-pill mode-pill-walk" aria-hidden="true" style={{ display: 'none' }} />
+                          {legModel.text}
+                          {legModel.transferDistanceM > 0 ? (
+                            <span
+                              style={{
+                                color: 'var(--text-muted)',
+                                fontWeight: 'normal',
+                                marginLeft: '6px',
+                              }}
+                            >
+                              (~{legModel.transferDistanceM} m
+                              {legModel.durationMinutes > 0
+                                ? ` • ${legModel.durationMinutes} min`
+                                : ''}
+                              )
+                            </span>
+                          ) : null}
+                        </span>
+                        <span class="itinerary-compact-time">
+                          {legModel.durationMinutes > 0
+                            ? `${legModel.durationMinutes} min`
+                            : '< 1 min'}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  if (legModel.kind === 'walk') {
+                    return (
+                      <div key={legIdx} class="itinerary-compact-row itinerary-walk-access">
+                        <span class="compact-marker" style={{ borderColor: '#94a3b8' }} />
+                        <span class="itinerary-compact-text">
+                          <span class="leg-mode-pill mode-pill-walk" aria-hidden="true" style={{ display: 'none' }} />
+                          Walk {legModel.boardStopName} → {legModel.exitStopName}
+                          {legModel.transferDistanceM > 0 ? (
+                            <span
+                              style={{
+                                color: 'var(--text-muted)',
+                                fontWeight: 'normal',
+                                marginLeft: '6px',
+                              }}
+                            >
+                              (~{legModel.transferDistanceM} m)
+                            </span>
+                          ) : null}
+                        </span>
+                        <span class="itinerary-compact-time">
+                          {legModel.durationMinutes > 0
+                            ? `${legModel.durationMinutes} min`
+                            : '< 1 min'}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  const routeBadge = getRouteBadge(legModel.routeId, routesMap);
 
                   return (
                     <div key={legIdx} class="itinerary-leg-card">
                       <div class="leg-card-header">
-                        <span class="leg-index-badge">Leg {legIdx + 1}</span>
-                        {legModel.mode === 'walk' || legModel.mode === 'transfer' ? (
-                          <span class="leg-mode-pill mode-pill-walk">🚶 Walk / Transfer</span>
-                        ) : legModel.mode === 'transit' && routeBadge ? (
+                        <span class="leg-index-badge">Leg {legModel.legIndex + 1}</span>
+                        {routeBadge ? (
                           <span class="route-badge-container">
                             <span
                               class={`route-pill-badge ${
@@ -251,12 +315,12 @@ export function RouteComparisonView({
                         </div>
                       </div>
 
-                      {legModel.transferDistanceM > 0 &&
-                        (legModel.mode === 'transfer' || legModel.mode === 'walk') && (
-                        <div class="leg-transfer-distance">
-                          Transfer distance: ~{legModel.transferDistanceM} m
+                      {legModel.intermediateStopsCount && legModel.intermediateStopsCount > 0 ? (
+                        <div class="leg-transit-meta">
+                          {legModel.intermediateStopsCount} intermediate{' '}
+                          {legModel.intermediateStopsCount === 1 ? 'stop' : 'stops'}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   );
                 })}
