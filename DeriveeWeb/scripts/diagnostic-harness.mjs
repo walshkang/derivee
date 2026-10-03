@@ -759,15 +759,22 @@ try {
       await badgePage.addInitScript(() => {
         localStorage.setItem('derivee_pack_nyc', JSON.stringify({
           isInstalled: true, slug: 'nyc', version: '3',
-          files: ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin'].map((name) => ({ name, size: 1000 })),
-          totalBytes: 6000,
+          files: ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin', 'patterns.json'].map((name) => ({ name, size: 1000 })),
+          totalBytes: 7000,
         }));
 
-        const REQUIRED = ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin'];
+        const REQUIRED = ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin', 'patterns.json'];
         const fakeFile = { size: 1000, async arrayBuffer() { return new ArrayBuffer(8); } };
+        
+        const patternsArray = new Array(200).fill(null);
+        patternsArray[36] = { route_id: "J" };
+        patternsArray[167] = { route_id: "L" };
+        const patternsFile = { size: 1000, async text() { return JSON.stringify(patternsArray); } };
+
         const fakeDir = {
           async getFileHandle(name) {
             if (!REQUIRED.includes(name)) throw new DOMException('nf', 'NotFoundError');
+            if (name === 'patterns.json') return { async getFile() { return patternsFile; } };
             return { async getFile() { return fakeFile; } };
           },
         };
@@ -796,7 +803,7 @@ try {
             return {
               postMessage(msg) {
                 setTimeout(() => {
-                  if (msg.type === 'INIT') handlers.message?.({ data: { type: 'READY', loadTimeMs: 90 } });
+                  if (msg.type === 'INIT') handlers.message?.({ data: { type: 'READY', loadTimeMs: 90, patterns: patternsArray } });
                   else if (msg.type === 'ROUTE') handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: REAL_SHAPED_SEGMENTS, profile: msg.profile, flags: msg.flags } });
                 }, 30);
               },
@@ -855,6 +862,15 @@ try {
 
       console.log('[Harness Badges] Route Badge Audit Result:', JSON.stringify(badgeAudit));
       await takeScreenshot(badgePage, 'leg-badges.png');
+
+      if (badgeAudit.badgeCount === 0) {
+        throw new Error('Expected at least one route badge pill to be rendered, found none');
+      }
+      const hasL = badgeAudit.badgeTexts.some((txt) => txt === 'L');
+      const hasJ = badgeAudit.badgeTexts.some((txt) => txt === 'J');
+      if (!hasL || !hasJ) {
+        throw new Error(`Expected leg badges to contain real line names "L" and "J", got: ${JSON.stringify(badgeAudit.badgeTexts)}`);
+      }
 
       if (badgeAudit.rawIdsFound.length > 0) {
         throw new Error(

@@ -20,6 +20,7 @@ import (
 func main() {
 	gtfsSources := flag.String("gtfs", "", "Comma-separated GTFS zip URLs or local file paths (required)")
 	outPath := flag.String("out", "timetable.bin", "Path to output timetable.bin file")
+	patternsPath := flag.String("patterns", "patterns.json", "Path to output patterns.json file")
 	anchorDateStr := flag.String("anchor", "", "Optional anchor date YYYY-MM-DD (defaults to today UTC)")
 	validate := flag.Bool("validate", true, "Validate output binary after compilation")
 	stats := flag.Bool("stats", true, "Print detailed timetable statistics")
@@ -110,6 +111,13 @@ func main() {
 	fileSizeMB := float64(header.FileSize) / (1024.0 * 1024.0)
 	log.Printf("[timetable_compiler] ✅ Wrote %d bytes (%.2f MB) to %s (Checksum XXH64: 0x%016X)",
 		header.FileSize, fileSizeMB, *outPath, header.ChecksumXXH64)
+
+	if *patternsPath != "" {
+		log.Printf("[timetable_compiler] Serializing patterns JSON to %s...", *patternsPath)
+		if err := raptor.WritePatternsJSON(tt.RoutePatterns, *patternsPath); err != nil {
+			log.Fatalf("Failed to write patterns JSON: %v", err)
+		}
+	}
 
 	// 5. Validation
 	if *validate {

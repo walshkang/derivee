@@ -7,7 +7,15 @@
  *   are collapsed into compact "Start at {station}" and "Arrive at {station}" rows.
  */
 
+import type { RoutePatternEntry } from '../types/routing.ts';
+
 export type LegMode = 'transit' | 'walk' | 'transfer';
+
+export type PatternResolver =
+  | ((patternIndex: number) => string | undefined)
+  | RoutePatternEntry[]
+  | string[]
+  | Map<number, string>;
 
 export interface LegInput {
   board_stop_id?: number;
@@ -82,8 +90,8 @@ export interface TransitLegDisplay {
   duration_minutes: number;
   durationSeconds: number;
   duration_seconds: number;
-  routeId?: number;
-  route_id?: number;
+  routeId?: number | string;
+  route_id?: number | string;
   transferDistanceM: number;
   transfer_distance_m: number;
   isTransfer: boolean;
@@ -421,7 +429,8 @@ export function canMergeTransitLegs(
  */
 export function describeItinerary(
   legs: LegInput[],
-  resolver?: StopNameResolver
+  resolver?: StopNameResolver,
+  patternResolver?: PatternResolver
 ): LegDisplayModel[] {
   if (!legs || legs.length === 0) return [];
 
@@ -519,6 +528,20 @@ export function describeItinerary(
       const durationMin = Math.max(0, Math.round(durationSec / 60));
       const intermediateStopsCount = block.legs.length - 1;
 
+      let resolvedRouteId: string | number | undefined;
+      if (patternResolver && first.route_id !== undefined) {
+        if (Array.isArray(patternResolver)) {
+          const entry = patternResolver[first.route_id];
+          resolvedRouteId = typeof entry === 'string' ? entry : entry?.route_id;
+        } else if (typeof patternResolver === 'function') {
+          resolvedRouteId = patternResolver(first.route_id);
+        } else if (patternResolver instanceof Map) {
+          resolvedRouteId = patternResolver.get(first.route_id);
+        }
+      }
+      
+      const finalRouteId = resolvedRouteId ?? (patternResolver ? undefined : first.route_id);
+
       const transitModel: TransitLegDisplay = {
         kind: 'transit',
         mode: 'transit',
@@ -540,8 +563,8 @@ export function describeItinerary(
         duration_minutes: durationMin,
         durationSeconds: durationSec,
         duration_seconds: durationSec,
-        routeId: first.route_id,
-        route_id: first.route_id,
+        routeId: finalRouteId,
+        route_id: finalRouteId,
         transferDistanceM: 0,
         transfer_distance_m: 0,
         isTransfer: false,

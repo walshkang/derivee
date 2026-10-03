@@ -15,6 +15,7 @@ import type {
   RouteItem,
   RoutingProfile,
   RankedItinerary,
+  RoutePatternEntry,
 } from '../types/routing';
 import {
   describeItinerary,
@@ -37,6 +38,7 @@ interface RouteComparisonViewProps {
   isRouting: boolean;
   routeError: string | null;
   hasQueried: boolean;
+  patternsMap?: RoutePatternEntry[] | null;
 }
 
 export function RouteComparisonView({
@@ -48,6 +50,7 @@ export function RouteComparisonView({
   isRouting,
   routeError,
   hasQueried,
+  patternsMap,
 }: RouteComparisonViewProps) {
   const uiState = getRouteComparisonUIState({
     isRouting,
@@ -117,7 +120,7 @@ export function RouteComparisonView({
       <div class="itinerary-results-container">
         {rankedCards.map((card, idx) => {
           const isSelected = card.profile === activeProfile || card.isDeduped;
-          const legModels = describeItinerary(card.segments, stopsMap);
+          const legModels = describeItinerary(card.segments, stopsMap, patternsMap ?? undefined);
           const transferCount = countTransfers(card.segments, stopsMap);
           return (
             <div

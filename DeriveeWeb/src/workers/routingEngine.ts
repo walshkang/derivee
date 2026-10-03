@@ -8,6 +8,7 @@ import type {
   RoutingWorkerIncomingMessage,
   RoutingWorkerOutgoingMessage,
   RoutingProfile,
+  RoutePatternEntry,
 } from '../types/routing.ts';
 import {
   ROUTING_FLAG_NONE,
@@ -277,9 +278,10 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
   let wasmModule: DeriveeWasmModule | null = null;
   let enginePtr: number | null = null;
   let isInitialized = false;
-  let initPromise: Promise<number> | null = null;
+  let cachedPatterns: RoutePatternEntry[] | undefined;
+  let initPromise: Promise<{ loadTimeMs: number; patterns?: RoutePatternEntry[] }> | null = null;
 
-  async function init(citySlug: string): Promise<number> {
+  async function init(citySlug: string): Promise<{ loadTimeMs: number; patterns?: RoutePatternEntry[] }> {
     const startTime = performance.now();
     const wasm = options.loadWasm ? await options.loadWasm() : await loadWasmModule();
     const ePtr = wasm._engine_create();
@@ -295,8 +297,25 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
       await hydrateOpfsBinaries(wasm, ePtr, citySlug);
     }
 
+    let patternsTable: RoutePatternEntry[] | null = null;
+    try {
+      const root = await navigator.storage.getDirectory();
+      const cityDir = await root.getDirectoryHandle(citySlug, { create: false });
+      const patternsHandle = await cityDir.getFileHandle('patterns.json');
+      const file = await patternsHandle.getFile();
+      const text = await file.text();
+      patternsTable = JSON.parse(text);
+    } catch {
+      // Old pack or file absent: degrade gracefully to null
+      patternsTable = null;
+    }
+
+    cachedPatterns = patternsTable ?? undefined;
     isInitialized = true;
-    return Math.round(performance.now() - startTime);
+    return {
+      loadTimeMs: Math.round(performance.now() - startTime),
+      patterns: cachedPatterns,
+    };
   }
 
   return async function onMessage(msg: RoutingWorkerIncomingMessage): Promise<void> {
@@ -304,7 +323,7 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
       switch (msg.type) {
         case 'INIT': {
           if (isInitialized && enginePtr) {
-            options.postMessage({ type: 'READY', loadTimeMs: 0 });
+            options.postMessage({ type: 'READY', loadTimeMs: 0, patterns: cachedPatterns });
             return;
           }
 
@@ -320,9 +339,9 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
           });
 
           try {
-            const loadTimeMs = await Promise.race([initPromise, timeoutPromise]);
+            const initResult = await Promise.race([initPromise, timeoutPromise]);
             if (timer) clearTimeout(timer);
-            options.postMessage({ type: 'READY', loadTimeMs });
+            options.postMessage({ type: 'READY', loadTimeMs: initResult.loadTimeMs, patterns: initResult.patterns });
           } catch (err: any) {
             if (timer) clearTimeout(timer);
             initPromise = null;

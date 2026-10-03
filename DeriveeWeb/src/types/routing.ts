@@ -47,6 +47,12 @@ export interface RankedItinerary {
   isDeduped: boolean;
 }
 
+export interface RoutePatternEntry {
+  route_id: string;
+  direction_id?: number;
+  headsign?: string;
+}
+
 export type RoutingWorkerIncomingMessage =
   | { type: 'INIT'; city?: string }
   | {
@@ -60,7 +66,7 @@ export type RoutingWorkerIncomingMessage =
     };
 
 export type RoutingWorkerOutgoingMessage =
-  | { type: 'READY'; loadTimeMs: number }
+  | { type: 'READY'; loadTimeMs: number; patterns?: RoutePatternEntry[] }
   | { type: 'ERROR'; message: string; queryId?: string | number }
   | {
       type: 'RESULT';

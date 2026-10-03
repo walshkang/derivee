@@ -6,6 +6,7 @@ import type {
   RoutingWorkerIncomingMessage,
   RoutingWorkerOutgoingMessage,
   RoutingProfile,
+  RoutePatternEntry,
 } from '../types/routing';
 import { RouteComparisonView } from './RouteComparisonView';
 import {
@@ -30,6 +31,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
   const [engineStatus, setEngineStatus] = useState<'warming_up' | 'ready' | 'error'>('warming_up');
   const [loadTimeMs, setLoadTimeMs] = useState<number | null>(null);
   const [engineError, setEngineError] = useState<string | null>(null);
+  const [patterns, setPatterns] = useState<RoutePatternEntry[] | null>(null);
 
   // Stop data from stops.json
   const [stops, setStops] = useState<StopItem[]>([]);
@@ -132,6 +134,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
       if (data.type === 'READY') {
         setEngineStatus('ready');
         setLoadTimeMs(data.loadTimeMs);
+        setPatterns(data.patterns ?? null);
       } else if (data.type === 'ERROR' && data.queryId === undefined) {
         routingWatchdogRef.current?.stop();
         routingWatchdogRef.current = null;
@@ -730,6 +733,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
         isRouting={isRouting}
         routeError={routeError}
         hasQueried={hasQueried}
+        patternsMap={patterns}
       />
     </div>
   );
