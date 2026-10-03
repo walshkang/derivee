@@ -22,13 +22,25 @@ directory = "../../dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# KV namespace for GTFS-RT cache — DISABLED pending M7a Gate 4
-# (real namespace IDs not yet provisioned; placeholder IDs fail deploy).
-# Re-enable when M7a is reviewed and the namespace exists.
+# ------------------------------------------------------------------------------
+# REALTIME ARRIVALS (M7a) KV & CRON CONFIGURATION
+# ------------------------------------------------------------------------------
+# DEPLOY-TIME STEP: Provision the KV namespace before enabling:
+# 1. Dashboard option:
+#    - Cloudflare Dashboard > Workers & Pages > KV
+#    - Click "Create namespace" -> Name: "derivee-api-realtime"
+#    - Copy the generated Namespace ID.
+# 2. CLI option (if API token has KV write permission):
+#    - npx wrangler kv namespace create KV_REALTIME
+#    - npx wrangler kv namespace create KV_REALTIME --preview
+# 3. Paste the returned ID(s) below in `id` (and optional `preview_id`).
+# 4. Uncomment the [[kv_namespaces]] block and the [triggers] block below:
+#
 # [[kv_namespaces]]
 # binding = "KV_REALTIME"
-# id = "YOUR_KV_NAMESPACE_ID"
-# preview_id = "YOUR_KV_NAMESPACE_PREVIEW_ID"
-
+# id = "<REAL_KV_NAMESPACE_ID>"
+# preview_id = "<REAL_KV_PREVIEW_ID>"
+#
 # [triggers]
-# crons = ["* * * * *"] # Every minute
+# crons = ["* * * * *"] # Ingest MTA GTFS-RT every minute
+# ------------------------------------------------------------------------------

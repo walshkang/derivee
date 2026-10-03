@@ -4,7 +4,7 @@ export interface Env {
   PACK: R2Bucket;
   RATE_LIMITER?: RateLimit;
   ASSETS?: Fetcher;
-  KV_REALTIME: KVNamespace;
+  KV_REALTIME?: KVNamespace;
 }
 
 const ALLOWED_ORIGINS = new Set([
@@ -63,6 +63,10 @@ function jsonResponse(
 
 export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    if (!env.KV_REALTIME) {
+      console.warn('KV_REALTIME binding not configured, skipping realtime ingestion');
+      return;
+    }
     ctx.waitUntil(fetchFeeds(env.KV_REALTIME));
   },
 
@@ -86,22 +90,27 @@ export default {
       return jsonResponse({ ok: true }, 200, origin);
     }
 
-    // 2.5 Realtime arrivals: GET /api/realtime/arrivals?stop=XXX
+    // 2.5 Realtime arrivals: GET /api/realtime/arrivals?stop_id=XXX (or ?stop=XXX)
     if (url.pathname === '/api/realtime/arrivals' && request.method === 'GET') {
-      const stop = url.searchParams.get('stop');
+      const stop = url.searchParams.get('stop_id') || url.searchParams.get('stop');
       if (!stop) {
         return jsonResponse({ error: 'missing_stop' }, 400, origin);
+      }
+      if (!env.KV_REALTIME) {
+        return jsonResponse({ error: 'kv_not_configured' }, 503, origin);
       }
       const data = await getArrivalsForStop(env.KV_REALTIME, stop);
       if (!data) {
         return jsonResponse({ error: 'not_found' }, 404, origin);
       }
-      // Check freshness
+      // Check freshness (120s TTL window)
       const now = Math.floor(Date.now() / 1000);
-      if (now - data.updated_at > 90) {
+      if (now - data.updated_at > 120) {
         return jsonResponse({ error: 'stale', stale: true }, 503, origin);
       }
-      return jsonResponse(data, 200, origin);
+      return jsonResponse(data, 200, origin, {
+        'Cache-Control': 'public, max-age=15, stale-while-revalidate=30',
+      });
     }
 
     // 3. Authenticated session check: GET /api/me
