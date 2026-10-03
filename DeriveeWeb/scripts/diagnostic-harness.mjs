@@ -876,6 +876,165 @@ try {
     }
   });
 
+  await recordScenario('Itinerary legs group by ride', 'trip planning', async ({ takeScreenshot }) => {
+    const groupContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    const groupPage = await groupContext.newPage();
+
+    try {
+      await groupPage.route(/\/api\/.*/, (route) => {
+        const url = new URL(route.request().url());
+        const pathname = url.pathname;
+        if (pathname === '/api/cities') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ id: 'nyc', name: 'New York City', slug: 'nyc', isInstalled: true }]),
+          });
+        }
+        if (pathname === '/api/me') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'test@example.com' }) });
+        }
+        if (pathname === '/api/basemap') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/vnd.pmtiles' }, body: basemapBuffer });
+        }
+        return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      });
+
+      await groupPage.addInitScript(() => {
+        localStorage.setItem('derivee_pack_nyc', JSON.stringify({
+          isInstalled: true, slug: 'nyc', version: '3',
+          files: ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin'].map((name) => ({ name, size: 1000 })),
+          totalBytes: 6000,
+        }));
+
+        const REQUIRED = ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin'];
+        const fakeFile = { size: 1000, async arrayBuffer() { return new ArrayBuffer(8); } };
+        const fakeDir = {
+          async getFileHandle(name) {
+            if (!REQUIRED.includes(name)) throw new DOMException('nf', 'NotFoundError');
+            return { async getFile() { return fakeFile; } };
+          },
+        };
+        Object.defineProperty(navigator, 'storage', {
+          value: {
+            async getDirectory() {
+              return { async getDirectoryHandle(name) { if (name === 'nyc') return fakeDir; throw new DOMException('nf', 'NotFoundError'); } };
+            },
+          },
+          configurable: true,
+        });
+
+        // Bowery -> 59 St-Columbus Circle real engine-shaped segments:
+        // Seg 0: Bowery -> Bowery (origin stub, 2s, dist 2m)
+        // Seg 1: Bowery -> Canal St (J train, trip 20615, 90s)
+        // Seg 2: Canal St -> Canal St (transfer walk, 57s, dist 74m)
+        // Seg 3: Canal St -> 34 St-Herald Sq (Q train, trip 18522, 390s)
+        // Seg 4: 34 St-Herald Sq -> 34 St-Penn Station (transfer walk, 91s, dist 118m)
+        // Seg 5: 34 St-Penn Station -> 59 St-Columbus Circle (1 train, trip 89, 330s)
+        // Seg 6: 59 St-Columbus Circle -> 59 St-Columbus Circle (destination stub, 8s, dist 10m)
+        const BOWERY_COLUMBUS_SEGMENTS = [
+          { board_stop_id: 1246, exit_stop_id: 1247, trip_id: 0, departure_time: 28800, arrival_time: 28802, route_id: 0, transfer_distance_m: 2, is_transfer: false },
+          { board_stop_id: 1247, exit_stop_id: 1250, trip_id: 20615, departure_time: 28920, arrival_time: 29010, route_id: 217, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 1250, exit_stop_id: 1288, trip_id: 0, departure_time: 29010, arrival_time: 29067, route_id: 0, transfer_distance_m: 74, is_transfer: false },
+          { board_stop_id: 1288, exit_stop_id: 1336, trip_id: 18522, departure_time: 29130, arrival_time: 29520, route_id: 190, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 1336, exit_stop_id: 76, trip_id: 0, departure_time: 29520, arrival_time: 29611, route_id: 0, transfer_distance_m: 118, is_transfer: false },
+          { board_stop_id: 76, exit_stop_id: 67, trip_id: 89, departure_time: 29700, arrival_time: 30030, route_id: 3, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 67, exit_stop_id: 66, trip_id: 0, departure_time: 30030, arrival_time: 30038, route_id: 0, transfer_distance_m: 10, is_transfer: false },
+        ];
+        const RealWorker = window.Worker;
+        window.Worker = function (url, opts) {
+          if (String(url).includes('routing.worker')) {
+            const handlers = {};
+            return {
+              postMessage(msg) {
+                setTimeout(() => {
+                  if (msg.type === 'INIT') handlers.message?.({ data: { type: 'READY', loadTimeMs: 90 } });
+                  else if (msg.type === 'ROUTE') handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: BOWERY_COLUMBUS_SEGMENTS, profile: msg.profile, flags: msg.flags } });
+                }, 30);
+              },
+              set onmessage(fn) { handlers.message = fn; },
+              get onmessage() { return handlers.message; },
+              set onerror(fn) { handlers.error = fn; },
+              addEventListener(t, fn) { handlers[t] = fn; },
+              removeEventListener(t) { delete handlers[t]; },
+              terminate() {},
+            };
+          }
+          return new RealWorker(url, opts);
+        };
+        window.Worker.prototype = RealWorker.prototype;
+      });
+
+      console.log('[Harness Grouping] Navigating to http://127.0.0.1:4173/...');
+      await groupPage.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+      await groupPage.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
+      await groupPage.waitForSelector('.engine-status-ready', { timeout: 30000 });
+
+      await groupPage.evaluate(() => {
+        document.querySelector('.bottom-sheet').style.height = '90dvh';
+      });
+      await new Promise((r) => setTimeout(r, 600));
+
+      await groupPage.click('.quick-preset-btn');
+      await new Promise((r) => setTimeout(r, 400));
+      await groupPage.click('.trip-route-btn');
+      console.log('[Harness Grouping] Routing trip Bowery -> Columbus Circle...');
+      await groupPage.waitForFunction(() => {
+        const c = document.querySelector('.itinerary-results-container');
+        return c && c.children.length > 0;
+      }, { timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 800));
+
+      const itineraryAudit = await groupPage.evaluate(() => {
+        const glanceTransfers = document.querySelector('.glance-transfers')?.textContent?.trim() || '';
+        const legCards = Array.from(document.querySelectorAll('.itinerary-leg-card'));
+        const legBadgeTexts = legCards.map((c) => c.querySelector('.leg-index-badge')?.textContent?.trim() || '');
+        const connectorRows = Array.from(document.querySelectorAll('.itinerary-transfer-connector, .transfer-connector-row'));
+        const connectorTexts = connectorRows.map((r) => r.textContent?.trim() || '');
+        const startRows = Array.from(document.querySelectorAll('.itinerary-compact-start'));
+        const arriveRows = Array.from(document.querySelectorAll('.itinerary-compact-arrive'));
+
+        return {
+          glanceTransfers,
+          legCardCount: legCards.length,
+          legBadgeTexts,
+          connectorCount: connectorRows.length,
+          connectorTexts,
+          startRowCount: startRows.length,
+          arriveRowCount: arriveRows.length,
+        };
+      });
+
+      console.log('[Harness Grouping] Itinerary Audit Result:', JSON.stringify(itineraryAudit));
+      await takeScreenshot(groupPage, 'itinerary-grouping.png');
+
+      // Assertions
+      if (itineraryAudit.glanceTransfers !== '2 transfers') {
+        throw new Error(`Expected transfer count to be "2 transfers", got "${itineraryAudit.glanceTransfers}"`);
+      }
+      if (itineraryAudit.legCardCount !== 3) {
+        throw new Error(`Expected exactly 3 transit ride leg cards, got ${itineraryAudit.legCardCount} (leg badges: ${JSON.stringify(itineraryAudit.legBadgeTexts)})`);
+      }
+      if (itineraryAudit.connectorCount !== 2) {
+        throw new Error(`Expected exactly 2 transfer connector rows between ride legs, got ${itineraryAudit.connectorCount}`);
+      }
+      const hasCanalTransfer = itineraryAudit.connectorTexts.some((txt) => /change at canal/i.test(txt));
+      if (!hasCanalTransfer) {
+        throw new Error(`Expected a connector row with "Change at Canal St", got connectors: ${JSON.stringify(itineraryAudit.connectorTexts)}`);
+      }
+      console.log('[Harness Grouping] SUCCESS: Itinerary legs correctly grouped by ride and transfers rendered as connectors!');
+    } catch (err) {
+      await takeScreenshot(groupPage, 'itinerary-grouping-failed.png').catch(() => {});
+      throw err;
+    } finally {
+      await groupContext.close();
+    }
+  });
+
 } finally {
   if (browser) await browser.close();
   server.close();
