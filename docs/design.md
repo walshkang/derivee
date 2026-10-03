@@ -1,5 +1,21 @@
 # Dérivée — UI Blueprint & Screen Specification
 
+> **PRODUCT DIRECTION (2026-09-29, current):** The PWA is the app.
+> Transit-only, map-first, offline-first. There is **no fog-of-war**,
+> **no Explore mode**, **no Transit/Explore toggle**, and the native
+> iOS port is parked indefinitely.
+>
+> **How to read this document:** **Appendix A** is the authoritative
+> visual ground truth for all PWA/web work — cite it in briefs, not
+> the sections below. The body (§§1–13) is the native-iOS legacy spec,
+> preserved for history. Sections marked **SUPERSEDED** describe cut
+> features and must not be implemented: §2 (fog visibility), §4 (ghost
+> POIs), §6 (Dynamic Island / Live Activities), §8 (progression
+> stats), §9 (exploration gamification). All fog-layer, GRDB,
+> SwiftUI, and App Store references are likewise superseded for web
+> work. §12 (Screen 4) remains conceptually relevant; Appendix A
+> restates it for the PWA as shipped.
+
 This document is the **single authoritative reference** for all visual design, screen hierarchy, interaction patterns, and UI acceptance criteria. If a screen, component, or animation is not defined here, an agent **must not** invent it.
 
 For backend data flows, native constraints, and library stacks, see [architecture.md](docs/architecture.md).
@@ -158,6 +174,8 @@ The interface is built exclusively around a pure, high-contrast Light Mode desig
 ---
 
 ## 2. The 3-Tier Fog Visibility Logic
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 The map uses a 3-tier state to separate where the user **is**, where they **have been**, and what remains **hidden**. Unlocked H3 hexes (Resolution 11) feature a subtle border outline to define the progression grid.
 
@@ -450,6 +468,8 @@ A clean, native list view using SwiftUI `List` or `LazyVStack` for guaranteed 12
 ---
 
 ## 4. Ghost POI Lifecycle
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 Ghost POIs are the primary discovery mechanic. They follow a strict 3-phase lifecycle:
 
@@ -519,6 +539,8 @@ When a new hex is discovered in real-time (via Nitro callback during active use)
 ---
 
 ## 6. Dynamic Island & Live Activities (Wave J.10)
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 Progression stats are accessible **outside** the app while the user walks with their phone locked.
 
@@ -558,6 +580,8 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 ---
 
 ## 8. The "Backend" (Data Layer) — Progression Stats
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 To support exploration percentages in Screen 3 (Stats and Profile) and any future contextual displays, the local database must maintain:
 
@@ -596,6 +620,8 @@ This is entirely local state driven by SwiftUI `@Observable`:
 ---
 
 ## 9. Exploration Polish, Customization & Gamification (Wave J)
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 This section defines visual and interaction standards for Wave J features (completed across sub-waves J.1 → J.10):
 
@@ -1198,3 +1224,91 @@ Developer / Agent Commit Attempt
    - Curates test results with an instantaneous, human-readable CLI reporter summarizing all 44 assertions across 9 ergonomic test suites.
    - Self-configures `core.hooksPath` on run, ensuring hook configuration is idempotent and never forgotten.
    - Mandatory gate in the **UI Wave Definition of Done** for both agents and human contributors.
+---
+
+## Appendix A — PWA Transit-Only Ground Truth (authoritative for all web work)
+
+> This appendix supersedes every fog, explore-mode, gamification, and
+> native-iOS statement in the body above for PWA work. When this
+> appendix and the body disagree, this appendix wins. Last revised
+> 2026-10-03.
+
+### A.1 Product
+
+- **The PWA is the app.** Installed via browser ("Install" / Add to
+  Home Screen); no App Store, no native shell.
+- **Transit-only.** The app plans and displays public-transit
+  itineraries. No fog-of-war, no exploration tracking, no POI
+  lifecycle, no stats/progression.
+- **Map-first, offline-first.** The dark vector map is the home
+  screen; the transit pack (timetable + stops + routes) is downloaded
+  once and routing runs on-device. An "OFFLINE SHELL" indicator marks
+  cached operation; a Cloudflare Access gate fronts the hosted
+  origin (sign-in state must degrade gracefully, never deadlock —
+  see the 2026-09-28 service-worker auth lesson).
+
+### A.2 Visual identity (as shipped)
+
+- Dark OLED-first theme. CSS tokens (`DeriveeWeb/src/index.css`):
+  `--bg-primary: #070a0f`, `--bg-secondary: #0d131d`,
+  `--bg-card: rgba(13,19,29,0.85)`, `--text-primary: #f1f5f9`,
+  `--text-secondary: #94a3b8`, `--accent-sky: #38bdf8`,
+  `--accent-cyan: #00e5ff`, `--accent-amber: #f59e0b`,
+  `--status-online: #10b981`, `--status-offline: #f59e0b`.
+- Transit line badges use per-line GTFS colors from `routes.json`
+  (e.g. 1/2/3 red, 4/5/6 green, 7 purple, A/C/E blue, B/D/F/M
+  orange, N/Q/R/W yellow, L gray, G light green).
+- Typography: system sans stack; monospace for times.
+- Persona: calm, utilitarian, understated. No arcade, no noise.
+
+### A.3 Screens (PWA)
+
+1. **Map home.** Dark NYC map (MapLibre), transit line overlays +
+   station dots, search capsule, line-badge quick filter row,
+   "Transit pack: NYC v3 (Installed)" status. Bottom sheet hosts
+   planning.
+2. **Search (4A).** Station/line/destination search from the capsule.
+3. **Route comparison (4B).** Itinerary cards — see A.4.
+4. **Active navigation (4C).** Future; not yet built.
+5. **System info.** Settings surface showing `Build: <short-hash>
+   (<timestamp>)` in the footer — the Gate 4 served-bundle check
+   reads this.
+
+### A.4 Itinerary card anatomy (as shipped, M5/M5d/M5e)
+
+- **Header:** ranked badges (`⚡ Fastest`, `🔄 Fewest Transfers`,
+  `Best Match`), arrival time, and a glance line:
+  `{duration} · {departure} – {arrival} · {N} transfers`.
+- **Transfer count = actual vehicle changes** (transit ride legs − 1).
+  It must match what a commuter counts. Zero-minute phantom
+  transfers never inflate it.
+- **Rows, in order:** `Start at {station}` row → ride legs →
+  `Arrive at {station}` row.
+- **Ride leg card:** ONE card per continuous ride on one vehicle
+  (consecutive same-trip segments are merged — never one card per
+  stop). Shows the line badge pill, board station → alight station,
+  duration, and intermediate stop count.
+- **Transfer connector:** between ride legs, an unnumbered connector
+  row — `Change at {station}` with walk time/distance. A transfer
+  is NOT a leg and NOT a mode of transit; it is never a numbered
+  `LEG N` card.
+- **Badges (FC-2):** internal `route_id`/`trip_id`/pattern-index
+  values must NEVER leak into UI copy. If a route cannot be resolved
+  to a real line, render NO badge — never a raw-ID pill, never a
+  placeholder. `getRouteBadge` returns `null` for unresolvable
+  routes; the component renders nothing.
+- **Leg mode model:** every leg carries
+  `mode: 'transit' | 'walk' | 'transfer'` (extensible for future
+  modes). Badges render only for `mode === 'transit'`.
+- **Bottom sheet:** swipe on a scrollable card scrolls the card
+  natively; the sheet only drags from its handle or at a scroll edge
+  (see `INVARIANTS.md`: every scrollable declares its scroll
+  container). Detents stay put during card scroll.
+
+### A.5 States
+
+Every shipped flow handles: loading, empty (no routes found),
+error, offline (cached pack, "OFFLINE SHELL"), and post-success
+(what the user sees next, how to return). Session-expiry at the
+Access gate resolves to an explicit "sign in again" path — never a
+dead cached gate.
