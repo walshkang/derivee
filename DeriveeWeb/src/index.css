@@ -153,7 +153,7 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: -0.025em;
-  color: #f1f5f9;
+  color: var(--text-primary);
 }
 
 .app-subtitle {
@@ -1160,15 +1160,22 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
 .spinner-ring {
   position: absolute;
   inset: -3px;
-  border-radius: 14px;
-  border: 2px solid transparent;
-  border-top-color: var(--accent-cyan);
-  animation: spin 1s linear infinite;
+  width: 54px;
+  height: 54px;
+  pointer-events: none;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.spinner-arc {
+  animation: spinner-contour-spin 1.4s linear infinite;
+}
+
+@keyframes spinner-contour-spin {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -100;
+  }
 }
 
 .card-badge {
@@ -2893,7 +2900,7 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
 
 .leg-stop-name {
   font-size: 0.78rem;
-  color: #f1f5f9;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -3289,10 +3296,28 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
 
 [data-theme="light"] .leg-card-header {
   border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
 }
 
 [data-theme="light"] .leg-connector-line {
-  background-color: var(--border-highlight);
+  background-color: var(--text-secondary);
+}
+
+[data-theme="light"] .leg-stop-name {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .leg-stop-time {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .leg-duration-tag {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .leg-transit-meta,
+[data-theme="light"] .leg-transfer-distance {
+  color: var(--text-secondary);
 }
 
 [data-theme="light"] .transfer-connector-row {

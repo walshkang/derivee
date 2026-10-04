@@ -5,10 +5,12 @@ import { getTransitLayerDisplayState, type UIState } from '../utils/displayModel
 import type { StopItem } from '../types/routing';
 import {
   TRANSIT_LINES_SOURCE_ID,
+  TRANSIT_LINES_CASING_LAYER_ID,
   TRANSIT_LINES_LAYER_ID,
   TRANSIT_STATIONS_SOURCE_ID,
   TRANSIT_STATIONS_LAYER_ID,
   buildStationGeoJSON,
+  getTransitLinesCasingLayerConfig,
   getTransitLinesLayerConfig,
   getTransitStationsLayerConfig,
   escapeHtml,
@@ -60,12 +62,17 @@ export function TransitOverlays({
 
         if (isCancelled) return;
 
-        // 1. Ribbons source & layer (styled by trunk_color_hex)
+        // 1. Ribbons source & layers (dual-layer: casing underneath, colored stroke on top)
         if (!map.getSource(TRANSIT_LINES_SOURCE_ID)) {
           map.addSource(TRANSIT_LINES_SOURCE_ID, {
             type: 'geojson',
             data: linesGeojson,
           });
+        }
+        if (!map.getLayer(TRANSIT_LINES_CASING_LAYER_ID)) {
+          map.addLayer(getTransitLinesCasingLayerConfig());
+        }
+        if (!map.getLayer(TRANSIT_LINES_LAYER_ID)) {
           map.addLayer(getTransitLinesLayerConfig());
         }
 

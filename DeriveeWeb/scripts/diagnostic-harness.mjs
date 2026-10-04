@@ -11,6 +11,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DIST_DIR = path.resolve(__dirname, '../dist');
 const FIXTURE_PATH = path.resolve(__dirname, '../../DeriveeNative/Derivee/basemap-nyc.pmtiles');
+const TRANSIT_LINES_GEOJSON_PATH = path.resolve(__dirname, '../../../derivee-audits/t1/pack_tmp/transit-lines.geojson');
+const transitLinesGeojsonText = fs.existsSync(TRANSIT_LINES_GEOJSON_PATH)
+  ? fs.readFileSync(TRANSIT_LINES_GEOJSON_PATH, 'utf8')
+  : JSON.stringify({ type: 'FeatureCollection', features: [] });
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -252,6 +256,9 @@ console.log(`[Harness] Screenshots Directory: ${screenshotsDir}`);
 const scenarioResults = [];
 
 async function recordScenario(name, flow, fn) {
+  if (process.env.HARNESS_FILTER && !name.includes(process.env.HARNESS_FILTER)) {
+    return;
+  }
   console.log(`\n========================================`);
   console.log(`[Harness] Scenario: ${name} (flow: ${flow})`);
   console.log(`========================================`);
@@ -1845,6 +1852,417 @@ try {
       throw err;
     } finally {
       await lightContext.close();
+    }
+  });
+
+  // ==========================================================================
+  // SCENARIO 10: Device visual defects (light theme + map)
+  // ==========================================================================
+  await recordScenario('Device visual defects (light theme + map)', 'visual spec', async ({ takeScreenshot }) => {
+    console.log('\n[Harness Device Visuals] --- TESTING DEVICE-REPORTED VISUAL DEFECTS (LIGHT THEME + MAP) ---');
+    const deviceContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const page = await deviceContext.newPage();
+    page.on('console', (msg) => console.log(`[Scenario10 Console ${msg.type()}]`, msg.text()));
+    page.on('pageerror', (err) => console.log(`[Scenario10 PageError]`, err.message));
+
+    try {
+      await page.route(/\/api\/.*/, (route) => {
+        const url = new URL(route.request().url());
+        const pathname = url.pathname;
+        if (pathname === '/api/cities') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ id: 'nyc', name: 'New York City', slug: 'nyc', isInstalled: true }]),
+          });
+        }
+        if (pathname === '/api/me') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'test@example.com' }),
+          });
+        }
+        if (pathname === '/api/basemap') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/vnd.pmtiles' },
+            body: basemapBuffer,
+          });
+        }
+        if (pathname === '/api/pack-info') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            body: JSON.stringify({
+              version: 4,
+              size: 29800000,
+              updated_at: '2026-10-04T00:00:00.000Z',
+            }),
+          });
+        }
+        return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      });
+
+      await page.route(/\/data\/stops\.json/, (route) => {
+        const stopsPath = path.join(DIST_DIR, 'data/stops.json');
+        if (fs.existsSync(stopsPath)) {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: fs.readFileSync(stopsPath),
+          });
+        }
+        return route.continue();
+      });
+
+      await page.addInitScript(async ({ geojsonText }) => {
+        localStorage.setItem('derivee_theme', 'light');
+        localStorage.setItem('derivee_pack_nyc', JSON.stringify({
+          isInstalled: true,
+          slug: 'nyc',
+          version: 3,
+          displayName: 'New York City',
+          seasonLabel: 'Summer 2026 Timetable',
+          installedAt: '2026-10-01T00:00:00.000Z',
+          totalBytes: 29684406,
+          files: [
+            { name: 'city_config.json', size: 3401 },
+            { name: 'transit.sqlite', size: 9744384 },
+            { name: 'transit-lines.geojson', size: 407221 },
+            { name: 'ultra_transfers.csr', size: 582906 },
+            { name: 'timetable.bin', size: 7184128 },
+            { name: 'walk_graph.bin', size: 47426176 },
+            { name: 'patterns.json', size: 1000 },
+          ],
+        }));
+
+        const patternsArray = new Array(200).fill(null);
+        patternsArray[36] = { route_id: 'J' };
+        patternsArray[167] = { route_id: 'L' };
+
+        // Write minimal transit-lines.geojson and required pack files to real OPFS before app loads
+        if (navigator.storage && typeof navigator.storage.getDirectory === 'function') {
+          const root = await navigator.storage.getDirectory();
+          const nycDir = await root.getDirectoryHandle('nyc', { create: true });
+          const geoHandle = await nycDir.getFileHandle('transit-lines.geojson', { create: true });
+          const geoWritable = await geoHandle.createWritable();
+          await geoWritable.write(geojsonText);
+          await geoWritable.close();
+
+          for (const fname of ['city_config.json', 'transit.sqlite', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin', 'patterns.json']) {
+            const fh = await nycDir.getFileHandle(fname, { create: true });
+            const w = await fh.createWritable();
+            if (fname === 'city_config.json') {
+              await w.write(JSON.stringify({ version: 3, displayName: 'New York City' }));
+            } else if (fname === 'patterns.json') {
+              await w.write(JSON.stringify(patternsArray));
+            } else {
+              await w.write(new Uint8Array([1, 2, 3, 4]));
+            }
+            await w.close();
+          }
+        }
+
+        const REAL_SHAPED_SEGMENTS = [
+          { board_stop_id: 72, exit_stop_id: 150, trip_id: 1045, departure_time: 28800, arrival_time: 29400, route_id: 167, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 150, exit_stop_id: 151, trip_id: 0, departure_time: 29400, arrival_time: 29700, route_id: 0, transfer_distance_m: 150, is_transfer: true },
+          { board_stop_id: 151, exit_stop_id: 207, trip_id: 2099, departure_time: 29700, arrival_time: 30600, route_id: 36, transfer_distance_m: 0, is_transfer: false },
+        ];
+
+        window.__workerMode = 'normal';
+
+        const OrigWorker = window.Worker;
+        window.Worker = function (url, opts) {
+          if (String(url).includes('pack-installer.worker')) {
+            const handlers = {};
+            return {
+              postMessage(msg) {
+                if (msg.type === 'START_INSTALL') {
+                  setTimeout(() => {
+                    handlers.message?.({
+                      data: {
+                        type: 'PROGRESS',
+                        stage: 'downloading',
+                        loadedBytes: 14842203,
+                        totalBytes: 29684406,
+                        percent: 50,
+                      },
+                    });
+                  }, 50);
+                  setTimeout(() => {
+                    handlers.message?.({
+                      data: {
+                        type: 'PROGRESS',
+                        stage: 'verifying',
+                        percent: 100,
+                        message: 'Validating headers & SQLite signatures...',
+                      },
+                    });
+                  }, 500);
+                  setTimeout(() => {
+                    handlers.message?.({
+                      data: {
+                        type: 'SUCCESS',
+                        packState: {
+                          isInstalled: true,
+                          slug: 'nyc',
+                          version: 4,
+                          displayName: 'New York City (v4)',
+                          seasonLabel: 'Fall 2026 Timetable',
+                          installedAt: new Date().toISOString(),
+                          totalBytes: 29800000,
+                          files: [],
+                        },
+                      },
+                    });
+                  }, 1200);
+                }
+              },
+              terminate() {},
+              set onmessage(fn) { handlers.message = fn; },
+              get onmessage() { return handlers.message; },
+              set onerror(fn) { handlers.error = fn; },
+            };
+          }
+          if (String(url).includes('routing.worker')) {
+            const handlers = {};
+            return {
+              postMessage(msg) {
+                if (msg.type === 'INIT') {
+                  setTimeout(() => {
+                    handlers.message?.({ data: { type: 'READY', loadTimeMs: 45, patterns: patternsArray } });
+                  }, 30);
+                } else if (msg.type === 'ROUTE') {
+                  setTimeout(() => {
+                    handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: REAL_SHAPED_SEGMENTS, profile: msg.profile, flags: msg.flags } });
+                  }, 300);
+                }
+              },
+              set onmessage(fn) { handlers.message = fn; },
+              get onmessage() { return handlers.message; },
+              set onerror(fn) { handlers.error = fn; },
+            };
+          }
+          return new OrigWorker(url, opts);
+        };
+        window.Worker.prototype = OrigWorker.prototype;
+      }, { geojsonText: transitLinesGeojsonText });
+
+      console.log('[Harness Device Visuals] Navigating to http://127.0.0.1:4173/...');
+      await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+      await page.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
+      await page.waitForSelector('.engine-status-ready', { timeout: 30000 });
+
+      // ------------------------------------------------------------------------
+      // CHECK 1: Zoomed-out map (z≈10–11, Midtown): parallel lines separable by eye
+      // ------------------------------------------------------------------------
+      console.log('[Harness Device Visuals] Check 1: Zoomed-out map line separation in Midtown...');
+      const debugInfo = await page.evaluate(() => {
+        const map = window.__mapInstance;
+        return {
+          hasMapInstance: Boolean(map),
+          mapLoaded: map ? map.loaded() : false,
+          layerIds: map && map.getStyle() ? map.getStyle().layers.map(l => l.id) : [],
+          localStorageKeys: Object.keys(localStorage),
+          packKey: localStorage.getItem('derivee_pack_nyc'),
+        };
+      });
+      console.log('[Harness Debug Info]', JSON.stringify(debugInfo));
+      await page.waitForFunction(() => {
+        const map = window.__mapInstance;
+        return map && map.getLayer('transit-lines-layer') != null && map.getLayer('transit-lines-casing') != null;
+      }, { timeout: 20000 });
+
+      await page.evaluate(() => {
+        const map = window.__mapInstance;
+        if (map) {
+          map.jumpTo({ center: [-73.985, 40.758], zoom: 10.8 });
+        }
+      });
+      await new Promise((r) => setTimeout(r, 800));
+
+      const mapLayerAudit = await page.evaluate(() => {
+        const map = window.__mapInstance;
+        if (!map) return { hasMap: false };
+        const style = map.getStyle();
+        const casingLayer = style?.layers?.find((l) => l.id === 'transit-lines-casing');
+        const ribbonLayer = style?.layers?.find((l) => l.id === 'transit-lines-layer');
+        return {
+          hasMap: true,
+          hasCasingLayer: Boolean(casingLayer),
+          casingColor: casingLayer?.paint?.['line-color'],
+          hasRibbonLayer: Boolean(ribbonLayer),
+          ribbonOffset: ribbonLayer?.paint?.['line-offset'],
+        };
+      });
+
+      if (!mapLayerAudit.hasCasingLayer) {
+        throw new Error('Check 1 Failed: Missing transit-lines-casing layer in MapLibre style');
+      }
+      if (!mapLayerAudit.hasRibbonLayer || !mapLayerAudit.ribbonOffset) {
+        throw new Error('Check 1 Failed: Missing line-offset expression on transit-lines-layer');
+      }
+      console.log('[Harness Device Visuals] Map layer audit verified:', JSON.stringify(mapLayerAudit));
+
+      // Collapse sheet to reveal full map view in Midtown
+      await page.evaluate(() => {
+        const sheet = document.querySelector('.bottom-sheet');
+        if (sheet) sheet.style.height = '12dvh';
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      await takeScreenshot(page, 'parallel-lines-midtown-z11.png');
+
+      // ------------------------------------------------------------------------
+      // CHECK 2: Header wordmark legible in light AND dark
+      // ------------------------------------------------------------------------
+      console.log('[Harness Device Visuals] Check 2: Header wordmark legibility in light AND dark...');
+      const wordmarkLightAudit = await page.evaluate(() => {
+        const titleEl = document.querySelector('.app-title');
+        const headerEl = document.querySelector('.app-header');
+        if (!titleEl || !headerEl) return null;
+        return {
+          titleColor: window.getComputedStyle(titleEl).color,
+          headerBg: window.getComputedStyle(headerEl).backgroundColor,
+        };
+      });
+
+      console.log('[Harness Device Visuals] Light Wordmark Audit:', JSON.stringify(wordmarkLightAudit));
+      if (!wordmarkLightAudit || wordmarkLightAudit.titleColor === 'rgb(241, 245, 249)' || wordmarkLightAudit.titleColor === 'rgb(255, 255, 255)') {
+        throw new Error(`Check 2 Failed: Wordmark washed out in light mode: ${wordmarkLightAudit?.titleColor}`);
+      }
+      await takeScreenshot(page, 'header-wordmark-light.png');
+
+      // Switch to dark theme
+      await page.click('.theme-toggle-dark');
+      await new Promise((r) => setTimeout(r, 500));
+
+      const wordmarkDarkAudit = await page.evaluate(() => {
+        const titleEl = document.querySelector('.app-title');
+        const headerEl = document.querySelector('.app-header');
+        if (!titleEl || !headerEl) return null;
+        return {
+          titleColor: window.getComputedStyle(titleEl).color,
+          headerBg: window.getComputedStyle(headerEl).backgroundColor,
+        };
+      });
+      console.log('[Harness Device Visuals] Dark Wordmark Audit:', JSON.stringify(wordmarkDarkAudit));
+      if (!wordmarkDarkAudit || wordmarkDarkAudit.titleColor === 'rgb(10, 15, 22)' || wordmarkDarkAudit.titleColor === 'rgb(0, 0, 0)') {
+        throw new Error(`Check 2 Failed: Wordmark dark on dark background: ${wordmarkDarkAudit?.titleColor}`);
+      }
+      await takeScreenshot(page, 'header-wordmark-dark.png');
+
+      // Switch back to light theme for remaining checks
+      await page.click('.theme-toggle-light');
+      await new Promise((r) => setTimeout(r, 500));
+
+      // ------------------------------------------------------------------------
+      // CHECK 3: Pack install card: spinner arc follows icon square
+      // ------------------------------------------------------------------------
+      console.log('[Harness Device Visuals] Check 3: Pack install card spinner tracking icon square...');
+      await page.evaluate(() => {
+        const sheet = document.querySelector('.bottom-sheet');
+        if (sheet) sheet.style.height = '90dvh';
+      });
+      await new Promise((r) => setTimeout(r, 400));
+
+      await page.waitForSelector('.pack-update-btn', { timeout: 5000 });
+      await page.click('.pack-update-btn');
+      await page.waitForSelector('.installing-beacon', { timeout: 5000 });
+      await new Promise((r) => setTimeout(r, 200));
+
+      const spinnerAudit = await page.evaluate(() => {
+        const beacon = document.querySelector('.installing-beacon');
+        const spinner = beacon ? beacon.querySelector('.spinner-ring') : null;
+        const arc = spinner ? spinner.querySelector('.spinner-arc') : null;
+        if (!spinner || !arc) return null;
+        const spinnerStyle = window.getComputedStyle(spinner);
+        return {
+          isSvg: spinner.tagName.toLowerCase() === 'svg',
+          viewBox: spinner.getAttribute('viewBox'),
+          hasArc: Boolean(arc),
+          pathLength: arc.getAttribute('pathLength'),
+          rx: arc.getAttribute('rx'),
+          transform: spinnerStyle.transform,
+        };
+      });
+
+      console.log('[Harness Device Visuals] Spinner Audit:', JSON.stringify(spinnerAudit));
+      if (!spinnerAudit || !spinnerAudit.isSvg || spinnerAudit.pathLength !== '100') {
+        throw new Error(`Check 3 Failed: Spinner does not conform to concentric contour tracking: ${JSON.stringify(spinnerAudit)}`);
+      }
+      await takeScreenshot(page, 'pack-install-spinner-tracking.png');
+
+      // Wait for pack install to settle
+      await page.waitForSelector('.installed-badge, .badge-installed, .pack-update-row', { timeout: 5000 }).catch(() => null);
+      await new Promise((r) => setTimeout(r, 600));
+
+      // ------------------------------------------------------------------------
+      // CHECK 4: LEG 1 card: station names and connector line visible in light AND dark
+      // ------------------------------------------------------------------------
+      console.log('[Harness Device Visuals] Check 4: LEG 1 card station names and connector line in light AND dark...');
+      await page.click('.quick-preset-btn');
+      await new Promise((r) => setTimeout(r, 400));
+      await page.click('.trip-route-btn');
+      await page.waitForSelector('.itinerary-results-container', { timeout: 10000 });
+      await new Promise((r) => setTimeout(r, 600));
+
+      // Light theme audit
+      const legLightAudit = await page.evaluate(() => {
+        const legCard = document.querySelector('.itinerary-leg-card');
+        const stationName = document.querySelector('.leg-stop-name');
+        const connector = document.querySelector('.leg-connector-line');
+        if (!stationName || !connector) return null;
+        return {
+          cardBg: legCard ? window.getComputedStyle(legCard).backgroundColor : '',
+          stationNameColor: window.getComputedStyle(stationName).color,
+          stationNameText: stationName.textContent?.trim(),
+          connectorColor: window.getComputedStyle(connector).backgroundColor,
+        };
+      });
+
+      console.log('[Harness Device Visuals] Light LEG 1 Audit:', JSON.stringify(legLightAudit));
+      if (!legLightAudit || legLightAudit.stationNameColor === 'rgb(241, 245, 249)' || legLightAudit.stationNameColor === 'rgb(255, 255, 255)') {
+        throw new Error(`Check 4 Failed: Leg station name white-on-white in light mode: ${legLightAudit?.stationNameColor}`);
+      }
+      if (legLightAudit.connectorColor === 'rgba(0, 0, 0, 0)' || legLightAudit.connectorColor === 'rgb(203, 213, 225)') {
+        throw new Error(`Check 4 Failed: Leg connector line invisible in light mode: ${legLightAudit?.connectorColor}`);
+      }
+      await takeScreenshot(page, 'leg1-card-detail-light.png');
+
+      // Dark theme audit
+      await page.click('.theme-toggle-dark');
+      await new Promise((r) => setTimeout(r, 500));
+
+      const legDarkAudit = await page.evaluate(() => {
+        const legCard = document.querySelector('.itinerary-leg-card');
+        const stationName = document.querySelector('.leg-stop-name');
+        const connector = document.querySelector('.leg-connector-line');
+        if (!stationName || !connector) return null;
+        return {
+          cardBg: legCard ? window.getComputedStyle(legCard).backgroundColor : '',
+          stationNameColor: window.getComputedStyle(stationName).color,
+          stationNameText: stationName.textContent?.trim(),
+          connectorColor: window.getComputedStyle(connector).backgroundColor,
+        };
+      });
+
+      console.log('[Harness Device Visuals] Dark LEG 1 Audit:', JSON.stringify(legDarkAudit));
+      if (!legDarkAudit || legDarkAudit.stationNameColor === 'rgb(10, 15, 22)' || legDarkAudit.stationNameColor === 'rgb(0, 0, 0)') {
+        throw new Error(`Check 4 Failed: Leg station name dark in dark mode: ${legDarkAudit?.stationNameColor}`);
+      }
+      await takeScreenshot(page, 'leg1-card-detail-dark.png');
+
+      console.log('[Harness Device Visuals] SUCCESS: All 4 device visual defects verified fixed!');
+    } catch (err) {
+      await takeScreenshot(page, 'device-visual-defects-failed.png').catch(() => {});
+      throw err;
+    } finally {
+      await deviceContext.close();
     }
   });
 

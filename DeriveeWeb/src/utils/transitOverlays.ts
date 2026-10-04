@@ -2,11 +2,54 @@ import type { LineLayerSpecification, CircleLayerSpecification } from 'maplibre-
 import type { StopItem } from '../types/routing.ts';
 
 export const TRANSIT_LINES_SOURCE_ID = 'transit-lines';
+export const TRANSIT_LINES_CASING_LAYER_ID = 'transit-lines-casing';
 export const TRANSIT_LINES_LAYER_ID = 'transit-lines-layer';
 export const TRANSIT_STATIONS_SOURCE_ID = 'transit-stations';
 export const TRANSIT_STATIONS_LAYER_ID = 'transit-stations-layer';
 
 export const RIBBON_PAINT_LINE_COLOR = ['get', 'trunk_color_hex'] as const;
+
+export const RIBBON_PAINT_LINE_OFFSET = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  9,
+  ['*', ['coalesce', ['get', 'delta_offset'], 0], 1.2],
+  11,
+  ['*', ['coalesce', ['get', 'delta_offset'], 0], 1.0],
+  14,
+  ['*', ['coalesce', ['get', 'delta_offset'], 0], 0.5],
+  16,
+  0,
+] as const;
+
+export const RIBBON_PAINT_LINE_WIDTH = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  9,
+  1.5,
+  11,
+  2.0,
+  14,
+  3.0,
+  17,
+  5.0,
+] as const;
+
+export const CASING_PAINT_LINE_WIDTH = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  9,
+  2.7,
+  11,
+  3.4,
+  14,
+  4.6,
+  17,
+  7.0,
+] as const;
 
 export interface StationFeatureProperties {
   id: number;
@@ -74,6 +117,21 @@ export function buildStationGeoJSON(stops: StopItem[]): StationGeoJSON {
   };
 }
 
+export function getTransitLinesCasingLayerConfig(): LineLayerSpecification {
+  return {
+    id: TRANSIT_LINES_CASING_LAYER_ID,
+    type: 'line',
+    source: TRANSIT_LINES_SOURCE_ID,
+    filter: ['==', ['geometry-type'], 'LineString'],
+    paint: {
+      'line-color': '#FFFFFF',
+      'line-width': CASING_PAINT_LINE_WIDTH as unknown as number,
+      'line-offset': RIBBON_PAINT_LINE_OFFSET as unknown as number,
+      'line-opacity': 0.9,
+    },
+  };
+}
+
 export function getTransitLinesLayerConfig(): LineLayerSpecification {
   return {
     id: TRANSIT_LINES_LAYER_ID,
@@ -82,7 +140,8 @@ export function getTransitLinesLayerConfig(): LineLayerSpecification {
     filter: ['==', ['geometry-type'], 'LineString'],
     paint: {
       'line-color': RIBBON_PAINT_LINE_COLOR as unknown as string,
-      'line-width': 4,
+      'line-width': RIBBON_PAINT_LINE_WIDTH as unknown as number,
+      'line-offset': RIBBON_PAINT_LINE_OFFSET as unknown as number,
     },
   };
 }

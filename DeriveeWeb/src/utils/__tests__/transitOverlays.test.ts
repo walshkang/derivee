@@ -2,11 +2,16 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   TRANSIT_LINES_SOURCE_ID,
+  TRANSIT_LINES_CASING_LAYER_ID,
   TRANSIT_LINES_LAYER_ID,
   TRANSIT_STATIONS_SOURCE_ID,
   TRANSIT_STATIONS_LAYER_ID,
   RIBBON_PAINT_LINE_COLOR,
+  RIBBON_PAINT_LINE_OFFSET,
+  RIBBON_PAINT_LINE_WIDTH,
+  CASING_PAINT_LINE_WIDTH,
   buildStationGeoJSON,
+  getTransitLinesCasingLayerConfig,
   getTransitLinesLayerConfig,
   getTransitStationsLayerConfig,
   escapeHtml,
@@ -177,4 +182,98 @@ describe('Transit Overlays Layer & Station Data Tests', () => {
       assert.strictEqual(escapeHtml(name), name);
     });
   });
+
+  describe('Parallel Corridor Line Separation & Dual-Layer Casing Contract', () => {
+    it('exports ribbon line offset and width expressions', () => {
+      assert.strictEqual(RIBBON_PAINT_LINE_OFFSET[0], 'interpolate');
+      assert.strictEqual(RIBBON_PAINT_LINE_WIDTH[0], 'interpolate');
+      assert.strictEqual(CASING_PAINT_LINE_WIDTH[0], 'interpolate');
+    });
+
+    it('configures per-route line-offset on ribbon layer to separate shared corridors at zoom <= 11', () => {
+      const config = getTransitLinesLayerConfig() as any;
+      const offset = config.paint['line-offset'];
+
+      assert.ok(offset, 'Ribbon layer must define line-offset');
+      assert.strictEqual(offset[0], 'interpolate');
+      assert.deepStrictEqual(offset[1], ['linear']);
+      assert.deepStrictEqual(offset[2], ['zoom']);
+
+      // At zoom 11, line-offset must reference delta_offset with multiplier >= 1.0
+      assert.strictEqual(offset[5], 11);
+      assert.deepStrictEqual(offset[6], ['*', ['coalesce', ['get', 'delta_offset'], 0], 1.0]);
+
+      // At low zoom <= 9, multiplier remains positive and separating
+      assert.strictEqual(offset[3], 9);
+      assert.deepStrictEqual(offset[4], ['*', ['coalesce', ['get', 'delta_offset'], 0], 1.2]);
+    });
+
+    it('interpolates ribbon line-width across zoom stops to prevent blob overlap at z <= 11', () => {
+      const config = getTransitLinesLayerConfig() as any;
+      const width = config.paint['line-width'];
+
+      assert.ok(Array.isArray(width), 'Ribbon line-width must be an interpolation expression');
+      assert.strictEqual(width[0], 'interpolate');
+      // At zoom 11, ribbon width must be lean (<= 2.0px) so parallel lines remain separable
+      assert.strictEqual(width[5], 11);
+      assert.ok(width[6] <= 2.5, `Zoom 11 width must be <= 2.5px, got: ${width[6]}`);
+    });
+
+    it('configures dual-layer trench casing underneath ribbons with matching lateral offsets', () => {
+      const casing = getTransitLinesCasingLayerConfig() as any;
+      const ribbon = getTransitLinesLayerConfig() as any;
+
+      assert.strictEqual(casing.id, TRANSIT_LINES_CASING_LAYER_ID);
+      assert.strictEqual(casing.source, TRANSIT_LINES_SOURCE_ID);
+      assert.strictEqual(casing.type, 'line');
+      assert.strictEqual(casing.paint['line-color'], '#FFFFFF');
+
+      // Casing line-offset must match ribbon offset exactly so casing tracks each offset ribbon
+      assert.deepStrictEqual(casing.paint['line-offset'], ribbon.paint['line-offset']);
+
+      // Casing width must be strictly wider than ribbon width across all zoom stops
+      const casingWidth = casing.paint['line-width'];
+      const ribbonWidth = ribbon.paint['line-width'];
+      assert.ok(Array.isArray(casingWidth));
+      assert.ok(Array.isArray(ribbonWidth));
+
+      // Check z=9, z=11, z=14, z=17
+      const zStops = [
+        { zIdx: 3, wIdx: 4 },
+        { zIdx: 5, wIdx: 6 },
+        { zIdx: 7, wIdx: 8 },
+        { zIdx: 9, wIdx: 10 },
+      ];
+      for (const { zIdx, wIdx } of zStops) {
+        assert.strictEqual(casingWidth[zIdx], ribbonWidth[zIdx]);
+        assert.ok(
+          casingWidth[wIdx] > ribbonWidth[wIdx],
+          `Casing width at zoom ${casingWidth[zIdx]} (${casingWidth[wIdx]}) must exceed ribbon width (${ribbonWidth[wIdx]})`
+        );
+      }
+    });
+
+    it('negative case: rejects static zero line-offset which causes corridor merging', () => {
+      const config = getTransitLinesLayerConfig() as any;
+      assert.notStrictEqual(
+        config.paint['line-offset'],
+        0,
+        'Ribbon line-offset must NOT be a static 0 literal'
+      );
+      assert.notStrictEqual(
+        config.paint['line-offset'],
+        undefined,
+        'Ribbon line-offset must NOT be omitted'
+      );
+    });
+
+    it('negative case: casing layer ID is distinct from ribbon layer ID', () => {
+      assert.notStrictEqual(
+        TRANSIT_LINES_CASING_LAYER_ID,
+        TRANSIT_LINES_LAYER_ID,
+        'Casing and ribbon layer IDs must be distinct for MapLibre stack ordering'
+      );
+    });
+  });
 });
+

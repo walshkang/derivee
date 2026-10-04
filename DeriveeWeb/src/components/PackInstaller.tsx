@@ -671,7 +671,33 @@ export function PackInstaller({
     return (
       <div class="pack-installer-card installing-card">
         <div class="card-beacon installing-beacon" aria-hidden="true">
-          <div class="spinner-ring" />
+          <svg class="spinner-ring" viewBox="0 0 54 54" aria-hidden="true">
+            <rect
+              class="spinner-track"
+              x="2"
+              y="2"
+              width="50"
+              height="50"
+              rx="13"
+              fill="none"
+              stroke="rgba(0, 229, 255, 0.2)"
+              stroke-width="2"
+            />
+            <rect
+              class="spinner-arc"
+              x="2"
+              y="2"
+              width="50"
+              height="50"
+              rx="13"
+              fill="none"
+              stroke="var(--accent-cyan)"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              pathLength="100"
+              stroke-dasharray="25 75"
+            />
+          </svg>
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="7 10 12 15 17 10" />

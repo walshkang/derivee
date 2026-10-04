@@ -350,3 +350,148 @@ describe('Theme Toggle Reachability & Relocation Contract', () => {
   });
 });
 
+describe('Device Visual Fixes: Wordmark, Spinner & Leg Detail Contracts', () => {
+  const PACK_INSTALLER_PATH = path.resolve(__dirname, '../../components/PackInstaller.tsx');
+
+  describe('Defect 2: Header Wordmark Theme Legibility Contract', () => {
+    it('sets .app-title color to token var(--text-primary) for dark/light adaptation', () => {
+      const css = fs.readFileSync(INDEX_CSS_PATH, 'utf8');
+      const appTitleMatch = css.match(/\.app-title\s*\{([^}]+)\}/);
+      assert.ok(appTitleMatch, 'Must find .app-title CSS rule');
+
+      const ruleBody = appTitleMatch[1];
+      assert.match(
+        ruleBody,
+        /color:\s*var\(--text-primary\)/,
+        '.app-title must use var(--text-primary) to adapt to active light/dark theme'
+      );
+    });
+
+    it('negative case: rejects hardcoded #f1f5f9 on .app-title that washes out in light mode', () => {
+      const css = fs.readFileSync(INDEX_CSS_PATH, 'utf8');
+      const appTitleMatch = css.match(/\.app-title\s*\{([^}]+)\}/);
+      assert.ok(appTitleMatch);
+      const ruleBody = appTitleMatch[1];
+      assert.doesNotMatch(
+        ruleBody,
+        /#f1f5f9/i,
+        '.app-title must NOT hardcode #f1f5f9 which renders invisible on white header'
+      );
+    });
+  });
+
+  describe('Defect 3: Pack Installer Concentric Spinner Geometry Contract', () => {
+    it('renders concentric SVG contour tracking icon square container bounds', () => {
+      const tsx = fs.readFileSync(PACK_INSTALLER_PATH, 'utf8');
+      assert.ok(
+        tsx.includes('<svg class="spinner-ring" viewBox="0 0 54 54"'),
+        'Installing beacon must use SVG contour with viewBox matching container'
+      );
+      assert.ok(
+        tsx.includes('class="spinner-arc"'),
+        'Must define spinner-arc element'
+      );
+      assert.ok(
+        tsx.includes('pathLength="100"'),
+        'Must specify pathLength="100" for normalized stroke perimeter tracking'
+      );
+      assert.ok(
+        tsx.includes('rx="13"'),
+        'Must specify corner radius rx="13" matching container border-radius'
+      );
+    });
+
+    it('animates stroke-dashoffset along perimeter instead of rotating the square div', () => {
+      const css = fs.readFileSync(INDEX_CSS_PATH, 'utf8');
+      const spinnerRingMatch = css.match(/\.spinner-ring\s*\{([^}]+)\}/);
+      assert.ok(spinnerRingMatch, 'Must find .spinner-ring rule');
+      assert.doesNotMatch(
+        spinnerRingMatch[1],
+        /animation:\s*spin/i,
+        '.spinner-ring must NOT rotate the container via animation: spin'
+      );
+
+      assert.match(
+        css,
+        /\.spinner-arc\s*\{[^}]*animation:\s*spinner-contour-spin/i,
+        '.spinner-arc must animate stroke-dashoffset around the contour'
+      );
+      assert.match(
+        css,
+        /@keyframes\s+spinner-contour-spin\s*\{[^}]*stroke-dashoffset/i,
+        'Must define keyframes for stroke-dashoffset contour traversal'
+      );
+    });
+
+    it('negative case: rejects transform: rotate(360deg) on non-circular spinner container', () => {
+      const css = fs.readFileSync(INDEX_CSS_PATH, 'utf8');
+      const spinnerRingMatch = css.match(/\.spinner-ring\s*\{([^}]+)\}/);
+      assert.ok(spinnerRingMatch);
+      assert.doesNotMatch(
+        spinnerRingMatch[1],
+        /transform:\s*rotate/i,
+        'Static container must not have transform: rotate'
+      );
+    });
+  });
+
+  describe('Defect 4: Leg Detail Light Mode Contrast & Visibility Contract', () => {
+    it('sets .leg-stop-name color to var(--text-primary) for dark/light adaptation', () => {
+      const css = fs.readFileSync(INDEX_CSS_PATH, 'utf8');
+      const stopNameMatch = css.match(/\.leg-stop-name\s*\{([^}]+)\}/);
+      assert.ok(stopNameMatch, 'Must find .leg-stop-name rule');
+      assert.match(
+        stopNameMatch[1],
+        /color:\s*var\(--text-primary\)/,
+        '.leg-stop-name must use var(--text-primary)'
+      );
+    });
+
+    it('provides high-contrast token color for .leg-connector-line in light theme', () => {
+      const css = fs.readFileSync(INDEX_CSS_PATH, 'utf8');
+      assert.match(
+        css,
+        /\[data-theme=["']?light["']?\]\s*\.leg-connector-line\s*\{[^}]*background-color:\s*var\(--text-secondary\)/,
+        'Light theme must style .leg-connector-line with var(--text-secondary) for WCAG AA visibility'
+      );
+    });
+
+    it('styles leg stop times and metadata with readable secondary token in light mode', () => {
+      const css = fs.readFileSync(INDEX_CSS_PATH, 'utf8');
+      assert.match(
+        css,
+        /\[data-theme=["']?light["']?\]\s*\.leg-stop-time\s*\{[^}]*color:\s*var\(--text-secondary\)/,
+        'Light theme must style .leg-stop-time with var(--text-secondary)'
+      );
+      assert.match(
+        css,
+        /\[data-theme=["']?light["']?\]\s*\.leg-card-header\s*\{[^}]*color:\s*var\(--text-secondary\)/,
+        'Light theme must style .leg-card-header with var(--text-secondary)'
+      );
+    });
+
+    it('negative case: rejects hardcoded white #f1f5f9 on .leg-stop-name', () => {
+      const css = fs.readFileSync(INDEX_CSS_PATH, 'utf8');
+      const stopNameMatch = css.match(/\.leg-stop-name\s*\{([^}]+)\}/);
+      assert.ok(stopNameMatch);
+      assert.doesNotMatch(
+        stopNameMatch[1],
+        /#f1f5f9/i,
+        '.leg-stop-name must NOT hardcode #f1f5f9'
+      );
+    });
+
+    it('negative case: rejects faint --border-highlight for .leg-connector-line in light mode', () => {
+      const css = fs.readFileSync(INDEX_CSS_PATH, 'utf8');
+      const lightConnectorMatch = css.match(/\[data-theme=["']?light["']?\]\s*\.leg-connector-line\s*\{([^}]+)\}/);
+      assert.ok(lightConnectorMatch, 'Must find light theme .leg-connector-line rule');
+      assert.doesNotMatch(
+        lightConnectorMatch[1],
+        /var\(--border-highlight\)/,
+        'Light connector line must not use faint --border-highlight which is invisible on card background'
+      );
+    });
+  });
+});
+
+
