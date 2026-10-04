@@ -11,16 +11,19 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 interface BasemapViewProps {
   slug?: string;
+  theme?: 'light' | 'dark';
   onMapLoaded?: (map: Map) => void;
 }
 
-export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
+export function BasemapView({ slug = 'nyc', theme = 'dark', onMapLoaded }: BasemapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<Map | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const watchdogRef = useRef<BasemapWatchdog | null>(null);
   const mountDiagnosticRef = useRef<MountDiagnostic | null>(null);
+  const targetStyleUrl = theme === 'light' ? '/map-style-light.json' : '/map-style-dark.json';
+  const lastAppliedStyleRef = useRef<string>(targetStyleUrl);
 
   if (!watchdogRef.current) {
     watchdogRef.current = new BasemapWatchdog(20_000);
@@ -32,6 +35,15 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
   useEffect(() => {
     return stateMachine.subscribe(setSnapshot);
   }, [stateMachine]);
+
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const nextStyle = theme === 'light' ? '/map-style-light.json' : '/map-style-dark.json';
+    if (lastAppliedStyleRef.current !== nextStyle) {
+      lastAppliedStyleRef.current = nextStyle;
+      mapInstanceRef.current.setStyle(nextStyle);
+    }
+  }, [theme]);
 
   const acquireWakeLock = async () => {
     if ('wakeLock' in navigator && !wakeLockRef.current) {
@@ -259,7 +271,7 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
       const map = initOfflineMap({
         container: mapContainerRef.current,
         file,
-        styleUrl: '/map-style-dark.json',
+        styleUrl: targetStyleUrl,
         mountTimeoutMs: 20_000,
         onSubStageChange: (subStage) => {
           stateMachine.setMountSubStage(subStage);
@@ -270,6 +282,9 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
         onLoad: (loadedMap) => {
           watchdogRef.current?.stop();
           mapInstanceRef.current = loadedMap;
+          if (typeof window !== 'undefined') {
+            (window as any).__mapInstance = loadedMap;
+          }
           stateMachine.setReady();
           onMapLoaded?.(loadedMap);
         },
@@ -286,6 +301,9 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
           if (mapInstanceRef.current) {
             mapInstanceRef.current.remove();
             mapInstanceRef.current = null;
+            if (typeof window !== 'undefined') {
+              (window as any).__mapInstance = null;
+            }
           }
           const diagDetail = formatMountDiagnostic(diag || mountDiagnosticRef.current);
           stateMachine.setError(
@@ -339,6 +357,9 @@ export function BasemapView({ slug = 'nyc', onMapLoaded }: BasemapViewProps) {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        if (typeof window !== 'undefined') {
+          (window as any).__mapInstance = null;
+        }
       }
       mountDiagnosticRef.current = null;
     };

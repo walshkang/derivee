@@ -1307,6 +1307,7 @@ try {
       });
 
       await visualPage.addInitScript(() => {
+        localStorage.setItem('derivee_theme', 'dark');
         localStorage.setItem('derivee_pack_nyc', JSON.stringify({
           isInstalled: true,
           slug: 'nyc',
@@ -1398,9 +1399,18 @@ try {
       await visualPage.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
       await visualPage.waitForSelector('.engine-status-ready', { timeout: 30000 });
 
+      const captureDualTheme = async (page, darkName, lightName) => {
+        await takeScreenshot(page, darkName);
+        await page.click('.theme-toggle-light').catch(() => null);
+        await new Promise((r) => setTimeout(r, 250));
+        await takeScreenshot(page, lightName);
+        await page.click('.theme-toggle-dark').catch(() => null);
+        await new Promise((r) => setTimeout(r, 250));
+      };
+
       // State 1: Sheet collapsed (peek detent 15dvh), brand lockup, offline ready indicator
       console.log('[Harness Visual Spec] Capturing State: Planner Idle (Collapsed Sheet 15dvh)...');
-      await takeScreenshot(visualPage, 'visual-spec-planner-idle.png');
+      await captureDualTheme(visualPage, 'visual-spec-planner-idle.png', 'visual-spec-light-planner-idle.png');
 
       // State 2: Sheet Half Detent (50dvh)
       console.log('[Harness Visual Spec] Expanding sheet to half detent (50dvh)...');
@@ -1408,7 +1418,7 @@ try {
         document.querySelector('.bottom-sheet').style.height = '50dvh';
       });
       await new Promise((r) => setTimeout(r, 400));
-      await takeScreenshot(visualPage, 'visual-spec-sheet-half.png');
+      await captureDualTheme(visualPage, 'visual-spec-sheet-half.png', 'visual-spec-light-sheet-half.png');
 
       // State 3: Sheet Full Detent (90dvh) & Pack update row
       console.log('[Harness Visual Spec] Expanding sheet to full detent (90dvh)...');
@@ -1419,7 +1429,7 @@ try {
 
       // Check Pack card update-available affordance
       await visualPage.waitForSelector('.pack-update-row', { timeout: 5000 }).catch(() => null);
-      await takeScreenshot(visualPage, 'visual-spec-pack-update-available.png');
+      await captureDualTheme(visualPage, 'visual-spec-pack-update-available.png', 'visual-spec-light-pack-update-available.png');
 
       // State 4: Departure Mode Segmented Control
       console.log('[Harness Visual Spec] Testing departure mode toggle...');
@@ -1435,7 +1445,7 @@ try {
 
       await visualPage.click('.dep-mode-now');
       await new Promise((r) => setTimeout(r, 300));
-      await takeScreenshot(visualPage, 'visual-spec-departure-modes.png');
+      await captureDualTheme(visualPage, 'visual-spec-departure-modes.png', 'visual-spec-light-departure-modes.png');
 
       // State 5: Routing State (Skeleton)
       console.log('[Harness Visual Spec] Triggering route to capture shimmering skeleton state...');
@@ -1481,14 +1491,14 @@ try {
       if (itineraryAudit.connectorCount === 0) {
         throw new Error('Expected transfer connector row between legs');
       }
-      await takeScreenshot(visualPage, 'visual-spec-itinerary-hero-arrival.png');
+      await captureDualTheme(visualPage, 'visual-spec-itinerary-hero-arrival.png', 'visual-spec-light-itinerary-hero-arrival.png');
 
       // State 7: Connectivity: online / offline
       console.log('[Harness Visual Spec] Testing offline connectivity transition...');
       await visualContext.setOffline(true);
       await visualPage.evaluate(() => window.dispatchEvent(new Event('offline')));
       await new Promise((r) => setTimeout(r, 400));
-      await takeScreenshot(visualPage, 'visual-spec-connectivity-offline.png');
+      await captureDualTheme(visualPage, 'visual-spec-connectivity-offline.png', 'visual-spec-light-connectivity-offline.png');
 
       // Restore online
       await visualContext.setOffline(false);
@@ -1511,7 +1521,7 @@ try {
       if (!emptyStateAudit.title.includes('No direct transit route found')) {
         throw new Error(`Expected calm empty title "No direct transit route found", got: ${emptyStateAudit.title}`);
       }
-      await takeScreenshot(visualPage, 'visual-spec-empty-state.png');
+      await captureDualTheme(visualPage, 'visual-spec-empty-state.png', 'visual-spec-light-empty-state.png');
 
       // State 9: Error State (calm recoverable error)
       console.log('[Harness Visual Spec] Testing recoverable error state...');
@@ -1529,14 +1539,312 @@ try {
       if (!errorAudit.title.includes('Routing Unavailable')) {
         throw new Error(`Expected error title "Routing Unavailable", got: ${errorAudit.title}`);
       }
-      await takeScreenshot(visualPage, 'visual-spec-error-state.png');
+      await captureDualTheme(visualPage, 'visual-spec-error-state.png', 'visual-spec-light-error-state.png');
 
-      console.log('[Harness Visual Spec] SUCCESS: All states and transitions verified against visual spec!');
+      console.log('[Harness Visual Spec] SUCCESS: All states and transitions verified against visual spec in both themes!');
     } catch (err) {
       await takeScreenshot(visualPage, 'visual-spec-failed.png').catch(() => {});
       throw err;
     } finally {
       await visualContext.close();
+    }
+  });
+
+  // ==========================================================================
+  // SCENARIO 9: Light theme matches visual spec
+  // ==========================================================================
+  await recordScenario('Light theme matches visual spec', 'trip planning', async ({ takeScreenshot }) => {
+    console.log('\n[Harness Light Spec] --- TESTING LIGHT THEME VISUAL SPEC & CONTRAST ---');
+    const lightContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const lightPage = await lightContext.newPage();
+
+    try {
+      await lightPage.route(/\/api\/.*/, (route) => {
+        const url = new URL(route.request().url());
+        const pathname = url.pathname;
+        if (pathname === '/api/cities') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ id: 'nyc', name: 'New York City', slug: 'nyc', isInstalled: true }]),
+          });
+        }
+        if (pathname === '/api/me') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'test@example.com' }),
+          });
+        }
+        if (pathname === '/api/basemap') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/vnd.pmtiles' },
+            body: basemapBuffer,
+          });
+        }
+        if (pathname === '/api/pack-info') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            body: JSON.stringify({
+              version: 4,
+              size: 29800000,
+              updated_at: '2026-10-04T00:00:00.000Z',
+            }),
+          });
+        }
+        return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      });
+
+      await lightPage.addInitScript(() => {
+        localStorage.setItem('derivee_theme', 'light');
+        localStorage.setItem('derivee_pack_nyc', JSON.stringify({
+          isInstalled: true,
+          slug: 'nyc',
+          version: 3,
+          displayName: 'New York City',
+          seasonLabel: 'Summer 2026 Timetable',
+          installedAt: '2026-10-01T00:00:00.000Z',
+          totalBytes: 29684406,
+          files: [
+            { name: 'city_config.json', size: 3401 },
+            { name: 'transit.sqlite', size: 9744384 },
+            { name: 'transit-lines.geojson', size: 407221 },
+            { name: 'ultra_transfers.csr', size: 582906 },
+            { name: 'timetable.bin', size: 7184128 },
+            { name: 'walk_graph.bin', size: 47426176 },
+            { name: 'patterns.json', size: 1000 },
+          ],
+        }));
+
+        const REQUIRED = ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin', 'patterns.json'];
+        const fakeFile = { size: 1000, async arrayBuffer() { return new ArrayBuffer(8); } };
+
+        const patternsArray = new Array(200).fill(null);
+        patternsArray[36] = { route_id: "J" };
+        patternsArray[167] = { route_id: "L" };
+        const patternsFile = { size: 1000, async text() { return JSON.stringify(patternsArray); } };
+
+        const fakeDir = {
+          async getFileHandle(name) {
+            if (!REQUIRED.includes(name)) throw new DOMException('nf', 'NotFoundError');
+            if (name === 'patterns.json') return { async getFile() { return patternsFile; } };
+            return { async getFile() { return fakeFile; } };
+          },
+        };
+        Object.defineProperty(navigator, 'storage', {
+          value: {
+            async getDirectory() {
+              return { async getDirectoryHandle(name) { if (name === 'nyc') return fakeDir; throw new DOMException('nf', 'NotFoundError'); } };
+            },
+          },
+          configurable: true,
+        });
+
+        const REAL_SHAPED_SEGMENTS = [
+          { board_stop_id: 72, exit_stop_id: 150, trip_id: 1045, departure_time: 28800, arrival_time: 29400, route_id: 167, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 150, exit_stop_id: 151, trip_id: 0, departure_time: 29400, arrival_time: 29700, route_id: 0, transfer_distance_m: 150, is_transfer: true },
+          { board_stop_id: 151, exit_stop_id: 207, trip_id: 2099, departure_time: 29700, arrival_time: 30600, route_id: 36, transfer_distance_m: 0, is_transfer: false },
+        ];
+
+        window.__workerMode = 'normal';
+
+        const RealWorker = window.Worker;
+        window.Worker = function (url, opts) {
+          if (String(url).includes('routing.worker')) {
+            const handlers = {};
+            return {
+              postMessage(msg) {
+                if (msg.type === 'INIT') {
+                  setTimeout(() => {
+                    handlers.message?.({ data: { type: 'READY', loadTimeMs: 45, patterns: patternsArray } });
+                  }, 30);
+                } else if (msg.type === 'ROUTE') {
+                  setTimeout(() => {
+                    if (window.__workerMode === 'empty') {
+                      handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: [], profile: msg.profile, flags: msg.flags } });
+                    } else if (window.__workerMode === 'error') {
+                      handlers.message?.({ data: { type: 'ERROR', queryId: msg.queryId, message: 'Routing engine calculation timeout' } });
+                    } else {
+                      handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: REAL_SHAPED_SEGMENTS, profile: msg.profile, flags: msg.flags } });
+                    }
+                  }, 450);
+                }
+              },
+              set onmessage(fn) { handlers.message = fn; },
+              get onmessage() { return handlers.message; },
+              set onerror(fn) { handlers.error = fn; },
+            };
+          }
+          return new RealWorker(url, opts);
+        };
+        window.Worker.prototype = RealWorker.prototype;
+      });
+
+      console.log('[Harness Light Spec] Navigating to http://127.0.0.1:4173/...');
+      await lightPage.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+      await lightPage.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
+      await lightPage.waitForSelector('.engine-status-ready', { timeout: 30000 });
+
+      // Verify theme attribute is light
+      const currentTheme = await lightPage.evaluate(() => document.documentElement.getAttribute('data-theme'));
+      if (currentTheme !== 'light') {
+        throw new Error(`Expected [data-theme="light"], got: ${currentTheme}`);
+      }
+      console.log('[Harness Light Spec] Verified data-theme="light" attribute.');
+
+      // State 1: Planner Idle (Collapsed 15dvh)
+      await takeScreenshot(lightPage, 'visual-spec-light-planner-idle.png');
+
+      // State 2: Sheet Half Detent (50dvh)
+      await lightPage.evaluate(() => {
+        document.querySelector('.bottom-sheet').style.height = '50dvh';
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      await takeScreenshot(lightPage, 'visual-spec-light-sheet-half.png');
+
+      // State 3: Sheet Full Detent (90dvh) & Pack update
+      await lightPage.evaluate(() => {
+        document.querySelector('.bottom-sheet').style.height = '90dvh';
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      await lightPage.waitForSelector('.pack-update-row', { timeout: 5000 }).catch(() => null);
+      await takeScreenshot(lightPage, 'visual-spec-light-pack-update-available.png');
+
+      // State 4: Departure Mode Segmented Control
+      await lightPage.click('.dep-mode-depart-at');
+      await new Promise((r) => setTimeout(r, 300));
+      await lightPage.click('.dep-mode-now');
+      await new Promise((r) => setTimeout(r, 300));
+      await takeScreenshot(lightPage, 'visual-spec-light-departure-modes.png');
+
+      // State 5: Routing State (Skeleton Shimmer)
+      await lightPage.click('.quick-preset-btn');
+      await new Promise((r) => setTimeout(r, 400));
+      await lightPage.click('.trip-route-btn');
+      await lightPage.waitForSelector('.itinerary-skeleton-card', { timeout: 4000 });
+      await takeScreenshot(lightPage, 'visual-spec-light-routing-skeleton.png');
+
+      // State 6: Itinerary Results & Hero Arrival & Contrast Check
+      await lightPage.waitForSelector('.itinerary-results-container', { timeout: 10000 });
+      await new Promise((r) => setTimeout(r, 600));
+
+      const lightAudit = await lightPage.evaluate(() => {
+        const arrivalHero = document.querySelector('.arrival-time-hero');
+        const heroColor = arrivalHero ? window.getComputedStyle(arrivalHero).color : '';
+        const badges = Array.from(document.querySelectorAll('.route-pill-badge'));
+        const badgeColors = badges.map((b) => ({
+          text: b.textContent?.trim(),
+          color: window.getComputedStyle(b).color,
+          bg: window.getComputedStyle(b).backgroundColor,
+        }));
+        return {
+          heroColor,
+          badgeColors,
+        };
+      });
+      console.log('[Harness Light Spec] Light Audit:', JSON.stringify(lightAudit));
+      await takeScreenshot(lightPage, 'visual-spec-light-itinerary-hero-arrival.png');
+
+      // State 7: Connectivity offline
+      await lightContext.setOffline(true);
+      await lightPage.evaluate(() => window.dispatchEvent(new Event('offline')));
+      await new Promise((r) => setTimeout(r, 400));
+      await takeScreenshot(lightPage, 'visual-spec-light-connectivity-offline.png');
+      await lightContext.setOffline(false);
+      await lightPage.evaluate(() => window.dispatchEvent(new Event('online')));
+      await new Promise((r) => setTimeout(r, 400));
+
+      // State 8: Empty state
+      await lightPage.evaluate(() => { window.__workerMode = 'empty'; });
+      await lightPage.click('.trip-route-btn');
+      await lightPage.waitForSelector('.route-comparison-empty', { timeout: 6000 });
+      await takeScreenshot(lightPage, 'visual-spec-light-empty-state.png');
+
+      // State 9: Error state
+      await lightPage.evaluate(() => { window.__workerMode = 'error'; });
+      await lightPage.click('.trip-route-btn');
+      await lightPage.waitForSelector('.itinerary-error-box', { timeout: 6000 });
+      await takeScreenshot(lightPage, 'visual-spec-light-error-state.png');
+
+      // Theme toggle verification (Theme switches Dark -> Light without camera jump)
+      console.log('[Harness Light Spec] Testing live toggle to Dark and back to Light...');
+
+      const initialMapInfo = await lightPage.evaluate(() => {
+        const map = window.__mapInstance;
+        if (!map) return null;
+        const center = map.getCenter();
+        return {
+          center: { lng: center.lng, lat: center.lat },
+          zoom: map.getZoom(),
+          pitch: map.getPitch(),
+          bearing: map.getBearing(),
+        };
+      });
+
+      // Tap Dark
+      await lightPage.click('.theme-toggle-dark');
+      await new Promise((r) => setTimeout(r, 600));
+      const darkThemeAttr = await lightPage.evaluate(() => document.documentElement.getAttribute('data-theme'));
+      if (darkThemeAttr !== 'dark') throw new Error(`Expected data-theme="dark", got: ${darkThemeAttr}`);
+
+      const darkMapState = await lightPage.evaluate(() => {
+        const map = window.__mapInstance;
+        if (!map) return null;
+        const style = map.getStyle();
+        const bgLayer = style?.layers?.find((l) => l.id === 'background');
+        return {
+          bgColor: bgLayer?.paint?.['background-color'],
+        };
+      });
+      if (darkMapState?.bgColor && darkMapState.bgColor.toLowerCase() === '#ffffff') {
+        throw new Error(`Expected dark map restyle, but map background is still white: ${darkMapState.bgColor}`);
+      }
+
+      // Tap Light
+      await lightPage.click('.theme-toggle-light');
+      await new Promise((r) => setTimeout(r, 600));
+      const lightThemeAttr = await lightPage.evaluate(() => document.documentElement.getAttribute('data-theme'));
+      if (lightThemeAttr !== 'light') throw new Error(`Expected data-theme="light", got: ${lightThemeAttr}`);
+
+      const lightMapState = await lightPage.evaluate(() => {
+        const map = window.__mapInstance;
+        if (!map) return null;
+        const center = map.getCenter();
+        const style = map.getStyle();
+        const bgLayer = style?.layers?.find((l) => l.id === 'background');
+        return {
+          center: { lng: center.lng, lat: center.lat },
+          zoom: map.getZoom(),
+          pitch: map.getPitch(),
+          bearing: map.getBearing(),
+          bgColor: bgLayer?.paint?.['background-color'],
+        };
+      });
+      if (lightMapState?.bgColor && lightMapState.bgColor.toLowerCase() !== '#ffffff') {
+        throw new Error(`Expected porcelain light map background #ffffff, got: ${lightMapState.bgColor}`);
+      }
+
+      if (initialMapInfo && lightMapState) {
+        const deltaLng = Math.abs(initialMapInfo.center.lng - lightMapState.center.lng);
+        const deltaLat = Math.abs(initialMapInfo.center.lat - lightMapState.center.lat);
+        const deltaZoom = Math.abs(initialMapInfo.zoom - lightMapState.zoom);
+        if (deltaLng > 0.0001 || deltaLat > 0.0001 || deltaZoom > 0.01) {
+          throw new Error(`Camera jump detected across theme toggle! Initial: ${JSON.stringify(initialMapInfo)}, Current: ${JSON.stringify(lightMapState)}`);
+        }
+      }
+
+      console.log('[Harness Light Spec] SUCCESS: Light theme and transitions verified against visual spec!');
+    } catch (err) {
+      await takeScreenshot(lightPage, 'visual-spec-light-failed.png').catch(() => {});
+      throw err;
+    } finally {
+      await lightContext.close();
     }
   });
 

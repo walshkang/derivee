@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
+import type { ThemeSetting } from '../utils/theme';
 
 interface BottomSheetProps {
   children: ComponentChildren;
@@ -8,6 +9,8 @@ interface BottomSheetProps {
   activeDetent?: number;
   onDetentChange?: (detent: number) => void;
   isOpen: boolean;
+  theme?: ThemeSetting;
+  onThemeChange?: (theme: ThemeSetting) => void;
 }
 
 import { findScrollableAncestor, shouldYieldToScroll } from '../utils/bottomSheetScroll';
@@ -19,6 +22,8 @@ export function BottomSheet({
   activeDetent,
   onDetentChange,
   isOpen,
+  theme,
+  onThemeChange,
 }: BottomSheetProps) {
   const [currentDetentIndex, setCurrentDetentIndex] = useState(() => {
     const initial = activeDetent !== undefined ? activeDetent : defaultDetent;
@@ -43,8 +48,11 @@ export function BottomSheet({
     currentY.current = e.touches[0].clientY;
     isInnerScroll.current = false;
 
-    const isHandle = Boolean(target && (target as Element).closest?.('.bottom-sheet-handle-container'));
-    if (isHandle) {
+    const isHandle = Boolean(
+      target && (target as Element).closest?.('.bottom-sheet-handle-container, .sheet-header-area')
+    );
+    const isButton = Boolean(target && (target as Element).closest?.('button'));
+    if (isHandle && !isButton) {
       isDragging.current = true;
       if (sheetRef.current) {
         sheetRef.current.style.transition = 'none';
@@ -64,6 +72,9 @@ export function BottomSheet({
 
     if (!isDragging.current) {
       const target = e.target as HTMLElement | null;
+      if (target && (target as Element).closest?.('button')) {
+        return;
+      }
       const scrollable = findScrollableAncestor(target, contentRef.current);
       if (shouldYieldToScroll(scrollable, deltaY)) {
         isInnerScroll.current = true;
@@ -162,6 +173,45 @@ export function BottomSheet({
       <div class="bottom-sheet-handle-container">
         <div class="bottom-sheet-handle" />
       </div>
+      {theme !== undefined && (
+        <div class="sheet-header-area">
+          <div class="sheet-display-row">
+            <span class="sheet-display-label">Display</span>
+            <div class="theme-toggle-group" role="radiogroup" aria-label="Theme selection">
+              <button
+                type="button"
+                class={`theme-toggle-btn theme-toggle-system ${theme === 'system' ? 'active' : ''}`}
+                onClick={() => onThemeChange?.('system')}
+                role="radio"
+                aria-checked={theme === 'system'}
+                title="System preference"
+              >
+                System
+              </button>
+              <button
+                type="button"
+                class={`theme-toggle-btn theme-toggle-light ${theme === 'light' ? 'active' : ''}`}
+                onClick={() => onThemeChange?.('light')}
+                role="radio"
+                aria-checked={theme === 'light'}
+                title="Light theme"
+              >
+                Light
+              </button>
+              <button
+                type="button"
+                class={`theme-toggle-btn theme-toggle-dark ${theme === 'dark' ? 'active' : ''}`}
+                onClick={() => onThemeChange?.('dark')}
+                role="radio"
+                aria-checked={theme === 'dark'}
+                title="Dark theme"
+              >
+                Dark
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div class="bottom-sheet-content" ref={contentRef}>
         {children}
       </div>

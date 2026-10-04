@@ -7,7 +7,11 @@ interface SystemInfoDrawerProps {
   onOpenTransitPack?: () => void;
 }
 
-export function SystemInfoDrawer({ isOnline, packState, onOpenTransitPack }: SystemInfoDrawerProps) {
+export function SystemInfoDrawer({
+  isOnline,
+  packState,
+  onOpenTransitPack,
+}: SystemInfoDrawerProps) {
   const isInstalled = Boolean(packState?.isInstalled);
   const buildInfo = formatBuildInfo();
 
@@ -44,4 +48,3 @@ export function SystemInfoDrawer({ isOnline, packState, onOpenTransitPack }: Sys
     </footer>
   );
 }
-

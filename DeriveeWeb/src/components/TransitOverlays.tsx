@@ -124,6 +124,10 @@ export function TransitOverlays({
           map.getCanvas().style.cursor = '';
         };
 
+        if (clickHandler) map.off('click', TRANSIT_STATIONS_LAYER_ID, clickHandler);
+        if (enterHandler) map.off('mouseenter', TRANSIT_STATIONS_LAYER_ID, enterHandler);
+        if (leaveHandler) map.off('mouseleave', TRANSIT_STATIONS_LAYER_ID, leaveHandler);
+
         map.on('click', TRANSIT_STATIONS_LAYER_ID, clickHandler);
         map.on('mouseenter', TRANSIT_STATIONS_LAYER_ID, enterHandler);
         map.on('mouseleave', TRANSIT_STATIONS_LAYER_ID, leaveHandler);
@@ -136,10 +140,18 @@ export function TransitOverlays({
       }
     };
 
+    const handleStyleLoad = () => {
+      if (!isCancelled) {
+        loadOverlays();
+      }
+    };
+
+    map.on('style.load', handleStyleLoad);
     loadOverlays();
 
     return () => {
       isCancelled = true;
+      map.off('style.load', handleStyleLoad);
       if (popupRef.current) {
         popupRef.current.remove();
         popupRef.current = null;

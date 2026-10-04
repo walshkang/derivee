@@ -45,6 +45,7 @@ import { Style } from 'maplibre-gl';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SHIPPED_STYLE_PATH = path.resolve(__dirname, '../../../public/map-style-dark.json');
+const SHIPPED_LIGHT_STYLE_PATH = path.resolve(__dirname, '../../../public/map-style-light.json');
 
 function createMockMapInstance() {
   return {
@@ -94,6 +95,22 @@ describe('Map Style Specification & Sprite URL Validation Tests', () => {
     // Validate overall style against @maplibre/maplibre-gl-style-spec
     const errors = validateStyleMin(style, latest);
     assert.strictEqual(errors.length, 0, `Shipped style must produce 0 style-spec validation errors: ${JSON.stringify(errors)}`);
+  });
+
+  it('validates the ACTUAL shipped map-style-light.json against MapLibre style validation', async () => {
+    const styleContent = fs.readFileSync(SHIPPED_LIGHT_STYLE_PATH, 'utf8');
+    const style = JSON.parse(styleContent);
+
+    assert.strictEqual(
+      style.sprite,
+      undefined,
+      'Shipped light style must not define a relative sprite URL'
+    );
+
+    await runRealMapLibreSpriteValidation(style.sprite);
+
+    const errors = validateStyleMin(style, latest);
+    assert.strictEqual(errors.length, 0, `Shipped light style must produce 0 style-spec validation errors: ${JSON.stringify(errors)}`);
   });
 
   it('end-to-end Style load: pre-fix style triggers fatal sprite error event, while shipped style loads without sprite error', async () => {

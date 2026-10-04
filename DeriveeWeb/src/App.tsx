@@ -13,10 +13,12 @@ import { BottomSheet } from './components/BottomSheet';
 import { TransitOverlays } from './components/TransitOverlays';
 import type { InstalledPackState } from './types/pack';
 import { isPackDismissed, setPackDismissed } from './utils/opfs';
+import { useTheme } from './hooks/useTheme';
 import type { Map } from 'maplibre-gl';
 
 export function App() {
   const isOnline = useOnlineStatus();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const { isStandalone, isIOS, canPromptNative, isOpen, closeModal, promptInstall } = useIsIOSInstallable();
   const [packState, setPackState] = useState<InstalledPackState | null>(null);
   const [packDismissed, setPackDismissedState] = useState<boolean>(() => isPackDismissed());
@@ -64,7 +66,7 @@ export function App() {
   return (
     <div class="app-layout">
       {/* Full-screen offline vector basemap base layer */}
-      <BasemapView onMapLoaded={setMapInstance} />
+      <BasemapView theme={resolvedTheme} onMapLoaded={setMapInstance} />
 
       <TransitOverlays map={mapInstance} isPackInstalled={Boolean(packState?.isInstalled)} />
 
@@ -75,7 +77,13 @@ export function App() {
         onTriggerInstall={promptInstall}
       />
 
-      <BottomSheet isOpen={true} detents={[15, 50, 90]} defaultDetent={15}>
+      <BottomSheet
+        isOpen={true}
+        detents={[15, 50, 90]}
+        defaultDetent={15}
+        theme={theme}
+        onThemeChange={setTheme}
+      >
         <SearchBar />
         <PackInstaller
           onPackStateChange={setPackState}
