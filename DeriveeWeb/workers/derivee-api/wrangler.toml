@@ -36,11 +36,10 @@ not_found_handling = "single-page-application"
 # 3. Paste the returned ID(s) below in `id` (and optional `preview_id`).
 # 4. Uncomment the [[kv_namespaces]] block and the [triggers] block below:
 #
-# [[kv_namespaces]]
-# binding = "KV_REALTIME"
-# id = "<REAL_KV_NAMESPACE_ID>"
-# preview_id = "<REAL_KV_PREVIEW_ID>"
+[[kv_namespaces]]
+binding = "KV_REALTIME"
+id = "9a64ab36a45b4e55afb5bba42d55bd6d"
 #
-# [triggers]
-# crons = ["* * * * *"] # Ingest MTA GTFS-RT every minute
+[triggers]
+crons = ["* * * * *"] # Ingest MTA GTFS-RT every minute
 # ------------------------------------------------------------------------------
