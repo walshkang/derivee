@@ -3,12 +3,17 @@ import type { InstalledPackState, InstallerStage, WorkerToMainMessage } from '..
 import {
   checkFullPackInstallState,
   saveInstalledPackState,
-  deleteCityPack,
   isOpfsSupported,
   setPackDismissed,
 } from '../utils/opfs';
 import { forceRelogin, RELOGIN_FALLBACK_MESSAGE } from '../utils/relogin';
 import { PackInstallWatchdog } from '../utils/tabSuspension';
+import {
+  isPackUpdateAvailable,
+  fetchPackInfo,
+  setTrackedCityPackVersion,
+  type PackInfo,
+} from '../utils/packUpdates';
 
 interface PackInstallerProps {
   onPackStateChange?: (state: InstalledPackState | null) => void;
@@ -66,6 +71,43 @@ export function PackInstaller({
   const workerRef = useRef<Worker | null>(null);
   const watchdogRef = useRef<PackInstallWatchdog | null>(null);
 
+  type UpdateStatus = 'idle' | 'checking' | 'available' | 'up-to-date' | 'error';
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
+  const [availableUpdate, setAvailableUpdate] = useState<PackInfo | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  const checkForUpdates = async (slugToTest?: string) => {
+    const slug = slugToTest || packState?.slug;
+    if (!slug) return;
+    if (!isOnline) {
+      setUpdateStatus('idle');
+      return;
+    }
+
+    setUpdateStatus('checking');
+    setUpdateError(null);
+    try {
+      const info = await fetchPackInfo(slug);
+      if (!info) {
+        setUpdateStatus('error');
+        setUpdateError("Couldn't check for pack updates");
+        return;
+      }
+
+      const installedVersion = Number(packState?.version ?? 0);
+      if (isPackUpdateAvailable(installedVersion, info)) {
+        setAvailableUpdate(info);
+        setUpdateStatus('available');
+      } else {
+        setAvailableUpdate(null);
+        setUpdateStatus('up-to-date');
+      }
+    } catch {
+      setUpdateStatus('error');
+      setUpdateError("Couldn't check for pack updates");
+    }
+  };
+
   // 1. Check OPFS for already installed pack on every launch
   useEffect(() => {
     let isMounted = true;
@@ -76,6 +118,9 @@ export function PackInstaller({
         if (isMounted) {
           setPackState(state);
           onPackStateChange?.(state);
+          if (state && isOnline) {
+            checkForUpdates(state.slug);
+          }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -91,6 +136,45 @@ export function PackInstaller({
       isMounted = false;
     };
   }, []);
+
+  // 1b. Check for pack updates when online transitions or pack state updates
+  useEffect(() => {
+    if (packState && isOnline && !isInstalling) {
+      checkForUpdates(packState.slug);
+    } else if (!isOnline) {
+      setUpdateStatus('idle');
+    }
+  }, [packState?.slug, packState?.version, isOnline, isInstalling]);
+
+  // 1c. Check for pack updates on returning to foreground
+  useEffect(() => {
+    const handleForeground = () => {
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'visible' &&
+        isOnline &&
+        packState &&
+        !isInstalling
+      ) {
+        checkForUpdates(packState.slug);
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleForeground);
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleForeground);
+    }
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleForeground);
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleForeground);
+      }
+    };
+  }, [packState?.slug, packState?.version, isOnline, isInstalling]);
 
   // 2. Check Auth status via /api/me
   useEffect(() => {
@@ -207,13 +291,13 @@ export function PackInstaller({
     };
   }, [isInstalling]);
 
-  const startInstall = async () => {
+  const startInstall = async (expectedTotalBytes?: number) => {
     setErrorMessage(null);
     setIsInstalling(true);
     setInstallStage('downloading');
     setProgress({
       loadedBytes: 0,
-      totalBytes: 29688421,
+      totalBytes: expectedTotalBytes || 29688421,
       percent: 0,
       message: 'Connecting to Cloudflare edge...',
     });
@@ -265,10 +349,13 @@ export function PackInstaller({
           watchdogRef.current = null;
           saveInstalledPackState(data.packState);
           setPackState(data.packState);
+          setTrackedCityPackVersion(data.packState.slug, data.packState.version);
           onPackStateChange?.(data.packState);
           setIsInstalling(false);
           setInstallStage(null);
           setPackDismissed(false);
+          setAvailableUpdate(null);
+          setUpdateStatus('up-to-date');
           onInstallSuccess?.();
           await releaseWakeLock();
           worker.terminate();
@@ -319,22 +406,24 @@ export function PackInstaller({
 
   const handleReinstall = async () => {
     if (confirm('Re-download and verify the NYC transit pack from scratch?')) {
-      await deleteCityPack('nyc');
-      setPackState(null);
-      onPackStateChange?.(null);
-      setPackDismissed(false);
-      onInstallSuccess?.();
       await startInstall();
     }
   };
 
-  const formatBytes = (bytes?: number) => {
+  const handleStartUpdate = async () => {
+    if (!availableUpdate || !packState) return;
+    await startInstall(availableUpdate.size);
+  };
+
+  const formatBytes = (bytes?: number, decimal: boolean = false) => {
     if (!bytes || bytes <= 0) return '0 B';
-    if (bytes >= 1024 * 1024) {
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    const divisor = decimal ? 1000 : 1024;
+    const mbDivisor = decimal ? 1_000_000 : 1024 * 1024;
+    if (bytes >= mbDivisor) {
+      return `${(bytes / mbDivisor).toFixed(1)} MB`;
     }
-    if (bytes >= 1024) {
-      return `${(bytes / 1024).toFixed(0)} KB`;
+    if (bytes >= divisor) {
+      return `${(bytes / divisor).toFixed(0)} KB`;
     }
     return `${bytes} B`;
   };
@@ -462,6 +551,42 @@ export function PackInstaller({
           </div>
         </div>
 
+        {/* Update available affordance: calm one-row affordance */}
+        {updateStatus === 'available' && availableUpdate && (
+          <div class="pack-update-row" role="status">
+            <div class="pack-update-info">
+              <span class="pack-update-dot" aria-hidden="true" />
+              <span class="pack-update-text">
+                {packState.slug === 'nyc' ? 'NYC' : packState.displayName} pack v{availableUpdate.version} available · {formatBytes(availableUpdate.size, true)}
+              </span>
+            </div>
+            <button
+              type="button"
+              class="pack-update-btn"
+              onClick={handleStartUpdate}
+              aria-label={`Update ${packState.displayName} pack to v${availableUpdate.version}`}
+            >
+              Update
+            </button>
+          </div>
+        )}
+
+        {/* Error state on update check failure */}
+        {updateStatus === 'error' && isOnline && (
+          <div class="pack-update-row pack-update-error-row" role="status">
+            <span class="pack-update-error-text">
+              {updateError || "Couldn't check for pack updates"}
+            </span>
+            <button
+              type="button"
+              class="pack-update-retry-btn"
+              onClick={() => checkForUpdates(packState.slug)}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {effectiveExpanded && (
           <div class="pack-installer-card installed-card pack-expanded-card">
             <div class="installer-header-row">
@@ -469,6 +594,12 @@ export function PackInstaller({
                 <div class="installed-status-tag">
                   <span class="status-live-dot" />
                   <span>Pack Installed</span>
+                  {updateStatus === 'checking' && (
+                    <span class="status-checking-subtle">· Checking for updates...</span>
+                  )}
+                  {updateStatus === 'up-to-date' && (
+                    <span class="status-checking-subtle">· Up to date</span>
+                  )}
                 </div>
                 <h2 class="installer-card-title">{packState.displayName} (v{packState.version})</h2>
                 <div class="installer-season-label">{packState.seasonLabel}</div>
@@ -649,7 +780,7 @@ export function PackInstaller({
         <button
           type="button"
           class="installer-primary-btn"
-          onClick={startInstall}
+          onClick={() => startInstall()}
           disabled={!isOpfsSupported() || isVerifyingDisk}
         >
           {isVerifyingDisk ? 'Verifying Storage...' : 'Download NYC Pack (~30 MB)'}

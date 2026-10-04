@@ -126,6 +126,59 @@ export default {
       return jsonResponse({ email: userEmail }, 200, origin);
     }
 
+    // 3.5 Pack info route: GET /api/pack-info
+    if (url.pathname === '/api/pack-info' && request.method === 'GET') {
+      const city = url.searchParams.get('city') || 'nyc';
+      const packKey = `city-${city}.pack.zst`;
+      const versionKey = `city-${city}.version.json`;
+
+      // Read pack object metadata without downloading pack body
+      const packObj = await env.PACK.head(packKey);
+      if (!packObj) {
+        return jsonResponse({ error: 'not_found' }, 404, origin);
+      }
+
+      let version: number | null = null;
+      if (packObj.customMetadata && packObj.customMetadata.version) {
+        const parsed = parseInt(packObj.customMetadata.version, 10);
+        if (!isNaN(parsed)) version = parsed;
+      }
+
+      if (version === null) {
+        const versionObj = await env.PACK.get(versionKey);
+        if (versionObj) {
+          try {
+            const raw = await versionObj.json() as { version?: unknown };
+            if (typeof raw?.version === 'number' && !isNaN(raw.version)) {
+              version = raw.version;
+            } else if (typeof raw?.version === 'string') {
+              const parsed = parseInt(raw.version, 10);
+              if (!isNaN(parsed)) version = parsed;
+            }
+          } catch {
+            // ignore malformed version json
+          }
+        }
+      }
+
+      if (version === null) {
+        return jsonResponse({ error: 'version_not_found' }, 404, origin);
+      }
+
+      return jsonResponse(
+        {
+          version,
+          size: packObj.size,
+          updated_at: packObj.uploaded.toISOString(),
+        },
+        200,
+        origin,
+        {
+          'Cache-Control': 'no-cache',
+        }
+      );
+    }
+
     // 4. Pack streaming route: GET /api/pack
     if (url.pathname === '/api/pack' && request.method === 'GET') {
       // Identity verification injected by Cloudflare Access edge

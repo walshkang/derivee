@@ -1051,6 +1051,495 @@ try {
     }
   });
 
+  // ==========================================================================
+  // Wave: Pack updates (T1): version check + update affordance
+  // Scenario: Pack update available → installed (flow: pack management)
+  // ==========================================================================
+  await recordScenario('Pack update available → installed', 'pack management', async ({ takeScreenshot }) => {
+    console.log('\n[Harness Pack Update] --- TESTING PACK UPDATE AFFORDANCE & INSTALLATION ---');
+    const updateContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    const updatePage = await updateContext.newPage();
+
+    try {
+      // Mock Cloudflare Access auth
+      await updatePage.route('**/api/me', (route) => {
+        return route.fulfill({
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'test@example.com' }),
+        });
+      });
+
+      // Mock /api/pack-info returning newer v4 pack
+      await updatePage.route('**/api/pack-info*', (route) => {
+        return route.fulfill({
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          body: JSON.stringify({
+            version: 4,
+            size: 29684406,
+            updated_at: '2026-10-03T12:00:00.000Z',
+          }),
+        });
+      });
+
+      // Set initial installed pack state at v3 in OPFS / localStorage
+      await updatePage.addInitScript(() => {
+        localStorage.setItem('derivee_pack_nyc', JSON.stringify({
+          isInstalled: true,
+          slug: 'nyc',
+          version: 3,
+          displayName: 'New York City',
+          seasonLabel: 'Summer 2026 Timetable',
+          installedAt: '2026-10-01T00:00:00.000Z',
+          totalBytes: 29684406,
+          files: [
+            { name: 'city_config.json', size: 3401 },
+            { name: 'transit.sqlite', size: 9744384 },
+            { name: 'transit-lines.geojson', size: 407221 },
+            { name: 'ultra_transfers.csr', size: 582906 },
+            { name: 'timetable.bin', size: 7184128 },
+            { name: 'walk_graph.bin', size: 47426176 },
+          ],
+        }));
+
+        const fakeFile = {
+          size: 1000,
+          async arrayBuffer() { return new ArrayBuffer(8); },
+          async text() {
+            return JSON.stringify({
+              version: 3,
+              slug: 'nyc',
+              displayName: 'New York City',
+              routing: { timetableBinFile: 't', walkGraphFile: 'w', ultraCsrFile: 'u' },
+            });
+          },
+        };
+        const fakeDir = {
+          async getFileHandle() { return { async getFile() { return fakeFile; } }; },
+          async getDirectoryHandle() { return this; },
+          async removeEntry() {},
+        };
+        Object.defineProperty(navigator, 'storage', {
+          value: {
+            async getDirectory() {
+              return { async getDirectoryHandle() { return fakeDir; } };
+            },
+          },
+          configurable: true,
+        });
+
+        // Intercept worker instantiation for pack-installer.worker.ts to simulate downloading -> SUCCESS v4
+        const OrigWorker = window.Worker;
+        window.Worker = function (url, opts) {
+          if (String(url).includes('pack-installer.worker')) {
+            const handlers = {};
+            const fakeWorker = {
+              postMessage(msg) {
+                if (msg.type === 'START_INSTALL') {
+                  // Simulate progress stages
+                  setTimeout(() => {
+                    handlers.message?.({
+                      data: {
+                        type: 'PROGRESS',
+                        stage: 'downloading',
+                        loadedBytes: 14842203,
+                        totalBytes: 29684406,
+                        percent: 50,
+                      },
+                    });
+                  }, 50);
+
+                  setTimeout(() => {
+                    handlers.message?.({
+                      data: {
+                        type: 'PROGRESS',
+                        stage: 'verifying',
+                        percent: 100,
+                        message: 'Verifying integrity...',
+                      },
+                    });
+                  }, 120);
+
+                  setTimeout(() => {
+                    handlers.message?.({
+                      data: {
+                        type: 'SUCCESS',
+                        packState: {
+                          isInstalled: true,
+                          slug: 'nyc',
+                          version: 4,
+                          displayName: 'New York City',
+                          seasonLabel: 'Summer 2026 Timetable',
+                          installedAt: new Date().toISOString(),
+                          totalBytes: 29684406,
+                          files: [
+                            { name: 'city_config.json', size: 3401 },
+                            { name: 'transit.sqlite', size: 9744384 },
+                            { name: 'transit-lines.geojson', size: 407221 },
+                            { name: 'ultra_transfers.csr', size: 582906 },
+                            { name: 'timetable.bin', size: 7184128 },
+                            { name: 'walk_graph.bin', size: 47426176 },
+                            { name: 'patterns.json', size: 19650 },
+                          ],
+                        },
+                      },
+                    });
+                  }, 200);
+                }
+              },
+              set onmessage(fn) { handlers.message = fn; },
+              set onerror(fn) { handlers.error = fn; },
+              terminate() {},
+            };
+            return fakeWorker;
+          }
+          return new OrigWorker(url, opts);
+        };
+      });
+
+      console.log('[Harness Pack Update] Navigating to http://127.0.0.1:4173/...');
+      await updatePage.goto('http://127.0.0.1:4173/');
+      await updatePage.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
+
+      // 1. Wait for update row affordance to appear
+      console.log('[Harness Pack Update] Waiting for update affordance row...');
+      await updatePage.waitForSelector('.pack-update-row', { timeout: 8000 });
+      const updateRowText = await updatePage.$eval('.pack-update-row', (el) => el.textContent?.trim() || '');
+      console.log(`[Harness Pack Update] Update row text: "${updateRowText}"`);
+
+      if (!updateRowText.includes('v4 available') || !updateRowText.includes('Update')) {
+        throw new Error(`Expected update row to state v4 available and have Update button, got: "${updateRowText}"`);
+      }
+
+      await takeScreenshot(updatePage, 'pack-update-available.png');
+
+      // 2. Tap Update button
+      console.log('[Harness Pack Update] Tapping Update button...');
+      await updatePage.click('.pack-update-btn');
+
+      // 3. Assert downloading state appears
+      console.log('[Harness Pack Update] Asserting downloading progress appears...');
+      await updatePage.waitForSelector('.installing-card', { timeout: 3000 });
+      const stageBadgeText = await updatePage.$eval('.installer-stage-badge', (el) => el.textContent?.trim() || '');
+      console.log(`[Harness Pack Update] Progress stage: "${stageBadgeText}"`);
+
+      // 4. Wait for install to complete and update row to disappear
+      console.log('[Harness Pack Update] Waiting for installation to complete and pack card to settle...');
+      await updatePage.waitForSelector('.pack-installed-banner', { timeout: 8000 });
+      await updatePage.waitForSelector('.pack-update-row', { state: 'detached', timeout: 5000 });
+
+      // 5. Expand details to verify v4 is now installed
+      console.log('[Harness Pack Update] Expanding details to verify installed version...');
+      await updatePage.click('.pack-details-btn');
+      await updatePage.waitForSelector('.pack-expanded-card', { timeout: 3000 });
+      const cardTitle = await updatePage.$eval('.installer-card-title', (el) => el.textContent?.trim() || '');
+      console.log(`[Harness Pack Update] Expanded card title: "${cardTitle}"`);
+
+      if (!cardTitle.includes('v4')) {
+        throw new Error(`Expected pack card title to show v4, got: "${cardTitle}"`);
+      }
+
+      await takeScreenshot(updatePage, 'pack-update-installed.png');
+      console.log('[Harness Pack Update] SUCCESS: Pack update affordance verified, updated to v4, and state settled!');
+    } catch (err) {
+      await takeScreenshot(updatePage, 'pack-update-failed.png').catch(() => {});
+      throw err;
+    } finally {
+      await updateContext.close();
+    }
+  });
+
+  // ==========================================================================
+  // Wave: Aesthetic polish (T2): world-class transit app finish
+  // Scenario: Planner and cards match visual spec (flow: trip planning)
+  // ==========================================================================
+  await recordScenario('Planner and cards match visual spec', 'trip planning', async ({ takeScreenshot }) => {
+    console.log('\n[Harness Visual Spec] --- TESTING PLANNER AND CARDS VISUAL SPEC ---');
+    const visualContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const visualPage = await visualContext.newPage();
+
+    try {
+      await visualPage.route(/\/api\/.*/, (route) => {
+        const url = new URL(route.request().url());
+        const pathname = url.pathname;
+        if (pathname === '/api/cities') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ id: 'nyc', name: 'New York City', slug: 'nyc', isInstalled: true }]),
+          });
+        }
+        if (pathname === '/api/me') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'test@example.com' }),
+          });
+        }
+        if (pathname === '/api/basemap') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/vnd.pmtiles' },
+            body: basemapBuffer,
+          });
+        }
+        if (pathname === '/api/pack-info') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            body: JSON.stringify({
+              version: 4,
+              size: 29800000,
+              updated_at: '2026-10-04T00:00:00.000Z',
+            }),
+          });
+        }
+        return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      });
+
+      await visualPage.addInitScript(() => {
+        localStorage.setItem('derivee_pack_nyc', JSON.stringify({
+          isInstalled: true,
+          slug: 'nyc',
+          version: 3,
+          displayName: 'New York City',
+          seasonLabel: 'Summer 2026 Timetable',
+          installedAt: '2026-10-01T00:00:00.000Z',
+          totalBytes: 29684406,
+          files: [
+            { name: 'city_config.json', size: 3401 },
+            { name: 'transit.sqlite', size: 9744384 },
+            { name: 'transit-lines.geojson', size: 407221 },
+            { name: 'ultra_transfers.csr', size: 582906 },
+            { name: 'timetable.bin', size: 7184128 },
+            { name: 'walk_graph.bin', size: 47426176 },
+            { name: 'patterns.json', size: 1000 },
+          ],
+        }));
+
+        const REQUIRED = ['city_config.json', 'transit.sqlite', 'transit-lines.geojson', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin', 'patterns.json'];
+        const fakeFile = { size: 1000, async arrayBuffer() { return new ArrayBuffer(8); } };
+
+        const patternsArray = new Array(200).fill(null);
+        patternsArray[36] = { route_id: "J" };
+        patternsArray[167] = { route_id: "L" };
+        const patternsFile = { size: 1000, async text() { return JSON.stringify(patternsArray); } };
+
+        const fakeDir = {
+          async getFileHandle(name) {
+            if (!REQUIRED.includes(name)) throw new DOMException('nf', 'NotFoundError');
+            if (name === 'patterns.json') return { async getFile() { return patternsFile; } };
+            return { async getFile() { return fakeFile; } };
+          },
+        };
+        Object.defineProperty(navigator, 'storage', {
+          value: {
+            async getDirectory() {
+              return { async getDirectoryHandle(name) { if (name === 'nyc') return fakeDir; throw new DOMException('nf', 'NotFoundError'); } };
+            },
+          },
+          configurable: true,
+        });
+
+        const REAL_SHAPED_SEGMENTS = [
+          { board_stop_id: 72, exit_stop_id: 150, trip_id: 1045, departure_time: 28800, arrival_time: 29400, route_id: 167, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 150, exit_stop_id: 151, trip_id: 0, departure_time: 29400, arrival_time: 29700, route_id: 0, transfer_distance_m: 150, is_transfer: true },
+          { board_stop_id: 151, exit_stop_id: 207, trip_id: 2099, departure_time: 29700, arrival_time: 30600, route_id: 36, transfer_distance_m: 0, is_transfer: false },
+        ];
+
+        window.__workerMode = 'normal';
+
+        const RealWorker = window.Worker;
+        window.Worker = function (url, opts) {
+          if (String(url).includes('routing.worker')) {
+            const handlers = {};
+            return {
+              postMessage(msg) {
+                if (msg.type === 'INIT') {
+                  setTimeout(() => {
+                    handlers.message?.({ data: { type: 'READY', loadTimeMs: 45, patterns: patternsArray } });
+                  }, 30);
+                } else if (msg.type === 'ROUTE') {
+                  setTimeout(() => {
+                    if (window.__workerMode === 'empty') {
+                      handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: [], profile: msg.profile, flags: msg.flags } });
+                    } else if (window.__workerMode === 'error') {
+                      handlers.message?.({ data: { type: 'ERROR', queryId: msg.queryId, message: 'Routing engine calculation timeout' } });
+                    } else {
+                      handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: REAL_SHAPED_SEGMENTS, profile: msg.profile, flags: msg.flags } });
+                    }
+                  }, 450);
+                }
+              },
+              set onmessage(fn) { handlers.message = fn; },
+              get onmessage() { return handlers.message; },
+              set onerror(fn) { handlers.error = fn; },
+              addEventListener(t, fn) { handlers[t] = fn; },
+              removeEventListener(t) { delete handlers[t]; },
+              terminate() {},
+            };
+          }
+          return new RealWorker(url, opts);
+        };
+        window.Worker.prototype = RealWorker.prototype;
+      });
+
+      console.log('[Harness Visual Spec] Navigating to http://127.0.0.1:4173/...');
+      await visualPage.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+      await visualPage.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
+      await visualPage.waitForSelector('.engine-status-ready', { timeout: 30000 });
+
+      // State 1: Sheet collapsed (peek detent 15dvh), brand lockup, offline ready indicator
+      console.log('[Harness Visual Spec] Capturing State: Planner Idle (Collapsed Sheet 15dvh)...');
+      await takeScreenshot(visualPage, 'visual-spec-planner-idle.png');
+
+      // State 2: Sheet Half Detent (50dvh)
+      console.log('[Harness Visual Spec] Expanding sheet to half detent (50dvh)...');
+      await visualPage.evaluate(() => {
+        document.querySelector('.bottom-sheet').style.height = '50dvh';
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      await takeScreenshot(visualPage, 'visual-spec-sheet-half.png');
+
+      // State 3: Sheet Full Detent (90dvh) & Pack update row
+      console.log('[Harness Visual Spec] Expanding sheet to full detent (90dvh)...');
+      await visualPage.evaluate(() => {
+        document.querySelector('.bottom-sheet').style.height = '90dvh';
+      });
+      await new Promise((r) => setTimeout(r, 400));
+
+      // Check Pack card update-available affordance
+      await visualPage.waitForSelector('.pack-update-row', { timeout: 5000 }).catch(() => null);
+      await takeScreenshot(visualPage, 'visual-spec-pack-update-available.png');
+
+      // State 4: Departure Mode Segmented Control
+      console.log('[Harness Visual Spec] Testing departure mode toggle...');
+      await visualPage.click('.dep-mode-depart-at');
+      await new Promise((r) => setTimeout(r, 300));
+      const timeVisible = await visualPage.evaluate(() => {
+        const timeGroup = document.querySelector('.trip-time-selector');
+        return timeGroup && window.getComputedStyle(timeGroup).display !== 'none';
+      });
+      if (!timeVisible) {
+        throw new Error('Expected departure time input to be visible when "Depart at" is active');
+      }
+
+      await visualPage.click('.dep-mode-now');
+      await new Promise((r) => setTimeout(r, 300));
+      await takeScreenshot(visualPage, 'visual-spec-departure-modes.png');
+
+      // State 5: Routing State (Skeleton)
+      console.log('[Harness Visual Spec] Triggering route to capture shimmering skeleton state...');
+      await visualPage.click('.quick-preset-btn');
+      await new Promise((r) => setTimeout(r, 400));
+
+      // Click route button and quickly capture skeleton
+      await visualPage.click('.trip-route-btn');
+      await visualPage.waitForSelector('.itinerary-skeleton-card', { timeout: 4000 });
+      console.log('[Harness Visual Spec] Shimmering skeleton card detected.');
+      await takeScreenshot(visualPage, 'visual-spec-routing-skeleton.png');
+
+      // State 6: Itinerary Results & Hero Arrival
+      console.log('[Harness Visual Spec] Waiting for itinerary results to render...');
+      await visualPage.waitForSelector('.itinerary-results-container', { timeout: 10000 });
+      await new Promise((r) => setTimeout(r, 600));
+
+      const itineraryAudit = await visualPage.evaluate(() => {
+        const arrivalHero = document.querySelector('.arrival-time-hero');
+        const heroText = arrivalHero?.textContent?.trim() || '';
+        const cards = document.querySelectorAll('.itinerary-ranked-card');
+        const connectors = document.querySelectorAll('.transfer-connector-row, .itinerary-transfer-connector');
+        const legCards = document.querySelectorAll('.itinerary-leg-card');
+        const badges = Array.from(document.querySelectorAll('.route-pill-badge')).map((b) => b.textContent?.trim());
+
+        return {
+          hasArrivalHero: Boolean(arrivalHero),
+          heroText,
+          cardCount: cards.length,
+          connectorCount: connectors.length,
+          legCount: legCards.length,
+          badgeLabels: badges,
+        };
+      });
+
+      console.log('[Harness Visual Spec] Itinerary Audit:', JSON.stringify(itineraryAudit));
+      if (!itineraryAudit.hasArrivalHero || !itineraryAudit.heroText) {
+        throw new Error('Expected arrival time hero element with formatted time, found none');
+      }
+      if (itineraryAudit.cardCount === 0) {
+        throw new Error('Expected at least 1 itinerary card rendered');
+      }
+      if (itineraryAudit.connectorCount === 0) {
+        throw new Error('Expected transfer connector row between legs');
+      }
+      await takeScreenshot(visualPage, 'visual-spec-itinerary-hero-arrival.png');
+
+      // State 7: Connectivity: online / offline
+      console.log('[Harness Visual Spec] Testing offline connectivity transition...');
+      await visualContext.setOffline(true);
+      await visualPage.evaluate(() => window.dispatchEvent(new Event('offline')));
+      await new Promise((r) => setTimeout(r, 400));
+      await takeScreenshot(visualPage, 'visual-spec-connectivity-offline.png');
+
+      // Restore online
+      await visualContext.setOffline(false);
+      await visualPage.evaluate(() => window.dispatchEvent(new Event('online')));
+      await new Promise((r) => setTimeout(r, 400));
+
+      // State 8: Empty State (calm brand voice)
+      console.log('[Harness Visual Spec] Testing empty state (no routes)...');
+      await visualPage.evaluate(() => {
+        window.__workerMode = 'empty';
+      });
+      await visualPage.click('.trip-route-btn');
+      await visualPage.waitForSelector('.route-comparison-empty', { timeout: 6000 });
+      const emptyStateAudit = await visualPage.evaluate(() => {
+        const title = document.querySelector('.empty-title')?.textContent?.trim() || '';
+        const subtitle = document.querySelector('.empty-subtitle')?.textContent?.trim() || '';
+        return { title, subtitle };
+      });
+      console.log('[Harness Visual Spec] Empty state audit:', JSON.stringify(emptyStateAudit));
+      if (!emptyStateAudit.title.includes('No direct transit route found')) {
+        throw new Error(`Expected calm empty title "No direct transit route found", got: ${emptyStateAudit.title}`);
+      }
+      await takeScreenshot(visualPage, 'visual-spec-empty-state.png');
+
+      // State 9: Error State (calm recoverable error)
+      console.log('[Harness Visual Spec] Testing recoverable error state...');
+      await visualPage.evaluate(() => {
+        window.__workerMode = 'error';
+      });
+      await visualPage.click('.trip-route-btn');
+      await visualPage.waitForSelector('.itinerary-error-box', { timeout: 6000 });
+      const errorAudit = await visualPage.evaluate(() => {
+        const title = document.querySelector('.error-title')?.textContent?.trim() || '';
+        const desc = document.querySelector('.error-description')?.textContent?.trim() || '';
+        return { title, desc };
+      });
+      console.log('[Harness Visual Spec] Error state audit:', JSON.stringify(errorAudit));
+      if (!errorAudit.title.includes('Routing Unavailable')) {
+        throw new Error(`Expected error title "Routing Unavailable", got: ${errorAudit.title}`);
+      }
+      await takeScreenshot(visualPage, 'visual-spec-error-state.png');
+
+      console.log('[Harness Visual Spec] SUCCESS: All states and transitions verified against visual spec!');
+    } catch (err) {
+      await takeScreenshot(visualPage, 'visual-spec-failed.png').catch(() => {});
+      throw err;
+    } finally {
+      await visualContext.close();
+    }
+  });
+
 } finally {
   if (browser) await browser.close();
   server.close();

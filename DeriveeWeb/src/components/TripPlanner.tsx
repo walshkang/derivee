@@ -48,6 +48,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
   const [showOriginDropdown, setShowOriginDropdown] = useState<boolean>(false);
   const [showDestDropdown, setShowDestDropdown] = useState<boolean>(false);
   const [departureTime, setDepartureTime] = useState<string>('08:00');
+  const [departureMode, setDepartureMode] = useState<'now' | 'depart_at'>('depart_at');
 
   // Screen 4B Dual-Profile Routing State
   const [isRouting, setIsRouting] = useState<boolean>(false);
@@ -479,11 +480,8 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
 
       setFastestSegments(fastest);
       setFewestTransfersSegments(fewestTransfers);
-
-      if (fastest.length === 0 && fewestTransfers.length === 0) {
-        setRouteError('No route found between selected stops at this departure time.');
-      } else {
-        setRouteError(null);
+      setRouteError(null);
+      if (fastest.length > 0 || fewestTransfers.length > 0) {
         onRoutesFound?.();
       }
     } catch (err: any) {
@@ -502,29 +500,35 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
 
   return (
     <div class="trip-planner-card">
-      {/* Engine Status Banner */}
-      <div class="trip-planner-status-bar">
-        {engineStatus === 'warming_up' && (
-          <div class="engine-status engine-status-warming">
-            <span class="engine-dot engine-dot-pulse" />
-            <span>Hydrating WASM routing engine from OPFS...</span>
-          </div>
-        )}
-        {engineStatus === 'ready' && (
-          <div class="engine-status engine-status-ready">
-            <span class="engine-dot engine-dot-green" />
-            <span>
-              Engine Ready{' '}
-              {loadTimeMs !== null && loadTimeMs > 0 && `(loaded in ${loadTimeMs}ms)`}
-            </span>
-          </div>
-        )}
-        {engineStatus === 'error' && (
-          <div class="engine-status engine-status-error">
-            <span class="engine-dot engine-dot-red" />
-            <span>Engine Error: {engineError || 'Failed to initialize WASM engine'}</span>
-          </div>
-        )}
+      {/* Header & Engine Status */}
+      <div class="trip-planner-header-row">
+        <div class="trip-planner-title-group">
+          <h2 class="trip-planner-title">Directions</h2>
+          <p class="trip-planner-subtitle">Instant on-device routing across NYC</p>
+        </div>
+        <div class="trip-planner-status-bar">
+          {engineStatus === 'warming_up' && (
+            <div class="engine-status engine-status-warming">
+              <span class="engine-dot engine-dot-pulse" />
+              <span>Warming engine...</span>
+            </div>
+          )}
+          {engineStatus === 'ready' && (
+            <div class="engine-status engine-status-ready">
+              <span class="engine-dot engine-dot-green" />
+              <span>
+                Offline Ready{' '}
+                {loadTimeMs !== null && loadTimeMs > 0 && `(${loadTimeMs}ms)`}
+              </span>
+            </div>
+          )}
+          {engineStatus === 'error' && (
+            <div class="engine-status engine-status-error">
+              <span class="engine-dot engine-dot-red" />
+              <span>{engineError || 'Engine error'}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* City Picker / Pack Manager UI (Wave M5c) */}
@@ -533,11 +537,6 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
         onSelectCity={handleSelectCity}
         onRetry={loadCities}
       />
-
-      <h2 class="trip-planner-title">Offline Transit Router</h2>
-      <p class="trip-planner-subtitle">
-        C++ RAPTOR engine pathfinding running 100% offline in WebAssembly
-      </p>
 
       {/* Origin & Destination Inputs */}
       <div class="trip-inputs-container">
@@ -552,7 +551,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
               id="origin-stop-input"
               type="text"
               class="stop-text-input"
-              placeholder="Origin stop (e.g. Times Sq)"
+              placeholder="Where from? (e.g. Times Sq)"
               value={originInput}
               onInput={(e) => {
                 const val = (e.target as HTMLInputElement).value;
@@ -593,7 +592,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
                   onClick={() => handleSelectOrigin(stop)}
                 >
                   <span class="stop-suggestion-name">{stop.name}</span>
-                  <span class="stop-suggestion-id">#{stop.id}</span>
+                  <span class="stop-suggestion-type">Station</span>
                 </button>
               ))}
             </div>
@@ -624,7 +623,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
               id="dest-stop-input"
               type="text"
               class="stop-text-input"
-              placeholder="Destination stop (e.g. Atlantic Av)"
+              placeholder="Where to? (e.g. Atlantic Av)"
               value={destInput}
               onInput={(e) => {
                 const val = (e.target as HTMLInputElement).value;
@@ -665,30 +664,61 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
                   onClick={() => handleSelectDest(stop)}
                 >
                   <span class="stop-suggestion-name">{stop.name}</span>
-                  <span class="stop-suggestion-id">#{stop.id}</span>
+                  <span class="stop-suggestion-type">Station</span>
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Departure Time & Quick Presets */}
+        {/* Departure Timing & Query Modes (Leave now / Depart at - §12.3) */}
         <div class="trip-options-row">
-          <div class="trip-time-selector">
-            <label class="trip-time-label" htmlFor="trip-dep-time">
-              Departure:
-            </label>
-            <input
-              id="trip-dep-time"
-              type="time"
-              class="trip-time-input"
-              value={departureTime}
-              onInput={(e) => setDepartureTime((e.target as HTMLInputElement).value)}
-            />
+          <div class="departure-control-group">
+            <div class="departure-mode-selector" role="radiogroup" aria-label="Departure timing">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={departureMode === 'now'}
+                class={`dep-mode-btn dep-mode-now ${departureMode === 'now' ? 'dep-mode-active' : ''}`}
+                onClick={() => {
+                  setDepartureMode('now');
+                  const now = new Date();
+                  const h = String(now.getHours()).padStart(2, '0');
+                  const m = String(now.getMinutes()).padStart(2, '0');
+                  setDepartureTime(`${h}:${m}`);
+                }}
+              >
+                <span class="dep-mode-icon">⚡</span>
+                <span>Leave now</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={departureMode === 'depart_at'}
+                class={`dep-mode-btn dep-mode-depart-at ${departureMode === 'depart_at' ? 'dep-mode-active' : ''}`}
+                onClick={() => setDepartureMode('depart_at')}
+              >
+                <span class="dep-mode-icon">🕐</span>
+                <span>Depart at</span>
+              </button>
+            </div>
+
+            <div class="trip-time-selector" style={{ display: departureMode === 'depart_at' ? 'flex' : 'none' }}>
+              <label class="trip-time-label" htmlFor="trip-dep-time">
+                Time
+              </label>
+              <input
+                id="trip-dep-time"
+                type="time"
+                class="trip-time-input"
+                value={departureTime}
+                onInput={(e) => setDepartureTime((e.target as HTMLInputElement).value)}
+              />
+            </div>
           </div>
 
           <div class="quick-presets-group">
-            <span class="quick-preset-label">Test Preset:</span>
+            <span class="quick-preset-label">Quick route:</span>
             <button
               type="button"
               class="quick-preset-btn"
@@ -699,7 +729,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
           </div>
         </div>
 
-        {/* Route Action Button */}
+        {/* Confident Primary Action Button */}
         <button
           type="button"
           class="installer-primary-btn trip-route-btn"
@@ -715,10 +745,15 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
           {isRouting ? (
             <span class="btn-spinner-content">
               <span class="btn-spinner" />
-              <span>Routing offline trip...</span>
+              <span>Finding routes...</span>
             </span>
           ) : (
-            'Route Trip'
+            <span class="btn-primary-content">
+              <span>Find Routes</span>
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+            </span>
           )}
         </button>
       </div>

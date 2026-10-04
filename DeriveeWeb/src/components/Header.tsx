@@ -15,18 +15,14 @@ export function Header({ isOnline, isStandalone, canInstall = false, onTriggerIn
     <header class="app-header">
       <div class="header-branding">
         <div class="logo-mark" aria-hidden="true">
-          <svg viewBox="0 0 32 32" width="24" height="24" fill="none">
-            <circle cx="16" cy="16" r="14" stroke="#1e293b" stroke-width="1.5" />
+          <svg viewBox="0 0 32 32" width="20" height="20" fill="none" class="brand-aperture-glyph">
             <path
-              d="M13 8h4.5a6.5 6.5 0 0 1 0 13H13V8z"
-              stroke="#38bdf8"
-              stroke-width="2"
-              stroke-linecap="round"
+              d="M 16,3 L 20,5.5 L 24,3 L 28,5.5 L 28,10.5 L 31.5,12.5 L 31.5,17.5 L 31.5,22.5 L 28,24.5 L 28,29.5 L 24,32 L 20,29.5 L 16,32 L 12,29.5 L 8,32 L 4,29.5 L 4,24.5 L 0.5,22.5 L 0.5,17.5 L 0.5,12.5 L 4,10.5 L 4,5.5 L 8,3 L 12,5.5 Z"
+              stroke="rgba(241, 245, 249, 0.85)"
+              stroke-width="1.75"
               stroke-linejoin="round"
             />
-            <polygon points="16,10 16,16 14.5,16" fill="#06b6d4" />
-            <polygon points="16,10 17.5,16 16,16" fill="#e0f2fe" />
-            <circle cx="16" cy="16" r="2" fill="#f59e0b" />
+            <circle cx="16" cy="17.5" r="3.2" fill="#FFB300" />
           </svg>
         </div>
         <div class="header-titles">

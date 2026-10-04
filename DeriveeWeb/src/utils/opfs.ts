@@ -223,13 +223,33 @@ export async function checkFullPackInstallState(slug: string = 'nyc'): Promise<I
     }
   }
 
+  let diskVersion = 4;
+  let displayName = slug === 'nyc' ? 'New York City' : slug.toUpperCase();
+  let seasonLabel = 'Summer 2026 Timetable';
+  try {
+    const dir = await getCityDirectory(slug, false);
+    if (dir) {
+      const cfgHandle = await dir.getFileHandle('city_config.json');
+      const file = await cfgHandle.getFile();
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (typeof parsed.version === 'number') diskVersion = parsed.version;
+      if (parsed.displayName) displayName = parsed.displayName;
+      if (parsed.transit?.scheduleValidity?.seasonLabel) {
+        seasonLabel = parsed.transit.scheduleValidity.seasonLabel;
+      }
+    }
+  } catch {
+    // Fallback defaults
+  }
+
   // Files exist on disk, synthesize state if localStorage was cleared
   return {
     isInstalled: true,
     slug,
-    version: 3,
-    displayName: 'New York City',
-    seasonLabel: 'Summer 2026 Timetable',
+    version: diskVersion,
+    displayName,
+    seasonLabel,
     installedAt: new Date().toISOString(),
     totalBytes: filesOnDisk.reduce((acc, f) => acc + f.size, 0),
     files: filesOnDisk,
@@ -241,6 +261,14 @@ export function saveInstalledPackState(state: InstalledPackState | null): void {
     localStorage.removeItem(LOCAL_STORAGE_PACK_KEY);
   } else {
     localStorage.setItem(LOCAL_STORAGE_PACK_KEY, JSON.stringify(state));
+    try {
+      const raw = localStorage.getItem('derivee_city_pack_versions');
+      const versions = raw ? JSON.parse(raw) : {};
+      versions[state.slug] = state.version;
+      localStorage.setItem('derivee_city_pack_versions', JSON.stringify(versions));
+    } catch {
+      // Ignore storage errors
+    }
   }
 }
 

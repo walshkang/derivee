@@ -31,6 +31,29 @@ describe('Worker /api/cities & /api/pack Endpoint Tests', () => {
               httpEtag: '"bos-etag"',
             };
           }
+          if (key === 'city-nyc.version.json') {
+            return {
+              json: async () => ({ version: 4, size: 29684406 }),
+              size: 38,
+            };
+          }
+          return null;
+        },
+        head: async (key: string) => {
+          if (key === 'city-nyc.pack.zst') {
+            return {
+              size: 29684406,
+              uploaded: new Date('2026-10-03T12:00:00.000Z'),
+              httpEtag: '"nyc-etag"',
+            };
+          }
+          if (key === 'city-custom.pack.zst') {
+            return {
+              size: 12345,
+              uploaded: new Date('2026-10-03T12:00:00.000Z'),
+              customMetadata: { version: '5' },
+            };
+          }
           return null;
         },
         ...overrides?.PACK,
@@ -153,6 +176,89 @@ describe('Worker /api/cities & /api/pack Endpoint Tests', () => {
         'attachment; filename="city-bos.pack.zst"'
       );
       assert.strictEqual(await res.text(), 'mock-bos-pack-bytes');
+    });
+  });
+
+  describe('GET /api/pack-info Endpoint Tests', () => {
+    it('returns 200 with version, size, and updated_at when companion version object exists', async () => {
+      const req = new Request('https://derivee-api.walsh-8de.workers.dev/api/pack-info?city=nyc', {
+        method: 'GET',
+        headers: { Origin: allowedOrigin },
+      });
+      const env = createMockEnv();
+      const res = await worker.fetch(req, env as any);
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.headers.get('Content-Type'), 'application/json');
+      assert.strictEqual(res.headers.get('Cache-Control'), 'no-cache');
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), allowedOrigin);
+
+      const data = await res.json() as any;
+      assert.strictEqual(data.version, 4);
+      assert.strictEqual(data.size, 29684406);
+      assert.strictEqual(data.updated_at, '2026-10-03T12:00:00.000Z');
+    });
+
+    it('returns 200 with version from customMetadata when present', async () => {
+      const req = new Request('https://derivee-api.walsh-8de.workers.dev/api/pack-info?city=custom', {
+        method: 'GET',
+        headers: { Origin: allowedOrigin },
+      });
+      const env = createMockEnv();
+      const res = await worker.fetch(req, env as any);
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json() as any;
+      assert.strictEqual(data.version, 5);
+      assert.strictEqual(data.size, 12345);
+      assert.strictEqual(data.updated_at, '2026-10-03T12:00:00.000Z');
+    });
+
+    it('returns 404 when pack object is not found in R2', async () => {
+      const req = new Request('https://derivee-api.walsh-8de.workers.dev/api/pack-info?city=unknown', {
+        method: 'GET',
+        headers: { Origin: allowedOrigin },
+      });
+      const env = createMockEnv();
+      const res = await worker.fetch(req, env as any);
+
+      assert.strictEqual(res.status, 404);
+      const data = await res.json() as any;
+      assert.strictEqual(data.error, 'not_found');
+    });
+
+    it('returns 404 when pack object exists but no version metadata is available', async () => {
+      const req = new Request('https://derivee-api.walsh-8de.workers.dev/api/pack-info?city=noversion', {
+        method: 'GET',
+        headers: { Origin: allowedOrigin },
+      });
+      const env = createMockEnv({
+        PACK: {
+          head: async () => ({
+            size: 5000,
+            uploaded: new Date(),
+          }),
+          get: async () => null,
+        },
+      });
+      const res = await worker.fetch(req, env as any);
+
+      assert.strictEqual(res.status, 404);
+      const data = await res.json() as any;
+      assert.strictEqual(data.error, 'version_not_found');
+    });
+
+    it('handles OPTIONS preflight for /api/pack-info', async () => {
+      const req = new Request('https://derivee-api.walsh-8de.workers.dev/api/pack-info?city=nyc', {
+        method: 'OPTIONS',
+        headers: { Origin: allowedOrigin },
+      });
+      const env = createMockEnv();
+      const res = await worker.fetch(req, env as any);
+
+      assert.strictEqual(res.status, 204);
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), allowedOrigin);
+      assert.ok(res.headers.get('Access-Control-Allow-Methods')?.includes('GET'));
     });
   });
 });

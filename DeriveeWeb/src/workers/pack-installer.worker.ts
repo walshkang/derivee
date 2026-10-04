@@ -89,7 +89,6 @@ async function readFullText(
 
 async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pack'): Promise<void> {
   let rootHandle: FileSystemDirectoryHandle | null = null;
-  let packDirHandle: FileSystemDirectoryHandle | null = null;
 
   try {
     rootHandle = await navigator.storage.getDirectory();
@@ -194,8 +193,13 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
       throw new Error('Tar archive contained no valid files.');
     }
 
-    // 6. Write files to OPFS directory (e.g. /nyc/)
-    packDirHandle = await rootHandle.getDirectoryHandle(slug, { create: true });
+    let stagingSlug: string | null = null;
+
+    // 6. Write files to isolated temporary staging OPFS directory
+    // Guard invariant: Existing pack files in /<slug>/ are NOT touched until
+    // all files have been completely downloaded, written, and verified.
+    stagingSlug = `${slug}-staging-${Date.now()}`;
+    const stagingDirHandle = await rootHandle.getDirectoryHandle(stagingSlug, { create: true });
     const totalFiles = validFiles.length;
     let filesWritten = 0;
 
@@ -209,7 +213,7 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
         percent: Math.round((filesWritten / totalFiles) * 100),
       } satisfies WorkerToMainMessage);
 
-      await writeOpfsEntry(packDirHandle, entry.name, entry.data!);
+      await writeOpfsEntry(stagingDirHandle, entry.name, entry.data!);
       filesWritten++;
     }
 
@@ -221,7 +225,7 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
       percent: 100,
     } satisfies WorkerToMainMessage);
 
-    // 7. Verify Integrity per T.1b Swift Mirror (CityPackManager.swift)
+    // 7. Verify Integrity per T.1b Swift Mirror (CityPackManager.swift) on staging directory
     self.postMessage({
       type: 'PROGRESS',
       stage: 'verifying',
@@ -229,11 +233,11 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     } satisfies WorkerToMainMessage);
 
     // Validate transit.sqlite
-    const sqliteHeader = await readFileHeader(packDirHandle, 'transit.sqlite', 16);
+    const sqliteHeader = await readFileHeader(stagingDirHandle, 'transit.sqlite', 16);
     validateSqliteDatabase(sqliteHeader.headerBytes, sqliteHeader.physicalSize, 'transit.sqlite');
 
     // Validate timetable.bin (MasterHeader, DRV1, 232B)
-    const timetableHeader = await readFileHeader(packDirHandle, 'timetable.bin', 40);
+    const timetableHeader = await readFileHeader(stagingDirHandle, 'timetable.bin', 40);
     validateMasterHeader(
       timetableHeader.headerBytes,
       timetableHeader.physicalSize,
@@ -243,7 +247,7 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     );
 
     // Validate walk_graph.bin (MasterHeader, WALK, 232B)
-    const walkHeader = await readFileHeader(packDirHandle, 'walk_graph.bin', 40);
+    const walkHeader = await readFileHeader(stagingDirHandle, 'walk_graph.bin', 40);
     validateMasterHeader(
       walkHeader.headerBytes,
       walkHeader.physicalSize,
@@ -253,7 +257,7 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     );
 
     // Validate ultra_transfers.csr (BinaryHeader, ULTR, 32B)
-    const ultraHeader = await readFileHeader(packDirHandle, 'ultra_transfers.csr', 8);
+    const ultraHeader = await readFileHeader(stagingDirHandle, 'ultra_transfers.csr', 8);
     validateBinaryHeader(
       ultraHeader.headerBytes,
       ultraHeader.physicalSize,
@@ -263,18 +267,32 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     );
 
     // Validate city_config.json
-    const configText = await readFullText(packDirHandle, 'city_config.json');
+    const configText = await readFullText(stagingDirHandle, 'city_config.json');
     const config = validateCityConfig(configText);
 
     // Validate transit-lines.geojson
-    const geojsonText = await readFullText(packDirHandle, 'transit-lines.geojson');
+    const geojsonText = await readFullText(stagingDirHandle, 'transit-lines.geojson');
     validateTransitLinesGeoJson(geojsonText);
 
-    // Collect finalized file list
+    // 8. Atomic Swap: Copy verified files to live directory /<slug>/
+    const destDirHandle = await rootHandle.getDirectoryHandle(slug, { create: true });
+    for (const entry of validFiles) {
+      await writeOpfsEntry(destDirHandle, entry.name, entry.data!);
+    }
+
+    // Clean up temporary staging directory
+    try {
+      await rootHandle.removeEntry(stagingSlug, { recursive: true });
+      stagingSlug = null;
+    } catch {
+      // Safe to ignore staging cleanup
+    }
+
+    // Collect finalized file list from live directory
     const finalizedFiles: PackFileEntry[] = [];
     let totalUncompressedBytes = 0;
     for (const entry of validFiles) {
-      const fileHandle = await packDirHandle.getFileHandle(entry.name);
+      const fileHandle = await destDirHandle.getFileHandle(entry.name);
       const file = await fileHandle.getFile();
       finalizedFiles.push({ name: entry.name, size: file.size });
       totalUncompressedBytes += file.size;
@@ -299,39 +317,22 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     // eslint-disable-next-line no-console
     console.error('[PackInstallerWorker] Error during installation:', err);
 
-    // Atomically purge corrupt / incomplete pack files from OPFS
+    // Clean up staging directory only. Existing installed pack at /<slug>/ is preserved!
     try {
       const root = rootHandle || (await navigator.storage?.getDirectory?.());
-      if (root && slug) {
+      if (root) {
+        // Look for any staging directory left behind
         try {
-          await root.removeEntry(slug, { recursive: true });
-          // eslint-disable-next-line no-console
-          console.warn(`[PackInstallerWorker] Purged partial directory /${slug} due to install failure.`);
-        } catch (dirRemoveErr) {
-          // Fallback: If recursive removeEntry fails, delete files individually to guarantee clean state
-          // eslint-disable-next-line no-console
-          console.warn(`[PackInstallerWorker] Recursive removeEntry failed for /${slug}, attempting individual file deletion:`, dirRemoveErr);
-          try {
-            const dir = packDirHandle || (await root.getDirectoryHandle(slug));
-            const knownFiles = [
-              'city_config.json',
-              'transit.sqlite',
-              'transit-lines.geojson',
-              'ultra_transfers.csr',
-              'timetable.bin',
-              'walk_graph.bin',
-            ];
-            for (const file of knownFiles) {
-              try {
-                await dir.removeEntry(file);
-              } catch {
-                // Ignore missing file
+          const entries = (root as any).values?.();
+          if (entries) {
+            for await (const entry of entries) {
+              if (entry.kind === 'directory' && entry.name.startsWith(`${slug}-staging-`)) {
+                await root.removeEntry(entry.name, { recursive: true }).catch(() => {});
               }
             }
-            await root.removeEntry(slug, { recursive: true });
-          } catch {
-            // Safe to ignore fallback error
           }
+        } catch {
+          // ignore
         }
       }
     } catch {

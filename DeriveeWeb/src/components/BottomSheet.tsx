@@ -152,6 +152,7 @@ export function BottomSheet({
     <div 
       ref={sheetRef}
       class="bottom-sheet"
+      data-detent={detents[currentDetentIndex]}
       style={{
         height: `${currentHeight}dvh`,
         transition: 'height 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
