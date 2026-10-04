@@ -42,215 +42,69 @@ function createFreshFixtureBuffer(targetEpoch: number = Math.floor(Date.now() / 
   return transit_realtime.FeedMessage.encode(feed).finish();
 }
 
-describe('Worker Realtime Arrivals (M7a) with Miniflare KV', async () => {
-  const { fetchFeeds, getArrivalsForStop } = await import('../src/gtfs.js');
-  const worker = (await import('../src/index.js')).default;
+/**
+ * Creates an empty GTFS-RT feed (0 entities) with valid header.
+ */
+function createEmptyFeedBuffer(targetEpoch: number = Math.floor(Date.now() / 1000)): Uint8Array {
+  const feed = transit_realtime.FeedMessage.create({
+    header: {
+      gtfsRealtimeVersion: '2.0',
+      timestamp: targetEpoch as any,
+    },
+    entity: [],
+  });
+  return transit_realtime.FeedMessage.encode(feed).finish();
+}
+
+describe('Worker Realtime On-Demand Arrivals (Zero KV, Live GTFS-RT)', async () => {
+  const { getLiveArrivalsForStop, getFeedUrlsForStop } = await import('../src/gtfs.ts');
+  const worker = (await import('../src/index.ts')).default;
 
   let mf: Miniflare;
-  let kv: KVNamespace;
   const originalFetch = global.fetch;
 
   before(async () => {
     mf = new Miniflare(
       convertV4MiniflareOptions({
         modules: true,
-        script: 'export default { fetch() { return new Response("miniflare-kv-host"); } }',
-        kvNamespaces: ['KV_REALTIME'],
+        script: 'export default { fetch() { return new Response("miniflare-host"); } }',
       })
     );
-    kv = (await mf.getKVNamespace('KV_REALTIME')) as unknown as KVNamespace;
+    (globalThis as any).caches = await mf.getCaches();
   });
 
   after(async () => {
     global.fetch = originalFetch;
+    delete (globalThis as any).caches;
     await mf.dispose();
   });
 
-  it('ingests GTFS-RT fixture into Miniflare KV with sane TTL (120s) and isolates failing feeds', async () => {
-    const now = Math.floor(Date.now() / 1000);
-    const freshFixture = createFreshFixtureBuffer(now);
-
-    let capturedPutOptions: any = null;
-    const kvProxy = new Proxy(kv, {
-      get(target, prop, receiver) {
-        if (prop === 'put') {
-          return async (...args: any[]) => {
-            capturedPutOptions = args[2];
-            return (target as any).put(...args);
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
-
-    global.fetch = async (url: string | URL | Request) => {
-      const urlStr = url.toString();
-      if (urlStr.includes('gtfs-l')) {
-        return new Response(freshFixture, {
-          status: 200,
-          headers: { 'Content-Type': 'application/octet-stream' },
-        });
-      }
-      return new Response('Internal Server Error', { status: 500 });
-    };
-
-    await fetchFeeds(kvProxy, {
-      now,
-      ttl: 120,
-      feeds: [
-        'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l',
-        'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-failing',
-      ],
-    });
-
-    // Verify sane TTL was passed to KV put
-    assert.ok(capturedPutOptions, 'kv.put must be called');
-    assert.strictEqual(capturedPutOptions.expirationTtl, 120, 'TTL must be 120 seconds');
-
-    // Key 'stops-L' should exist in Miniflare KV
-    const lStops = (await kv.get('stops-L', 'json')) as Record<string, any>;
-    assert.ok(lStops, 'stops-L should be written to Miniflare KV');
-    assert.ok(Object.keys(lStops).length > 0, 'Should contain L line stops');
-
-    // Verify L01 arrivals
-    const stopData = await getArrivalsForStop(kv, 'L01');
-    assert.ok(stopData, 'L01 stop data must be found');
-    assert.strictEqual(stopData.stop_id, 'L01');
-    assert.ok(stopData.arrivals.length > 0, 'Must have arrival predictions');
-    assert.strictEqual(stopData.arrivals[0].route_id, 'L');
-    assert.ok(['NORTH', 'SOUTH'].includes(stopData.arrivals[0].direction));
-    assert.strictEqual(stopData.arrivals[0].is_realtime, true);
-
-    // Verify predictions are sorted ascending
-    for (let i = 1; i < stopData.arrivals.length; i++) {
-      assert.ok(
-        stopData.arrivals[i].predicted_arrival_epoch >= stopData.arrivals[i - 1].predicted_arrival_epoch,
-        'Arrivals must be sorted ascending by epoch'
-      );
-    }
+  it('resolves relevant MTA feed URLs based on stop_id prefix or route_id', () => {
+    // 1-7, 9 lines
+    assert.deepStrictEqual(getFeedUrlsForStop('101'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs']);
+    assert.deepStrictEqual(getFeedUrlsForStop('725N'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs']);
+    // ACE
+    assert.deepStrictEqual(getFeedUrlsForStop('A34N'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace']);
+    // BDFM
+    assert.deepStrictEqual(getFeedUrlsForStop('D28'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm']);
+    // G
+    assert.deepStrictEqual(getFeedUrlsForStop('G30'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g']);
+    // JZ
+    assert.deepStrictEqual(getFeedUrlsForStop('J28S'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz']);
+    assert.deepStrictEqual(getFeedUrlsForStop('M20S'), [
+      'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz',
+      'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm',
+    ]);
+    // L
+    assert.deepStrictEqual(getFeedUrlsForStop('L01'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l']);
+    // NQRW
+    assert.deepStrictEqual(getFeedUrlsForStop('R23S'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw']);
+    assert.deepStrictEqual(getFeedUrlsForStop('Q01N'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw']);
+    // Route ID override
+    assert.deepStrictEqual(getFeedUrlsForStop('1288', 'Q'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw']);
   });
 
-  it('serves fresh arrivals via /api/realtime/arrivals endpoint with stop_id and stop params', async () => {
-    const env = { KV_REALTIME: kv } as any;
-
-    // Test with stop_id parameter
-    const req1 = new Request('http://localhost/api/realtime/arrivals?stop_id=L01');
-    const res1 = await worker.fetch(req1, env);
-    assert.strictEqual(res1.status, 200);
-    assert.strictEqual(res1.headers.get('Content-Type'), 'application/json');
-    assert.ok(res1.headers.get('Cache-Control')?.includes('max-age=15'));
-    const body1 = (await res1.json()) as any;
-    assert.strictEqual(body1.stop_id, 'L01');
-    assert.ok(body1.arrivals.length > 0);
-
-    // Test with backward-compatible stop parameter
-    const req2 = new Request('http://localhost/api/realtime/arrivals?stop=L01');
-    const res2 = await worker.fetch(req2, env);
-    assert.strictEqual(res2.status, 200);
-    const body2 = (await res2.json()) as any;
-    assert.strictEqual(body2.stop_id, 'L01');
-
-    // Test platform stop ID direction filtering (e.g. L01N)
-    const req3 = new Request('http://localhost/api/realtime/arrivals?stop_id=L01N');
-    const res3 = await worker.fetch(req3, env);
-    assert.strictEqual(res3.status, 200);
-    const body3 = (await res3.json()) as any;
-    assert.strictEqual(body3.stop_id, 'L01N');
-    for (const arr of body3.arrivals) {
-      assert.strictEqual(arr.direction, 'NORTH');
-    }
-  });
-
-  it('handles TTL expiry and cache staleness', async () => {
-    const env = { KV_REALTIME: kv } as any;
-
-    // 1. Stale cache: when data in KV is older than 120s TTL window, endpoint returns 503 stale
-    const staleTimestamp = Math.floor(Date.now() / 1000) - 150;
-    await kv.put('stops-L', JSON.stringify({
-      L01: {
-        stop_id: 'L01',
-        updated_at: staleTimestamp,
-        arrivals: [{ route_id: 'L', direction: 'NORTH', headsign: '', predicted_arrival_epoch: staleTimestamp + 20, is_realtime: true }],
-      },
-    }));
-
-    const staleReq = new Request('http://localhost/api/realtime/arrivals?stop_id=L01');
-    const staleRes = await worker.fetch(staleReq, env);
-    assert.strictEqual(staleRes.status, 503);
-    const staleBody = (await staleRes.json()) as any;
-    assert.strictEqual(staleBody.stale, true);
-
-    // 2. Key eviction/expiration: when key is evicted or expired from KV, getArrivalsForStop returns null
-    await kv.delete('stops-L');
-    const evicted = await getArrivalsForStop(kv, 'L01');
-    assert.strictEqual(evicted, null, 'Evicted or expired KV key must return null');
-
-    // Endpoint returns 404 when key is expired/missing from KV
-    const missingRes = await worker.fetch(staleReq, env);
-    assert.strictEqual(missingRes.status, 404);
-  });
-
-  it('returns 404 for unknown stop', async () => {
-    const env = { KV_REALTIME: kv } as any;
-    const req = new Request('http://localhost/api/realtime/arrivals?stop_id=X99');
-    const res = await worker.fetch(req, env);
-    assert.strictEqual(res.status, 404);
-    const body = (await res.json()) as any;
-    assert.strictEqual(body.error, 'not_found');
-  });
-
-  it('returns 400 for missing stop param', async () => {
-    const env = { KV_REALTIME: kv } as any;
-    const req = new Request('http://localhost/api/realtime/arrivals');
-    const res = await worker.fetch(req, env);
-    assert.strictEqual(res.status, 400);
-    const body = (await res.json()) as any;
-    assert.strictEqual(body.error, 'missing_stop');
-  });
-
-  it('returns 503 when KV binding is unconfigured', async () => {
-    const env = {} as any;
-    const req = new Request('http://localhost/api/realtime/arrivals?stop_id=L01');
-    const res = await worker.fetch(req, env);
-    assert.strictEqual(res.status, 503);
-    const body = (await res.json()) as any;
-    assert.strictEqual(body.error, 'kv_not_configured');
-  });
-
-  it('handles malformed feed without crashing and preserves cache (negative case)', async () => {
-    const now = Math.floor(Date.now() / 1000);
-    const freshFixture = createFreshFixtureBuffer(now);
-
-    // Prime cache with valid data first
-    await fetchFeeds(kv, {
-      now,
-      ttl: 120,
-      feeds: ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l'],
-    });
-    assert.ok(await getArrivalsForStop(kv, 'L01'));
-
-    // Simulate corrupted binary response from MTA
-    global.fetch = async () => {
-      return new Response(Buffer.from('corrupted non-protobuf binary content'), {
-        status: 200,
-        headers: { 'Content-Type': 'application/octet-stream' },
-      });
-    };
-
-    // fetchFeeds should catch and swallow malformed protobuf decode error
-    await assert.doesNotReject(async () => {
-      await fetchFeeds(kv, {
-        now,
-        feeds: ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-malformed'],
-      });
-    });
-
-    // Existing cache should not be overwritten with empty data
-    const cachedAfterMalformed = await getArrivalsForStop(kv, 'L01');
-    assert.ok(cachedAfterMalformed, 'Existing cache must remain intact when feed is malformed');
-  });
-
-  it('performs end-to-end miniflare flow: cron ingestion tick -> arrivals query', async () => {
+  it('arrivals returned for a stop: serves live predictions with minutesAway on-demand (zero KV)', async () => {
     const now = Math.floor(Date.now() / 1000);
     const freshFixture = createFreshFixtureBuffer(now);
 
@@ -265,25 +119,180 @@ describe('Worker Realtime Arrivals (M7a) with Miniflare KV', async () => {
       return new Response('Not Found', { status: 404 });
     };
 
-    const env = { KV_REALTIME: kv } as any;
-    const scheduledPromises: Promise<any>[] = [];
-    const ctx = {
-      waitUntil(promise: Promise<any>) {
-        scheduledPromises.push(promise);
-      },
-    } as any;
+    const env = {} as any; // ZERO KV binding
 
-    // Trigger scheduled handler directly to simulate Cloudflare cron tick
-    await worker.scheduled({} as any, env, ctx);
-    await Promise.all(scheduledPromises);
+    // 1. Query with stop_id=L01
+    const req1 = new Request('http://localhost/api/realtime/arrivals?stop_id=L01');
+    const res1 = await worker.fetch(req1, env);
+    assert.strictEqual(res1.status, 200);
+    assert.strictEqual(res1.headers.get('Content-Type'), 'application/json');
+    assert.ok(res1.headers.get('Cache-Control')?.includes('max-age=15'));
 
-    // Query endpoint
+    const body1 = (await res1.json()) as any;
+    assert.strictEqual(body1.stop_id, 'L01');
+    assert.ok(body1.arrivals.length > 0, 'Must have arrival predictions');
+    assert.strictEqual(body1.arrivals[0].route_id, 'L');
+    assert.strictEqual(body1.arrivals[0].is_realtime, true);
+    assert.strictEqual(typeof body1.arrivals[0].minutesAway, 'number');
+    assert.ok(body1.arrivals[0].minutesAway >= 0);
+
+    // 2. Query with platform direction stop_id=L01N
+    const req2 = new Request('http://localhost/api/realtime/arrivals?stop_id=L01N');
+    const res2 = await worker.fetch(req2, env);
+    assert.strictEqual(res2.status, 200);
+    const body2 = (await res2.json()) as any;
+    assert.strictEqual(body2.stop_id, 'L01N');
+    assert.ok(body2.arrivals.length > 0);
+    for (const arr of body2.arrivals) {
+      assert.strictEqual(arr.direction, 'NORTH');
+    }
+
+    // 3. Backward-compatible ?stop=L01
+    const req3 = new Request('http://localhost/api/realtime/arrivals?stop=L01');
+    const res3 = await worker.fetch(req3, env);
+    assert.strictEqual(res3.status, 200);
+    const body3 = (await res3.json()) as any;
+    assert.strictEqual(body3.stop_id, 'L01');
+  });
+
+  it('empty feed → empty arrivals: returns 200 with empty arrivals array', async () => {
+    const emptyFeed = createEmptyFeedBuffer();
+
+    global.fetch = async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes('gtfs-g')) {
+        return new Response(emptyFeed, {
+          status: 200,
+          headers: { 'Content-Type': 'application/octet-stream' },
+        });
+      }
+      return new Response('Not Found', { status: 404 });
+    };
+
+    const env = {} as any;
+    const req = new Request('http://localhost/api/realtime/arrivals?stop_id=G30');
+    const res = await worker.fetch(req, env);
+    assert.strictEqual(res.status, 200);
+
+    const body = (await res.json()) as any;
+    assert.strictEqual(body.stop_id, 'G30');
+    assert.ok(Array.isArray(body.arrivals));
+    assert.strictEqual(body.arrivals.length, 0);
+  });
+
+  it('feed fetch failure → clean error: returns 503 feed_unavailable when MTA fails', async () => {
+    global.fetch = async () => {
+      return new Response('Internal Server Error', { status: 500 });
+    };
+
+    const env = {} as any;
+    // Using J line stop to avoid any cached L feed
+    const req = new Request('http://localhost/api/realtime/arrivals?stop_id=J20');
+    const res = await worker.fetch(req, env);
+    assert.strictEqual(res.status, 503);
+
+    const body = (await res.json()) as any;
+    assert.strictEqual(body.error, 'feed_unavailable');
+  });
+
+  it('cache hit → no second fetch: caches raw feed in Cache API within TTL window', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const freshFixture = createFreshFixtureBuffer(now);
+    let fetchCount = 0;
+
+    global.fetch = async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes('gtfs-bdfm')) {
+        fetchCount++;
+        return new Response(freshFixture, {
+          status: 200,
+          headers: { 'Content-Type': 'application/octet-stream' },
+        });
+      }
+      return new Response('Not Found', { status: 404 });
+    };
+
+    const env = {} as any;
+
+    // 1st request -> triggers network fetch
+    const req1 = new Request('http://localhost/api/realtime/arrivals?stop_id=D28');
+    const res1 = await worker.fetch(req1, env);
+    assert.strictEqual(res1.status, 200);
+    assert.strictEqual(fetchCount, 1, 'First request must fetch feed from MTA');
+
+    // 2nd request -> served from Cache API without secondary fetch
+    const req2 = new Request('http://localhost/api/realtime/arrivals?stop_id=D28');
+    const res2 = await worker.fetch(req2, env);
+    assert.strictEqual(res2.status, 200);
+    assert.strictEqual(fetchCount, 1, 'Second request within TTL must hit Cache API and NOT fetch again');
+
+    // 3rd request for different stop in same feed (B25 in BDFM feed) -> still served from cached feed!
+    const req3 = new Request('http://localhost/api/realtime/arrivals?stop_id=B25');
+    const res3 = await worker.fetch(req3, env);
+    assert.strictEqual(res3.status, 200);
+    assert.strictEqual(fetchCount, 1, 'Request for another stop in same feed must reuse cached raw feed');
+  });
+
+  it('no-KV operation: functions fully when env has zero KV namespaces', async () => {
+    const env = { PACK: {} } as any; // Strictly zero KV
+    assert.strictEqual(env.KV_REALTIME, undefined);
+
     const req = new Request('http://localhost/api/realtime/arrivals?stop_id=L01');
     const res = await worker.fetch(req, env);
     assert.strictEqual(res.status, 200);
-    const data = (await res.json()) as any;
-    assert.strictEqual(data.stop_id, 'L01');
-    assert.ok(data.arrivals.length > 0);
-    assert.strictEqual(data.arrivals[0].route_id, 'L');
+    const body = (await res.json()) as any;
+    assert.strictEqual(body.stop_id, 'L01');
+  });
+
+  it('returns 400 for missing stop param', async () => {
+    const env = {} as any;
+    const req = new Request('http://localhost/api/realtime/arrivals');
+    const res = await worker.fetch(req, env);
+    assert.strictEqual(res.status, 400);
+    const body = (await res.json()) as any;
+    assert.strictEqual(body.error, 'missing_stop');
+  });
+
+  it('handles malformed feed binary cleanly without crashing worker (negative case)', async () => {
+    global.fetch = async () => {
+      return new Response(Buffer.from('corrupted non-protobuf binary content'), {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      });
+    };
+
+    const env = {} as any;
+    // Use A line stop to hit uncached feed
+    const req = new Request('http://localhost/api/realtime/arrivals?stop_id=A34');
+    const res = await worker.fetch(req, env);
+    assert.strictEqual(res.status, 503);
+    const body = (await res.json()) as any;
+    assert.strictEqual(body.error, 'feed_unavailable');
+  });
+
+  it('latency honesty: on-demand fetch and protobuf parse completes well under 3s', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const freshFixture = createFreshFixtureBuffer(now);
+
+    global.fetch = async () => {
+      return new Response(freshFixture, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      });
+    };
+
+    const durations: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const start = performance.now();
+      await getLiveArrivalsForStop('L01', {
+        now,
+        cache: null, // Force uncached parse iteration
+      });
+      durations.push(performance.now() - start);
+    }
+
+    durations.sort((a, b) => a - b);
+    const p95 = durations[Math.floor(durations.length * 0.95)];
+    assert.ok(p95 < 500, `p95 latency (${p95.toFixed(2)}ms) must be well under 3000ms`);
   });
 });

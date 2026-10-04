@@ -1092,7 +1092,7 @@ try {
           return route.fulfill({
             status: 503,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'kv_not_configured' }),
+            body: JSON.stringify({ error: 'feed_unavailable' }),
           });
         }
         return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -1393,7 +1393,7 @@ try {
             return route.fulfill({
               status: 503,
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ error: 'kv_not_configured' }),
+              body: JSON.stringify({ error: 'feed_unavailable' }),
             });
           }
           const nowSec = Math.floor(Date.now() / 1000);

@@ -21,25 +21,3 @@ period = 60
 directory = "../../dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-
-# ------------------------------------------------------------------------------
-# REALTIME ARRIVALS (M7a) KV & CRON CONFIGURATION
-# ------------------------------------------------------------------------------
-# DEPLOY-TIME STEP: Provision the KV namespace before enabling:
-# 1. Dashboard option:
-#    - Cloudflare Dashboard > Workers & Pages > KV
-#    - Click "Create namespace" -> Name: "derivee-api-realtime"
-#    - Copy the generated Namespace ID.
-# 2. CLI option (if API token has KV write permission):
-#    - npx wrangler kv namespace create KV_REALTIME
-#    - npx wrangler kv namespace create KV_REALTIME --preview
-# 3. Paste the returned ID(s) below in `id` (and optional `preview_id`).
-# 4. Uncomment the [[kv_namespaces]] block and the [triggers] block below:
-#
-# [[kv_namespaces]]
-# binding = "KV_REALTIME"
-# id = "9a64ab36a45b4e55afb5bba42d55bd6d"
-#
-# [triggers]
-# crons = ["* * * * *"] # Ingest MTA GTFS-RT every minute
-# ------------------------------------------------------------------------------

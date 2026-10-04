@@ -1,10 +1,9 @@
-import { fetchFeeds, getArrivalsForStop } from './gtfs.ts';
+import { getLiveArrivalsForStop } from './gtfs.ts';
 
 export interface Env {
   PACK: R2Bucket;
   RATE_LIMITER?: RateLimit;
   ASSETS?: Fetcher;
-  KV_REALTIME?: KVNamespace;
 }
 
 const ALLOWED_ORIGINS = new Set([
@@ -62,14 +61,6 @@ function jsonResponse(
 }
 
 export default {
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    if (!env.KV_REALTIME) {
-      console.warn('KV_REALTIME binding not configured, skipping realtime ingestion');
-      return;
-    }
-    ctx.waitUntil(fetchFeeds(env.KV_REALTIME));
-  },
-
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin');
@@ -96,26 +87,17 @@ export default {
       if (!stop) {
         return jsonResponse({ error: 'missing_stop' }, 400, origin);
       }
-      if (!env.KV_REALTIME) {
-        return jsonResponse({ error: 'kv_not_configured' }, 503, origin);
+      const routeId = url.searchParams.get('route_id') || url.searchParams.get('route') || undefined;
+
+      try {
+        const data = await getLiveArrivalsForStop(stop, { routeId });
+        return jsonResponse(data, 200, origin, {
+          'Cache-Control': 'public, max-age=15, stale-while-revalidate=30',
+        });
+      } catch (err: any) {
+        console.warn(`[Realtime Arrivals] Failed to fetch on-demand arrivals for stop ${stop}:`, err?.message || err);
+        return jsonResponse({ error: 'feed_unavailable' }, 503, origin);
       }
-      const data = await getArrivalsForStop(env.KV_REALTIME, stop);
-      if (!data) {
-        return jsonResponse({ error: 'not_found' }, 404, origin);
-      }
-      // Check freshness (120s TTL window)
-      const now = Math.floor(Date.now() / 1000);
-      if (now - data.updated_at > 120) {
-        return jsonResponse({ error: 'stale', stale: true }, 503, origin);
-      }
-      // Enrich arrivals with minutesAway for easy client consumption
-      const enrichedArrivals = data.arrivals.map((arr) => ({
-        ...arr,
-        minutesAway: Math.max(0, Math.round((arr.predicted_arrival_epoch - now) / 60)),
-      }));
-      return jsonResponse({ ...data, arrivals: enrichedArrivals }, 200, origin, {
-        'Cache-Control': 'public, max-age=15, stale-while-revalidate=30',
-      });
     }
 
     // 3. Authenticated session check: GET /api/me
