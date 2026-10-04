@@ -14,6 +14,7 @@ import {
   getTransitLinesLayerConfig,
   getTransitStationsLayerConfig,
   escapeHtml,
+  highlightRouteOnMap,
 } from '../utils/transitOverlays';
 
 interface TransitOverlaysProps {
@@ -21,6 +22,7 @@ interface TransitOverlaysProps {
   slug?: string;
   isPackInstalled?: boolean;
   onSelectStation?: (station: { id: number; name: string }) => void;
+  focusedRouteId?: string | null;
 }
 
 export function TransitOverlays({
@@ -28,6 +30,7 @@ export function TransitOverlays({
   slug = 'nyc',
   isPackInstalled,
   onSelectStation,
+  focusedRouteId = null,
 }: TransitOverlaysProps) {
   const [transitState, setTransitState] = useState<UIState>('ready');
   const [selectedStation, setSelectedStation] = useState<{ id: number; name: string } | null>(null);
@@ -174,6 +177,14 @@ export function TransitOverlays({
       }
     };
   }, [map, slug, isPackInstalled, onSelectStation]);
+
+  useEffect(() => {
+    if (!map || transitState !== 'ready') return;
+    highlightRouteOnMap(map, focusedRouteId);
+    return () => {
+      highlightRouteOnMap(map, null);
+    };
+  }, [map, transitState, focusedRouteId]);
 
   const display = getTransitLayerDisplayState(transitState);
 

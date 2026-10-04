@@ -168,3 +168,147 @@ export function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+export interface RouteHighlightPaintProperties {
+  lines: {
+    'line-opacity': any;
+    'line-width'?: any;
+  };
+  casing: {
+    'line-opacity': any;
+    'line-width'?: any;
+  };
+  stations: {
+    'circle-opacity': number;
+    'circle-stroke-opacity': number;
+  };
+}
+
+/**
+ * Returns paint properties for highlighting an active route on the vector transit overlay,
+ * while dimming all non-matching routes.
+ * Passing null/empty routeId restores full overlay opacity and widths.
+ */
+export function getRouteHighlightPaintProperties(routeId: string | null | undefined): RouteHighlightPaintProperties {
+  const trimmed = routeId?.trim();
+  if (!trimmed) {
+    return {
+      lines: {
+        'line-opacity': 1.0,
+        'line-width': RIBBON_PAINT_LINE_WIDTH,
+      },
+      casing: {
+        'line-opacity': 0.9,
+        'line-width': CASING_PAINT_LINE_WIDTH,
+      },
+      stations: {
+        'circle-opacity': 1.0,
+        'circle-stroke-opacity': 1.0,
+      },
+    };
+  }
+
+  const isMatchingRoute = [
+    'case',
+    [
+      'any',
+      ['==', ['get', 'route_id'], trimmed],
+      ['in', trimmed, ['coalesce', ['get', 'routes'], ['literal', []]]],
+    ],
+    1.0,
+    0.15,
+  ];
+
+  const isMatchingCasing = [
+    'case',
+    [
+      'any',
+      ['==', ['get', 'route_id'], trimmed],
+      ['in', trimmed, ['coalesce', ['get', 'routes'], ['literal', []]]],
+    ],
+    0.95,
+    0.05,
+  ];
+
+  const highlightedLineWidth = [
+    'case',
+    [
+      'any',
+      ['==', ['get', 'route_id'], trimmed],
+      ['in', trimmed, ['coalesce', ['get', 'routes'], ['literal', []]]],
+    ],
+    ['*', RIBBON_PAINT_LINE_WIDTH, 1.4],
+    ['*', RIBBON_PAINT_LINE_WIDTH, 0.8],
+  ];
+
+  const highlightedCasingWidth = [
+    'case',
+    [
+      'any',
+      ['==', ['get', 'route_id'], trimmed],
+      ['in', trimmed, ['coalesce', ['get', 'routes'], ['literal', []]]],
+    ],
+    ['*', CASING_PAINT_LINE_WIDTH, 1.4],
+    CASING_PAINT_LINE_WIDTH,
+  ];
+
+  return {
+    lines: {
+      'line-opacity': isMatchingRoute,
+      'line-width': highlightedLineWidth,
+    },
+    casing: {
+      'line-opacity': isMatchingCasing,
+      'line-width': highlightedCasingWidth,
+    },
+    stations: {
+      'circle-opacity': 0.25,
+      'circle-stroke-opacity': 0.25,
+    },
+  };
+}
+
+/**
+ * Highlights a route's physical geometry on the MapLibre map and dims other transit lines.
+ * Sets data-highlighted-route attribute on the map container for DOM inspection/harness assertions.
+ */
+export function highlightRouteOnMap(map: any, routeId: string | null | undefined): void {
+  if (!map) return;
+
+  const props = getRouteHighlightPaintProperties(routeId);
+  const trimmed = routeId?.trim();
+
+  try {
+    if (typeof map.getLayer === 'function' && map.getLayer(TRANSIT_LINES_LAYER_ID)) {
+      map.setPaintProperty(TRANSIT_LINES_LAYER_ID, 'line-opacity', props.lines['line-opacity']);
+      if (props.lines['line-width']) {
+        map.setPaintProperty(TRANSIT_LINES_LAYER_ID, 'line-width', props.lines['line-width']);
+      }
+    }
+
+    if (typeof map.getLayer === 'function' && map.getLayer(TRANSIT_LINES_CASING_LAYER_ID)) {
+      map.setPaintProperty(TRANSIT_LINES_CASING_LAYER_ID, 'line-opacity', props.casing['line-opacity']);
+      if (props.casing['line-width']) {
+        map.setPaintProperty(TRANSIT_LINES_CASING_LAYER_ID, 'line-width', props.casing['line-width']);
+      }
+    }
+
+    if (typeof map.getLayer === 'function' && map.getLayer(TRANSIT_STATIONS_LAYER_ID)) {
+      map.setPaintProperty(TRANSIT_STATIONS_LAYER_ID, 'circle-opacity', props.stations['circle-opacity']);
+      map.setPaintProperty(TRANSIT_STATIONS_LAYER_ID, 'circle-stroke-opacity', props.stations['circle-stroke-opacity']);
+    }
+
+    if (typeof map.getContainer === 'function') {
+      const container = map.getContainer();
+      if (container && typeof container.setAttribute === 'function') {
+        if (trimmed) {
+          container.setAttribute('data-highlighted-route', trimmed);
+        } else {
+          container.removeAttribute('data-highlighted-route');
+        }
+      }
+    }
+  } catch {
+    // Graceful degrade: do not crash on missing layers or style transitions
+  }
+}

@@ -1059,6 +1059,301 @@ try {
   });
 
   // ==========================================================================
+  // Wave: Leg detail wave (T2): tap a ride leg → line shape, stops, times
+  // Scenario: Tap leg → line shape + stops (flow: trip planning)
+  // ==========================================================================
+  await recordScenario('Tap leg → line shape + stops', 'trip planning', async ({ takeScreenshot }) => {
+    console.log('\n[Harness Leg Detail] --- TESTING LEG DETAIL: TAP LEG → LINE SHAPE, STOPS, TIMES ---');
+    const legContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    const legPage = await legContext.newPage();
+
+    try {
+      await legPage.route(/\/api\/.*/, (route) => {
+        const url = new URL(route.request().url());
+        const pathname = url.pathname;
+        if (pathname === '/api/cities') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ id: 'nyc', name: 'New York City', slug: 'nyc', isInstalled: true }]),
+          });
+        }
+        if (pathname === '/api/me') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'test@example.com' }) });
+        }
+        if (pathname === '/api/basemap') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/vnd.pmtiles' }, body: basemapBuffer });
+        }
+        if (pathname === '/api/realtime/arrivals') {
+          return route.fulfill({
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: 'kv_not_configured' }),
+          });
+        }
+        return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      });
+
+      await legPage.addInitScript(async ({ geojsonText }) => {
+        localStorage.setItem('derivee_pack_nyc', JSON.stringify({
+          isInstalled: true,
+          slug: 'nyc',
+          version: '3',
+          displayName: 'New York City',
+          seasonLabel: 'Summer 2026 Timetable',
+          installedAt: '2026-10-01T00:00:00.000Z',
+          totalBytes: 29684406,
+          files: [
+            { name: 'city_config.json', size: 3401 },
+            { name: 'transit.sqlite', size: 9744384 },
+            { name: 'transit-lines.geojson', size: 407221 },
+            { name: 'ultra_transfers.csr', size: 582906 },
+            { name: 'timetable.bin', size: 7184128 },
+            { name: 'walk_graph.bin', size: 47426176 },
+            { name: 'patterns.json', size: 1000 },
+          ],
+        }));
+
+        const patternsArray = new Array(250).fill(null);
+        patternsArray[217] = { route_id: 'J', headsign: 'Broad St' };
+        patternsArray[190] = { route_id: 'Q', headsign: '96 St' };
+        patternsArray[3] = { route_id: '1', headsign: 'Van Cortlandt Park' };
+
+        if (navigator.storage && typeof navigator.storage.getDirectory === 'function') {
+          const root = await navigator.storage.getDirectory();
+          const nycDir = await root.getDirectoryHandle('nyc', { create: true });
+          const geoHandle = await nycDir.getFileHandle('transit-lines.geojson', { create: true });
+          const geoWritable = await geoHandle.createWritable();
+          await geoWritable.write(geojsonText);
+          await geoWritable.close();
+
+          for (const fname of ['city_config.json', 'transit.sqlite', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin', 'patterns.json']) {
+            const fh = await nycDir.getFileHandle(fname, { create: true });
+            const w = await fh.createWritable();
+            if (fname === 'city_config.json') {
+              await w.write(JSON.stringify({ version: 3, displayName: 'New York City' }));
+            } else if (fname === 'patterns.json') {
+              await w.write(JSON.stringify(patternsArray));
+            } else {
+              await w.write(new Uint8Array([1, 2, 3, 4]));
+            }
+            await w.close();
+          }
+        }
+
+        // Multi-hop transit segments with intermediate stops along Q train (trip 18522, route 190):
+        // Seg 0: Bowery stub
+        // Seg 1: J train Bowery -> Canal St
+        // Seg 2: Transfer walk Canal St -> Canal St
+        // Seg 3: Q train Canal St (1288) -> 14 St-Union Sq (444)
+        // Seg 4: Q train 14 St-Union Sq (444) -> 23 St (81)
+        // Seg 5: Q train 23 St (81) -> 34 St-Herald Sq (1336)
+        // Seg 6: Transfer walk 34 St-Herald Sq -> 34 St-Penn Station
+        // Seg 7: 1 train 34 St-Penn Station -> 59 St-Columbus Circle
+        // Seg 8: Columbus Circle dest stub
+        const MULTIHOP_SEGMENTS = [
+          { board_stop_id: 1246, exit_stop_id: 1247, trip_id: 0, departure_time: 28800, arrival_time: 28802, route_id: 0, transfer_distance_m: 2, is_transfer: false },
+          { board_stop_id: 1247, exit_stop_id: 1250, trip_id: 20615, departure_time: 28920, arrival_time: 29010, route_id: 217, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 1250, exit_stop_id: 1288, trip_id: 0, departure_time: 29010, arrival_time: 29067, route_id: 0, transfer_distance_m: 74, is_transfer: false },
+          { board_stop_id: 1288, exit_stop_id: 444, trip_id: 18522, departure_time: 29130, arrival_time: 29280, route_id: 190, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 444, exit_stop_id: 81, trip_id: 18522, departure_time: 29280, arrival_time: 29400, route_id: 190, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 81, exit_stop_id: 1336, trip_id: 18522, departure_time: 29400, arrival_time: 29520, route_id: 190, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 1336, exit_stop_id: 76, trip_id: 0, departure_time: 29520, arrival_time: 29611, route_id: 0, transfer_distance_m: 118, is_transfer: false },
+          { board_stop_id: 76, exit_stop_id: 67, trip_id: 89, departure_time: 29700, arrival_time: 30030, route_id: 3, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 67, exit_stop_id: 66, trip_id: 0, departure_time: 30030, arrival_time: 30038, route_id: 0, transfer_distance_m: 10, is_transfer: false },
+        ];
+
+        const RealWorker = window.Worker;
+        window.Worker = function (url, opts) {
+          if (String(url).includes('routing.worker')) {
+            const handlers = {};
+            return {
+              postMessage(msg) {
+                setTimeout(() => {
+                  if (msg.type === 'INIT') {
+                    handlers.message?.({ data: { type: 'READY', loadTimeMs: 90, patterns: patternsArray } });
+                  } else if (msg.type === 'ROUTE') {
+                    handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: MULTIHOP_SEGMENTS, profile: msg.profile, flags: msg.flags } });
+                  }
+                }, 30);
+              },
+              set onmessage(fn) { handlers.message = fn; },
+              get onmessage() { return handlers.message; },
+              set onerror(fn) { handlers.error = fn; },
+              addEventListener(t, fn) { handlers[t] = fn; },
+              removeEventListener(t) { delete handlers[t]; },
+              terminate() {},
+            };
+          }
+          return new RealWorker(url, opts);
+        };
+        window.Worker.prototype = RealWorker.prototype;
+      }, { geojsonText: transitLinesGeojsonText });
+
+      console.log('[Harness Leg Detail] Navigating to http://127.0.0.1:4173/...');
+      await legPage.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+      await legPage.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
+      await legPage.waitForSelector('.engine-status-ready', { timeout: 30000 });
+
+      await legPage.evaluate(() => {
+        document.querySelector('.bottom-sheet').style.height = '90dvh';
+      });
+      await new Promise((r) => setTimeout(r, 600));
+
+      await legPage.click('.quick-preset-btn');
+      await new Promise((r) => setTimeout(r, 400));
+      await legPage.click('.trip-route-btn');
+      console.log('[Harness Leg Detail] Routing multi-hop trip...');
+      await legPage.waitForFunction(() => {
+        const c = document.querySelector('.itinerary-results-container');
+        return c && c.children.length > 0;
+      }, { timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 800));
+
+      // 1. Assert initial state: all transit leg cards are tappable and no route is highlighted on map
+      const initialAudit = await legPage.evaluate(() => {
+        const mapContainer = document.querySelector('.maplibregl-map');
+        const highlightedRoute = mapContainer?.getAttribute('data-highlighted-route') || null;
+        const tappableCards = Array.from(document.querySelectorAll('.itinerary-leg-card-tappable'));
+        const chevrons = Array.from(document.querySelectorAll('.leg-card-chevron'));
+        return {
+          highlightedRoute,
+          tappableCardsCount: tappableCards.length,
+          chevronsCount: chevrons.length,
+        };
+      });
+
+      console.log('[Harness Leg Detail] Initial audit:', JSON.stringify(initialAudit));
+      if (initialAudit.highlightedRoute !== null) {
+        throw new Error(`Expected data-highlighted-route to be null initially, got "${initialAudit.highlightedRoute}"`);
+      }
+      if (initialAudit.tappableCardsCount < 3) {
+        throw new Error(`Expected at least 3 tappable leg cards, got ${initialAudit.tappableCardsCount}`);
+      }
+
+      // 2. Tap the Q train leg card (Leg 2: Canal St -> 34 St-Herald Sq)
+      console.log('[Harness Leg Detail] Tapping Q train leg card...');
+      const tappedLeg = await legPage.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.itinerary-leg-card'));
+        const qCard = cards.find((c) => c.textContent && c.textContent.includes('Canal St') && c.textContent.includes('34 St-Herald Sq'));
+        if (qCard) {
+          qCard.click();
+          return true;
+        }
+        return false;
+      });
+
+      if (!tappedLeg) {
+        throw new Error('Could not find Q train leg card to tap');
+      }
+
+      await legPage.waitForSelector('.leg-detail-container', { timeout: 5000 });
+      await new Promise((r) => setTimeout(r, 600));
+
+      // 3. Audit Leg Detail View
+      const detailAudit = await legPage.evaluate(() => {
+        const mapContainer = document.querySelector('.maplibregl-map');
+        const highlightedRoute = mapContainer?.getAttribute('data-highlighted-route') || null;
+
+        const headsign = document.querySelector('.leg-detail-headsign')?.textContent?.trim() || '';
+        const routeBadge = document.querySelector('.leg-detail-route-badge')?.textContent?.trim() || '';
+        const stopItems = Array.from(document.querySelectorAll('.leg-stop-item'));
+        const stopNames = stopItems.map((el) => el.querySelector('.leg-stop-name')?.textContent?.trim() || '');
+        const stopTimes = stopItems.map((el) => el.querySelector('.leg-stop-time')?.textContent?.trim() || '');
+        const roleBadges = stopItems.map((el) => el.querySelector('.leg-stop-role-badge')?.textContent?.trim() || '');
+
+        const detailAllText = document.querySelector('.leg-detail-container')?.textContent || '';
+        const rawIdsFound = /18522|trip_id|#\d{3,}/i.test(detailAllText);
+
+        return {
+          highlightedRoute,
+          headsign,
+          routeBadge,
+          stopCount: stopItems.length,
+          stopNames,
+          stopTimes,
+          roleBadges,
+          rawIdsFound,
+        };
+      });
+
+      console.log('[Harness Leg Detail] Detail Audit Result:', JSON.stringify(detailAudit));
+      await takeScreenshot(legPage, 'tap-leg-shape-stops.png');
+
+      // Assertions on Leg Detail
+      if (detailAudit.highlightedRoute !== 'Q') {
+        throw new Error(`Expected data-highlighted-route to be "Q", got "${detailAudit.highlightedRoute}"`);
+      }
+      if (detailAudit.routeBadge !== 'Q') {
+        throw new Error(`Expected route badge in leg detail to be "Q", got "${detailAudit.routeBadge}"`);
+      }
+      if (!/To 96 St/i.test(detailAudit.headsign)) {
+        throw new Error(`Expected headsign to be "To 96 St", got "${detailAudit.headsign}"`);
+      }
+      if (detailAudit.stopCount !== 4) {
+        throw new Error(`Expected 4 stops in ladder (board, 2 interim, alight), got ${detailAudit.stopCount}: ${JSON.stringify(detailAudit.stopNames)}`);
+      }
+      if (detailAudit.stopNames[0] !== 'Canal St' || detailAudit.stopNames[3] !== '34 St-Herald Sq') {
+        throw new Error(`Expected stops from Canal St to 34 St-Herald Sq, got ${JSON.stringify(detailAudit.stopNames)}`);
+      }
+      if (!detailAudit.roleBadges[0].includes('Board')) {
+        throw new Error(`Expected first stop role badge to be "Board", got "${detailAudit.roleBadges[0]}"`);
+      }
+      if (!detailAudit.roleBadges[3].includes('Alight')) {
+        throw new Error(`Expected last stop role badge to be "Alight", got "${detailAudit.roleBadges[3]}"`);
+      }
+      if (detailAudit.stopTimes.some((t) => !t || t.length === 0)) {
+        throw new Error(`Expected scheduled times for all stops, got ${JSON.stringify(detailAudit.stopTimes)}`);
+      }
+      if (detailAudit.rawIdsFound) {
+        throw new Error('FC-2 regression: raw internal IDs found in leg detail view copy');
+      }
+
+      // 4. Test Back button returns to itinerary and restores map overlay
+      console.log('[Harness Leg Detail] Clicking Back to routes button...');
+      await legPage.click('.leg-detail-back-btn');
+      await legPage.waitForSelector('.itinerary-results-container', { timeout: 5000 });
+      await new Promise((r) => setTimeout(r, 600));
+
+      const backAudit = await legPage.evaluate(() => {
+        const mapContainer = document.querySelector('.maplibregl-map');
+        const highlightedRoute = mapContainer?.getAttribute('data-highlighted-route') || null;
+        const detailPresent = Boolean(document.querySelector('.leg-detail-container'));
+        const itineraryPresent = Boolean(document.querySelector('.itinerary-results-container'));
+        return {
+          highlightedRoute,
+          detailPresent,
+          itineraryPresent,
+        };
+      });
+
+      console.log('[Harness Leg Detail] Back Audit Result:', JSON.stringify(backAudit));
+      await takeScreenshot(legPage, 'tap-leg-back-restored.png');
+
+      if (backAudit.highlightedRoute !== null) {
+        throw new Error(`Expected data-highlighted-route to be cleared (restoring full overlay), got "${backAudit.highlightedRoute}"`);
+      }
+      if (backAudit.detailPresent) {
+        throw new Error('Expected leg detail container to be unmounted after clicking Back');
+      }
+      if (!backAudit.itineraryPresent) {
+        throw new Error('Expected itinerary results container to be visible after clicking Back');
+      }
+
+      console.log('[Harness Leg Detail] SUCCESS: Tap leg → route shape highlighted, stop ladder rendered with times, Back restored overlay & itinerary!');
+    } catch (err) {
+      await takeScreenshot(legPage, 'tap-leg-failed.png').catch(() => {});
+      throw err;
+    } finally {
+      await legContext.close();
+    }
+  });
+
+  // ==========================================================================
   // Wave: Pack updates (T1): version check + update affordance
   // Scenario: Pack update available → installed (flow: pack management)
   // ==========================================================================

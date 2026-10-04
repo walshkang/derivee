@@ -19,13 +19,22 @@ import { CityPicker } from './CityPicker';
 import type { CityPickerState } from '../types/cityPicker';
 import { reduceCityPickerState, fetchCitiesManifest } from '../utils/cityPicker';
 import type { WorkerToMainMessage } from '../types/pack';
+import { LegDetailView } from './LegDetailView';
+import type { TransitLegDisplay } from '../utils/itineraryDisplay';
 
 interface TripPlannerProps {
   isInstalled: boolean;
   onRoutesFound?: () => void;
+  onFocusedRouteIdChange?: (routeId: string | null) => void;
+  onSelectLeg?: (leg: TransitLegDisplay | null) => void;
 }
 
-export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
+export function TripPlanner({
+  isInstalled,
+  onRoutesFound,
+  onFocusedRouteIdChange,
+  onSelectLeg,
+}: TripPlannerProps) {
   // Worker & Engine state
   const [worker, setWorker] = useState<Worker | null>(null);
   const [engineStatus, setEngineStatus] = useState<'warming_up' | 'ready' | 'error'>('warming_up');
@@ -57,6 +66,7 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
   const [activeProfile, setActiveProfile] = useState<RoutingProfile>('fastest');
   const [hasQueried, setHasQueried] = useState<boolean>(false);
   const [routeError, setRouteError] = useState<string | null>(null);
+  const [selectedLeg, setSelectedLeg] = useState<TransitLegDisplay | null>(null);
 
 
   const originContainerRef = useRef<HTMLDivElement | null>(null);
@@ -374,6 +384,22 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
     setFewestTransfersSegments(null);
     setRouteError(null);
     setHasQueried(false);
+    setSelectedLeg(null);
+    onFocusedRouteIdChange?.(null);
+    onSelectLeg?.(null);
+  };
+
+  const handleSelectLeg = (leg: TransitLegDisplay) => {
+    setSelectedLeg(leg);
+    const routeIdStr = leg.routeId ? String(leg.routeId) : null;
+    onFocusedRouteIdChange?.(routeIdStr);
+    onSelectLeg?.(leg);
+  };
+
+  const handleBackFromLegDetail = () => {
+    setSelectedLeg(null);
+    onFocusedRouteIdChange?.(null);
+    onSelectLeg?.(null);
   };
 
   const handleSelectOrigin = (stop: StopItem) => {
@@ -758,18 +784,27 @@ export function TripPlanner({ isInstalled, onRoutesFound }: TripPlannerProps) {
         </button>
       </div>
 
-      {/* Screen 4B Route Comparison & Profile Cards */}
-      <RouteComparisonView
-        rankedCards={rankedCards}
-        activeProfile={activeProfile}
-        onSelectProfile={setActiveProfile}
-        stopsMap={stopsMap}
-        routesMap={routesMap}
-        isRouting={isRouting}
-        routeError={routeError}
-        hasQueried={hasQueried}
-        patternsMap={patterns}
-      />
+      {/* Screen 4B Route Comparison & Profile Cards OR Leg Detail View (Wave T2) */}
+      {selectedLeg ? (
+        <LegDetailView
+          leg={selectedLeg}
+          routesMap={routesMap}
+          onBack={handleBackFromLegDetail}
+        />
+      ) : (
+        <RouteComparisonView
+          rankedCards={rankedCards}
+          activeProfile={activeProfile}
+          onSelectProfile={setActiveProfile}
+          stopsMap={stopsMap}
+          routesMap={routesMap}
+          isRouting={isRouting}
+          routeError={routeError}
+          hasQueried={hasQueried}
+          patternsMap={patterns}
+          onSelectLeg={handleSelectLeg}
+        />
+      )}
     </div>
   );
 }

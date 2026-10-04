@@ -2777,6 +2777,45 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+}
+
+.itinerary-leg-card-tappable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.itinerary-leg-card-tappable:hover {
+  background-color: rgba(26, 38, 57, 0.85);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.itinerary-leg-card-tappable:focus-visible {
+  outline: 2px solid var(--accent-sky);
+  outline-offset: 2px;
+}
+
+.itinerary-leg-card-tappable:active {
+  transform: scale(0.99);
+}
+
+.leg-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.leg-card-chevron {
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--text-muted);
+  font-weight: 400;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.itinerary-leg-card-tappable:hover .leg-card-chevron {
+  color: var(--accent-sky);
+  transform: translateX(2px);
 }
 
 .leg-card-header {
@@ -3470,5 +3509,288 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   font-weight: 600;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
+
+/* ==========================================================================
+   Wave T2: Leg Detail View & Stops Ladder (Screen 4B drill-in)
+   ========================================================================== */
+
+.leg-detail-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px 18px;
+  animation: legDetailFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes legDetailFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.leg-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.leg-detail-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--accent-sky);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 4px 8px;
+  margin-left: -8px;
+  align-self: flex-start;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.leg-detail-back-btn:hover {
+  background-color: rgba(56, 189, 248, 0.12);
+}
+
+.leg-detail-back-btn:focus-visible {
+  outline: 2px solid var(--accent-sky);
+  outline-offset: 2px;
+}
+
+.back-arrow {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.leg-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.leg-detail-headsign {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.leg-detail-glance {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.live-eta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background-color: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Stop Ladder */
+.leg-stops-ladder {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 6px 12px;
+}
+
+.ladder-stop-item {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.ladder-marker-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.ladder-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  border: 3px solid;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.ladder-marker-board,
+.ladder-marker-alight {
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  border-width: 3.5px;
+}
+
+.ladder-marker-interim {
+  width: 10px;
+  height: 10px;
+  border-width: 2.5px;
+  margin-top: 6px;
+}
+
+.ladder-connector-segment {
+  width: 3px;
+  flex-grow: 1;
+  margin: 3px 0;
+  opacity: 0.75;
+  border-radius: 2px;
+}
+
+.ladder-stop-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  flex-grow: 1;
+  padding-bottom: 12px;
+}
+
+.ladder-stop-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ladder-stop-name {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.ladder-stop-name-bold {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ladder-role-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.tag-board {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.tag-alight {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.ladder-stop-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: monospace;
+  margin-top: 2px;
+}
+
+/* States */
+.leg-detail-loading,
+.leg-detail-empty,
+.leg-detail-error {
+  padding: 18px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.leg-detail-empty .empty-title,
+.leg-detail-error .error-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.leg-detail-empty .empty-subtitle,
+.leg-detail-error .error-description {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  max-width: 320px;
+  line-height: 1.45;
+}
+
+.leg-detail-retry-btn {
+  margin-top: 8px;
+  padding: 6px 14px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+  transition: all 0.15s ease;
+}
+
+.leg-detail-retry-btn:hover {
+  border-color: var(--accent-sky);
+  color: var(--accent-sky);
+}
+
+/* Light Theme Adaptations */
+[data-theme="light"] .itinerary-leg-card-tappable:hover {
+  background-color: var(--bg-primary);
+  border-color: var(--accent-sky);
+}
+
+[data-theme="light"] .leg-detail-header {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+[data-theme="light"] .ladder-marker {
+  background: #ffffff;
+}
+
+[data-theme="light"] .ladder-stop-name-bold {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .leg-detail-headsign {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .leg-detail-retry-btn {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-subtle);
+}
+
 
 

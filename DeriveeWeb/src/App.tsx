@@ -24,6 +24,8 @@ export function App() {
   const [packDismissed, setPackDismissedState] = useState<boolean>(() => isPackDismissed());
   const [packExpanded, setPackExpanded] = useState<boolean>(false);
   const [mapInstance, setMapInstance] = useState<Map | null>(null);
+  const [focusedRouteId, setFocusedRouteId] = useState<string | null>(null);
+  const [sheetDetent, setSheetDetent] = useState<number>(15);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -68,7 +70,11 @@ export function App() {
       {/* Full-screen offline vector basemap base layer */}
       <BasemapView theme={resolvedTheme} onMapLoaded={setMapInstance} />
 
-      <TransitOverlays map={mapInstance} isPackInstalled={Boolean(packState?.isInstalled)} />
+      <TransitOverlays
+        map={mapInstance}
+        isPackInstalled={Boolean(packState?.isInstalled)}
+        focusedRouteId={focusedRouteId}
+      />
 
       <Header
         isOnline={isOnline}
@@ -81,6 +87,8 @@ export function App() {
         isOpen={true}
         detents={[15, 50, 90]}
         defaultDetent={15}
+        activeDetent={sheetDetent}
+        onDetentChange={setSheetDetent}
         theme={theme}
         onThemeChange={setTheme}
       >
@@ -95,7 +103,15 @@ export function App() {
           onInstallSuccess={handleInstallSuccess}
         />
         {Boolean(packState?.isInstalled) && (
-          <TripPlanner isInstalled={true} />
+          <TripPlanner
+            isInstalled={true}
+            onFocusedRouteIdChange={setFocusedRouteId}
+            onSelectLeg={(leg) => {
+              if (leg && sheetDetent < 50) {
+                setSheetDetent(50);
+              }
+            }}
+          />
         )}
       </BottomSheet>
 

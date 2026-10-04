@@ -20,6 +20,7 @@ import type {
 import {
   describeItinerary,
   countTransfers,
+  type TransitLegDisplay,
 } from '../utils/itineraryDisplay';
 import {
   formatTransferCount,
@@ -39,6 +40,7 @@ interface RouteComparisonViewProps {
   routeError: string | null;
   hasQueried: boolean;
   patternsMap?: RoutePatternEntry[] | null;
+  onSelectLeg?: (leg: TransitLegDisplay) => void;
 }
 
 export function RouteComparisonView({
@@ -51,6 +53,7 @@ export function RouteComparisonView({
   routeError,
   hasQueried,
   patternsMap,
+  onSelectLeg,
 }: RouteComparisonViewProps) {
   const uiState = getRouteComparisonUIState({
     isRouting,
@@ -302,9 +305,27 @@ export function RouteComparisonView({
                   }
 
                   const routeBadge = getRouteBadge(legModel.routeId, routesMap);
+                  const isTappable = Boolean(onSelectLeg);
 
                   return (
-                    <div key={legIdx} class="itinerary-leg-card">
+                    <div
+                      key={legIdx}
+                      class={`itinerary-leg-card ${isTappable ? 'itinerary-leg-card-tappable' : ''}`}
+                      role={isTappable ? 'button' : undefined}
+                      tabIndex={isTappable ? 0 : undefined}
+                      onClick={isTappable ? () => onSelectLeg?.(legModel) : undefined}
+                      onKeyDown={
+                        isTappable
+                          ? (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                onSelectLeg?.(legModel);
+                              }
+                            }
+                          : undefined
+                      }
+                      aria-label={`View stops for Leg ${legModel.legIndex + 1}: ${routeBadge?.label || 'Transit'}, ${legModel.boardStopName} to ${legModel.exitStopName}`}
+                    >
                       <div class="leg-card-header">
                         <span class="leg-index-badge">Leg {legModel.legIndex + 1}</span>
                         {routeBadge ? (
@@ -324,11 +345,18 @@ export function RouteComparisonView({
                             </span>
                           </span>
                         ) : null}
-                        <span class="leg-duration-tag">
-                          {legModel.durationMinutes > 0
-                            ? `${legModel.durationMinutes} min`
-                            : '< 1 min'}
-                        </span>
+                        <div class="leg-header-right">
+                          <span class="leg-duration-tag">
+                            {legModel.durationMinutes > 0
+                              ? `${legModel.durationMinutes} min`
+                              : '< 1 min'}
+                          </span>
+                          {isTappable && (
+                            <span class="leg-card-chevron" aria-hidden="true">
+                              ›
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div class="leg-stops-flow">

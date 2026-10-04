@@ -69,6 +69,14 @@ export interface ArriveLegDisplay {
   arrival_time: number;
 }
 
+export interface LegStopDetail {
+  stopId: number;
+  stopName: string;
+  time: number;
+  isBoarding: boolean;
+  isAlighting: boolean;
+}
+
 export interface TransitLegDisplay {
   kind: 'transit';
   mode: LegMode;
@@ -98,6 +106,8 @@ export interface TransitLegDisplay {
   is_transfer: boolean;
   intermediateStopsCount?: number;
   stopCount?: number;
+  headsign?: string;
+  stops?: LegStopDetail[];
 }
 
 export interface TransferConnectorDisplay {
@@ -236,6 +246,41 @@ export function resolveStopName(
 }
 
 /**
+ * Formats a destination headsign using commuter-first "To [Terminal]" style.
+ * Strictly adheres to FC-2 (no internal IDs or raw hashes leak into the UI).
+ */
+export function formatHeadsign(headsign?: string, fallbackDestination?: string): string {
+  const sanitize = (val: string) => {
+    return val
+      .replace(/^(?:trip_id_|route_id_|route_|trip_)\w+/gi, '')
+      .replace(/^#\d+/g, '')
+      .trim();
+  };
+
+  if (headsign && headsign.trim().length > 0) {
+    const cleaned = sanitize(headsign);
+    if (cleaned.length > 0) {
+      if (/^to\s+/i.test(cleaned)) {
+        return cleaned;
+      }
+      return `To ${cleaned}`;
+    }
+  }
+
+  if (fallbackDestination && fallbackDestination.trim().length > 0) {
+    const cleaned = sanitize(fallbackDestination);
+    if (cleaned.length > 0) {
+      if (/^to\s+/i.test(cleaned)) {
+        return cleaned;
+      }
+      return `To ${cleaned}`;
+    }
+  }
+
+  return '';
+}
+
+/**
  * Transforms an itinerary leg into its presentation display model.
  * Note: `trip_id` is completely excluded from all output types.
  */
@@ -340,6 +385,22 @@ export function describeLeg(
     is_transfer: Boolean(leg.is_transfer || mode === 'transfer' || mode === 'walk'),
     intermediateStopsCount: 0,
     stopCount: 0,
+    stops: [
+      {
+        stopId: fromStop,
+        stopName: boardName,
+        time: leg.departure_time,
+        isBoarding: true,
+        isAlighting: false,
+      },
+      {
+        stopId: toStop,
+        stopName: exitName,
+        time: leg.arrival_time,
+        isBoarding: false,
+        isAlighting: true,
+      },
+    ],
   };
 }
 
@@ -529,18 +590,62 @@ export function describeItinerary(
       const intermediateStopsCount = block.legs.length - 1;
 
       let resolvedRouteId: string | number | undefined;
+      let resolvedHeadsign: string | undefined;
       if (patternResolver && first.route_id !== undefined) {
         if (Array.isArray(patternResolver)) {
           const entry = patternResolver[first.route_id];
-          resolvedRouteId = typeof entry === 'string' ? entry : entry?.route_id;
+          if (typeof entry === 'string') {
+            resolvedRouteId = entry;
+          } else if (entry && typeof entry === 'object') {
+            resolvedRouteId = entry.route_id;
+            resolvedHeadsign = entry.headsign;
+          }
         } else if (typeof patternResolver === 'function') {
           resolvedRouteId = patternResolver(first.route_id);
         } else if (patternResolver instanceof Map) {
-          resolvedRouteId = patternResolver.get(first.route_id);
+          const entry = patternResolver.get(first.route_id);
+          if (typeof entry === 'string') {
+            resolvedRouteId = entry;
+          } else if (entry && typeof entry === 'object') {
+            resolvedRouteId = (entry as any).route_id;
+            resolvedHeadsign = (entry as any).headsign;
+          }
         }
       }
       
       const finalRouteId = resolvedRouteId ?? (patternResolver ? undefined : first.route_id);
+
+      const legStops: LegStopDetail[] = [];
+      legStops.push({
+        stopId: fromStop,
+        stopName: boardName,
+        time: depTime,
+        isBoarding: true,
+        isAlighting: false,
+      });
+
+      for (let sIdx = 0; sIdx < block.legs.length - 1; sIdx++) {
+        const seg = block.legs[sIdx];
+        const nextSeg = block.legs[sIdx + 1];
+        const stopId = seg.exit_stop_id !== undefined ? seg.exit_stop_id : seg.to_stop ?? 0;
+        const name = resolveStopName(stopId, resolver);
+        const time = seg.arrival_time || nextSeg.departure_time;
+        legStops.push({
+          stopId,
+          stopName: name,
+          time,
+          isBoarding: false,
+          isAlighting: false,
+        });
+      }
+
+      legStops.push({
+        stopId: toStop,
+        stopName: exitName,
+        time: arrTime,
+        isBoarding: false,
+        isAlighting: true,
+      });
 
       const transitModel: TransitLegDisplay = {
         kind: 'transit',
@@ -571,6 +676,8 @@ export function describeItinerary(
         is_transfer: false,
         intermediateStopsCount,
         stopCount: intermediateStopsCount,
+        headsign: resolvedHeadsign,
+        stops: legStops,
       };
 
       result.push(transitModel);
