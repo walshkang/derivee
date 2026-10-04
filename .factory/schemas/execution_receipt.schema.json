@@ -59,6 +59,24 @@
     },
     "blocker_reason": {
       "type": ["string", "null"]
+    },
+    "discoveries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "symbol_or_behavior": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": ["symbol_or_behavior", "file"],
+        "additionalProperties": false
+      },
+      "maxItems": 5,
+      "description": "Falsifiable technical discoveries from this wave: new exported symbols, unmapped edge cases, quirky runtime behaviors - each anchored to an exact file path. No prose lessons, no generic statements. Feeds the nightly reflection's knowledge capture. KILL CONDITION: if empty or padded with fluff after 10 waves carrying this field (count from 2026-10-04), strip the key from the schema."
     }
   },
   "required": [
