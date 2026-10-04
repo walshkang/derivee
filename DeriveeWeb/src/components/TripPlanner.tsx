@@ -22,12 +22,16 @@ import { reduceCityPickerState, fetchCitiesManifest } from '../utils/cityPicker'
 import type { WorkerToMainMessage } from '../types/pack';
 import { LegDetailView } from './LegDetailView';
 import type { TransitLegDisplay } from '../utils/itineraryDisplay';
+import type { JourneyHighlightState } from './TransitOverlays';
 
 interface TripPlannerProps {
   isInstalled: boolean;
   onRoutesFound?: () => void;
   onFocusedRouteIdChange?: (routeId: string | null) => void;
-  onSelectLeg?: (leg: TransitLegDisplay | null) => void;
+  onSelectLeg?: (
+    leg: TransitLegDisplay | null,
+    highlight?: JourneyHighlightState | null
+  ) => void;
 }
 
 export function TripPlanner({

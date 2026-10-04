@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'preact/hooks';
-import { type Map, Popup, type MapMouseEvent, type MapGeoJSONFeature } from 'maplibre-gl';
+import { type Map as MapLibreMap, Popup, type MapMouseEvent, type MapGeoJSONFeature } from 'maplibre-gl';
 import { getCityDirectory } from '../utils/opfs';
 import { getTransitLayerDisplayState, type UIState } from '../utils/displayModel';
 import type { StopItem } from '../types/routing';
@@ -15,14 +15,26 @@ import {
   getTransitStationsLayerConfig,
   escapeHtml,
   highlightRouteOnMap,
+  clipRouteShapeToStops,
 } from '../utils/transitOverlays';
+import type { TransitLegDisplay } from '../utils/itineraryDisplay';
+
+export interface JourneyHighlightState {
+  focusedRouteId: string;
+  journeyRouteIds: string[];
+  tappedLeg: TransitLegDisplay;
+  stopsMap?: Map<number, StopItem>;
+  routeColor?: string;
+  casingColor?: string;
+}
 
 interface TransitOverlaysProps {
-  map: Map | null;
+  map: MapLibreMap | null;
   slug?: string;
   isPackInstalled?: boolean;
   onSelectStation?: (station: { id: number; name: string }) => void;
   focusedRouteId?: string | null;
+  journeyHighlight?: JourneyHighlightState | null;
 }
 
 export function TransitOverlays({
@@ -31,10 +43,12 @@ export function TransitOverlays({
   isPackInstalled,
   onSelectStation,
   focusedRouteId = null,
+  journeyHighlight = null,
 }: TransitOverlaysProps) {
   const [transitState, setTransitState] = useState<UIState>('ready');
   const [selectedStation, setSelectedStation] = useState<{ id: number; name: string } | null>(null);
   const popupRef = useRef<Popup | null>(null);
+  const linesGeojsonRef = useRef<any>(null);
 
   useEffect(() => {
     if (!map || !isPackInstalled) return;
@@ -64,6 +78,7 @@ export function TransitOverlays({
         ]);
 
         if (isCancelled) return;
+        linesGeojsonRef.current = linesGeojson;
 
         // 1. Ribbons source & layers (dual-layer: casing underneath, colored stroke on top)
         if (!map.getSource(TRANSIT_LINES_SOURCE_ID)) {
@@ -180,11 +195,50 @@ export function TransitOverlays({
 
   useEffect(() => {
     if (!map || transitState !== 'ready') return;
-    highlightRouteOnMap(map, focusedRouteId);
+
+    if (journeyHighlight && journeyHighlight.focusedRouteId) {
+      let clippedCoords: [number, number][] | null = null;
+      const {
+        tappedLeg,
+        stopsMap,
+        focusedRouteId,
+        journeyRouteIds,
+        routeColor,
+        casingColor,
+      } = journeyHighlight;
+
+      if (
+        linesGeojsonRef.current &&
+        stopsMap &&
+        tappedLeg.boardStopId &&
+        tappedLeg.exitStopId
+      ) {
+        const board = stopsMap.get(tappedLeg.boardStopId);
+        const alight = stopsMap.get(tappedLeg.exitStopId);
+        if (board && alight) {
+          clippedCoords = clipRouteShapeToStops(
+            linesGeojsonRef.current,
+            focusedRouteId,
+            [board.lon, board.lat],
+            [alight.lon, alight.lat]
+          );
+        }
+      }
+
+      highlightRouteOnMap(map, focusedRouteId, {
+        journeyRouteIds,
+        clippedCoordinates: clippedCoords,
+        routeColor,
+        casingColor,
+      });
+    } else {
+      highlightRouteOnMap(map, focusedRouteId);
+    }
+
     return () => {
       highlightRouteOnMap(map, null);
     };
-  }, [map, transitState, focusedRouteId]);
+  }, [map, transitState, focusedRouteId, journeyHighlight]);
 
   const display = getTransitLayerDisplayState(transitState);
 

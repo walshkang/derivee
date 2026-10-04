@@ -134,7 +134,7 @@ export function BottomSheet({
   useEffect(() => {
     if (activeDetent !== undefined) {
       const idx = detents.indexOf(activeDetent);
-      if (idx !== -1 && idx !== currentDetentIndex) {
+      if (idx !== -1) {
         setCurrentDetentIndex(idx);
         if (sheetRef.current) {
           sheetRef.current.style.transition = 'height 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';

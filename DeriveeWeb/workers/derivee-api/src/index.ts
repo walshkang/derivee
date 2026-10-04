@@ -95,7 +95,7 @@ export default {
           'Cache-Control': 'public, max-age=15, stale-while-revalidate=30',
         });
       } catch (err: any) {
-        console.warn(`[Realtime Arrivals] Failed to fetch on-demand arrivals for stop ${stop}:`, err?.message || err);
+        console.warn(`[Realtime] Failed to fetch on-demand arrivals for stop ${stop}:`, err?.message || err);
         return jsonResponse({ error: 'feed_unavailable' }, 503, origin);
       }
     }

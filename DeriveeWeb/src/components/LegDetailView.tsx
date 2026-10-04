@@ -51,17 +51,22 @@ export function LegDetailView({
     if (!leg.boardStopId) return;
 
     const probeLiveTimes = async () => {
+      const routeParamVal = routeBadge?.label || (leg.routeId != null ? String(leg.routeId).trim() : '');
+      const routeQuery = routeParamVal ? `&route_id=${encodeURIComponent(routeParamVal)}` : '';
+      const endpoint = `/api/realtime/arrivals?stop_id=${leg.boardStopId}${routeQuery}`;
+
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-        const res = await fetch(`/api/realtime/arrivals?stop_id=${leg.boardStopId}`, {
+        console.log(`[Realtime] Probing arrivals: stop_id=${leg.boardStopId} route_id=${routeParamVal || 'none'}`);
+        const res = await fetch(endpoint, {
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
 
         if (!res.ok) {
-          console.log(`[Realtime Probe] stop_id=${leg.boardStopId} route=${routeBadge?.label}: status=${res.status} (degraded to scheduled)`);
+          console.log(`[Realtime] stop_id=${leg.boardStopId} route_id=${routeParamVal || 'none'} fetch status=${res.status} (degraded to scheduled)`);
           return;
         }
 
@@ -69,23 +74,18 @@ export function LegDetailView({
         if (isCancelled) return;
 
         if (!data || !Array.isArray(data.arrivals)) {
-          console.log(`[Realtime Probe] stop_id=${leg.boardStopId} unexpected data shape:`, data);
+          console.log(`[Realtime] stop_id=${leg.boardStopId} route_id=${routeParamVal || 'none'} fetch status=${res.status} unexpected data shape:`, data);
           return;
         }
 
-        const match = matchLiveArrival(data.arrivals, routeBadge?.label);
-        console.log(`[Realtime Probe] stop_id=${leg.boardStopId} route=${routeBadge?.label}: status=${res.status}`, {
-          status: res.status,
-          arrivalsCount: data.arrivals.length,
-          matched: Boolean(match),
-          minutesAway: match?.minutesAway,
-        });
+        const match = matchLiveArrival(data.arrivals, routeBadge?.label || routeParamVal);
+        console.log(`[Realtime] stop_id=${leg.boardStopId} route_id=${routeParamVal || 'none'} fetch status=${res.status} arrivals matched=${data.arrivals.length} (matched=${Boolean(match)}, minutesAway=${match?.minutesAway})`);
 
         if (match) {
           setLiveArrival(match);
         }
       } catch (err: any) {
-        console.log(`[Realtime Probe] stop_id=${leg.boardStopId} route=${routeBadge?.label} failed (degraded to scheduled):`, err?.message || err);
+        console.log(`[Realtime] stop_id=${leg.boardStopId} route_id=${routeParamVal || 'none'} fetch status=error (${err?.message || err}) (degraded to scheduled)`);
       }
     };
 
@@ -94,7 +94,7 @@ export function LegDetailView({
     return () => {
       isCancelled = true;
     };
-  }, [leg.boardStopId, routeBadge?.label]);
+  }, [leg.boardStopId, leg.routeId, routeBadge?.label]);
 
   const headsignTitle = formatHeadsign(leg.headsign, leg.exitStopName);
   const stops = leg.stops ?? [];

@@ -136,6 +136,7 @@ export async function fetchFeedBytes(
 
   try {
     const res = await fetch(feedUrl, { signal: controller.signal });
+    console.log(`[Realtime] feed=${feedUrl.split('/').pop()} fetch status=${res.status}`);
     if (!res.ok) {
       throw new Error(`Feed fetch failed with HTTP ${res.status}`);
     }
@@ -284,6 +285,12 @@ export async function getLiveArrivalsForStop(
     options?.feedUrls ?? getFeedUrlsForStop(cleanStopId, options?.routeId);
   const now = options?.now ?? Math.floor(Date.now() / 1000);
 
+  console.log(
+    `[Realtime] stop_id=${cleanStopId} route_id=${options?.routeId ?? 'none'} feed chosen=${feedUrls
+      .map((u) => u.split('/').pop())
+      .join(',')}`
+  );
+
   // Fetch all relevant feeds in parallel
   const results = await Promise.allSettled(
     feedUrls.map((url) =>
@@ -338,6 +345,10 @@ export async function getLiveArrivalsForStop(
   // Sort all arrivals ascending
   allArrivals.sort(
     (a, b) => a.predicted_arrival_epoch - b.predicted_arrival_epoch
+  );
+
+  console.log(
+    `[Realtime] stop_id=${cleanStopId} arrivals matched=${allArrivals.length}`
   );
 
   return {

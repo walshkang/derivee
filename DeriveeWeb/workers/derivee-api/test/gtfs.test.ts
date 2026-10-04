@@ -102,6 +102,16 @@ describe('Worker Realtime On-Demand Arrivals (Zero KV, Live GTFS-RT)', async () 
     assert.deepStrictEqual(getFeedUrlsForStop('Q01N'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw']);
     // Route ID override
     assert.deepStrictEqual(getFeedUrlsForStop('1288', 'Q'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw']);
+    // Times Sq-42 St ("127", route "3") -> NUMERIC feed
+    assert.deepStrictEqual(getFeedUrlsForStop('127', '3'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs']);
+    assert.deepStrictEqual(getFeedUrlsForStop('127', 'A'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace']);
+    assert.deepStrictEqual(getFeedUrlsForStop('127', 'B'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm']);
+    assert.deepStrictEqual(getFeedUrlsForStop('127', 'L'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l']);
+    assert.deepStrictEqual(getFeedUrlsForStop('127', 'G'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g']);
+    assert.deepStrictEqual(getFeedUrlsForStop('127', 'J'), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz']);
+    // Negative cases: empty/unknown route falls back to stop_id prefix
+    assert.deepStrictEqual(getFeedUrlsForStop('127', ''), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs']);
+    assert.deepStrictEqual(getFeedUrlsForStop('A27', ''), ['https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace']);
   });
 
   it('arrivals returned for a stop: serves live predictions with minutesAway on-demand (zero KV)', async () => {
