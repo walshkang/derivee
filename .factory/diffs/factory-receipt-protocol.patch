@@ -1,0 +1,122 @@
+diff --git a/.factory/README.md b/.factory/README.md
+new file mode 100644
+index 0000000..27ac958
+--- /dev/null
++++ b/.factory/README.md
+@@ -0,0 +1,8 @@
++# .factory
++
++Workspace directory for wave execution contracts, schemas, and receipts.
++- schemas/: Machine-readable schemas defining execution protocols.
++- active_brief.json: Wave contract written by orchestrator before execution.
++- receipt.json: Structured execution receipt returned upon wave completion.
++- diffs/: Wave patch files (<wave_id>.patch) for verification and audit.
++- scratch/: Ephemeral wave logs and temporary diagnostics.
+diff --git a/.factory/active_brief.json b/.factory/active_brief.json
+new file mode 100644
+index 0000000..454f896
+--- /dev/null
++++ b/.factory/active_brief.json
+@@ -0,0 +1,16 @@
++{
++  "wave_id": "factory-receipt-protocol",
++  "scope": {
++    "allowed_files": [
++      ".factory/**"
++    ]
++  },
++  "limits": {
++    "max_lines_changed": 150
++  },
++  "acceptance": [
++    ".factory/ structure exists exactly as specified",
++    "receipt.json validates against the schema",
++    "final response is the receipt JSON (<150 tokens)"
++  ]
++}
+diff --git a/.factory/diffs/.gitkeep b/.factory/diffs/.gitkeep
+new file mode 100644
+index 0000000..e69de29
+diff --git a/.factory/schemas/execution_receipt.schema.json b/.factory/schemas/execution_receipt.schema.json
+new file mode 100644
+index 0000000..98476f3
+--- /dev/null
++++ b/.factory/schemas/execution_receipt.schema.json
+@@ -0,0 +1,74 @@
++{
++  "$schema": "http://json-schema.org/draft-07/schema#",
++  "title": "ExecutionReceipt",
++  "type": "object",
++  "properties": {
++    "$schema": {
++      "type": "string"
++    },
++    "wave_id": {
++      "type": "string"
++    },
++    "status": {
++      "type": "string",
++      "enum": ["complete", "failed", "killed"]
++    },
++    "git_commit": {
++      "type": "string"
++    },
++    "diff_stat": {
++      "type": "object",
++      "properties": {
++        "files_changed": {
++          "type": "integer",
++          "minimum": 0
++        },
++        "insertions": {
++          "type": "integer",
++          "minimum": 0
++        },
++        "deletions": {
++          "type": "integer",
++          "minimum": 0
++        }
++      },
++      "required": ["files_changed", "insertions", "deletions"],
++      "additionalProperties": false
++    },
++    "patch_file": {
++      "type": "string"
++    },
++    "test_verdict": {
++      "type": "string",
++      "enum": ["PASS", "FAIL", "NOT_RUN"]
++    },
++    "token_burn": {
++      "type": "object",
++      "properties": {
++        "input": {
++          "type": "integer",
++          "minimum": 0
++        },
++        "output": {
++          "type": "integer",
++          "minimum": 0
++        }
++      },
++      "required": ["input", "output"],
++      "additionalProperties": false
++    },
++    "blocker_reason": {
++      "type": ["string", "null"]
++    }
++  },
++  "required": [
++    "wave_id",
++    "status",
++    "git_commit",
++    "diff_stat",
++    "patch_file",
++    "test_verdict",
++    "blocker_reason"
++  ],
++  "additionalProperties": false
++}
+diff --git a/.factory/scratch/.gitkeep b/.factory/scratch/.gitkeep
+new file mode 100644
+index 0000000..e69de29

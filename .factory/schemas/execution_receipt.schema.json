@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExecutionReceipt",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "wave_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["complete", "failed", "killed"]
+    },
+    "git_commit": {
+      "type": "string"
+    },
+    "diff_stat": {
+      "type": "object",
+      "properties": {
+        "files_changed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "insertions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deletions": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["files_changed", "insertions", "deletions"],
+      "additionalProperties": false
+    },
+    "patch_file": {
+      "type": "string"
+    },
+    "test_verdict": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "NOT_RUN"]
+    },
+    "token_burn": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["input", "output"],
+      "additionalProperties": false
+    },
+    "blocker_reason": {
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "wave_id",
+    "status",
+    "git_commit",
+    "diff_stat",
+    "patch_file",
+    "test_verdict",
+    "blocker_reason"
+  ],
+  "additionalProperties": false
+}
