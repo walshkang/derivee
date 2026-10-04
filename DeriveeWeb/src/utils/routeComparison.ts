@@ -116,6 +116,39 @@ export function formatArrivalTime(sec: number): string {
 }
 
 /**
+ * Converts a "HH:MM" 24-hour time string into seconds of the day.
+ * Falls back to 28800 (8:00 AM) if invalid or malformed.
+ */
+export function getDepartureSeconds(timeStr: string): number {
+  if (!timeStr || typeof timeStr !== 'string') return 28800;
+  const parts = timeStr.split(':');
+  if (parts.length === 2) {
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (!isNaN(h) && !isNaN(m) && h >= 0 && h < 24 && m >= 0 && m < 60) {
+      return h * 3600 + m * 60;
+    }
+  }
+  return 28800; // 8:00 AM fallback
+}
+
+/**
+ * Computes departure timestamp in seconds of the day based on departure timing mode.
+ * - 'now': uses the CURRENT time (hours * 3600 + minutes * 60 + seconds).
+ * - 'depart_at': uses the explicit "HH:MM" user-selected time string.
+ */
+export function computeDepartureSeconds(
+  mode: 'now' | 'depart_at',
+  departureTimeStr: string,
+  now: Date = new Date()
+): number {
+  if (mode === 'now') {
+    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  }
+  return getDepartureSeconds(departureTimeStr);
+}
+
+/**
  * Constructs a single RankedItinerary display model from segments and profile attribution.
  */
 export function createRankedItinerary(

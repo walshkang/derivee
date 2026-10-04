@@ -808,3 +808,49 @@ export function countTransfers(legs: LegInput[], resolver?: StopNameResolver): n
   return Math.max(0, transitLegs.length - 1);
 }
 
+export interface LiveArrivalMatch {
+  isLive: boolean;
+  minutesAway: number;
+  isApproaching: boolean;
+}
+
+/**
+ * Matches realtime arrival predictions against the leg route and computes ETA minutes.
+ * Handles both GTFS-RT predicted_arrival_epoch (seconds) and pre-calculated minutesAway.
+ * Returns null if no match or if data is empty/invalid (triggering clean fallback to scheduled times).
+ */
+export function matchLiveArrival(
+  arrivals: any[] | null | undefined,
+  targetRoute: string | null | undefined,
+  nowEpoch: number = Math.floor(Date.now() / 1000)
+): LiveArrivalMatch | null {
+  if (!Array.isArray(arrivals) || arrivals.length === 0 || !targetRoute) {
+    return null;
+  }
+  const cleanTarget = targetRoute.trim().toLowerCase();
+  if (!cleanTarget) return null;
+
+  const match = arrivals.find((arr) => {
+    if (!arr) return false;
+    const rId = String(arr.route_id || '').trim().toLowerCase();
+    return rId === cleanTarget;
+  });
+
+  if (!match) return null;
+
+  let minutesAway: number | null = null;
+  if (typeof match.minutesAway === 'number' && !isNaN(match.minutesAway)) {
+    minutesAway = match.minutesAway;
+  } else if (typeof match.predicted_arrival_epoch === 'number' && !isNaN(match.predicted_arrival_epoch)) {
+    minutesAway = Math.max(0, Math.round((match.predicted_arrival_epoch - nowEpoch) / 60));
+  }
+
+  if (minutesAway === null) return null;
+
+  return {
+    isLive: true,
+    minutesAway,
+    isApproaching: Boolean(match.isApproaching || minutesAway <= 1),
+  };
+}
+

@@ -5,6 +5,7 @@ import {
   formatHeadsign,
   type LegInput,
   type TransitLegDisplay,
+  matchLiveArrival,
 } from '../itineraryDisplay.ts';
 import {
   getRouteHighlightPaintProperties,
@@ -219,6 +220,25 @@ describe('Leg Detail & Map Highlight Tests (Wave T2)', () => {
         highlightRouteOnMap(emptyMap, '1');
         highlightRouteOnMap(emptyMap, null);
       });
+    });
+  });
+
+  describe('4. Live vs Scheduled Leg Badges & Realtime Fallback', () => {
+    const nowSec = 1728048000;
+
+    it('classifies arrival as Live and computes minutesAway from GTFS-RT epoch', () => {
+      const feedArrivals = [
+        { route_id: 'Q', predicted_arrival_epoch: nowSec + 180, is_realtime: true },
+      ];
+      const match = matchLiveArrival(feedArrivals, 'Q', nowSec);
+      assert.ok(match);
+      assert.strictEqual(match.isLive, true);
+      assert.strictEqual(match.minutesAway, 3);
+    });
+
+    it('negative case: degrades cleanly to scheduled (returns null) on 503 or empty response', () => {
+      assert.strictEqual(matchLiveArrival(null, 'Q', nowSec), null);
+      assert.strictEqual(matchLiveArrival([], 'Q', nowSec), null);
     });
   });
 });

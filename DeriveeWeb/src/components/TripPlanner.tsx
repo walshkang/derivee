@@ -12,6 +12,7 @@ import { RouteComparisonView } from './RouteComparisonView';
 import {
   executeDualProfileRouting,
   buildRankedItineraries,
+  computeDepartureSeconds,
 } from '../utils/routeComparison';
 import { RoutingQueryWatchdog } from '../utils/tabSuspension';
 import { createRoutesMap } from '../utils/routeBadge';
@@ -56,8 +57,11 @@ export function TripPlanner({
   const [selectedDest, setSelectedDest] = useState<StopItem | null>(null);
   const [showOriginDropdown, setShowOriginDropdown] = useState<boolean>(false);
   const [showDestDropdown, setShowDestDropdown] = useState<boolean>(false);
-  const [departureTime, setDepartureTime] = useState<string>('08:00');
-  const [departureMode, setDepartureMode] = useState<'now' | 'depart_at'>('depart_at');
+  const [departureTime, setDepartureTime] = useState<string>(() => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  });
+  const [departureMode, setDepartureMode] = useState<'now' | 'depart_at'>('now');
 
   // Screen 4B Dual-Profile Routing State
   const [isRouting, setIsRouting] = useState<boolean>(false);
@@ -72,6 +76,8 @@ export function TripPlanner({
   const originContainerRef = useRef<HTMLDivElement | null>(null);
   const destContainerRef = useRef<HTMLDivElement | null>(null);
   const routingWatchdogRef = useRef<RoutingQueryWatchdog | null>(null);
+  const isRoutingRef = useRef<boolean>(false);
+  const pendingRouteRef = useRef<{ mode: 'now' | 'depart_at'; time: string } | null>(null);
 
   // 1. Fetch stops.json and routes.json offline
   useEffect(() => {
@@ -440,18 +446,6 @@ export function TripPlanner({
     resetRoutes();
   };
 
-  const getDepartureSeconds = (timeStr: string): number => {
-    const parts = timeStr.split(':');
-    if (parts.length === 2) {
-      const h = parseInt(parts[0], 10);
-      const m = parseInt(parts[1], 10);
-      if (!isNaN(h) && !isNaN(m)) {
-        return h * 3600 + m * 60;
-      }
-    }
-    return 28800; // 8:00 AM fallback
-  };
-
   // Monitor tab backgrounding and suspension during route query calculation
   useEffect(() => {
     let lastHidden = 0;
@@ -477,10 +471,20 @@ export function TripPlanner({
     };
   }, [isRouting]);
 
-  const handleRoute = async () => {
-    if (!worker || !selectedOrigin || !selectedDest || engineStatus !== 'ready' || isRouting) {
+  const handleRoute = async (modeOverride?: 'now' | 'depart_at', timeOverride?: string) => {
+    if (!worker || !selectedOrigin || !selectedDest || engineStatus !== 'ready') {
       return;
     }
+
+    const mode = modeOverride ?? departureMode;
+    const time = timeOverride ?? departureTime;
+
+    if (isRoutingRef.current) {
+      pendingRouteRef.current = { mode, time };
+      return;
+    }
+
+    isRoutingRef.current = true;
     setIsRouting(true);
     setFastestSegments(null);
     setFewestTransfersSegments(null);
@@ -489,12 +493,13 @@ export function TripPlanner({
 
     const watchdog = new RoutingQueryWatchdog(8_000, (reason) => {
       setIsRouting(false);
+      isRoutingRef.current = false;
       setRouteError(reason);
     });
     routingWatchdogRef.current = watchdog;
     watchdog.start();
 
-    const depSec = getDepartureSeconds(departureTime);
+    const depSec = computeDepartureSeconds(mode, time);
 
     try {
       const { fastest, fewestTransfers } = await executeDualProfileRouting(
@@ -516,6 +521,13 @@ export function TripPlanner({
       routingWatchdogRef.current?.stop();
       routingWatchdogRef.current = null;
       setIsRouting(false);
+      isRoutingRef.current = false;
+
+      if (pendingRouteRef.current) {
+        const next = pendingRouteRef.current;
+        pendingRouteRef.current = null;
+        handleRoute(next.mode, next.time);
+      }
     }
   };
 
@@ -708,10 +720,7 @@ export function TripPlanner({
                 class={`dep-mode-btn dep-mode-now ${departureMode === 'now' ? 'dep-mode-active' : ''}`}
                 onClick={() => {
                   setDepartureMode('now');
-                  const now = new Date();
-                  const h = String(now.getHours()).padStart(2, '0');
-                  const m = String(now.getMinutes()).padStart(2, '0');
-                  setDepartureTime(`${h}:${m}`);
+                  handleRoute('now');
                 }}
               >
                 <span class="dep-mode-icon">⚡</span>
@@ -738,7 +747,20 @@ export function TripPlanner({
                 type="time"
                 class="trip-time-input"
                 value={departureTime}
-                onInput={(e) => setDepartureTime((e.target as HTMLInputElement).value)}
+                onInput={(e) => {
+                  const val = (e.target as HTMLInputElement).value;
+                  setDepartureTime(val);
+                  if (val) {
+                    handleRoute('depart_at', val);
+                  }
+                }}
+                onChange={(e) => {
+                  const val = (e.target as HTMLInputElement).value;
+                  setDepartureTime(val);
+                  if (val) {
+                    handleRoute('depart_at', val);
+                  }
+                }}
               />
             </div>
           </div>
@@ -766,7 +788,7 @@ export function TripPlanner({
             engineStatus !== 'ready' ||
             isRouting
           }
-          onClick={handleRoute}
+          onClick={() => handleRoute(departureMode, departureTime)}
         >
           {isRouting ? (
             <span class="btn-spinner-content">

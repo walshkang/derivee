@@ -1278,6 +1278,7 @@ try {
           stopTimes,
           roleBadges,
           rawIdsFound,
+          scheduledBadges: Array.from(document.querySelectorAll('.badge-scheduled')).map((el) => el.textContent?.trim()),
         };
       });
 
@@ -1311,6 +1312,9 @@ try {
       }
       if (detailAudit.rawIdsFound) {
         throw new Error('FC-2 regression: raw internal IDs found in leg detail view copy');
+      }
+      if (!detailAudit.scheduledBadges || !detailAudit.scheduledBadges.includes('Scheduled')) {
+        throw new Error(`Expected Scheduled badge on 503 probe degradation, got: ${JSON.stringify(detailAudit.scheduledBadges)}`);
       }
 
       // 4. Test Back button returns to itinerary and restores map overlay
@@ -1350,6 +1354,335 @@ try {
       throw err;
     } finally {
       await legContext.close();
+    }
+  });
+
+  // ==========================================================================
+  // Wave: Commuter departure timing + realtime leg badges
+  // Scenario: Leave now routing + realtime leg badges (flow: trip planning)
+  // ==========================================================================
+  await recordScenario('Leave now routing + realtime leg badges', 'trip planning', async ({ takeScreenshot }) => {
+    console.log('\n[Harness Commuter Departure] --- TESTING LEAVE NOW + REALTIME BADGES ---');
+    const commuterContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    const commuterPage = await commuterContext.newPage();
+
+    try {
+      let realtimeStatus = 200;
+      await commuterPage.route(/\/api\/.*/, (route) => {
+        const url = new URL(route.request().url());
+        const pathname = url.pathname;
+        if (pathname === '/api/cities') {
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ id: 'nyc', name: 'New York City', slug: 'nyc', isInstalled: true }]),
+          });
+        }
+        if (pathname === '/api/me') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'test@example.com' }) });
+        }
+        if (pathname === '/api/basemap') {
+          return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/vnd.pmtiles' }, body: basemapBuffer });
+        }
+        if (pathname === '/api/realtime/arrivals') {
+          if (realtimeStatus === 503) {
+            return route.fulfill({
+              status: 503,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ error: 'kv_not_configured' }),
+            });
+          }
+          const nowSec = Math.floor(Date.now() / 1000);
+          return route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              stop_id: '1288',
+              updated_at: nowSec,
+              arrivals: [
+                {
+                  route_id: 'Q',
+                  direction: 'NORTH',
+                  headsign: '96 St',
+                  predicted_arrival_epoch: nowSec + 240,
+                  is_realtime: true,
+                },
+              ],
+            }),
+          });
+        }
+        return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      });
+
+      await commuterPage.addInitScript(async ({ geojsonText }) => {
+        localStorage.setItem('derivee_pack_nyc', JSON.stringify({
+          isInstalled: true,
+          slug: 'nyc',
+          version: '3',
+          displayName: 'New York City',
+          seasonLabel: 'Summer 2026 Timetable',
+          installedAt: '2026-10-01T00:00:00.000Z',
+          totalBytes: 29684406,
+          files: [
+            { name: 'city_config.json', size: 3401 },
+            { name: 'transit.sqlite', size: 9744384 },
+            { name: 'transit-lines.geojson', size: 407221 },
+            { name: 'ultra_transfers.csr', size: 582906 },
+            { name: 'timetable.bin', size: 7184128 },
+            { name: 'walk_graph.bin', size: 47426176 },
+            { name: 'patterns.json', size: 1000 },
+          ],
+        }));
+
+        const patternsArray = new Array(250).fill(null);
+        patternsArray[217] = { route_id: 'J', headsign: 'Broad St' };
+        patternsArray[190] = { route_id: 'Q', headsign: '96 St' };
+        patternsArray[3] = { route_id: '1', headsign: 'Van Cortlandt Park' };
+
+        if (navigator.storage && typeof navigator.storage.getDirectory === 'function') {
+          const root = await navigator.storage.getDirectory();
+          const nycDir = await root.getDirectoryHandle('nyc', { create: true });
+          const geoHandle = await nycDir.getFileHandle('transit-lines.geojson', { create: true });
+          const geoWritable = await geoHandle.createWritable();
+          await geoWritable.write(geojsonText);
+          await geoWritable.close();
+
+          for (const fname of ['city_config.json', 'transit.sqlite', 'ultra_transfers.csr', 'timetable.bin', 'walk_graph.bin', 'patterns.json']) {
+            const fh = await nycDir.getFileHandle(fname, { create: true });
+            const w = await fh.createWritable();
+            if (fname === 'city_config.json') {
+              await w.write(JSON.stringify({ version: 3, displayName: 'New York City' }));
+            } else if (fname === 'patterns.json') {
+              await w.write(JSON.stringify(patternsArray));
+            } else {
+              await w.write(new Uint8Array([1, 2, 3, 4]));
+            }
+            await w.close();
+          }
+        }
+
+        const MULTIHOP_SEGMENTS = [
+          { board_stop_id: 1246, exit_stop_id: 1247, trip_id: 0, departure_time: 28800, arrival_time: 28802, route_id: 0, transfer_distance_m: 2, is_transfer: false },
+          { board_stop_id: 1247, exit_stop_id: 1250, trip_id: 20615, departure_time: 28920, arrival_time: 29010, route_id: 217, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 1250, exit_stop_id: 1288, trip_id: 0, departure_time: 29010, arrival_time: 29067, route_id: 0, transfer_distance_m: 74, is_transfer: false },
+          { board_stop_id: 1288, exit_stop_id: 444, trip_id: 18522, departure_time: 29130, arrival_time: 29280, route_id: 190, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 444, exit_stop_id: 81, trip_id: 18522, departure_time: 29280, arrival_time: 29400, route_id: 190, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 81, exit_stop_id: 1336, trip_id: 18522, departure_time: 29400, arrival_time: 29520, route_id: 190, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 1336, exit_stop_id: 76, trip_id: 0, departure_time: 29520, arrival_time: 29611, route_id: 0, transfer_distance_m: 118, is_transfer: false },
+          { board_stop_id: 76, exit_stop_id: 67, trip_id: 89, departure_time: 29700, arrival_time: 30030, route_id: 3, transfer_distance_m: 0, is_transfer: false },
+          { board_stop_id: 67, exit_stop_id: 66, trip_id: 0, departure_time: 30030, arrival_time: 30038, route_id: 0, transfer_distance_m: 10, is_transfer: false },
+        ];
+
+        window.__routedQueries = [];
+        const RealWorker = window.Worker;
+        window.Worker = function (url, opts) {
+          if (String(url).includes('routing.worker')) {
+            const handlers = {};
+            return {
+              postMessage(msg) {
+                setTimeout(() => {
+                  if (msg.type === 'INIT') {
+                    handlers.message?.({ data: { type: 'READY', loadTimeMs: 90, patterns: patternsArray } });
+                  } else if (msg.type === 'ROUTE') {
+                    window.__routedQueries.push({
+                      profile: msg.profile,
+                      departure_timestamp: msg.departure_timestamp,
+                      queryId: msg.queryId,
+                    });
+                    const offset = (msg.departure_timestamp || 28800) - 28800;
+                    const shiftedSegments = MULTIHOP_SEGMENTS.map((s) => ({
+                      ...s,
+                      departure_time: s.departure_time + offset,
+                      arrival_time: s.arrival_time + offset,
+                    }));
+                    handlers.message?.({ data: { type: 'RESULT', queryId: msg.queryId, segments: shiftedSegments, profile: msg.profile, flags: msg.flags } });
+                  }
+                }, 30);
+              },
+              set onmessage(fn) { handlers.message = fn; },
+              get onmessage() { return handlers.message; },
+              set onerror(fn) { handlers.error = fn; },
+              addEventListener(t, fn) { handlers[t] = fn; },
+              removeEventListener(t) { delete handlers[t]; },
+              terminate() {},
+            };
+          }
+          return new RealWorker(url, opts);
+        };
+        window.Worker.prototype = RealWorker.prototype;
+      }, { geojsonText: transitLinesGeojsonText });
+
+      await commuterPage.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+      await commuterPage.addStyleTag({ content: '.map-state-overlay { display: none !important; }' });
+      await commuterPage.waitForSelector('.engine-status-ready', { timeout: 30000 });
+
+      await commuterPage.evaluate(() => {
+        document.querySelector('.bottom-sheet').style.height = '90dvh';
+      });
+      await new Promise((r) => setTimeout(r, 400));
+
+      // 1. Quick Route Preset
+      await commuterPage.click('.quick-preset-btn');
+      await new Promise((r) => setTimeout(r, 300));
+
+      // 2. Set mode to "Leave now"
+      console.log('[Harness Commuter Departure] Setting departure mode to "Leave now"...');
+      await commuterPage.click('.dep-mode-now');
+      await commuterPage.waitForFunction(() => {
+        const c = document.querySelector('.itinerary-results-container');
+        return c && c.children.length > 0;
+      }, { timeout: 10000 });
+      await new Promise((r) => setTimeout(r, 600));
+
+      const nowQueries = await commuterPage.evaluate(() => window.__routedQueries);
+      console.log('[Harness Commuter Departure] Leave now queries recorded:', JSON.stringify(nowQueries));
+
+      if (nowQueries.length === 0) {
+        throw new Error('Expected routing queries to be posted on "Leave now" click');
+      }
+
+      const latestNowQuery = nowQueries[nowQueries.length - 1];
+      const now = new Date();
+      const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      const diffFromNow = Math.abs(latestNowQuery.departure_timestamp - currentSeconds);
+
+      console.log(`[Harness Commuter Departure] departure_timestamp=${latestNowQuery.departure_timestamp}, expectedCurrentSec=${currentSeconds}, diffSec=${diffFromNow}`);
+      if (diffFromNow > 120) {
+        throw new Error(`Expected "Leave now" departure time to be within 120s of current time (${currentSeconds}), got ${latestNowQuery.departure_timestamp} (diff ${diffFromNow}s)`);
+      }
+      if (latestNowQuery.departure_timestamp === 28800) {
+        throw new Error('Reproduction: routing query used stale hardcoded 08:00 (28800) instead of current time');
+      }
+
+      await takeScreenshot(commuterPage, 'leave-now-results.png');
+
+      // 3. Toggle "Depart at" -> 10:30 -> assert results shift
+      console.log('[Harness Commuter Departure] Toggling to "Depart at" and changing time to 10:30...');
+      await commuterPage.click('.dep-mode-depart-at');
+      await new Promise((r) => setTimeout(r, 200));
+
+      // Set input time to 10:30
+      await commuterPage.fill('#trip-dep-time', '10:30');
+      await commuterPage.dispatchEvent('#trip-dep-time', 'input');
+      await commuterPage.dispatchEvent('#trip-dep-time', 'change');
+
+      await commuterPage.waitForFunction(() => {
+        const qs = window.__routedQueries || [];
+        return qs.some((q) => q.departure_timestamp === 37800);
+      }, { timeout: 10000 });
+
+      await new Promise((r) => setTimeout(r, 600));
+
+      const departAtAudit = await commuterPage.evaluate(() => {
+        const qs = window.__routedQueries || [];
+        const depart1030Query = qs.find((q) => q.departure_timestamp === 37800);
+        const heroText = document.querySelector('.arrival-time-hero')?.textContent?.trim() || '';
+        const timeRangeText = document.querySelector('.glance-time-range')?.textContent?.trim() || '';
+        return {
+          has1030Query: Boolean(depart1030Query),
+          heroText,
+          timeRangeText,
+        };
+      });
+
+      console.log('[Harness Commuter Departure] Depart at 10:30 audit:', JSON.stringify(departAtAudit));
+      if (!departAtAudit.has1030Query) {
+        throw new Error('Expected routing query with departure_timestamp 37800 (10:30 AM)');
+      }
+      if (!departAtAudit.timeRangeText.includes('10:30')) {
+        throw new Error(`Expected glance time range to reflect 10:30 departure, got: "${departAtAudit.timeRangeText}"`);
+      }
+      await takeScreenshot(commuterPage, 'leave-now-depart-at-1030.png');
+
+      // 4. Tap Q train leg -> Live badge check
+      console.log('[Harness Commuter Departure] Tapping Q train leg to verify Live badge...');
+      const tappedLeg = await commuterPage.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.itinerary-leg-card'));
+        const qCard = cards.find((c) => c.textContent && c.textContent.includes('Canal St') && c.textContent.includes('34 St-Herald Sq'));
+        if (qCard) {
+          qCard.click();
+          return true;
+        }
+        return false;
+      });
+      if (!tappedLeg) throw new Error('Could not find Q train leg card to tap');
+
+      await commuterPage.waitForSelector('.leg-detail-container', { timeout: 5000 });
+      await commuterPage.waitForSelector('.badge-live', { timeout: 5000 });
+      await new Promise((r) => setTimeout(r, 400));
+
+      const liveAudit = await commuterPage.evaluate(() => {
+        const liveBadges = Array.from(document.querySelectorAll('.badge-live')).map((el) => el.textContent?.trim());
+        const liveEtaPill = document.querySelector('.live-eta-pill')?.textContent?.trim() || '';
+        return { liveBadges, liveEtaPill };
+      });
+
+      console.log('[Harness Commuter Departure] Live badge audit:', JSON.stringify(liveAudit));
+      if (liveAudit.liveBadges.length === 0 || !liveAudit.liveBadges.includes('Live')) {
+        throw new Error(`Expected "Live" badge in leg detail, got: ${JSON.stringify(liveAudit.liveBadges)}`);
+      }
+      if (!liveAudit.liveEtaPill.includes('Live in 4 min')) {
+        throw new Error(`Expected live ETA pill "Live in 4 min", got: "${liveAudit.liveEtaPill}"`);
+      }
+      await takeScreenshot(commuterPage, 'leg-detail-live-badge.png');
+
+      // 5. Test 503 fallback degrades to Scheduled without crash
+      console.log('[Harness Commuter Departure] Testing 503 fallback to Scheduled badge...');
+      realtimeStatus = 503;
+
+      // Click back, then tap leg again
+      await commuterPage.click('.leg-detail-back-btn');
+      await commuterPage.waitForSelector('.itinerary-results-container', { timeout: 5000 });
+      await new Promise((r) => setTimeout(r, 400));
+
+      const retapped = await commuterPage.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.itinerary-leg-card'));
+        const qCard = cards.find((c) => c.textContent && c.textContent.includes('Canal St') && c.textContent.includes('34 St-Herald Sq'));
+        if (qCard) {
+          qCard.click();
+          return true;
+        }
+        return false;
+      });
+      if (!retapped) throw new Error('Could not re-tap Q leg card');
+
+      await commuterPage.waitForSelector('.leg-detail-container', { timeout: 5000 });
+      await commuterPage.waitForSelector('.badge-scheduled', { timeout: 5000 });
+      await new Promise((r) => setTimeout(r, 400));
+
+      const scheduledAudit = await commuterPage.evaluate(() => {
+        const scheduledBadges = Array.from(document.querySelectorAll('.badge-scheduled')).map((el) => el.textContent?.trim());
+        const liveBadges = Array.from(document.querySelectorAll('.badge-live'));
+        const hasLiveEta = Boolean(document.querySelector('.live-eta-pill'));
+        return {
+          scheduledBadges,
+          liveBadgesCount: liveBadges.length,
+          hasLiveEta,
+        };
+      });
+
+      console.log('[Harness Commuter Departure] Scheduled fallback audit:', JSON.stringify(scheduledAudit));
+      if (scheduledAudit.scheduledBadges.length === 0 || !scheduledAudit.scheduledBadges.includes('Scheduled')) {
+        throw new Error(`Expected "Scheduled" badge on 503 degradation, got: ${JSON.stringify(scheduledAudit.scheduledBadges)}`);
+      }
+      if (scheduledAudit.liveBadgesCount > 0) {
+        throw new Error('Expected 0 live badges on 503 probe degradation');
+      }
+      if (scheduledAudit.hasLiveEta) {
+        throw new Error('Expected no live ETA pill on 503 degradation');
+      }
+      await takeScreenshot(commuterPage, 'leg-detail-scheduled-503.png');
+
+      console.log('[Harness Commuter Departure] SUCCESS: "Leave now" computed with current time, 10:30 shifted results, Live & Scheduled badges verified on real GTFS-RT shape & 503 fallback!');
+    } catch (err) {
+      await takeScreenshot(commuterPage, 'commuter-departure-failed.png').catch(() => {});
+      throw err;
+    } finally {
+      await commuterContext.close();
     }
   });
 

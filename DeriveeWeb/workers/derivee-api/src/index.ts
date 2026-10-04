@@ -108,7 +108,12 @@ export default {
       if (now - data.updated_at > 120) {
         return jsonResponse({ error: 'stale', stale: true }, 503, origin);
       }
-      return jsonResponse(data, 200, origin, {
+      // Enrich arrivals with minutesAway for easy client consumption
+      const enrichedArrivals = data.arrivals.map((arr) => ({
+        ...arr,
+        minutesAway: Math.max(0, Math.round((arr.predicted_arrival_epoch - now) / 60)),
+      }));
+      return jsonResponse({ ...data, arrivals: enrichedArrivals }, 200, origin, {
         'Cache-Control': 'public, max-age=15, stale-while-revalidate=30',
       });
     }

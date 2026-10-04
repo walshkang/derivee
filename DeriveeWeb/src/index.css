@@ -3610,6 +3610,38 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   letter-spacing: 0.02em;
 }
 
+.time-source-badge,
+.stop-time-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.badge-live {
+  background-color: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  font-weight: 600;
+}
+
+.badge-scheduled {
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+}
+
+.ladder-stop-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
 /* Stop Ladder */
 .leg-stops-ladder {
   display: flex;
@@ -3790,6 +3822,18 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
 [data-theme="light"] .leg-detail-retry-btn {
   background-color: var(--bg-secondary);
   border-color: var(--border-subtle);
+}
+
+[data-theme="light"] .badge-live {
+  background-color: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #059669;
+}
+
+[data-theme="light"] .badge-scheduled {
+  background-color: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: var(--text-secondary);
 }
 
 

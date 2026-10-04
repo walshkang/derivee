@@ -15,7 +15,9 @@ import { useState, useEffect } from 'preact/hooks';
 import type { RouteItem } from '../types/routing.ts';
 import {
   type TransitLegDisplay,
+  type LiveArrivalMatch,
   formatHeadsign,
+  matchLiveArrival,
 } from '../utils/itineraryDisplay.ts';
 import { formatClockTime } from '../utils/routeComparison.ts';
 import { getRouteBadge } from '../utils/routeBadge.ts';
@@ -29,11 +31,6 @@ export interface LegDetailViewProps {
   onRetry?: () => void;
 }
 
-interface LiveArrivalInfo {
-  minutesAway: number;
-  isApproaching?: boolean;
-}
-
 export function LegDetailView({
   leg,
   routesMap,
@@ -42,7 +39,7 @@ export function LegDetailView({
   error = null,
   onRetry,
 }: LegDetailViewProps) {
-  const [liveArrival, setLiveArrival] = useState<LiveArrivalInfo | null>(null);
+  const [liveArrival, setLiveArrival] = useState<LiveArrivalMatch | null>(null);
   const routeBadge = getRouteBadge(leg.routeId, routesMap);
   const routeColor = routeBadge?.backgroundColor || '#38bdf8';
 
@@ -64,27 +61,31 @@ export function LegDetailView({
         clearTimeout(timeoutId);
 
         if (!res.ok) {
-          // 503 kv_not_configured or other status -> degrade cleanly to scheduled times
+          console.log(`[Realtime Probe] stop_id=${leg.boardStopId} route=${routeBadge?.label}: status=${res.status} (degraded to scheduled)`);
           return;
         }
 
         const data = await res.json();
-        if (isCancelled || !data || !Array.isArray(data.arrivals)) return;
+        if (isCancelled) return;
 
-        const targetRoute = routeBadge?.label?.toLowerCase();
-        const match = data.arrivals.find((arr: any) => {
-          if (!targetRoute) return false;
-          return String(arr.route_id || '').toLowerCase() === targetRoute;
+        if (!data || !Array.isArray(data.arrivals)) {
+          console.log(`[Realtime Probe] stop_id=${leg.boardStopId} unexpected data shape:`, data);
+          return;
+        }
+
+        const match = matchLiveArrival(data.arrivals, routeBadge?.label);
+        console.log(`[Realtime Probe] stop_id=${leg.boardStopId} route=${routeBadge?.label}: status=${res.status}`, {
+          status: res.status,
+          arrivalsCount: data.arrivals.length,
+          matched: Boolean(match),
+          minutesAway: match?.minutesAway,
         });
 
-        if (match && typeof match.minutesAway === 'number') {
-          setLiveArrival({
-            minutesAway: match.minutesAway,
-            isApproaching: Boolean(match.isApproaching),
-          });
+        if (match) {
+          setLiveArrival(match);
         }
-      } catch {
-        // Network offline or timeout -> clean fallback to scheduled times
+      } catch (err: any) {
+        console.log(`[Realtime Probe] stop_id=${leg.boardStopId} route=${routeBadge?.label} failed (degraded to scheduled):`, err?.message || err);
       }
     };
 
@@ -209,6 +210,10 @@ export function LegDetailView({
           <span class="glance-time-range">
             {formatClockTime(leg.departureTime)} – {formatClockTime(leg.arrivalTime)}
           </span>
+          <span class="glance-dot">•</span>
+          <span class={`time-source-badge ${liveArrival ? 'badge-live' : 'badge-scheduled'}`}>
+            {liveArrival ? 'Live' : 'Scheduled'}
+          </span>
           {hasStops && (
             <>
               <span class="glance-dot">•</span>
@@ -289,9 +294,14 @@ export function LegDetailView({
                     {isFirst && <span class="ladder-role-tag leg-stop-role-badge tag-board">Board</span>}
                     {isLast && <span class="ladder-role-tag leg-stop-role-badge tag-alight">Alight</span>}
                   </div>
-                  <span class="ladder-stop-time leg-stop-time">
-                    {formatClockTime(stop.time)}
-                  </span>
+                  <div class="ladder-stop-time-row">
+                    <span class="ladder-stop-time leg-stop-time">
+                      {formatClockTime(stop.time)}
+                    </span>
+                    <span class={`stop-time-source-badge ${isFirst && liveArrival ? 'badge-live' : 'badge-scheduled'}`}>
+                      {isFirst && liveArrival ? 'Live' : 'Scheduled'}
+                    </span>
+                  </div>
                 </div>
               </div>
             );
