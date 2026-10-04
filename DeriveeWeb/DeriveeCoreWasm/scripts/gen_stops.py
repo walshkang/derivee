@@ -45,7 +45,8 @@ def main():
             "id": idx,
             "name": name,
             "lat": round(lat, 6),
-            "lon": round(lon, 6)
+            "lon": round(lon, 6),
+            "gtfs_id": stop_id
         })
 
     conn.close()

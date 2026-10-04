@@ -3,6 +3,7 @@ export interface StopItem {
   name: string;
   lat: number;
   lon: number;
+  gtfs_id?: string;
 }
 
 export interface RouteItem {

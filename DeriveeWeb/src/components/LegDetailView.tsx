@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect } from 'preact/hooks';
-import type { RouteItem } from '../types/routing.ts';
+import type { RouteItem, StopItem } from '../types/routing.ts';
 import {
   type TransitLegDisplay,
   type LiveArrivalMatch,
@@ -25,6 +25,7 @@ import { getRouteBadge } from '../utils/routeBadge.ts';
 export interface LegDetailViewProps {
   leg: TransitLegDisplay;
   routesMap?: Map<string, RouteItem>;
+  stopsMap?: Map<number, StopItem>;
   onBack: () => void;
   isLoading?: boolean;
   error?: string | null;
@@ -34,6 +35,7 @@ export interface LegDetailViewProps {
 export function LegDetailView({
   leg,
   routesMap,
+  stopsMap,
   onBack,
   isLoading = false,
   error = null,
@@ -48,12 +50,15 @@ export function LegDetailView({
   useEffect(() => {
     let isCancelled = false;
 
-    if (!leg.boardStopId) return;
+    if (leg.boardStopId == null) return;
 
     const probeLiveTimes = async () => {
+      const gtfsId = stopsMap?.get(leg.boardStopId)?.gtfs_id;
+      if (!gtfsId) return;
+
       const routeParamVal = routeBadge?.label || (leg.routeId != null ? String(leg.routeId).trim() : '');
       const routeQuery = routeParamVal ? `&route_id=${encodeURIComponent(routeParamVal)}` : '';
-      const endpoint = `/api/realtime/arrivals?stop_id=${leg.boardStopId}${routeQuery}`;
+      const endpoint = `/api/realtime/arrivals?stop_id=${gtfsId}${routeQuery}`;
 
       try {
         const controller = new AbortController();

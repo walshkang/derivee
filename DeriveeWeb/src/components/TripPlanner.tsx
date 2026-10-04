@@ -815,6 +815,7 @@ export function TripPlanner({
         <LegDetailView
           leg={selectedLeg}
           routesMap={routesMap}
+          stopsMap={stopsMap}
           onBack={handleBackFromLegDetail}
         />
       ) : (
