@@ -129,6 +129,8 @@ New required fields for headless tracking:
 - `kill_reason`: structured reason if status is `"killed"`
 - `attempts_used`: code-modifying attempts consumed
 
+Use `.factory/bin/emit-receipt.py` to emit receipts, or pass `--validate-only` to verify an existing receipt.
+
 ---
 
 ## 7. What Good Headless Work Looks Like

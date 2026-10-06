@@ -1,0 +1,912 @@
+diff --git a/.factory/HEADLESS.md b/.factory/HEADLESS.md
+index 1662a9d..01d6bec 100644
+--- a/.factory/HEADLESS.md
++++ b/.factory/HEADLESS.md
+@@ -129,6 +129,8 @@ New required fields for headless tracking:
+ - `kill_reason`: structured reason if status is `"killed"`
+ - `attempts_used`: code-modifying attempts consumed
+ 
++Use `.factory/bin/emit-receipt.py` to emit receipts, or pass `--validate-only` to verify an existing receipt.
++
+ ---
+ 
+ ## 7. What Good Headless Work Looks Like
+diff --git a/.factory/bin/emit-receipt.py b/.factory/bin/emit-receipt.py
+new file mode 100755
+index 0000000..a95dd63
+--- /dev/null
++++ b/.factory/bin/emit-receipt.py
+@@ -0,0 +1,357 @@
++#!/usr/bin/env python3
++"""CLI for emitting and validating .factory/receipt.json.
++
++Conforms to .factory/schemas/execution_receipt.schema.json.
++"""
++
++import argparse
++import json
++import sys
++from pathlib import Path
++from typing import Any
++
++import jsonschema
++
++
++VALID_STATUSES = {"complete", "failed", "killed"}
++VALID_ENVIRONMENTS = {"local-mac", "headless-vm"}
++VALID_BRANCH_POLICIES = {"wave-branch", "patch-only", "direct-main"}
++VALID_TEST_VERDICTS = {"PASS", "FAIL", "NOT_RUN"}
++VALID_KILL_REASONS = {
++    "budget-exceeded",
++    "timeout",
++    "scope-violation",
++    "attempt-limit",
++    "environment-ceiling",
++    "manual",
++}
++
++
++def get_repo_root() -> Path:
++    """Derive repo root from script location: <repo>/.factory/bin/emit-receipt.py"""
++    return Path(__file__).resolve().parent.parent.parent
++
++
++def get_default_schema_path() -> Path:
++    """Resolve schema relative to the script location / repo root."""
++    return get_repo_root() / ".factory" / "schemas" / "execution_receipt.schema.json"
++
++
++def get_default_receipt_path() -> Path:
++    """Resolve default receipt path relative to repo root."""
++    return get_repo_root() / ".factory" / "receipt.json"
++
++
++def parse_nullable_str(val: str | None) -> str | None:
++    """Normalize CLI string inputs where 'null', 'none', or empty string mean null."""
++    if val is None:
++        return None
++    stripped = val.strip()
++    if stripped.lower() in ("null", "none", ""):
++        return None
++    return stripped
++
++
++def validate_receipt_dict(data: dict[str, Any], schema_path: Path | None = None) -> list[str]:
++    """Validate receipt dictionary against schema and strict business rules.
++
++    Returns a list of error strings (empty if valid).
++    """
++    if schema_path is None:
++        schema_path = get_default_schema_path()
++
++    if not schema_path.exists():
++        return [f"Schema file not found at {schema_path}"]
++
++    try:
++        with open(schema_path, "r", encoding="utf-8") as f:
++            schema = json.load(f)
++    except Exception as exc:
++        return [f"Failed to read schema from {schema_path}: {exc}"]
++
++    errors: list[str] = []
++
++    # Stricter checks: status and kill_reason
++    status = data.get("status")
++    kill_reason = data.get("kill_reason")
++
++    if status not in VALID_STATUSES:
++        errors.append(
++            f"Validation error: invalid status '{status}'. Must be one of: {', '.join(sorted(VALID_STATUSES))}"
++        )
++
++    if status == "killed":
++        if not kill_reason:
++            errors.append(
++                "Validation error: status is 'killed' but kill_reason is null or missing. A killed wave must provide a kill_reason."
++            )
++        elif kill_reason not in VALID_KILL_REASONS:
++            errors.append(
++                f"Validation error: invalid kill_reason '{kill_reason}'. Must be one of: {', '.join(sorted(VALID_KILL_REASONS))}"
++            )
++    elif status in ("complete", "failed"):
++        if kill_reason is not None:
++            errors.append(
++                f"Validation error: kill_reason must be null when status is not 'killed' (status is '{status}', got kill_reason '{kill_reason}')"
++            )
++
++    # Stricter checks: negative token counts
++    if "token_burn" in data:
++        tb = data["token_burn"]
++        if isinstance(tb, dict):
++            in_tokens = tb.get("input")
++            out_tokens = tb.get("output")
++            if isinstance(in_tokens, (int, float)) and in_tokens < 0:
++                errors.append(
++                    f"Validation error: negative token count rejected: token_burn.input ({in_tokens}) cannot be negative"
++                )
++            if isinstance(out_tokens, (int, float)) and out_tokens < 0:
++                errors.append(
++                    f"Validation error: negative token count rejected: token_burn.output ({out_tokens}) cannot be negative"
++                )
++
++    # Stricter checks: diff_stat counts
++    if "diff_stat" in data:
++        ds = data["diff_stat"]
++        if isinstance(ds, dict):
++            for k in ("files_changed", "insertions", "deletions"):
++                v = ds.get(k)
++                if isinstance(v, (int, float)) and v < 0:
++                    errors.append(
++                        f"Validation error: negative diff_stat count rejected: {k} ({v}) cannot be negative"
++                    )
++
++    # Stricter checks: attempts_used
++    attempts_used = data.get("attempts_used")
++    if isinstance(attempts_used, (int, float)) and attempts_used < 0:
++        errors.append(
++            f"Validation error: attempts_used ({attempts_used}) cannot be negative"
++        )
++
++    # JSON Schema validation
++    try:
++        validator = jsonschema.Draft7Validator(schema)
++        for err in validator.iter_errors(data):
++            path_str = ".".join(str(p) for p in err.path)
++            # Avoid duplicate messages if custom check already surfaced it cleanly
++            if path_str == "status" and any("invalid status" in e for e in errors):
++                continue
++            if path_str in ("token_burn.input", "token_burn.output") and any(
++                "negative token count" in e for e in errors
++            ):
++                continue
++            if path_str in (
++                "diff_stat.files_changed",
++                "diff_stat.insertions",
++                "diff_stat.deletions",
++            ) and any("diff_stat" in e for e in errors):
++                continue
++            if path_str == "attempts_used" and any("attempts_used" in e for e in errors):
++                continue
++            loc = f" at '{path_str}'" if path_str else ""
++            errors.append(f"Schema validation error{loc}: {err.message}")
++    except Exception as exc:
++        errors.append(f"JSON schema validator failure: {exc}")
++
++    return errors
++
++
++def build_parser() -> argparse.ArgumentParser:
++    parser = argparse.ArgumentParser(
++        description="Emit or validate .factory/receipt.json conforming to execution_receipt.schema.json."
++    )
++    parser.add_argument(
++        "--receipt",
++        type=str,
++        default=None,
++        help="Path to receipt JSON file (default: .factory/receipt.json relative to repo root).",
++    )
++    parser.add_argument(
++        "--validate-only",
++        action="store_true",
++        help="Validate existing receipt file against schema and strict rules without writing.",
++    )
++    parser.add_argument(
++        "--schema",
++        type=str,
++        default=None,
++        help="Path to custom schema file (default: derived from script location).",
++    )
++
++    # Receipt fields
++    parser.add_argument("--wave-id", "--wave_id", type=str, default=None, dest="wave_id", help="Wave identifier.")
++    parser.add_argument("--status", type=str, default=None, help="Wave status: complete, failed, killed.")
++    parser.add_argument("--environment", type=str, default=None, help="Execution environment: local-mac, headless-vm.")
++    parser.add_argument(
++        "--branch-policy",
++        "--branch_policy",
++        type=str,
++        default=None,
++        dest="branch_policy",
++        help="Delivery policy: wave-branch, patch-only, direct-main.",
++    )
++    parser.add_argument("--branch", type=str, default=None, help="Git branch name (or null).")
++    parser.add_argument("--git-commit", "--git_commit", type=str, default=None, dest="git_commit", help="Git commit SHA (or null).")
++    parser.add_argument(
++        "--diff-stat",
++        "--diff_stat",
++        nargs=3,
++        type=int,
++        metavar=("FILES", "INS", "DEL"),
++        default=None,
++        dest="diff_stat",
++        help="Diff stat as 3 integers: files_changed insertions deletions.",
++    )
++    parser.add_argument("--files-changed", "--files_changed", type=int, default=None, dest="files_changed", help="Files changed count.")
++    parser.add_argument("--insertions", type=int, default=None, help="Insertions count.")
++    parser.add_argument("--deletions", type=int, default=None, help="Deletions count.")
++    parser.add_argument("--patch-file", "--patch_file", type=str, default=None, dest="patch_file", help="Relative path to .patch file (or null).")
++    parser.add_argument("--test-verdict", "--test_verdict", type=str, default=None, dest="test_verdict", help="Test verdict: PASS, FAIL, NOT_RUN.")
++    parser.add_argument(
++        "--token-burn",
++        "--token_burn",
++        nargs=2,
++        type=int,
++        metavar=("INPUT", "OUTPUT"),
++        default=None,
++        dest="token_burn",
++        help="Token burn as 2 integers: input output.",
++    )
++    parser.add_argument("--token-input", "--tokens-in", "--token_input", type=int, default=None, dest="token_input", help="Input tokens.")
++    parser.add_argument("--token-output", "--tokens-out", "--token_output", type=int, default=None, dest="token_output", help="Output tokens.")
++    parser.add_argument("--blocker-reason", "--blocker_reason", type=str, default=None, dest="blocker_reason", help="Blocker reason (or null).")
++    parser.add_argument("--attempts-used", "--attempts_used", type=int, default=1, dest="attempts_used", help="Attempts consumed (default: 1).")
++    parser.add_argument("--kill-reason", "--kill_reason", type=str, default=None, dest="kill_reason", help="Kill reason if killed (or null).")
++    parser.add_argument(
++        "--discoveries",
++        type=str,
++        default=None,
++        help="JSON string or file path containing discoveries array (max 5 items).",
++    )
++    parser.add_argument(
++        "--schema-ref",
++        "--schema_ref",
++        type=str,
++        default="./schemas/execution_receipt.schema.json",
++        dest="schema_ref",
++        help="Value for $schema field in the emitted receipt.",
++    )
++    return parser
++
++
++def run(argv: list[str] | None = None) -> int:
++    parser = build_parser()
++    args = parser.parse_args(argv)
++
++    schema_path = Path(args.schema) if args.schema else get_default_schema_path()
++    receipt_path = Path(args.receipt) if args.receipt else get_default_receipt_path()
++
++    if args.validate_only:
++        if not receipt_path.exists():
++            sys.stderr.write(f"Validation error: receipt file not found: {receipt_path}\n")
++            return 1
++        try:
++            with open(receipt_path, "r", encoding="utf-8") as f:
++                data = json.load(f)
++        except Exception as exc:
++            sys.stderr.write(f"Validation error: failed to parse JSON in {receipt_path}: {exc}\n")
++            return 1
++
++        errors = validate_receipt_dict(data, schema_path=schema_path)
++        if errors:
++            sys.stderr.write(f"Validation failed for {receipt_path}:\n")
++            for err in errors:
++                sys.stderr.write(f"  - {err}\n")
++            return 1
++
++        print(f"Receipt is valid: {receipt_path}")
++        return 0
++
++    # Emission mode
++    missing = []
++    for req in ("wave_id", "status", "environment", "branch_policy", "test_verdict"):
++        if getattr(args, req) is None:
++            missing.append(f"--{req.replace('_', '-')}")
++    if missing:
++        sys.stderr.write(f"Validation error: missing required arguments: {', '.join(missing)}\n")
++        return 1
++
++    # Resolve diff_stat
++    if args.diff_stat is not None:
++        files_changed, insertions, deletions = args.diff_stat
++    else:
++        files_changed = args.files_changed if args.files_changed is not None else 0
++        insertions = args.insertions if args.insertions is not None else 0
++        deletions = args.deletions if args.deletions is not None else 0
++
++    # Resolve token_burn
++    if args.token_burn is not None:
++        token_in, token_out = args.token_burn
++    else:
++        token_in = args.token_input if args.token_input is not None else 0
++        token_out = args.token_output if args.token_output is not None else 0
++
++    # Resolve discoveries
++    discoveries = None
++    if args.discoveries is not None:
++        raw = args.discoveries.strip()
++        disc_path = Path(raw)
++        if disc_path.is_file():
++            try:
++                with open(disc_path, "r", encoding="utf-8") as f:
++                    discoveries = json.load(f)
++            except Exception as exc:
++                sys.stderr.write(f"Validation error: failed to parse discoveries file {disc_path}: {exc}\n")
++                return 1
++        else:
++            try:
++                discoveries = json.loads(raw)
++            except Exception as exc:
++                sys.stderr.write(f"Validation error: failed to parse discoveries JSON string: {exc}\n")
++                return 1
++
++    receipt: dict[str, Any] = {
++        "$schema": args.schema_ref,
++        "wave_id": args.wave_id,
++        "status": args.status,
++        "environment": args.environment,
++        "branch": parse_nullable_str(args.branch),
++        "branch_policy": args.branch_policy,
++        "git_commit": parse_nullable_str(args.git_commit),
++        "diff_stat": {
++            "files_changed": files_changed,
++            "insertions": insertions,
++            "deletions": deletions,
++        },
++        "patch_file": parse_nullable_str(args.patch_file),
++        "test_verdict": args.test_verdict,
++        "token_burn": {
++            "input": token_in,
++            "output": token_out,
++        },
++        "blocker_reason": parse_nullable_str(args.blocker_reason),
++        "kill_reason": parse_nullable_str(args.kill_reason),
++        "attempts_used": args.attempts_used,
++    }
++
++    if discoveries is not None:
++        receipt["discoveries"] = discoveries
++
++    errors = validate_receipt_dict(receipt, schema_path=schema_path)
++    if errors:
++        sys.stderr.write("Validation failed for receipt:\n")
++        for err in errors:
++            sys.stderr.write(f"  - {err}\n")
++        return 1
++
++    receipt_path.parent.mkdir(parents=True, exist_ok=True)
++    with open(receipt_path, "w", encoding="utf-8") as f:
++        json.dump(receipt, f, indent=2)
++        f.write("\n")
++
++    print(f"Receipt written to {receipt_path}")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(run())
+diff --git a/.factory/tests/test_emit_receipt.py b/.factory/tests/test_emit_receipt.py
+new file mode 100644
+index 0000000..a4e1e10
+--- /dev/null
++++ b/.factory/tests/test_emit_receipt.py
+@@ -0,0 +1,530 @@
++#!/usr/bin/env python3
++"""Tests for .factory/bin/emit-receipt.py.
++
++Uses stdlib unittest (no pytest).
++Covers:
++- valid emission for each of complete/failed/killed
++- rejection of bad status enum
++- rejection of killed-with-null-kill_reason
++- rejection of negative token counts
++- --validate-only accepting valid receipt and rejecting deliberately broken receipts
++"""
++
++import json
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++
++REPO_ROOT = Path(__file__).resolve().parent.parent.parent
++EMIT_RECEIPT_BIN = REPO_ROOT / ".factory" / "bin" / "emit-receipt.py"
++SCHEMA_PATH = REPO_ROOT / ".factory" / "schemas" / "execution_receipt.schema.json"
++
++
++class TestEmitReceiptCLI(unittest.TestCase):
++    def setUp(self) -> None:
++        self.temp_dir = tempfile.TemporaryDirectory()
++        self.work_dir = Path(self.temp_dir.name)
++
++    def tearDown(self) -> None:
++        self.temp_dir.cleanup()
++
++    def run_cli(
++        self,
++        args: list[str],
++        cwd: Path | None = None,
++    ) -> subprocess.CompletedProcess[str]:
++        cmd = [sys.executable, str(EMIT_RECEIPT_BIN)] + args
++        return subprocess.run(
++            cmd,
++            cwd=str(cwd or REPO_ROOT),
++            capture_output=True,
++            text=True,
++            check=False,
++        )
++
++    def test_emit_valid_complete(self) -> None:
++        """Valid emission with status=complete produces a valid receipt."""
++        receipt_file = self.work_dir / "receipt_complete.json"
++        res = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "test-complete-wave",
++                "--status",
++                "complete",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--branch",
++                "wave/test-complete",
++                "--git-commit",
++                "0123456789abcdef",
++                "--diff-stat",
++                "2",
++                "15",
++                "3",
++                "--patch-file",
++                ".factory/diffs/test.patch",
++                "--test-verdict",
++                "PASS",
++                "--token-burn",
++                "12000",
++                "850",
++                "--attempts-used",
++                "1",
++            ]
++        )
++        self.assertEqual(res.returncode, 0, f"CLI failed: {res.stderr}")
++        self.assertTrue(receipt_file.exists())
++
++        with open(receipt_file, "r", encoding="utf-8") as f:
++            data = json.load(f)
++
++        self.assertEqual(data["status"], "complete")
++        self.assertEqual(data["wave_id"], "test-complete-wave")
++        self.assertEqual(data["diff_stat"], {"files_changed": 2, "insertions": 15, "deletions": 3})
++        self.assertEqual(data["token_burn"], {"input": 12000, "output": 850})
++        self.assertIsNone(data["blocker_reason"])
++        self.assertIsNone(data["kill_reason"])
++
++        # Also verify with --validate-only
++        v_res = self.run_cli(["--validate-only", "--receipt", str(receipt_file)])
++        self.assertEqual(v_res.returncode, 0, f"Validate-only failed: {v_res.stderr}")
++
++    def test_emit_valid_failed(self) -> None:
++        """Valid emission with status=failed records blocker_reason."""
++        receipt_file = self.work_dir / "receipt_failed.json"
++        res = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "test-failed-wave",
++                "--status",
++                "failed",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--branch",
++                "wave/test-failed",
++                "--git-commit",
++                "abcdef0123456789",
++                "--files-changed",
++                "1",
++                "--insertions",
++                "5",
++                "--deletions",
++                "0",
++                "--patch-file",
++                ".factory/diffs/fail.patch",
++                "--test-verdict",
++                "FAIL",
++                "--token-input",
++                "30000",
++                "--token-output",
++                "1200",
++                "--blocker_reason",
++                "Integration test suite timed out waiting for backend",
++                "--attempts-used",
++                "1",
++            ]
++        )
++        self.assertEqual(res.returncode, 0, f"CLI failed: {res.stderr}")
++        self.assertTrue(receipt_file.exists())
++
++        with open(receipt_file, "r", encoding="utf-8") as f:
++            data = json.load(f)
++
++        self.assertEqual(data["status"], "failed")
++        self.assertEqual(data["test_verdict"], "FAIL")
++        self.assertIn("timed out", data["blocker_reason"])
++        self.assertIsNone(data["kill_reason"])
++
++        v_res = self.run_cli(["--validate-only", "--receipt", str(receipt_file)])
++        self.assertEqual(v_res.returncode, 0, f"Validate-only failed: {v_res.stderr}")
++
++    def test_emit_valid_killed(self) -> None:
++        """Valid emission with status=killed requires and stores a structured kill_reason."""
++        receipt_file = self.work_dir / "receipt_killed.json"
++        res = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "test-killed-wave",
++                "--status",
++                "killed",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--branch",
++                "wave/test-killed",
++                "--git-commit",
++                "none",
++                "--files-changed",
++                "0",
++                "--insertions",
++                "0",
++                "--deletions",
++                "0",
++                "--patch-file",
++                "null",
++                "--test-verdict",
++                "NOT_RUN",
++                "--token-burn",
++                "405000",
++                "1200",
++                "--kill-reason",
++                "budget-exceeded",
++                "--attempts-used",
++                "1",
++            ]
++        )
++        self.assertEqual(res.returncode, 0, f"CLI failed: {res.stderr}")
++        self.assertTrue(receipt_file.exists())
++
++        with open(receipt_file, "r", encoding="utf-8") as f:
++            data = json.load(f)
++
++        self.assertEqual(data["status"], "killed")
++        self.assertEqual(data["kill_reason"], "budget-exceeded")
++        self.assertIsNone(data["git_commit"])
++        self.assertIsNone(data["patch_file"])
++
++        v_res = self.run_cli(["--validate-only", "--receipt", str(receipt_file)])
++        self.assertEqual(v_res.returncode, 0, f"Validate-only failed: {v_res.stderr}")
++
++    def test_rejection_bad_status_enum(self) -> None:
++        """Rejects bad status enum with non-zero exit code and named error."""
++        receipt_file = self.work_dir / "bad_status.json"
++        # Negative test: invalid status
++        res = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "bad-status-wave",
++                "--status",
++                "in-progress",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--test-verdict",
++                "PASS",
++            ]
++        )
++        self.assertNotEqual(res.returncode, 0)
++        self.assertIn("invalid status", res.stderr)
++        self.assertFalse(receipt_file.exists())
++
++        # Positive counterpart: changing status to complete succeeds
++        res_ok = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "bad-status-wave",
++                "--status",
++                "complete",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--test-verdict",
++                "PASS",
++            ]
++        )
++        self.assertEqual(res_ok.returncode, 0)
++        self.assertTrue(receipt_file.exists())
++
++    def test_rejection_killed_with_null_kill_reason(self) -> None:
++        """Rejects status=killed when kill_reason is null or omitted."""
++        receipt_file = self.work_dir / "killed_no_reason.json"
++        # Negative test 1: kill-reason omitted
++        res1 = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "killed-wave",
++                "--status",
++                "killed",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--test-verdict",
++                "NOT_RUN",
++            ]
++        )
++        self.assertNotEqual(res1.returncode, 0)
++        self.assertIn("kill_reason is null or missing", res1.stderr)
++        self.assertFalse(receipt_file.exists())
++
++        # Negative test 2: kill-reason explicit null
++        res2 = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "killed-wave",
++                "--status",
++                "killed",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--test-verdict",
++                "NOT_RUN",
++                "--kill-reason",
++                "null",
++            ]
++        )
++        self.assertNotEqual(res2.returncode, 0)
++        self.assertIn("kill_reason is null or missing", res2.stderr)
++        self.assertFalse(receipt_file.exists())
++
++        # Positive counterpart: providing kill-reason succeeds
++        res_ok = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "killed-wave",
++                "--status",
++                "killed",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--test-verdict",
++                "NOT_RUN",
++                "--kill-reason",
++                "timeout",
++            ]
++        )
++        self.assertEqual(res_ok.returncode, 0)
++        self.assertTrue(receipt_file.exists())
++
++    def test_rejection_negative_token_counts(self) -> None:
++        """Rejects negative token counts with non-zero exit and named error."""
++        receipt_file = self.work_dir / "neg_tokens.json"
++
++        # Negative test 1: negative token input
++        res1 = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "neg-tokens-wave",
++                "--status",
++                "complete",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--test-verdict",
++                "PASS",
++                "--token-input",
++                "-100",
++                "--token-output",
++                "50",
++            ]
++        )
++        self.assertNotEqual(res1.returncode, 0)
++        self.assertIn("negative token count rejected", res1.stderr)
++        self.assertFalse(receipt_file.exists())
++
++        # Negative test 2: negative token burn output via --token-burn
++        res2 = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "neg-tokens-wave",
++                "--status",
++                "complete",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--test-verdict",
++                "PASS",
++                "--token-burn",
++                "1000",
++                "-25",
++            ]
++        )
++        self.assertNotEqual(res2.returncode, 0)
++        self.assertIn("negative token count rejected", res2.stderr)
++        self.assertFalse(receipt_file.exists())
++
++        # Positive counterpart: non-negative token counts succeed
++        res_ok = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "neg-tokens-wave",
++                "--status",
++                "complete",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--test-verdict",
++                "PASS",
++                "--token-burn",
++                "1000",
++                "25",
++            ]
++        )
++        self.assertEqual(res_ok.returncode, 0)
++        self.assertTrue(receipt_file.exists())
++
++    def test_rejection_kill_reason_when_not_killed(self) -> None:
++        """Rejects non-null kill_reason when status is complete or failed."""
++        receipt_file = self.work_dir / "invalid_kill_reason.json"
++        res = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "bad-kill-wave",
++                "--status",
++                "complete",
++                "--environment",
++                "headless-vm",
++                "--branch-policy",
++                "wave-branch",
++                "--test-verdict",
++                "PASS",
++                "--kill-reason",
++                "budget-exceeded",
++            ]
++        )
++        self.assertNotEqual(res.returncode, 0)
++        self.assertIn("kill_reason must be null when status is not 'killed'", res.stderr)
++        self.assertFalse(receipt_file.exists())
++
++    def test_validate_only_accepts_valid_receipt(self) -> None:
++        """--validate-only accepts an existing valid receipt."""
++        # Default receipt in repo
++        res = self.run_cli(["--validate-only", "--receipt", ".factory/receipt.json"])
++        self.assertEqual(res.returncode, 0, f"Failed to validate existing receipt: {res.stderr}")
++        self.assertIn("Receipt is valid", res.stdout)
++
++    def test_validate_only_rejects_broken_receipts(self) -> None:
++        """--validate-only rejects various deliberately broken receipt structures."""
++        # Broken case 1: missing required field (wave_id)
++        broken_1 = self.work_dir / "missing_wave_id.json"
++        with open(broken_1, "w", encoding="utf-8") as f:
++            json.dump(
++                {
++                    "$schema": "./schemas/execution_receipt.schema.json",
++                    "status": "complete",
++                    "environment": "headless-vm",
++                    "branch_policy": "wave-branch",
++                    "git_commit": "abc",
++                    "diff_stat": {"files_changed": 1, "insertions": 1, "deletions": 0},
++                    "patch_file": None,
++                    "test_verdict": "PASS",
++                    "blocker_reason": None,
++                    "attempts_used": 1,
++                },
++                f,
++            )
++        res1 = self.run_cli(["--validate-only", "--receipt", str(broken_1)])
++        self.assertNotEqual(res1.returncode, 0)
++        self.assertIn("required property", res1.stderr)
++
++        # Broken case 2: killed status with null kill_reason
++        broken_2 = self.work_dir / "killed_null_reason.json"
++        with open(broken_2, "w", encoding="utf-8") as f:
++            json.dump(
++                {
++                    "$schema": "./schemas/execution_receipt.schema.json",
++                    "wave_id": "test-killed-null",
++                    "status": "killed",
++                    "environment": "headless-vm",
++                    "branch_policy": "wave-branch",
++                    "git_commit": None,
++                    "diff_stat": {"files_changed": 0, "insertions": 0, "deletions": 0},
++                    "patch_file": None,
++                    "test_verdict": "NOT_RUN",
++                    "blocker_reason": None,
++                    "kill_reason": None,
++                    "attempts_used": 1,
++                },
++                f,
++            )
++        res2 = self.run_cli(["--validate-only", "--receipt", str(broken_2)])
++        self.assertNotEqual(res2.returncode, 0)
++        self.assertIn("kill_reason is null or missing", res2.stderr)
++
++        # Broken case 3: negative token counts in receipt file
++        broken_3 = self.work_dir / "negative_tokens.json"
++        with open(broken_3, "w", encoding="utf-8") as f:
++            json.dump(
++                {
++                    "$schema": "./schemas/execution_receipt.schema.json",
++                    "wave_id": "test-neg-tokens",
++                    "status": "complete",
++                    "environment": "headless-vm",
++                    "branch_policy": "wave-branch",
++                    "git_commit": "abc",
++                    "diff_stat": {"files_changed": 1, "insertions": 1, "deletions": 0},
++                    "patch_file": None,
++                    "test_verdict": "PASS",
++                    "token_burn": {"input": -50, "output": 10},
++                    "blocker_reason": None,
++                    "attempts_used": 1,
++                },
++                f,
++            )
++        res3 = self.run_cli(["--validate-only", "--receipt", str(broken_3)])
++        self.assertNotEqual(res3.returncode, 0)
++        self.assertIn("negative token count rejected", res3.stderr)
++
++        # Broken case 4: non-existent receipt file
++        res4 = self.run_cli(["--validate-only", "--receipt", str(self.work_dir / "does_not_exist.json")])
++        self.assertNotEqual(res4.returncode, 0)
++        self.assertIn("receipt file not found", res4.stderr)
++
++    def test_schema_path_relative_to_script(self) -> None:
++        """Tool resolves schema correctly even when run from an arbitrary working directory."""
++        external_dir = self.work_dir / "some_other_dir"
++        external_dir.mkdir()
++        receipt_file = external_dir / "out.json"
++
++        res = self.run_cli(
++            [
++                "--receipt",
++                str(receipt_file),
++                "--wave-id",
++                "rel-path-wave",
++                "--status",
++                "complete",
++                "--environment",
++                "local-mac",
++                "--branch-policy",
++                "direct-main",
++                "--test-verdict",
++                "PASS",
++            ],
++            cwd=external_dir,
++        )
++        self.assertEqual(res.returncode, 0, f"Failed when invoked from outside dir: {res.stderr}")
++        self.assertTrue(receipt_file.exists())
++
++
++if __name__ == "__main__":
++    unittest.main()
