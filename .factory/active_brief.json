@@ -8,7 +8,7 @@
     "verification_commands": ["echo 'no-op verification'"]
   },
   "limits": {
-    "budget_tokens": 150000,
+    "budget_tokens": 250000,
     "max_attempts": 1
   },
   "branch_policy": "direct-main",

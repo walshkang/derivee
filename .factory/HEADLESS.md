@@ -14,8 +14,8 @@ while Walsh is away.
 
 > [!IMPORTANT]
 > **Core Division of Labor:**
-> - **Headless VM (Linux/Cloud VM / Muse):** Exclusively for the **PWA** ([`DeriveeWeb/`](file:///Volumes/T7ssd/derivee/DeriveeWeb)), the Go Observer ([`observer/`](file:///Volumes/T7ssd/derivee/observer)), GIS/pack compiler scripts ([`scripts/`](file:///Volumes/T7ssd/derivee/scripts)), and documentation/schemas. All code must be verified with headless terminal commands (`tsc`, `vitest`, `go test`, `pytest`).
-> - **Local Mac (Apple Silicon macOS):** Exclusively for **Native iOS** ([`DeriveeNative/`](file:///Volumes/T7ssd/derivee/DeriveeNative)), Xcode builds, iOS Simulator ergonomics tests (`verify-ux.sh`), Metal shaders, and direct-to-main development.
+> - **Headless VM (Linux/Cloud VM / Muse):** Exclusively for the **PWA** ([`DeriveeWeb/`](../DeriveeWeb)), the Go Observer ([`observer/`](../observer)), GIS/pack compiler scripts ([`scripts/`](../scripts)), and documentation/schemas. All code must be verified with headless terminal commands (`tsc`, `vitest`, `go test`, `pytest`).
+> - **Local Mac (Apple Silicon macOS):** Exclusively for **Native iOS** ([`DeriveeNative/`](../DeriveeNative)), Xcode builds, iOS Simulator ergonomics tests (`verify-ux.sh`), Metal shaders, and direct-to-main development.
 
 | Environment | Platform | Can Build iOS? | Can Run Simulator? | Target Subsystems | Allowed Scope Tier |
 |---|---|---|---|---|---|
@@ -174,3 +174,15 @@ New required fields for headless tracking:
 }
 ```
 ❌ This will fail schema validation: `headless-vm` + `visual-sensory` is prohibited.
+
+### Terminal state: harness green, not device-accepted
+
+A headless wave is done when the **Playwright harness is green** — the harness
+drives every shipped user flow against the built bundle and the ledger
+regenerates with harness ✅. That is the terminal state for unattended work.
+
+**Device acceptance stays Walsh's explicit gate.** The ledger's device tier
+remains `pending` until he accepts on his phone; a headless wave MUST NOT mark
+device ✅, and no headless wave is "done done" until he does. The receipt
+records the harness outcome; the morning surface reports harness-green waves
+as awaiting device acceptance.

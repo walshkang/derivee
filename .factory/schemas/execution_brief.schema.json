@@ -51,9 +51,9 @@
       "properties": {
         "budget_tokens": {
           "type": "integer",
-          "minimum": 50000,
+          "minimum": 250000,
           "maximum": 1500000,
-          "description": "Hard token budget for this wave. Agent must halt if exceeded."
+          "description": "Hard token budget for this wave. Evidence floor (2026-10-06 usage analysis): zero real waves shipped under 250k tokens; a budget below the harness's minimum viable cost kills the agent mid-exploration with full spend and zero code. Agent must halt if exceeded."
         },
         "max_attempts": {
           "type": "integer",
