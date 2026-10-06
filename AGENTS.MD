@@ -100,10 +100,13 @@
 - **Recursive Improvement:** Both diagnostic references grow from real debugging sessions. After resolving a bug, the agent appends new invariants, failure modes, or band-aid patterns to the relevant context file.
 
 ## 7. Headless / Unattended Execution Guardrails (VM Dispatch)
-- **Environment Classification:** Every execution context is classified as either `local-mac` (Apple Silicon, Xcode, Simulator) or `headless-vm` (Linux/cloud VM, no Xcode, no Simulator). This classification determines which scope tiers and branch policies are permitted.
+- **Platform Division of Labor:**
+  - **Headless VM (`headless-vm`):** Exclusively for the **PWA** (`DeriveeWeb/`), Go Observer (`observer/`), GIS/pack compiler (`scripts/`), and documentation/schemas. Target verification commands must run headlessly in Linux (`tsc --noEmit`, `vitest run`, `go test`, `pytest`).
+  - **Local Mac (`local-mac`):** Exclusively for **Native iOS** (`DeriveeNative/`, `DeriveeCore/`), Xcode builds, iOS Simulator ergonomics tests (`verify-ux.sh`), Metal shaders, and direct-to-main development.
+- **Environment Classification:** Every execution context is classified as either `local-mac` (Apple Silicon Mac) or `headless-vm` (Linux/cloud VM). This classification strictly determines which scope tiers and branch policies are permitted.
 - **Scope Tiers:**
-  - `mechanically-computable`: Deterministic binary pass/fail. All verification commands can run headlessly (`go test`, `tsc --noEmit`, `vitest run`, `python -m pytest`). **Required** for `headless-vm`.
-  - `visual-sensory`: Requires iOS Simulator, gesture evaluation, ProMotion frame rates, or physical device testing. **Prohibited** on `headless-vm`.
+  - `mechanically-computable`: Deterministic binary pass/fail without GUI/display. Targets the PWA (`DeriveeWeb/`), Go Observer (`observer/`), GIS pipeline (`scripts/`), and schemas. **Required** for `headless-vm`.
+  - `visual-sensory`: Requires macOS, Apple Silicon, Xcode, iOS Simulator, gesture evaluation, ProMotion frame rates, or physical device testing (`DeriveeNative/`). **Prohibited** on `headless-vm`.
 - **Branch Isolation (Mandatory for `headless-vm`):** Headless agents **never push directly to `main`**. Two permitted policies:
   1. `wave-branch`: Commit to `wave/<wave_id>` branch. Walsh merges when back at Mac.
   2. `patch-only`: Emit `.factory/diffs/<wave_id>.patch` only. No commits, no pushes.

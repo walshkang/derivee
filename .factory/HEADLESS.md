@@ -10,22 +10,27 @@ while Walsh is away.
 
 ---
 
-## 1. Environment Classification
+## 1. Environment Classification & Platform Division of Labor
 
-| Environment | Platform | Can Build iOS? | Can Run Simulator? | Allowed Scope Tier |
-|---|---|---|---|---|
-| `local-mac` | Apple Silicon Mac | ✅ | ✅ | `mechanically-computable` or `visual-sensory` |
-| `headless-vm` | Linux VM / Cloud | ❌ | ❌ | `mechanically-computable` only |
+> [!IMPORTANT]
+> **Core Division of Labor:**
+> - **Headless VM (Linux/Cloud VM / Muse):** Exclusively for the **PWA** ([`DeriveeWeb/`](file:///Volumes/T7ssd/derivee/DeriveeWeb)), the Go Observer ([`observer/`](file:///Volumes/T7ssd/derivee/observer)), GIS/pack compiler scripts ([`scripts/`](file:///Volumes/T7ssd/derivee/scripts)), and documentation/schemas. All code must be verified with headless terminal commands (`tsc`, `vitest`, `go test`, `pytest`).
+> - **Local Mac (Apple Silicon macOS):** Exclusively for **Native iOS** ([`DeriveeNative/`](file:///Volumes/T7ssd/derivee/DeriveeNative)), Xcode builds, iOS Simulator ergonomics tests (`verify-ux.sh`), Metal shaders, and direct-to-main development.
 
-**Headless VMs are restricted to `mechanically-computable` scope tier.** This means:
-- ✅ Go Observer (`observer/`): `go build`, `go test`, `go vet`
-- ✅ GIS pipeline scripts (`scripts/`): Python tests, data generation
-- ✅ Documentation, schemas, `.factory/` contracts
-- ✅ Web targets (`DeriveeWeb/`): `tsc --noEmit`, `vitest run`, bundling
-- ❌ SwiftUI screens, sheets, navigation, or map interactions
-- ❌ Metal shaders, MapLibre custom layers, fog engine
-- ❌ iOS Simulator tests (`DeriveeSnapshotTests`, `verify-ux.sh`)
-- ❌ C++20 Swift interop (`DeriveeCore/`) — requires Xcode toolchain
+| Environment | Platform | Can Build iOS? | Can Run Simulator? | Target Subsystems | Allowed Scope Tier |
+|---|---|---|---|---|---|
+| `local-mac` | Apple Silicon Mac | ✅ | ✅ | **Native iOS** (`DeriveeNative/`, `DeriveeCore/`), Metal, Simulator | `mechanically-computable` or `visual-sensory` |
+| `headless-vm` | Linux VM / Cloud | ❌ | ❌ | **PWA** (`DeriveeWeb/`), Go Observer (`observer/`), GIS (`scripts/`) | `mechanically-computable` only |
+
+**Headless VMs are strictly restricted to `mechanically-computable` scope tier.** This means:
+- ✅ **The PWA** (`DeriveeWeb/`): TypeScript (`tsc --noEmit`), unit & worker tests (`vitest run`), Vite bundling, Service Worker, OPFS pipelines, and WASM bindings
+- ✅ **Go Observer** (`observer/`): `go build`, `go test`, `go vet`
+- ✅ **GIS pipeline & pack compiler scripts** (`scripts/`): Python tests, pack compiler (`pack_builder`), data generation
+- ✅ **Documentation, schemas, `.factory/` contracts**
+- ❌ **Native iOS** (`DeriveeNative/`): SwiftUI screens, sheets, navigation, or map interactions (requires Xcode/macOS)
+- ❌ **Metal shaders, MapLibre custom layers, fog engine** (requires Metal/macOS)
+- ❌ **iOS Simulator tests** (`DeriveeSnapshotTests`, `verify-ux.sh`) (requires macOS Simulator runtime)
+- ❌ **C++20 Swift interop** (`DeriveeCore/`) — requires Xcode/Apple Clang toolchain
 
 ---
 
