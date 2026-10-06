@@ -137,6 +137,7 @@ func CompileTimetable(ds *gtfs.Dataset, anchorDate time.Time) (*CompiledTimetabl
 
 	// 4. Flatten Routes, Trips, StopTimes, and RouteStops
 	routes := make([]Route, len(patternKeys))
+	routePatterns := make([]RoutePatternMeta, len(patternKeys))
 	trips := make([]Trip, 0)
 	stopTimes := make([]StopTime, 0)
 	routeStops := make([]uint32, 0)
@@ -159,6 +160,13 @@ func CompileTimetable(ds *gtfs.Dataset, anchorDate time.Time) (*CompiledTimetabl
 			}
 			return candList[i].TripID < candList[j].TripID
 		})
+
+		headsign := ds.Trips[candList[0].TripID].TripHeadsign
+		routePatterns[rIdx] = RoutePatternMeta{
+			RouteID:     key.RouteID,
+			DirectionID: key.DirectionID,
+			Headsign:    headsign,
+		}
 
 		// Parse stop sequence for this route pattern
 		stopIDStrs := strings.Split(key.StopSignature, ",")
@@ -271,6 +279,7 @@ func CompileTimetable(ds *gtfs.Dataset, anchorDate time.Time) (*CompiledTimetabl
 		StopRoutes:        stopRoutes,
 		RouteStops:        routeStops,
 		StochasticWeights: stochasticWeights,
+		RoutePatterns:     routePatterns,
 		StopIDToIndex:     stopIDToIndex,
 		IndexToStopID:     indexToStopID,
 		RouteIDToIndex:    routeIDToIndex,

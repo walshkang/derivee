@@ -41,10 +41,10 @@ The `SpatialStore` (`@Observable`) acts as the bridge between GRDB and SwiftUI. 
 All `SpatialDatabaseManager` read methods exposed to callers **must** use `async`/`await` (`try await dbWriter.read`). Synchronous `dbWriter.read { }` calls on the main thread cause priority inversion hangs when the background `AmbientTrackingEngine` holds a pool connection. The only acceptable synchronous reads are internal to GRDB's `ValueObservation` callbacks, which manage their own threading.
 
 ### 2.5 Pre-Compiled Query Optimizer Statistics (`sqlite_stat1`)
-When the Swift client mounts a City Pack via `ATTACH DATABASE '<path>/transit.sqlite' AS transit`, SQLite cannot enforce foreign key constraints across schema boundaries. Cross-database JOIN operations (e.g. `explored_hexes` $\bowtie$ `transit.stops`, `transit.stop_resolution`) default to full-table scans if the SQLite query planner lacks index selectivity statistics. The Observer pre-compiles `sqlite_stat1` into every distributed `transit.sqlite` by running `PRAGMA analysis_limit = 1000; ANALYZE; PRAGMA optimize(0x10000); VACUUM;` before Zstandard compression. See [docs/multi-city.md §3.7](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full optimization pipeline.
+When the Swift client mounts a City Pack via `ATTACH DATABASE '<path>/transit.sqlite' AS transit`, SQLite cannot enforce foreign key constraints across schema boundaries. Cross-database JOIN operations (e.g. `explored_hexes` $\bowtie$ `transit.stops`, `transit.stop_resolution`) default to full-table scans if the SQLite query planner lacks index selectivity statistics. The Observer pre-compiles `sqlite_stat1` into every distributed `transit.sqlite` by running `PRAGMA analysis_limit = 1000; ANALYZE; PRAGMA optimize(0x10000); VACUUM;` before Zstandard compression. See [docs/multi-city.md §3.7](docs/multi-city.md) for the full optimization pipeline.
 
 ### 2.6 iOS Lifecycle Safety & `0xdead10cc` Avoidance
-iOS terminates backgrounded processes with exception code `0xdead10cc` if an application holds an open file lock on an SQLite database (under WAL or attached schemas) during suspension. The `CityPackManager` hot-swap protocol executes a **Coordinated Two-Phase Barrier**: Phase 1 tears down all in-flight foreground transit queries (`TransitRealtimeService` feed polling, `NearbyBusesCapsule` spatial scans, `TransitRevealSheet` if open), then Phase 2 invokes `dbPool.releaseMemory()` followed by the `DETACH`/`ATTACH` sequence inside a serial `dbWriter.writeWithoutTransaction` barrier. See [docs/multi-city.md §4.1](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full reference implementation.
+iOS terminates backgrounded processes with exception code `0xdead10cc` if an application holds an open file lock on an SQLite database (under WAL or attached schemas) during suspension. The `CityPackManager` hot-swap protocol executes a **Coordinated Two-Phase Barrier**: Phase 1 tears down all in-flight foreground transit queries (`TransitRealtimeService` feed polling, `NearbyBusesCapsule` spatial scans, `TransitRevealSheet` if open), then Phase 2 invokes `dbPool.releaseMemory()` followed by the `DETACH`/`ATTACH` sequence inside a serial `dbWriter.writeWithoutTransaction` barrier. See [docs/multi-city.md §4.1](docs/multi-city.md) for the full reference implementation.
 
 ### 2.7 `WITHOUT ROWID` Applicability Nuance
 The prohibition on `WITHOUT ROWID` tables (documented in AGENTS.md) applies strictly to **mutable tables in the primary database** that are observed by GRDB `ValueObservation` (e.g., `explored_hexes_{slug}`). `WITHOUT ROWID` breaks the SQLite update hook region tracking that GRDB relies on to fire `onChange` callbacks. However, **static read-only lookup tables in attached databases** (e.g., `transit.stop_resolution`) are never mutated or observed by `ValueObservation`, and benefit from `WITHOUT ROWID`'s clustered B-Tree leaf storage for $\mathcal{O}(1)$ point reads.
@@ -52,7 +52,7 @@ The prohibition on `WITHOUT ROWID` tables (documented in AGENTS.md) applies stri
 ### 2.8 H3 Index Type Conventions
 H3 indices have a dual representation across the codebase:
 - **SQLite layer:** Stored as **15-character hexadecimal TEXT strings** (e.g., `"8b2a100d213fff"`). This preserves human readability in database inspection and ensures lossless storage via `INSERT OR IGNORE`. All `explored_hexes_{slug}` tables, GRDB `TableRecord` types, and reactive `ValueObservation` queries use string H3 indices.
-- **Native Swift / C++ / Metal layer:** Handled as **`UInt64` / `uint64_t` / `H3Index`** for performance-critical paths. Required for GPU `MTLBuffer` open-addressing hash tables ([Doc 06](file:///Volumes/T7ssd/derivee/docs/research/06_sparse_gpu_spatial_memory_h3_buffering.md)), C++ RAPTOR timetable packed structs ([Doc 10](file:///Volumes/T7ssd/derivee/docs/research/10_hybrid_raptor_algorithm_cpp20_interop.md)), and bitwise parent LOD masking in Metal fragment shaders.
+- **Native Swift / C++ / Metal layer:** Handled as **`UInt64` / `uint64_t` / `H3Index`** for performance-critical paths. Required for GPU `MTLBuffer` open-addressing hash tables ([Doc 06](docs/research/06_sparse_gpu_spatial_memory_h3_buffering.md)), C++ RAPTOR timetable packed structs ([Doc 10](docs/research/10_hybrid_raptor_algorithm_cpp20_interop.md)), and bitwise parent LOD masking in Metal fragment shaders.
 
 > [!NOTE]
 > The historical ban on 64-bit integer H3 casting was a JavaScript-era guardrail (IEEE-754 `Number` silently truncates 64-bit integers to 53-bit precision). This restriction does **not** apply to native Swift, C++, or Metal code paths.
@@ -173,10 +173,11 @@ Because Dérivée relies heavily on rich, custom SwiftUI visual elements (like t
 - **UI Snapshots:** **swift-snapshot-testing** (Point-Free) is used to capture pixel-perfect snapshots of SwiftUI views loaded with mocked `@Observable` data. This prevents visual regressions from going unnoticed during rapid AI/agent-driven iterations.
 - **Geometry Snapshots:** The `.dump` strategy is used to serialize and assert the exact memory structures of complex spatial types (like `MLNPolygon`). This acts as a structural lock against accidental modifications to coordinate math and winding orders, which simple count assertions (`XCTAssertEqual(count, 4)`) would fail to catch.
 
-### 6.3 CI/CD Enforcement (Phase 4)
-Because the native Xcode project is generated immutably via `xcodegen`:
-- **Headless Testing:** All unit and snapshot tests run via `xcodebuild test` exclusively on **GitHub Actions**. We explicitly avoid Xcode Cloud due to its rigid `.xcodeproj` requirements that conflict with our `xcodegen` setup.
-- **Fast Post-Push CI:** We embrace a solo-dev "vibe coding" workflow: commits are pushed directly to `main` without requiring PRs, and GitHub Actions acts as an automated safety net to catch regressions immediately.
+### 6.3 Local Ergonomic Bouncer & Verification Enforcement (Phase 4)
+Because the project embraces an unencumbered solo-developer "vibe coding" workflow, remote GitHub Actions CI has been retired in favor of a 100% local, two-tier shift-left verification harness:
+- **Tier 1 (Sub-100ms Pre-Commit Gate):** `.githooks/pre-commit` intercepts staged Swift commits, running AST/pattern regex checks to block banned UI anti-patterns (nested sheets, hardcoded row heights, raw telemetry strings, static line widths) before they enter history.
+- **Tier 2 (Headless Commuter Ergonomics Suite):** `scripts/verify-ux.sh` executes the full `CommuterErgonomicsTests` suite headlessly via `xcodebuild test` on a local iOS simulator in <12s, verifying invariants FC-1 through FC-17 and degraded state fallbacks without cloud runner queue latency.
+- **Direct-to-Main Workflow:** Commits are pushed directly to `main` with zero PR bottlenecks or remote CI queues, guaranteed regression-free by mandatory local bouncer execution prior to commit.
 
 ---
 
@@ -190,7 +191,7 @@ To provide users with offline-first historical transit reliability data and auto
 - **No Docker:** Containerization is explicitly avoided. Running the raw binary via `systemd` eliminates virtualized filesystem overhead and maximizes SQLite write performance.
 - **Static Timetable Compaction:** Flattens millions of relational `stop_times` rows into compact `scheduled_hourly_patterns` (<3.8 MB uncompressed for NYC, <1.2 MB .zst) with a 14-day `service_mask uint16` rolling calendar bitmask and universal distance-based linear interpolation for `timepoint = 0`. Achieves sub-0.12ms single-row reads in GRDB.
 - **Output & R2 Upload Cadence:** Compiles Zstandard-compressed city packs (`city-{slug}.pack.zst`) and historical deltas (`transit_delta.sqlite.zst`), uploaded to Cloudflare R2 for mobile client synchronization. Feed delta detection operates on a 12-hour cron using HTTP ETags and SHA-1 hashes.
-- **Multi-City Scaling Constraint:** While local single-city development pushes every 3 minutes, production multi-city fleet deployments batch historical delta uploads hourly or nightly. This ensures 100+ metros stay within Cloudflare R2's 1,000,000 monthly Class A write limit (<7.2% capacity) and 10 GB storage budget (<25% capacity). See [docs/multi-city.md §7.3](file:///Volumes/T7ssd/derivee/docs/multi-city.md#73-free-tier-capacity--100-city-scaling-analysis) for the complete 100-city capacity specification.
+- **Multi-City Scaling Constraint:** While local single-city development pushes every 3 minutes, production multi-city fleet deployments batch historical delta uploads hourly or nightly. This ensures 100+ metros stay within Cloudflare R2's 1,000,000 monthly Class A write limit (<7.2% capacity) and 10 GB storage budget (<25% capacity). See [docs/multi-city.md §7.3](docs/multi-city.md#73-free-tier-capacity--100-city-scaling-analysis) for the complete 100-city capacity specification.
 
 ### 7.2 Web MVP
 A standalone web version of the transit map provides a lightweight alternative.
@@ -333,7 +334,7 @@ The dual-entity camera framing pipeline (used when inspecting a live vehicle acr
   - **Parent-Station Resolution (`stop_resolution`):**
     - Pre-compiled `WITHOUT ROWID` lookup table in `transit.sqlite` with reflexive transitive closure across the GTFS `stops.txt` parent-child hierarchy ($\mathcal{O}(1)$ clustered B-Tree point reads).
     - Swift client queries `transit.stop_resolution` as the authoritative source for platform disambiguation in `fetchStopDetails` and GTFS-RT feed matching, with legacy 3-tier fallback retained for databases lacking the table.
-    - See [docs/multi-city.md §3.3](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full schema and transitive closure rules.
+    - See [docs/multi-city.md §3.3](docs/multi-city.md) for the full schema and transitive closure rules.
   - **Data-Driven Realtime Feed Routing:**
     - Feed endpoints are declared as structured `realtimeEndpoints` array entries in `city_config.json` with per-endpoint `feedId`, `url`, `pollIntervalSeconds`, and `headers`.
     - Per-route feed resolution uses `feedRouteMapping` (e.g. `"B": "nyct_bdfm"`) — fully data-driven with zero hardcoded Swift switch tables.
@@ -363,7 +364,7 @@ Standard Ramer-Douglas-Peucker simplification evaluates overlapping transit rout
 3. Simplify each Arc independently via **Visvalingam-Whyatt** (iterative elimination of smallest effective triangle area $A_i$) with mode-adaptive thresholds: $\approx 10^{-9}\text{ deg}^2$ (Subway), $5 \times 10^{-9}$ (LRT), $10^{-8}$ (Ferry), $5 \times 10^{-8}$ (Commuter Rail). Bus routes excluded (handled by 400m Quick Lens).
 4. Re-assemble route features — overlapping routes share identical Arc vertices, guaranteeing zero Z-fighting.
 
-See [docs/multi-city.md §5.4](file:///Volumes/T7ssd/derivee/docs/multi-city.md) for the full mathematical formulation and mode-adaptive threshold table.
+See [docs/multi-city.md §5.4](docs/multi-city.md) for the full mathematical formulation and mode-adaptive threshold table.
 
 ### 8.12 Navigation Orientation Cluster, Ambient Dismissals & Terminus Dwell (Wave M)
 - **Bottom-Right Orientation Cluster:**

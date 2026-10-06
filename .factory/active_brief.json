@@ -1,0 +1,16 @@
+{
+  "wave_id": "factory-receipt-protocol",
+  "scope": {
+    "allowed_files": [
+      ".factory/**"
+    ]
+  },
+  "limits": {
+    "max_lines_changed": 150
+  },
+  "acceptance": [
+    ".factory/ structure exists exactly as specified",
+    "receipt.json validates against the schema",
+    "final response is the receipt JSON (<150 tokens)"
+  ]
+}

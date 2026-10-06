@@ -33,6 +33,7 @@ func main() {
 	anchorDateStr := flag.String("anchor", "", "Optional anchor date YYYY-MM-DD (defaults to today UTC)")
 	keepDBPath := flag.String("keep-db", "", "Optional path to save intermediate uncompressed transit.sqlite")
 	timetableInputPath := flag.String("timetable", "", "Path to pre-compiled timetable.bin (optional, bundled in pack if provided)")
+	patternsInputPath := flag.String("patterns", "", "Path to pre-compiled patterns.json (optional, bundled in pack if provided)")
 	buildTimetable := flag.Bool("build-timetable", false, "Compile timetable.bin and bundle in pack")
 	emitTimetablePath := flag.String("emit-timetable", "", "Optional path to export generated timetable.bin")
 	walkGraphPath := flag.String("walk-graph", "", "Path to walk_graph.bin (optional, bundled in pack and used for ULTRA)")
@@ -298,7 +299,14 @@ func main() {
 	if *timetableInputPath != "" {
 		extraAssets["timetable.bin"] = *timetableInputPath
 		log.Printf("Bundling pre-compiled timetable from %s", *timetableInputPath)
-	} else if *buildTimetable || *emitTimetablePath != "" {
+	}
+
+	if *patternsInputPath != "" {
+		extraAssets["patterns.json"] = *patternsInputPath
+		log.Printf("Bundling pre-compiled patterns from %s", *patternsInputPath)
+	}
+
+	if *timetableInputPath == "" && (*buildTimetable || *emitTimetablePath != "") {
 		log.Println("Compiling RAPTOR timetable.bin with stochastic weights...")
 		tt, err := raptor.CompileTimetable(mergedDataset, anchorDate)
 		if err != nil {
@@ -312,8 +320,14 @@ func main() {
 		log.Printf("Generated timetable.bin: %d bytes (%.2f MB, Checksum XXH64: 0x%016X)",
 			header.FileSize, float64(header.FileSize)/(1024*1024), header.ChecksumXXH64)
 
+		patternsPath := filepath.Join(tempDir, "patterns.json")
+		if err := raptor.WritePatternsJSON(tt.RoutePatterns, patternsPath); err != nil {
+			log.Fatalf("Failed to write patterns.json: %v", err)
+		}
+
 		if *buildTimetable {
 			extraAssets["timetable.bin"] = timetablePath
+			extraAssets["patterns.json"] = patternsPath
 		}
 		if *emitTimetablePath != "" {
 			if err := copyFile(timetablePath, *emitTimetablePath); err != nil {

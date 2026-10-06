@@ -1,0 +1,147 @@
+{
+  "1": {
+    "shortName": "1",
+    "color": "D82233",
+    "textColor": "FFFFFF"
+  },
+  "2": {
+    "shortName": "2",
+    "color": "D82233",
+    "textColor": "FFFFFF"
+  },
+  "3": {
+    "shortName": "3",
+    "color": "D82233",
+    "textColor": "FFFFFF"
+  },
+  "4": {
+    "shortName": "4",
+    "color": "009952",
+    "textColor": "FFFFFF"
+  },
+  "5": {
+    "shortName": "5",
+    "color": "009952",
+    "textColor": "FFFFFF"
+  },
+  "6": {
+    "shortName": "6",
+    "color": "009952",
+    "textColor": "FFFFFF"
+  },
+  "6X": {
+    "shortName": "6X",
+    "color": "009952",
+    "textColor": "FFFFFF"
+  },
+  "7": {
+    "shortName": "7",
+    "color": "9A38A1",
+    "textColor": "FFFFFF"
+  },
+  "7X": {
+    "shortName": "7X",
+    "color": "9A38A1",
+    "textColor": "FFFFFF"
+  },
+  "A": {
+    "shortName": "A",
+    "color": "0062CF",
+    "textColor": "FFFFFF"
+  },
+  "B": {
+    "shortName": "B",
+    "color": "EB6800",
+    "textColor": "FFFFFF"
+  },
+  "C": {
+    "shortName": "C",
+    "color": "0062CF",
+    "textColor": "FFFFFF"
+  },
+  "D": {
+    "shortName": "D",
+    "color": "EB6800",
+    "textColor": "FFFFFF"
+  },
+  "E": {
+    "shortName": "E",
+    "color": "0062CF",
+    "textColor": "FFFFFF"
+  },
+  "F": {
+    "shortName": "F",
+    "color": "EB6800",
+    "textColor": "FFFFFF"
+  },
+  "FS": {
+    "shortName": "S",
+    "color": "7C858C",
+    "textColor": "FFFFFF"
+  },
+  "FX": {
+    "shortName": "FX",
+    "color": "EB6800",
+    "textColor": "FFFFFF"
+  },
+  "G": {
+    "shortName": "G",
+    "color": "799534",
+    "textColor": "FFFFFF"
+  },
+  "GS": {
+    "shortName": "S",
+    "color": "7C858C",
+    "textColor": "FFFFFF"
+  },
+  "H": {
+    "shortName": "S",
+    "color": "7C858C",
+    "textColor": "FFFFFF"
+  },
+  "J": {
+    "shortName": "J",
+    "color": "8E5C33",
+    "textColor": "FFFFFF"
+  },
+  "L": {
+    "shortName": "L",
+    "color": "7C858C",
+    "textColor": "FFFFFF"
+  },
+  "M": {
+    "shortName": "M",
+    "color": "EB6800",
+    "textColor": "FFFFFF"
+  },
+  "N": {
+    "shortName": "N",
+    "color": "F6BC26",
+    "textColor": "000000"
+  },
+  "Q": {
+    "shortName": "Q",
+    "color": "F6BC26",
+    "textColor": "000000"
+  },
+  "R": {
+    "shortName": "R",
+    "color": "F6BC26",
+    "textColor": "000000"
+  },
+  "SI": {
+    "shortName": "SIR",
+    "color": "08179C",
+    "textColor": "FFFFFF"
+  },
+  "W": {
+    "shortName": "W",
+    "color": "F6BC26",
+    "textColor": "000000"
+  },
+  "Z": {
+    "shortName": "Z",
+    "color": "8E5C33",
+    "textColor": "FFFFFF"
+  }
+}

@@ -3,6 +3,7 @@ package raptor
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,15 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 )
+
+// WritePatternsJSON serializes pattern metadata to a JSON file
+func WritePatternsJSON(patterns []RoutePatternMeta, outputPath string) error {
+	data, err := json.MarshalIndent(patterns, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal patterns JSON: %w", err)
+	}
+	return os.WriteFile(outputPath, data, 0644)
+}
 
 // TimetableView provides a typed deserialized view of the binary timetable
 type TimetableView struct {

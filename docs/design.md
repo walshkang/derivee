@@ -1,8 +1,24 @@
 # Dérivée — UI Blueprint & Screen Specification
 
+> **PRODUCT DIRECTION (2026-09-29, current):** The PWA is the app.
+> Transit-only, map-first, offline-first. There is **no fog-of-war**,
+> **no Explore mode**, **no Transit/Explore toggle**, and the native
+> iOS port is parked indefinitely.
+>
+> **How to read this document:** **Appendix A** is the authoritative
+> visual ground truth for all PWA/web work — cite it in briefs, not
+> the sections below. The body (§§1–13) is the native-iOS legacy spec,
+> preserved for history. Sections marked **SUPERSEDED** describe cut
+> features and must not be implemented: §2 (fog visibility), §4 (ghost
+> POIs), §6 (Dynamic Island / Live Activities), §8 (progression
+> stats), §9 (exploration gamification). All fog-layer, GRDB,
+> SwiftUI, and App Store references are likewise superseded for web
+> work. §12 (Screen 4) remains conceptually relevant; Appendix A
+> restates it for the PWA as shipped.
+
 This document is the **single authoritative reference** for all visual design, screen hierarchy, interaction patterns, and UI acceptance criteria. If a screen, component, or animation is not defined here, an agent **must not** invent it.
 
-For backend data flows, native constraints, and library stacks, see [architecture.md](file:///Volumes/T7ssd/derivee/docs/architecture.md).
+For backend data flows, native constraints, and library stacks, see [architecture.md](docs/architecture.md).
 
 ---
 
@@ -158,6 +174,8 @@ The interface is built exclusively around a pure, high-contrast Light Mode desig
 ---
 
 ## 2. The 3-Tier Fog Visibility Logic
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 The map uses a 3-tier state to separate where the user **is**, where they **have been**, and what remains **hidden**. Unlocked H3 hexes (Resolution 11) feature a subtle border outline to define the progression grid.
 
@@ -186,7 +204,7 @@ Standard cartographic data (streets, parks, travel direction) is handled entirel
 
 ### 2.2 The MapLibre Layer Stack
 
-The MapLibre layer stack **must** follow this exact Z-index order. All layers are defined in the bundled `composite_style.json` (vector-only, no raster satellite layers) or injected as runtime `MLNShapeSource` / `MLNStyleLayer` objects. See [architecture.md §8](file:///Volumes/T7ssd/derivee/docs/architecture.md) for implementation specifics and [diagrams.md §4](file:///Volumes/T7ssd/derivee/docs/diagrams.md) for the full annotated stack.
+The MapLibre layer stack **must** follow this exact Z-index order. All layers are defined in the bundled `composite_style.json` (vector-only, no raster satellite layers) or injected as runtime `MLNShapeSource` / `MLNStyleLayer` objects. See [architecture.md §8](docs/architecture.md) for implementation specifics and [diagrams.md §4](docs/diagrams.md) for the full annotated stack.
 
 ```
 ▲ Top of Z-Stack
@@ -230,7 +248,7 @@ The MapLibre layer stack **must** follow this exact Z-index order. All layers ar
 > **Fog Bounding Polygon (Wave M.5.1):** The fog mask uses a Global World outer polygon spanning Web Mercator limits `[-85.0511, 85.0511]` latitude and `[-179.999, 179.999]` longitude in Clockwise (CW) winding order. Explored H3 hexes anywhere on earth dissolve into interior cutout apertures, completely eliminating artificial rectangular fog edges and border lines across city margins.
 
 > [!IMPORTANT]
-> **Cold-Start Fog Contract:** On app launch after a force-quit, the Cloud Layer (Layer 2) must render with all previously explored hex holes visible **immediately** when the map finishes loading. The `SpatialStore` fog polygon computation must complete before or synchronize with MapLibre's `didFinishLoading` callback. A solid, hole-less fog flash on cold start is a rendering bug. See [architecture.md §5.2](file:///Volumes/T7ssd/derivee/docs/architecture.md) for the synchronization mechanism.
+> **Cold-Start Fog Contract:** On app launch after a force-quit, the Cloud Layer (Layer 2) must render with all previously explored hex holes visible **immediately** when the map finishes loading. The `SpatialStore` fog polygon computation must complete before or synchronize with MapLibre's `didFinishLoading` callback. A solid, hole-less fog flash on cold start is a rendering bug. See [architecture.md §5.2](docs/architecture.md) for the synchronization mechanism.
 
 ---
 
@@ -451,6 +469,8 @@ A clean, native list view using SwiftUI `List` or `LazyVStack` for guaranteed 12
 ---
 
 ## 4. Ghost POI Lifecycle
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 Ghost POIs are the primary discovery mechanic. They follow a strict 3-phase lifecycle:
 
@@ -489,7 +509,7 @@ When a user uploads a heavy GPX file containing hundreds of new hexes, the bridg
 * **Implementation:** Use MapLibre's native `fill-opacity-transition` with a staggered delay per hex cluster (sorted by distance from the user's position). The fog literally "melts away" from the user outward.
 
 > [!NOTE]
-> **Design Aspiration — Metal Enhancement:** For a more dramatic volumetric sunburst effect, SwiftUI `.colorEffect` with a custom Metal shader could be introduced to render a shader-based dissolve mask. This capability is **not currently in the locked stack** (see [architecture.md §2](file:///Volumes/T7ssd/derivee/docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
+> **Design Aspiration — Metal Enhancement:** For a more dramatic volumetric sunburst effect, SwiftUI `.colorEffect` with a custom Metal shader could be introduced to render a shader-based dissolve mask. This capability is **not currently in the locked stack** (see [architecture.md §2](docs/architecture.md)). If adopted, it must be formally added to the Core Library Stack table. Until then, use the MapLibre-native approach above.
 
 ### 5.2 Bottom Sheet Transitions
 
@@ -520,6 +540,8 @@ When a new hex is discovered in real-time (via Nitro callback during active use)
 ---
 
 ## 6. Dynamic Island & Live Activities (Wave J.10)
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 Progression stats are accessible **outside** the app while the user walks with their phone locked.
 
@@ -560,6 +582,8 @@ These rules are **non-negotiable**. Violating any guardrail constitutes a failed
 ---
 
 ## 8. The "Backend" (Data Layer) — Progression Stats
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 To support exploration percentages in Screen 3 (Stats and Profile) and any future contextual displays, the local database must maintain:
 
@@ -598,6 +622,8 @@ This is entirely local state driven by SwiftUI `@Observable`:
 ---
 
 ## 9. Exploration Polish, Customization & Gamification (Wave J)
+> **SUPERSEDED (2026-09-29):** this section describes a cut feature (fog-of-war / explore / native). Do not implement. See Appendix A for the PWA ground truth.
+
 
 This section defines visual and interaction standards for Wave J features (completed across sub-waves J.1 → J.10):
 
@@ -915,7 +941,7 @@ In multi-modal transit hubs (e.g. Atlantic Av–Barclays Center, Times Sq–42 S
 ## 11. Multi-City Screens & User Flows (Wave L)
 
 > [!NOTE]
-> All multi-city UI surfaces exist as **sub-views within the existing 5-screen hierarchy** (Screens 0–4), preserving Guardrail G10. No new top-level screens are introduced. For the complete backend architecture, database topology, and city pack format, see [docs/multi-city.md](file:///Volumes/T7ssd/derivee/docs/multi-city.md).
+> All multi-city UI surfaces exist as **sub-views within the existing 5-screen hierarchy** (Screens 0–4), preserving Guardrail G10. No new top-level screens are introduced. For the complete backend architecture, database topology, and city pack format, see [docs/multi-city.md](docs/multi-city.md).
 
 ### 11.1 City Download Prompt (`CityDownloadPromptSheet` — Screen 1 Overlay)
 
@@ -1161,7 +1187,7 @@ Before submitting or merging any PR modifying user-facing SwiftUI views in Déri
 
 ### 13.5 Automated Ergonomics Bouncer Architecture (2-Tier Shift-Left)
 
-To eliminate visual and cognitive regressions without the overhead and delay of remote cloud CI, Dérivée enforces a 100% local, two-tier ergonomic testing architecture (see [Research Document 21: `docs/research/21_mobile_map_transit_testing_invariants.md`](file:///Volumes/T7ssd/derivee/docs/research/21_mobile_map_transit_testing_invariants.md)):
+To eliminate visual and cognitive regressions without the overhead and delay of remote cloud CI, Dérivée enforces a 100% local, two-tier ergonomic testing architecture (see [Research Document 21: `docs/research/21_mobile_map_transit_testing_invariants.md`](docs/research/21_mobile_map_transit_testing_invariants.md)):
 
 ```
 Developer / Agent Commit Attempt
@@ -1192,11 +1218,99 @@ Developer / Agent Commit Attempt
 ```
 
 1. **Tier 1: Pre-Commit AST/Pattern Bouncer (`.githooks/pre-commit`)**
-   - Configured automatically via [`scripts/setup-hooks.sh`](file:///Volumes/T7ssd/derivee/scripts/setup-hooks.sh) (`git config core.hooksPath .githooks`).
+   - Configured automatically via [`scripts/setup-hooks.sh`](scripts/setup-hooks.sh) (`git config core.hooksPath .githooks`).
    - Executes in $< 100\text{ms}$ directly against staged Swift changes (`git diff --cached --name-only`).
    - Immediately aborts `git commit` if prohibited anti-patterns (e.g., hardcoded `.frame(height: 56)`, `trip_id`, nested `.sheet` in bottom sheet components) are detected.
-2. **Tier 2: Headless Commuter Ergonomics Suite ([`scripts/verify-ux.sh`](file:///Volumes/T7ssd/derivee/scripts/verify-ux.sh))**
+2. **Tier 2: Headless Commuter Ergonomics Suite ([`scripts/verify-ux.sh`](scripts/verify-ux.sh))**
    - Headless test execution targeting `DeriveeTests/CommuterErgonomicsTests` via `xcodebuild`.
    - Curates test results with an instantaneous, human-readable CLI reporter summarizing all 44 assertions across 9 ergonomic test suites.
    - Self-configures `core.hooksPath` on run, ensuring hook configuration is idempotent and never forgotten.
    - Mandatory gate in the **UI Wave Definition of Done** for both agents and human contributors.
+---
+
+## Appendix A — PWA Transit-Only Ground Truth (authoritative for all web work)
+
+> This appendix supersedes every fog, explore-mode, gamification, and
+> native-iOS statement in the body above for PWA work. When this
+> appendix and the body disagree, this appendix wins. Last revised
+> 2026-10-03.
+
+### A.1 Product
+
+- **The PWA is the app.** Installed via browser ("Install" / Add to
+  Home Screen); no App Store, no native shell.
+- **Transit-only.** The app plans and displays public-transit
+  itineraries. No fog-of-war, no exploration tracking, no POI
+  lifecycle, no stats/progression.
+- **Map-first, offline-first.** The dark vector map is the home
+  screen; the transit pack (timetable + stops + routes) is downloaded
+  once and routing runs on-device. An "OFFLINE SHELL" indicator marks
+  cached operation; a Cloudflare Access gate fronts the hosted
+  origin (sign-in state must degrade gracefully, never deadlock —
+  see the 2026-09-28 service-worker auth lesson).
+
+### A.2 Visual identity (as shipped)
+
+- Dark OLED-first theme. CSS tokens (`DeriveeWeb/src/index.css`):
+  `--bg-primary: #070a0f`, `--bg-secondary: #0d131d`,
+  `--bg-card: rgba(13,19,29,0.85)`, `--text-primary: #f1f5f9`,
+  `--text-secondary: #94a3b8`, `--accent-sky: #38bdf8`,
+  `--accent-cyan: #00e5ff`, `--accent-amber: #f59e0b`,
+  `--status-online: #10b981`, `--status-offline: #f59e0b`.
+- Transit line badges use per-line GTFS colors from `routes.json`
+  (e.g. 1/2/3 red, 4/5/6 green, 7 purple, A/C/E blue, B/D/F/M
+  orange, N/Q/R/W yellow, L gray, G light green).
+- Typography: system sans stack; monospace for times.
+- Persona: calm, utilitarian, understated. No arcade, no noise.
+
+### A.3 Screens (PWA)
+
+1. **Map home.** Dark NYC map (MapLibre), transit line overlays +
+   station dots, search capsule, line-badge quick filter row,
+   "Transit pack: NYC v3 (Installed)" status. Bottom sheet hosts
+   planning.
+2. **Search (4A).** Station/line/destination search from the capsule.
+3. **Route comparison (4B).** Itinerary cards — see A.4.
+4. **Active navigation (4C).** Future; not yet built.
+5. **System info.** Settings surface showing `Build: <short-hash>
+   (<timestamp>)` in the footer — the Gate 4 served-bundle check
+   reads this.
+
+### A.4 Itinerary card anatomy (as shipped, M5/M5d/M5e)
+
+- **Header:** ranked badges (`⚡ Fastest`, `🔄 Fewest Transfers`,
+  `Best Match`), arrival time, and a glance line:
+  `{duration} · {departure} – {arrival} · {N} transfers`.
+- **Transfer count = actual vehicle changes** (transit ride legs − 1).
+  It must match what a commuter counts. Zero-minute phantom
+  transfers never inflate it.
+- **Rows, in order:** `Start at {station}` row → ride legs →
+  `Arrive at {station}` row.
+- **Ride leg card:** ONE card per continuous ride on one vehicle
+  (consecutive same-trip segments are merged — never one card per
+  stop). Shows the line badge pill, board station → alight station,
+  duration, and intermediate stop count.
+- **Transfer connector:** between ride legs, an unnumbered connector
+  row — `Change at {station}` with walk time/distance. A transfer
+  is NOT a leg and NOT a mode of transit; it is never a numbered
+  `LEG N` card.
+- **Badges (FC-2):** internal `route_id`/`trip_id`/pattern-index
+  values must NEVER leak into UI copy. If a route cannot be resolved
+  to a real line, render NO badge — never a raw-ID pill, never a
+  placeholder. `getRouteBadge` returns `null` for unresolvable
+  routes; the component renders nothing.
+- **Leg mode model:** every leg carries
+  `mode: 'transit' | 'walk' | 'transfer'` (extensible for future
+  modes). Badges render only for `mode === 'transit'`.
+- **Bottom sheet:** swipe on a scrollable card scrolls the card
+  natively; the sheet only drags from its handle or at a scroll edge
+  (see `INVARIANTS.md`: every scrollable declares its scroll
+  container). Detents stay put during card scroll.
+
+### A.5 States
+
+Every shipped flow handles: loading, empty (no routes found),
+error, offline (cached pack, "OFFLINE SHELL"), and post-success
+(what the user sees next, how to return). Session-expiry at the
+Access gate resolves to an explicit "sign in again" path — never a
+dead cached gate.

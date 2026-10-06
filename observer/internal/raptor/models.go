@@ -81,6 +81,13 @@ type StochasticWeight struct {
 	VariancePenalty uint16 // Quantized variance risk score (0-1000)
 }
 
+// RoutePatternMeta encapsulates metadata for a route pattern to map GTFS string IDs
+type RoutePatternMeta struct {
+	RouteID     string `json:"route_id"`
+	DirectionID int    `json:"direction_id"`
+	Headsign    string `json:"headsign,omitempty"`
+}
+
 // CompiledTimetable encapsulates all flattened contiguous arrays ready for binary serialization
 type CompiledTimetable struct {
 	Stops             []Stop
@@ -91,6 +98,7 @@ type CompiledTimetable struct {
 	StopRoutes        []uint32
 	RouteStops        []uint32
 	StochasticWeights []StochasticWeight
+	RoutePatterns     []RoutePatternMeta
 
 	// Metadata string maps
 	StopIDToIndex  map[string]uint32
