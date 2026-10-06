@@ -64,8 +64,6 @@ func InitDB(path string) (*Database, error) {
 		location_type INTEGER NOT NULL DEFAULT 0,
 		parent_station TEXT DEFAULT NULL
 	) WITHOUT ROWID;
-
-	CREATE INDEX IF NOT EXISTS idx_stops_parent ON stops(parent_station);
 	
 	CREATE INDEX IF NOT EXISTS idx_stop_events_observed ON stop_events(observed_at);
 	`

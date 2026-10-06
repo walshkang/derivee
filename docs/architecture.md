@@ -212,6 +212,20 @@ This section defines the implementation parameters and algorithmic constraints e
   - **Architectural Flat Footprints:** Buildings render strictly as flat 2D polygons across all zoom levels ($z = 13..24$) via the `Building` fill layer in `composite_style.json`. The `Building 3D` extrusion layer is disabled (`visibility: "none"`).
   - **Boundary Damping & Rollback:** Intercept camera changes via `CameraBounds.shouldAllowCameraChange`. Mathematically evaluate if the projected `newCamera.centerCoordinate` falls outside the active city envelope (loaded dynamically from `CityConfig.bounds`). For gestures (`.gesturePan`, `.gesturePinch`, `.gestureRotate`), allow temporary rubber-band overflow up to $0.05^\circ$ (~5km), then asynchronously animate a smooth corrective rollback to hard bounds using `mapView.setCamera(correctedCamera, withDuration: 0.4, animationTimingFunction: .easeOut)` enforcing `pitch: 0.0`. *(Tightened from 0.35° in Wave K.6; dynamic bounds loading from Wave L-B.2.)*
 
+#### 8.1.1 Viewport Framing Pipeline (Pre-T.9 / Research Doc 23)
+
+The dual-entity camera framing pipeline (used when inspecting a live vehicle across all modes — subway, bus, LRT, commuter rail, ferry) uses **pre-clamped bounding span math** instead of post-hoc altitude overrides:
+
+1. Compute geographic bounding box from vehicle + station coordinates.
+2. Enforce minimum spans: `minSpanLat = 0.006` (~660m), `minSpanLon = 0.008` (~670m).
+3. Measure sheet height dynamically via `GeometryReader` + `PreferenceKey` in `TransitRevealSheet`.
+4. Compute `bottomPadding = measuredSheetHeight + 36.0` (36pt clears 24pt card corner radius + 12pt buffer).
+5. Pass clamped bounds + edge padding to `cameraThatFitsCoordinateBounds`.
+6. Use returned `(centerCoordinate, altitude)` pair **UNMODIFIED**.
+
+- **Anti-pattern (banned):** Never compute `MLNZoomLevelForAltitude` → clamp → `MLNAltitudeForZoomLevel` → reconstruct camera. This decouples the mathematically coupled center-altitude pair computed by MapLibre's projection engine. On asymmetric edge padding (large bottom, small top), decoupling causes coordinates to project behind the sheet. The FC-15 AST bouncer enforces this ban.
+- **Detent-Aware Padding Table:** `.inspectionPeekDetent` (.fraction(0.12)): `viewHeight * 0.12 + 36.0`; `.medium` (measured): `measuredSheetHeight + 36.0`; `.medium` (fallback): `viewHeight * 0.535 + 36.0`; `.large`: `viewHeight * 0.88 + 36.0`.
+
 ### 8.2 The Spatial Unioning Imperative for 120Hz ProMotion (`WJ2-PERF-OPTIMIZATION`)
 - **The Bottleneck:** Passing raw, un-dissolved H3 hexagons as individual interior rings to `MLNPolygon` causes MapLibre's underlying `earcut.hpp` triangulation to degrade from $O(N \log N)$ to $O(N^2)$. Pushing thousands of disconnected micro-holes freezes the `@MainActor` render loop and causes severe thermal throttling.
 - **Rejected Alternatives:**

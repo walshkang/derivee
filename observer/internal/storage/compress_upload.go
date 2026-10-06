@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
-
+	"io"
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -15,24 +15,29 @@ import (
 
 // CompressSQLite reads the sqlite file, compresses it with Zstandard, and writes to output path
 func CompressSQLite(inputPath, outputPath string) error {
-	inData, err := os.ReadFile(inputPath)
+	inFile, err := os.Open(inputPath)
 	if err != nil {
-		return fmt.Errorf("failed to read input sqlite file: %w", err)
+		return fmt.Errorf("failed to open input sqlite file: %w", err)
 	}
+	defer inFile.Close()
 
-	encoder, err := zstd.NewWriter(nil, zstd.WithSingleSegment(true))
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output zst file: %w", err)
+	}
+	defer outFile.Close()
+
+	encoder, err := zstd.NewWriter(outFile, zstd.WithEncoderLevel(zstd.SpeedDefault))
 	if err != nil {
 		return fmt.Errorf("failed to initialize zstd writer: %w", err)
 	}
-	defer encoder.Close()
 
-	outData := encoder.EncodeAll(inData, make([]byte, 0, len(inData)))
-
-	if err := os.WriteFile(outputPath, outData, 0644); err != nil {
-		return fmt.Errorf("failed to write output zst file: %w", err)
+	if _, err := io.Copy(encoder, inFile); err != nil {
+		encoder.Close()
+		return fmt.Errorf("failed to compress sqlite file: %w", err)
 	}
 
-	return nil
+	return encoder.Close()
 }
 
 // UploadToR2 uploads a file to Cloudflare R2 under the default transit_delta.sqlite.zst key

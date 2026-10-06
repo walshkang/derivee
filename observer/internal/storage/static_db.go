@@ -46,8 +46,6 @@ func InitStaticDB(path string) (*StaticDatabase, error) {
 		location_type INTEGER NOT NULL DEFAULT 0,
 		parent_station TEXT DEFAULT NULL
 	) WITHOUT ROWID;
-
-	CREATE INDEX IF NOT EXISTS idx_stops_parent ON stops(parent_station);
 	`
 	if _, err := db.Exec(createTableSQL); err != nil {
 		return nil, fmt.Errorf("failed to create static tables: %w", err)
@@ -57,10 +55,20 @@ func InitStaticDB(path string) (*StaticDatabase, error) {
 	db.Exec(`ALTER TABLE stops ADD COLUMN parent_station TEXT DEFAULT NULL;`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_stops_parent ON stops(parent_station);`)
 
-	// We clear scheduled_stops on init because we will reload it from the latest GTFS zip
-	db.Exec(`DELETE FROM scheduled_stops;`)
-
 	return &StaticDatabase{db: db}, nil
+}
+
+// CountScheduledStops returns the total number of scheduled stop times
+func (d *StaticDatabase) CountScheduledStops() (int, error) {
+	var count int
+	err := d.db.QueryRow(`SELECT count(*) FROM scheduled_stops;`).Scan(&count)
+	return count, err
+}
+
+// ClearScheduledStops wipes scheduled stop times before a fresh GTFS reload
+func (d *StaticDatabase) ClearScheduledStops() error {
+	_, err := d.db.Exec(`DELETE FROM scheduled_stops;`)
+	return err
 }
 
 // BulkInsertStopTimes inserts an array of records using a transaction and multiple values
