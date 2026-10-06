@@ -18,6 +18,10 @@ the design itself needs rethinking.
   counter — reconnaissance is never rationed, only execution is.
 - Stop means no retry, no resume. Run recon (`loops/templates/recon-brief.md`),
   re-scope, re-price.
+- Kill, don't retry, a mispriced contract: after a zero-code budget-exceeded
+  attempt, the next dispatch must be a rescope/reprice or a kill — never an
+  identical retry of the same contract. (The 3-attempt retry presumes resumed
+  partial work; with zero code written there is nothing to resume.)
 - A new dispatch on the same problem requires the recon output **and** Walsh's
   explicit word naming the wave.
 
