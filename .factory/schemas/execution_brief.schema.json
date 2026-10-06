@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExecutionBrief",
+  "description": "Contract written by the orchestrator before dispatching a wave. Headless agents MUST NOT execute without a valid brief.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "wave_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$",
+      "description": "Lowercase kebab-case identifier. Must match the branch name suffix (wave/<wave_id>)."
+    },
+    "environment": {
+      "type": "string",
+      "enum": ["local-mac", "headless-vm"],
+      "description": "Execution environment. Determines which scope tiers are permitted."
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": ["mechanically-computable", "visual-sensory"],
+          "description": "mechanically-computable: deterministic pass/fail (tsc, go test, vitest, headless xcodebuild). visual-sensory: requires iOS Simulator, gesture evaluation, or device testing. Headless VMs MUST use mechanically-computable."
+        },
+        "allowed_paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Glob patterns for files the agent may modify (e.g. 'observer/**', 'DeriveeWeb/**'). Agent MUST NOT touch files outside these globs."
+        },
+        "banned_paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Glob patterns the agent must never touch, even if they fall within allowed_paths."
+        },
+        "verification_commands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Shell commands that must all exit 0 for the wave to pass. Example: ['tsc --noEmit', 'go test ./...']"
+        }
+      },
+      "required": ["tier", "allowed_paths", "verification_commands"],
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "budget_tokens": {
+          "type": "integer",
+          "minimum": 50000,
+          "maximum": 1500000,
+          "description": "Hard token budget for this wave. Agent must halt if exceeded."
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3,
+          "description": "Maximum code-modifying attempts. Recon passes do not count."
+        },
+        "max_lines_changed": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional hard cap on total lines changed (insertions + deletions)."
+        },
+        "timeout_minutes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 120,
+          "description": "Wall-clock timeout. Agent must emit receipt and halt after this duration."
+        }
+      },
+      "required": ["budget_tokens", "max_attempts"],
+      "additionalProperties": false
+    },
+    "branch_policy": {
+      "type": "string",
+      "enum": ["wave-branch", "patch-only", "direct-main"],
+      "description": "wave-branch: commit to wave/<wave_id> branch (required for headless-vm). patch-only: emit .patch file only, no commits. direct-main: push to main (local-mac only, requires Walsh present)."
+    },
+    "acceptance": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Human-readable acceptance criteria. Each must be a positive assertion of target state, never 'absence of error'."
+    },
+    "kill_conditions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Conditions under which the agent must immediately halt and emit a failed receipt. Example: 'Any file outside allowed_paths is modified', 'Token burn exceeds budget_tokens'."
+    },
+    "recon_output": {
+      "type": "object",
+      "properties": {
+        "blast_radius_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Files identified during recon as needing modification."
+        },
+        "symbols_mapped": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Key functions/types/modules identified during recon."
+        },
+        "open_questions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Unresolved questions from recon that may require Walsh's input."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Output from a prior recon pass. Required for waves with max_attempts > 1."
+    },
+    "approved_by": {
+      "type": "string",
+      "enum": ["walsh-explicit", "convergence-list"],
+      "description": "walsh-explicit: Walsh named this wave. convergence-list: wave is on the approved convergence list in 80H-PROVING-PLAN.md §3."
+    }
+  },
+  "required": [
+    "wave_id",
+    "environment",
+    "scope",
+    "limits",
+    "branch_policy",
+    "acceptance",
+    "approved_by"
+  ],
+  "additionalProperties": false,
+  "if": {
+    "properties": { "environment": { "const": "headless-vm" } }
+  },
+  "then": {
+    "properties": {
+      "scope": {
+        "properties": {
+          "tier": { "const": "mechanically-computable" }
+        }
+      },
+      "branch_policy": {
+        "enum": ["wave-branch", "patch-only"]
+      }
+    }
+  }
+}

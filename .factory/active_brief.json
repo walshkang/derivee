@@ -1,16 +1,22 @@
 {
-  "wave_id": "factory-receipt-protocol",
+  "$schema": "./schemas/execution_brief.schema.json",
+  "wave_id": "template-placeholder",
+  "environment": "local-mac",
   "scope": {
-    "allowed_files": [
-      ".factory/**"
-    ]
+    "tier": "mechanically-computable",
+    "allowed_paths": [".factory/**"],
+    "verification_commands": ["echo 'no-op verification'"]
   },
   "limits": {
-    "max_lines_changed": 150
+    "budget_tokens": 150000,
+    "max_attempts": 1
   },
+  "branch_policy": "direct-main",
   "acceptance": [
-    ".factory/ structure exists exactly as specified",
-    "receipt.json validates against the schema",
-    "final response is the receipt JSON (<150 tokens)"
-  ]
+    "Replace this template with a real wave contract before dispatch"
+  ],
+  "kill_conditions": [
+    "Any file outside allowed_paths is modified"
+  ],
+  "approved_by": "walsh-explicit"
 }

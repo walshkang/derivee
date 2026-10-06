@@ -98,3 +98,18 @@
 - **Debugging Context:** When diagnosing bugs in this repo, `/diagnosing-bugs` loads Derivee-specific pipeline context from `.agents/skills/diagnosing-bugs/DERIVEE_CONTEXT.md` — the 6-stage reactive pipeline map, 5 invariant pre-flight checks, test harness cheat sheet, and known band-aid rejection patterns. This context enriches hypothesis generation (Phase 3) and fix validation (Phase 5).
 - **UX Audit:** For interaction design defects (inaccessible tap targets, missing feedback states, scroll position loss, choice overload), invoke `/ux-audit`. Derivee-specific UX constraints load from `.agents/skills/ux-audit/DERIVEE_INVARIANTS.md`.
 - **Recursive Improvement:** Both diagnostic references grow from real debugging sessions. After resolving a bug, the agent appends new invariants, failure modes, or band-aid patterns to the relevant context file.
+
+## 7. Headless / Unattended Execution Guardrails (VM Dispatch)
+- **Environment Classification:** Every execution context is classified as either `local-mac` (Apple Silicon, Xcode, Simulator) or `headless-vm` (Linux/cloud VM, no Xcode, no Simulator). This classification determines which scope tiers and branch policies are permitted.
+- **Scope Tiers:**
+  - `mechanically-computable`: Deterministic binary pass/fail. All verification commands can run headlessly (`go test`, `tsc --noEmit`, `vitest run`, `python -m pytest`). **Required** for `headless-vm`.
+  - `visual-sensory`: Requires iOS Simulator, gesture evaluation, ProMotion frame rates, or physical device testing. **Prohibited** on `headless-vm`.
+- **Branch Isolation (Mandatory for `headless-vm`):** Headless agents **never push directly to `main`**. Two permitted policies:
+  1. `wave-branch`: Commit to `wave/<wave_id>` branch. Walsh merges when back at Mac.
+  2. `patch-only`: Emit `.factory/diffs/<wave_id>.patch` only. No commits, no pushes.
+  `direct-main` is reserved exclusively for `local-mac` with Walsh present.
+- **Execution Brief Contract:** Every headless dispatch requires a valid `.factory/active_brief.json` conforming to `.factory/schemas/execution_brief.schema.json`. The schema enforces conditional validation: `headless-vm` + `visual-sensory` is structurally impossible. No valid brief = no dispatch.
+- **Circuit Breaker:** Max 3 code-modifying attempts per problem. Recon is free. Zero-code budget burns are killed immediately with structured `kill_reason`. See `.factory/80H-PROVING-PLAN.md` §1 for the full circuit breaker protocol.
+- **Recon-First Protocol:** Before any code-modifying headless dispatch, run a free read-only recon pass. Agent maps blast radius, identifies symbols, surfaces open questions. Walsh reviews the 30-second brief and greenlights or kills. This prevents exploration-on-the-clock spiral burns.
+- **Receipt Protocol:** Every wave (headless or local) emits a structured receipt conforming to `.factory/schemas/execution_receipt.schema.json` with `environment`, `branch_policy`, `kill_reason`, and `attempts_used` fields for post-hoc analysis.
+- **Full Playbook:** See [`.factory/HEADLESS.md`](.factory/HEADLESS.md) for the complete dispatch checklist, examples, and anti-patterns.

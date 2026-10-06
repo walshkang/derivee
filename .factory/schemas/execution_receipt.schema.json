@@ -13,8 +13,23 @@
       "type": "string",
       "enum": ["complete", "failed", "killed"]
     },
+    "environment": {
+      "type": "string",
+      "enum": ["local-mac", "headless-vm"],
+      "description": "Where this wave was executed."
+    },
+    "branch": {
+      "type": ["string", "null"],
+      "description": "Git branch name (e.g. 'wave/fix-observer-polling'). Null if patch-only."
+    },
+    "branch_policy": {
+      "type": "string",
+      "enum": ["wave-branch", "patch-only", "direct-main"],
+      "description": "How the wave's output was delivered."
+    },
     "git_commit": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "HEAD commit SHA after wave completion. Null if patch-only or no code changed."
     },
     "diff_stat": {
       "type": "object",
@@ -36,7 +51,8 @@
       "additionalProperties": false
     },
     "patch_file": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Path to .patch file relative to repo root. Null if direct-main."
     },
     "test_verdict": {
       "type": "string",
@@ -60,6 +76,16 @@
     "blocker_reason": {
       "type": ["string", "null"]
     },
+    "kill_reason": {
+      "type": ["string", "null"],
+      "enum": [null, "budget-exceeded", "timeout", "scope-violation", "attempt-limit", "environment-ceiling", "manual"],
+      "description": "Structured kill reason when status is 'killed'. Null otherwise."
+    },
+    "attempts_used": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of code-modifying attempts consumed (recon passes excluded)."
+    },
     "discoveries": {
       "type": "array",
       "items": {
@@ -82,11 +108,14 @@
   "required": [
     "wave_id",
     "status",
+    "environment",
+    "branch_policy",
     "git_commit",
     "diff_stat",
     "patch_file",
     "test_verdict",
-    "blocker_reason"
+    "blocker_reason",
+    "attempts_used"
   ],
   "additionalProperties": false
 }
