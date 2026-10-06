@@ -24,6 +24,11 @@ the design itself needs rethinking.
   partial work; with zero code written there is nothing to resume.)
 - A new dispatch on the same problem requires the recon output **and** Walsh's
   explicit word naming the wave.
+- Price from evidence: real waves get 400–600k, single attempt (usage log:
+  successful waves cost 250k–1.5M; zero real waves shipped under 250k). Small
+  budgets run `--max-attempts 1`. Surgical tasks below the harness's efficient
+  scale don't go to agy — batch related changes so one exploration serves
+  multiple edits.
 
 ## 2. Budget rationing
 
