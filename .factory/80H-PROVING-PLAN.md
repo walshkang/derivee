@@ -38,8 +38,10 @@ the design itself needs rethinking.
 - **Emergency ceiling: ~12M tokens.** Hard cap; every dispatch is logged
   against it. If device feedback surfaces more than 2 batched waves, stop and
   triage rather than burning the ceiling down.
-- Empirical priors per wave: surgical 150–250k, cross-cutting 500k–1M,
-  read-only recon ≤50k, free orchestrator CLI recon first.
+- Empirical priors per wave (synced 2026-10-07 with adopted evidence-based
+  pricing): real wave 400–600k single attempt; read-only recon ≤50k; free
+  orchestrator CLI recon first. Nothing real ships under 250k — do not price
+  below it.
 - `--budget` is mandatory (launcher refuses without it). No priced contract =
   no dispatch. No exceptions.
 - Check the rolling burn before sizing a wave: `bin/agy-window.py`
