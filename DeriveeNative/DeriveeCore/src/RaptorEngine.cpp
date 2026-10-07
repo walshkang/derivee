@@ -1,4 +1,17 @@
 #include "RaptorEngine.hpp"
+#include <cmath>
+
+static inline float haversine_m(float lat1, float lon1, float lat2, float lon2) {
+    constexpr float R = 6371000.0f;
+    float p1 = lat1 * M_PI / 180.0f;
+    float p2 = lat2 * M_PI / 180.0f;
+    float dp = (lat2 - lat1) * M_PI / 180.0f;
+    float dl = (lon2 - lon1) * M_PI / 180.0f;
+    float a = std::sin(dp / 2) * std::sin(dp / 2) + std::cos(p1) * std::cos(p2) * std::sin(dl / 2) * std::sin(dl / 2);
+    float c = 2.0f * std::atan2(std::sqrt(a), std::sqrt(1.0f - a));
+    return R * c;
+}
+
 #include <cstring>
 #include <algorithm>
 #include <limits>
@@ -278,7 +291,54 @@ void RaptorEngine::relax_intra_transfers(
             marked_stops_next.push_back(target_stop);
         }
     }
+    // Bike Share Dynamic Transfers
+    if (!bike_docks_.empty() && from_stop_id < stop_to_docks_.size()) {
+        const auto& origin_docks = stop_to_docks_[from_stop_id];
+        for (const auto& od : origin_docks) {
+            const auto& origin_dock = bike_docks_[od.dock_idx];
+            if (origin_dock.num_bikes_available == 0 && origin_dock.num_ebikes_available == 0) continue;
+
+            float speed = origin_dock.num_ebikes_available > 0 ? 6.7056f : 3.57632f; // 15 mph vs 8 mph
+
+            for (uint32_t dd_idx = 0; dd_idx < bike_docks_.size(); ++dd_idx) {
+                if (dd_idx == od.dock_idx) continue;
+                const auto& dest_dock = bike_docks_[dd_idx];
+                if (dest_dock.num_docks_available == 0) continue;
+
+                float dist_m = haversine_m(origin_dock.latitude, origin_dock.longitude, dest_dock.latitude, dest_dock.longitude);
+                uint32_t bike_time = static_cast<uint32_t>(dist_m / speed);
+                uint32_t arr_at_dest_dock = current_arrival_sec + od.duration_sec + bike_time;
+
+                for (const auto& ds : dock_to_stops_[dd_idx]) {
+                    uint32_t target_stop = ds.stop_id;
+                    if (!is_stop_active(target_stop)) continue;
+
+                    uint32_t tr_arrival = arr_at_dest_dock + ds.duration_sec;
+
+                    if (tr_arrival >= best_tau[target_stop] && tr_arrival >= tau_k[target_stop]) continue;
+
+                    if (tr_arrival < best_tau[target_stop]) {
+                        best_tau[target_stop] = tr_arrival;
+                    }
+                    if (tr_arrival < tau_k[target_stop]) {
+                        tau_k[target_stop] = tr_arrival;
+                        parents[target_stop] = ParentPointer(
+                            from_stop_id,
+                            TRIP_TRANSFER,
+                            current_arrival_sec,
+                            tr_arrival,
+                            ROUTE_TRANSFER,
+                            od.distance_meters + static_cast<uint16_t>(dist_m) + ds.distance_meters,
+                            true
+                        );
+                        marked_stops_next.push_back(target_stop);
+                    }
+                }
+            }
+        }
+    }
 }
+
 
 std::vector<JourneySegment> RaptorEngine::compute_journey(const QueryParams& params) const noexcept {
     std::vector<JourneySegment> results;
@@ -917,3 +977,36 @@ std::vector<CandidateStop> RaptorEngine::find_candidate_stops(
 }
 
 
+void RaptorEngine::load_bike_docks(const BikeDock* docks, size_t count) noexcept {
+    bike_docks_.assign(docks, docks + count);
+    station_id_to_dock_idx_.clear();
+    for (size_t i = 0; i < bike_docks_.size(); ++i) {
+        station_id_to_dock_idx_[bike_docks_[i].station_id] = i;
+    }
+
+    constexpr float MAX_WALK_M = 400.0f;
+    constexpr float WALK_SPEED = 1.34f;
+    stop_to_docks_.assign(stops_.size(), std::vector<DockWalk>());
+    dock_to_stops_.assign(bike_docks_.size(), std::vector<StopWalk>());
+
+    for (size_t s = 0; s < stops_.size(); ++s) {
+        for (size_t d = 0; d < bike_docks_.size(); ++d) {
+            float dist = haversine_m(stops_[s].latitude, stops_[s].longitude, bike_docks_[d].latitude, bike_docks_[d].longitude);
+            if (dist <= MAX_WALK_M) {
+                uint16_t dur = static_cast<uint16_t>(dist / WALK_SPEED);
+                stop_to_docks_[s].push_back({static_cast<uint32_t>(d), dur, static_cast<uint16_t>(dist)});
+                dock_to_stops_[d].push_back({static_cast<uint32_t>(s), dur, static_cast<uint16_t>(dist)});
+            }
+        }
+    }
+}
+
+void RaptorEngine::update_dock_availability(uint32_t station_id, uint16_t bikes, uint16_t ebikes, uint16_t docks) noexcept {
+    auto it = station_id_to_dock_idx_.find(station_id);
+    if (it != station_id_to_dock_idx_.end()) {
+        auto& d = bike_docks_[it->second];
+        d.num_bikes_available = bikes;
+        d.num_ebikes_available = ebikes;
+        d.num_docks_available = docks;
+    }
+}

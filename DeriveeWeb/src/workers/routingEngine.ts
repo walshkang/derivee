@@ -1,3 +1,5 @@
+import { computeItineraryFare } from './fareTable.ts';
+
 /**
  * routingEngine.ts
  * Core logic and WASM lifecycle orchestration for offline transit routing.
@@ -31,10 +33,21 @@ export interface DeriveeWasmModule {
   _engine_load_timetable(enginePtr: number, buffer: number, size: number): number | boolean;
   _engine_load_ultra(enginePtr: number, buffer: number, size: number): number | boolean;
   _engine_load_walk_graph(enginePtr: number, buffer: number, size: number): number | boolean;
+  _engine_load_bike_docks(enginePtr: number, buffer: number, count: number): void;
+  _engine_update_dock_availability(enginePtr: number, stationId: number, bikes: number, ebikes: number, docks: number): void;
   _engine_compute_journey(enginePtr: number, paramsPtr: number): number;
   _engine_free_result(resultPtr: number): void;
   _malloc(size: number): number;
   _free(ptr: number): void;
+}
+
+export function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash >>> 0;
 }
 
 /**
@@ -195,6 +208,53 @@ export async function hydrateOpfsBinaries(
   }
 }
 
+export function startGbfsPolling(wasm: DeriveeWasmModule, enginePtr: number, citySlug: string) {
+  if (citySlug !== 'nyc') return;
+
+  const poll = async () => {
+    try {
+      const [infoResp, statusResp] = await Promise.all([
+        fetch('https://gbfs.citibikenyc.com/gbfs/en/station_information.json'),
+        fetch('https://gbfs.citibikenyc.com/gbfs/en/station_status.json')
+      ]);
+      const infoData = await infoResp.json();
+      const statusData = await statusResp.json();
+
+      const stations = infoData.data.stations;
+      const statuses = statusData.data.stations;
+      const statusMap = new Map();
+      for (const st of statuses) {
+        statusMap.set(st.station_id, st);
+      }
+
+      const count = stations.length;
+      const bufferPtr = wasm._malloc(count * 20);
+      const dv = new DataView(wasm.HEAPU8.buffer, bufferPtr, count * 20);
+
+      for (let i = 0; i < count; i++) {
+        const st = stations[i];
+        const stat = statusMap.get(st.station_id) || {};
+        const offset = i * 20;
+        dv.setUint32(offset, hashString(String(st.station_id)), true);
+        dv.setFloat32(offset + 4, st.lat, true);
+        dv.setFloat32(offset + 8, st.lon, true);
+        dv.setUint16(offset + 12, stat.num_bikes_available || 0, true);
+        dv.setUint16(offset + 14, stat.num_ebikes_available || 0, true);
+        dv.setUint16(offset + 16, stat.num_docks_available || 0, true);
+        dv.setUint16(offset + 18, 0, true); // padding
+      }
+
+      wasm._engine_load_bike_docks(enginePtr, bufferPtr, count);
+      wasm._free(bufferPtr);
+    } catch (err) {
+      console.warn('Failed to poll GBFS:', err);
+    }
+  };
+
+  poll();
+  setInterval(poll, 60000);
+}
+
 export function computeJourneySegments(
   wasm: DeriveeWasmModule,
   enginePtr: number,
@@ -279,9 +339,11 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
   let enginePtr: number | null = null;
   let isInitialized = false;
   let cachedPatterns: RoutePatternEntry[] | undefined;
+  let currentCity: string = 'nyc';
   let initPromise: Promise<{ loadTimeMs: number; patterns?: RoutePatternEntry[] }> | null = null;
 
   async function init(citySlug: string): Promise<{ loadTimeMs: number; patterns?: RoutePatternEntry[] }> {
+    currentCity = citySlug || 'nyc';
     const startTime = performance.now();
     const wasm = options.loadWasm ? await options.loadWasm() : await loadWasmModule();
     const ePtr = wasm._engine_create();
@@ -296,6 +358,8 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
     } else {
       await hydrateOpfsBinaries(wasm, ePtr, citySlug);
     }
+
+    startGbfsPolling(wasm, ePtr, citySlug);
 
     let patternsTable: RoutePatternEntry[] | null = null;
     try {
@@ -366,9 +430,11 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
             msg.departure_timestamp,
             flags
           );
+          const totalFareCents = computeItineraryFare(segments, currentCity, cachedPatterns);
           options.postMessage({
             type: 'RESULT',
             segments,
+            totalFareCents,
             profile,
             flags,
             queryId: msg.queryId,

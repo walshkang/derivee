@@ -131,6 +131,9 @@ static_assert(sizeof(JourneySegment) == 24, "JourneySegment layout must be exact
 #include <vector>
 #include <algorithm>
 
+struct BikeDock { uint32_t station_id; float latitude; float longitude; uint16_t num_bikes_available; uint16_t num_ebikes_available; uint16_t num_docks_available; uint16_t padding; constexpr BikeDock() noexcept : station_id(0), latitude(0.0f), longitude(0.0f), num_bikes_available(0), num_ebikes_available(0), num_docks_available(0), padding(0) {} constexpr BikeDock(uint32_t id, float lat, float lon, uint16_t bikes, uint16_t ebikes, uint16_t docks) noexcept : station_id(id), latitude(lat), longitude(lon), num_bikes_available(bikes), num_ebikes_available(ebikes), num_docks_available(docks), padding(0) {} };
+static_assert(sizeof(BikeDock) == 20, "BikeDock layout must be exactly 20 bytes");
+
 struct QueryParams {
     uint32_t origin_stop_id;
     uint32_t destination_stop_id;

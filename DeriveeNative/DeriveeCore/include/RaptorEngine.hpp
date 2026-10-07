@@ -48,6 +48,22 @@ private:
     // Disrupted route segments: packed 64-bit key: (route_id << 32) | (from_stop << 16) | to_stop
     std::unordered_set<uint64_t> disrupted_segments_;
 
+    // Bike Share Dynamic Topo
+    struct DockWalk {
+        uint32_t dock_idx;
+        uint16_t duration_sec;
+        uint16_t distance_meters;
+    };
+    struct StopWalk {
+        uint32_t stop_id;
+        uint16_t duration_sec;
+        uint16_t distance_meters;
+    };
+    std::vector<BikeDock> bike_docks_;
+    std::vector<std::vector<DockWalk>> stop_to_docks_;
+    std::vector<std::vector<StopWalk>> dock_to_stops_;
+    std::unordered_map<uint32_t, uint32_t> station_id_to_dock_idx_;
+
     // Helper: Relax intra-timetable transfers when ULTRA CSR is not loaded
     void relax_intra_transfers(
         uint32_t from_stop_id,
@@ -60,6 +76,9 @@ private:
     ) const noexcept;
 
 public:
+    void load_bike_docks(const BikeDock* docks, size_t count) noexcept;
+    void update_dock_availability(uint32_t station_id, uint16_t bikes, uint16_t ebikes, uint16_t docks) noexcept;
+
     RaptorEngine();
     ~RaptorEngine();
 

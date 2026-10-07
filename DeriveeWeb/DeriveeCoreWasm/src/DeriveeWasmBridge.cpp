@@ -43,6 +43,18 @@ bool engine_load_walk_graph(void* engine_ptr, uint8_t* buffer, size_t size) {
     return engine->load_walk_graph_blob(buffer, size);
 }
 
+EMSCRIPTEN_KEEPALIVE
+void engine_load_bike_docks(void* engine_ptr, const BikeDock* buffer, size_t count) {
+    auto* engine = static_cast<RaptorEngine*>(engine_ptr);
+    engine->load_bike_docks(buffer, count);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void engine_update_dock_availability(void* engine_ptr, uint32_t station_id, uint16_t bikes, uint16_t ebikes, uint16_t docks) {
+    auto* engine = static_cast<RaptorEngine*>(engine_ptr);
+    engine->update_dock_availability(station_id, bikes, ebikes, docks);
+}
+
 struct JourneyResult {
     JourneySegment* segs;
     uint32_t count;

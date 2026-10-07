@@ -72,6 +72,7 @@ export type RoutingWorkerOutgoingMessage =
   | {
       type: 'RESULT';
       segments: RoutingSegment[];
+      totalFareCents?: number;
       profile?: RoutingProfile;
       flags?: number;
       queryId?: string | number;
