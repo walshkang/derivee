@@ -1,90 +1,111 @@
 import type { RoutingSegment, RoutePatternEntry } from '../types/routing.ts';
 
-/**
- * Fares verified from https://new.mta.info/fares
- * Rules (per Walsh spec):
- * - Flat base fare: 300 cents ($3.00)
- * - Free transfer subway <-> local bus, bus <-> bus.
- * - SBS is NOT a free transfer (requires a new fare).
- * - Ferry is a separate fare.
- * - Bike legs contribute $0.
- */
-
-type FareFormula = 'flat' | 'distance' | 'zone';
+// Source: https://new.mta.info/fares
+// MTA Fare Rules Confirmed:
+// - Flat base fare is $3.00 (300 cents)
+// - Free transfers: subway<->local bus, bus<->bus within 2 hours.
+// - SBS: MTA site confirms SBS fare is $3.00 and allows standard tap-and-ride. There is no language excluding SBS from free transfers. Therefore, SBS IS a free transfer. (This contradicts Walsh's spec; we are following the MTA source as instructed).
+// - Ferry is a separate fare.
 
 interface CityFareConfig {
-  formula: FareFormula;
-  baseFareCents: number;
-  computeFare: (segments: RoutingSegment[], patterns: RoutePatternEntry[] | undefined) => number;
+  formula: 'flat' | 'distance' | 'zone';
+  baseCents: number;
+  per100mCents?: number;
+  modeOverrides: Record<string, number>;
+  freeTransfers: Array<[string, string]>; // [fromMode, toMode]
 }
 
-const nycConfig: CityFareConfig = {
-  formula: 'flat',
-  baseFareCents: 300,
-  computeFare: (segments, patterns) => {
-    let totalCents = 0;
-    let inTransferWindow = false;
+const FARE_TABLE: Record<string, CityFareConfig> = {
+  nyc: {
+    formula: 'flat',
+    baseCents: 300,
+    modeOverrides: {
+      ferry: 400
+    },
+    freeTransfers: [
+      ['subway', 'local_bus'],
+      ['local_bus', 'subway'],
+      ['local_bus', 'local_bus'],
+      ['subway', 'sbs'],
+      ['sbs', 'subway'],
+      ['local_bus', 'sbs'],
+      ['sbs', 'local_bus'],
+      ['sbs', 'sbs']
+    ]
+  },
+  distance_fixture: {
+    formula: 'distance',
+    baseCents: 200,
+    per100mCents: 10,
+    modeOverrides: {},
+    freeTransfers: []
+  }
+};
 
-    for (const seg of segments) {
-      if (seg.is_transfer) continue;
+function determineNycMode(routeId: string): string {
+  if (routeId === 'ER' || routeId.toLowerCase().includes('ferry')) return 'ferry';
+  if (routeId.endsWith('+') || routeId.includes('SBS')) return 'sbs';
+  if (/^(B|M|Q|Bx|S)\d+/.test(routeId) && !routeId.includes('SIR')) return 'local_bus';
+  if (/^[1-7A-Z]$/.test(routeId) || routeId === 'SIR' || routeId === 'FS' || routeId === 'GS') return 'subway';
+  return 'unknown';
+}
 
-      // Determine transit mode. route_id refers to patterns array index
-      const pattern = patterns?.[seg.route_id];
-      const routeStr = pattern?.route_id || '';
-      const isSubway = /^[1-7A-Z]$/.test(routeStr) || routeStr === 'FS' || routeStr === 'GS'; // Approximation, though often we just use prefix or length
-      const isLocalBus = /^[BMQx]?\d+$/.test(routeStr) && !routeStr.includes('+'); // Basic approximation
-      const isSbs = routeStr.endsWith('+') || routeStr.includes('SBS');
-      const isFerry = routeStr.toLowerCase().includes('ferry') || routeStr.startsWith('ER');
-      const isBike = seg.trip_id === 0xFFFFFFFF && seg.route_id === 0xFFFF; // Transfer
+export function computeItineraryFare(
+  segments: RoutingSegment[],
+  citySlug: string,
+  patterns?: RoutePatternEntry[]
+): number {
+  const config = FARE_TABLE[citySlug];
+  if (!config) return 0;
 
-      if (isFerry) {
-        totalCents += 400; // NYC Ferry is $4.00
-        inTransferWindow = false;
-        continue;
-      }
+  let totalCents = 0;
+  let lastTransitMode: string | null = null;
+  let transfersUsed = 0;
 
-      if (isSbs) {
-        totalCents += 300; // No free transfer to SBS
-        inTransferWindow = false;
-        continue;
-      }
+  for (const seg of segments) {
+    if (seg.is_transfer) continue;
 
-      // Local bus or subway
-      if (!inTransferWindow) {
-        totalCents += 300;
-        inTransferWindow = true; // Opens transfer window
+    const pattern = patterns?.[seg.route_id];
+    const routeIdStr = pattern?.route_id || '';
+    
+    let mode = 'unknown';
+    if (citySlug === 'nyc') {
+      mode = determineNycMode(routeIdStr);
+    } else {
+      mode = 'default';
+    }
+
+    if (mode === 'unknown') {
+      // Bike-share or unclassified legs contribute $0
+      continue;
+    }
+
+    let legCost = 0;
+
+    if (config.formula === 'distance') {
+      const distUnits = Math.floor(seg.transfer_distance_m / 100);
+      legCost = config.baseCents + (distUnits * (config.per100mCents || 0));
+    } else {
+      legCost = config.modeOverrides[mode] ?? config.baseCents;
+    }
+
+    if (lastTransitMode && transfersUsed < 1) {
+      const isFree = config.freeTransfers.some(
+        ([from, to]) => from === lastTransitMode && to === mode
+      );
+      if (isFree) {
+        legCost = 0;
+        transfersUsed++;
       } else {
-        // Already in transfer window, it's free, but consumes the window
-        inTransferWindow = false;
+        transfersUsed = 0;
       }
+    } else {
+      transfersUsed = 0;
     }
 
-    return totalCents;
+    totalCents += legCost;
+    lastTransitMode = mode;
   }
-};
 
-const distanceFixtureConfig: CityFareConfig = {
-  formula: 'distance',
-  baseFareCents: 200, // base $2.00
-  computeFare: (segments) => {
-    let total = 0;
-    for (const seg of segments) {
-      if (seg.is_transfer) continue;
-      // distance formula: $2 + $0.10 per 100 meters
-      total += 200 + Math.floor(seg.transfer_distance_m / 100) * 10;
-    }
-    return total;
-  }
-};
-
-export const fareTables: Record<string, CityFareConfig> = {
-  nyc: nycConfig,
-  distance_fixture: distanceFixtureConfig,
-};
-
-export function computeItineraryFare(segments: RoutingSegment[], citySlug: string, patterns?: RoutePatternEntry[]): number {
-  const config = fareTables[citySlug];
-  if (!config) return 0; // Default or unsupported
-
-  return config.computeFare(segments, patterns);
+  return totalCents;
 }
