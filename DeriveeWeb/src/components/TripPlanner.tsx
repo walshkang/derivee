@@ -23,6 +23,12 @@ import type { WorkerToMainMessage } from '../types/pack';
 import { LegDetailView } from './LegDetailView';
 import type { TransitLegDisplay } from '../utils/itineraryDisplay';
 import type { JourneyHighlightState } from './TransitOverlays';
+import {
+  searchPlaces,
+  findNearestStopByCoordinates,
+  type GeocodedPlace,
+} from '../utils/geocoder';
+import { queryCandidateStopsFromWorker } from '../workers/routingEngine';
 
 interface TripPlannerProps {
   isInstalled: boolean;
@@ -61,6 +67,10 @@ export function TripPlanner({
   const [selectedDest, setSelectedDest] = useState<StopItem | null>(null);
   const [showOriginDropdown, setShowOriginDropdown] = useState<boolean>(false);
   const [showDestDropdown, setShowDestDropdown] = useState<boolean>(false);
+  const [originPlaces, setOriginPlaces] = useState<GeocodedPlace[]>([]);
+  const [destPlaces, setDestPlaces] = useState<GeocodedPlace[]>([]);
+  const [selectedOriginPlace, setSelectedOriginPlace] = useState<GeocodedPlace | null>(null);
+  const [selectedDestPlace, setSelectedDestPlace] = useState<GeocodedPlace | null>(null);
   const [departureTime, setDepartureTime] = useState<string>(() => {
     const d = new Date();
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -347,7 +357,7 @@ export function TripPlanner({
     if (
       !originInput ||
       originInput.trim().length < 2 ||
-      (selectedOrigin && originInput === selectedOrigin.name)
+      (selectedOrigin && (originInput === selectedOrigin.name || originInput === selectedOriginPlace?.displayName))
     ) {
       return [];
     }
@@ -364,13 +374,13 @@ export function TripPlanner({
       }
     }
     return matches;
-  }, [originInput, stops, selectedOrigin]);
+  }, [originInput, stops, selectedOrigin, selectedOriginPlace]);
 
   const destSuggestions = useMemo(() => {
     if (
       !destInput ||
       destInput.trim().length < 2 ||
-      (selectedDest && destInput === selectedDest.name)
+      (selectedDest && (destInput === selectedDest.name || destInput === selectedDestPlace?.displayName))
     ) {
       return [];
     }
@@ -387,7 +397,89 @@ export function TripPlanner({
       }
     }
     return matches;
-  }, [destInput, stops, selectedDest]);
+  }, [destInput, stops, selectedDest, selectedDestPlace]);
+
+  // Online Geocoding: debounced Nominatim search for places
+  useEffect(() => {
+    if (
+      !originInput ||
+      originInput.trim().length < 2 ||
+      (selectedOrigin && (originInput === selectedOrigin.name || originInput === selectedOriginPlace?.displayName))
+    ) {
+      setOriginPlaces([]);
+      return;
+    }
+
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        const places = await searchPlaces(originInput);
+        if (active) {
+          setOriginPlaces(places);
+        }
+      } catch {
+        if (active) {
+          setOriginPlaces([]);
+        }
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [originInput, selectedOrigin, selectedOriginPlace]);
+
+  useEffect(() => {
+    if (
+      !destInput ||
+      destInput.trim().length < 2 ||
+      (selectedDest && (destInput === selectedDest.name || destInput === selectedDestPlace?.displayName))
+    ) {
+      setDestPlaces([]);
+      return;
+    }
+
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        const places = await searchPlaces(destInput);
+        if (active) {
+          setDestPlaces(places);
+        }
+      } catch {
+        if (active) {
+          setDestPlaces([]);
+        }
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [destInput, selectedDest, selectedDestPlace]);
+
+  const resolveNearestStation = async (place: GeocodedPlace): Promise<StopItem | null> => {
+    if (routingWorkerRef.current && engineStatus === 'ready') {
+      try {
+        const candidateIds = await queryCandidateStopsFromWorker(
+          routingWorkerRef.current,
+          place.lat,
+          place.lon
+        );
+        if (candidateIds && candidateIds.length > 0) {
+          for (const id of candidateIds) {
+            const stop = stopsMap.get(id);
+            if (stop) return stop;
+          }
+        }
+      } catch {
+        // Degrade gracefully to distance fallback
+      }
+    }
+    return findNearestStopByCoordinates(place.lat, place.lon, stops);
+  };
 
   const resetRoutes = () => {
     setFastestSegments(null);
@@ -414,25 +506,59 @@ export function TripPlanner({
 
   const handleSelectOrigin = (stop: StopItem) => {
     setSelectedOrigin(stop);
+    setSelectedOriginPlace(null);
+    setOriginPlaces([]);
     setOriginInput(stop.name);
     setShowOriginDropdown(false);
     resetRoutes();
   };
 
+  const handleSelectOriginPlace = async (place: GeocodedPlace) => {
+    const snapped = await resolveNearestStation(place);
+    if (snapped) {
+      setSelectedOrigin(snapped);
+      setSelectedOriginPlace(place);
+      setOriginInput(place.displayName);
+      setOriginPlaces([]);
+      setShowOriginDropdown(false);
+      resetRoutes();
+    }
+  };
+
   const handleSelectDest = (stop: StopItem) => {
     setSelectedDest(stop);
+    setSelectedDestPlace(null);
+    setDestPlaces([]);
     setDestInput(stop.name);
     setShowDestDropdown(false);
     resetRoutes();
   };
 
+  const handleSelectDestPlace = async (place: GeocodedPlace) => {
+    const snapped = await resolveNearestStation(place);
+    if (snapped) {
+      setSelectedDest(snapped);
+      setSelectedDestPlace(place);
+      setDestInput(place.displayName);
+      setDestPlaces([]);
+      setShowDestDropdown(false);
+      resetRoutes();
+    }
+  };
+
   const handleSwapStops = () => {
     const tempStop = selectedOrigin;
     const tempInput = originInput;
+    const tempPlace = selectedOriginPlace;
+    const tempPlaces = originPlaces;
     setSelectedOrigin(selectedDest);
+    setSelectedOriginPlace(selectedDestPlace);
     setOriginInput(destInput);
+    setOriginPlaces(destPlaces);
     setSelectedDest(tempStop);
+    setSelectedDestPlace(tempPlace);
     setDestInput(tempInput);
+    setDestPlaces(tempPlaces);
     resetRoutes();
   };
 

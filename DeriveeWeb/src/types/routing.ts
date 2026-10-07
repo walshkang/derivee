@@ -64,6 +64,15 @@ export type RoutingWorkerIncomingMessage =
       profile?: RoutingProfile;
       flags?: number;
       queryId?: string | number;
+    }
+  | {
+      type: 'FIND_CANDIDATE_STOPS';
+      lat: number;
+      lon: number;
+      maxRadius?: number;
+      flags?: number;
+      maxResults?: number;
+      queryId?: string | number;
     };
 
 export type RoutingWorkerOutgoingMessage =
@@ -74,6 +83,11 @@ export type RoutingWorkerOutgoingMessage =
       segments: RoutingSegment[];
       profile?: RoutingProfile;
       flags?: number;
+      queryId?: string | number;
+    }
+  | {
+      type: 'CANDIDATE_STOPS_RESULT';
+      stopIds: number[];
       queryId?: string | number;
     };
 

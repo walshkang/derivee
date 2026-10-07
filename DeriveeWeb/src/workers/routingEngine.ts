@@ -33,6 +33,15 @@ export interface DeriveeWasmModule {
   _engine_load_walk_graph(enginePtr: number, buffer: number, size: number): number | boolean;
   _engine_compute_journey(enginePtr: number, paramsPtr: number): number;
   _engine_free_result(resultPtr: number): void;
+  _engine_find_candidate_stops?(
+    enginePtr: number,
+    lat: number,
+    lon: number,
+    maxRadius: number,
+    flags: number,
+    maxResults: number
+  ): number;
+  _engine_free_candidate_stops?(resultPtr: number): void;
   _malloc(size: number): number;
   _free(ptr: number): void;
 }
@@ -266,6 +275,126 @@ export function computeJourneySegments(
   }
 }
 
+/**
+ * Queries candidate transit stops near a given coordinate via native RAPTOR engine.
+ * Parses CandidateStopResult (8B) and CandidateStop array (30B per stop).
+ * Returns array of stop IDs.
+ */
+export function findCandidateStops(
+  wasm: DeriveeWasmModule,
+  enginePtr: number,
+  lat: number,
+  lon: number,
+  maxRadius: number = 1000.0,
+  flags: number = 0,
+  maxResults: number = 5
+): number[] {
+  if (typeof wasm._engine_find_candidate_stops !== 'function') {
+    return [];
+  }
+
+  const resPtr = wasm._engine_find_candidate_stops(
+    enginePtr,
+    lat,
+    lon,
+    maxRadius,
+    flags,
+    maxResults
+  );
+  if (!resPtr) {
+    return [];
+  }
+
+  try {
+    const resDv = new DataView(wasm.HEAPU8.buffer, resPtr, 8);
+    const stopsPtr = resDv.getUint32(0, true);
+    const count = resDv.getUint32(4, true);
+
+    if (!stopsPtr || count === 0) {
+      return [];
+    }
+
+    const stopIds: number[] = [];
+    for (let i = 0; i < count; i++) {
+      const stopDv = new DataView(wasm.HEAPU8.buffer, stopsPtr + i * 30, 30);
+      stopIds.push(stopDv.getUint32(0, true));
+    }
+    return stopIds;
+  } finally {
+    if (typeof wasm._engine_free_candidate_stops === 'function') {
+      wasm._engine_free_candidate_stops(resPtr);
+    }
+  }
+}
+
+/**
+ * Dispatches a FIND_CANDIDATE_STOPS message to a routing worker and awaits CANDIDATE_STOPS_RESULT.
+ */
+export function queryCandidateStopsFromWorker(
+  worker: {
+    postMessage: (msg: any) => void;
+    addEventListener: (type: 'message' | 'error', handler: any) => void;
+    removeEventListener: (type: 'message' | 'error', handler: any) => void;
+  },
+  lat: number,
+  lon: number,
+  options?: {
+    timeoutMs?: number;
+    maxRadius?: number;
+    flags?: number;
+    maxResults?: number;
+    queryId?: string | number;
+  }
+): Promise<number[]> {
+  const queryId = options?.queryId ?? `cand-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const timeoutMs = options?.timeoutMs ?? 5000;
+
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const messageHandler = (event: MessageEvent<RoutingWorkerOutgoingMessage>) => {
+      const data = event.data;
+      if (data.type === 'CANDIDATE_STOPS_RESULT' && (data.queryId === undefined || data.queryId === queryId)) {
+        cleanup();
+        resolve(data.stopIds);
+      } else if (data.type === 'ERROR' && (data.queryId === undefined || data.queryId === queryId)) {
+        cleanup();
+        reject(new Error(data.message));
+      }
+    };
+
+    const errorHandler = (err: any) => {
+      cleanup();
+      reject(err instanceof Error ? err : new Error(String(err)));
+    };
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      worker.removeEventListener('message', messageHandler);
+      worker.removeEventListener('error', errorHandler);
+    };
+
+    timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`queryCandidateStops timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    worker.addEventListener('message', messageHandler);
+    worker.addEventListener('error', errorHandler);
+
+    worker.postMessage({
+      type: 'FIND_CANDIDATE_STOPS',
+      lat,
+      lon,
+      maxRadius: options?.maxRadius,
+      flags: options?.flags,
+      maxResults: options?.maxResults,
+      queryId,
+    });
+  });
+}
+
+
 export interface WorkerOrchestrationOptions {
   postMessage: (msg: RoutingWorkerOutgoingMessage) => void;
   loadWasm?: () => Promise<DeriveeWasmModule>;
@@ -371,6 +500,27 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
             segments,
             profile,
             flags,
+            queryId: msg.queryId,
+          });
+          break;
+        }
+
+        case 'FIND_CANDIDATE_STOPS': {
+          if (!wasmModule || !enginePtr || !isInitialized) {
+            throw new Error('Routing engine is not initialized');
+          }
+          const stopIds = findCandidateStops(
+            wasmModule,
+            enginePtr,
+            msg.lat,
+            msg.lon,
+            msg.maxRadius ?? 1000.0,
+            msg.flags ?? 0,
+            msg.maxResults ?? 5
+          );
+          options.postMessage({
+            type: 'CANDIDATE_STOPS_RESULT',
+            stopIds,
             queryId: msg.queryId,
           });
           break;
