@@ -114,6 +114,23 @@
       "additionalProperties": false,
       "description": "Output from a prior recon pass. Required for waves with max_attempts > 1."
     },
+    "plan_artifact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the implementation plan markdown (loops/templates/implementation-plan.md format), relative to the audits root (~/workspace/derivee-audits/). Example: 'plans/geocode-finish-plan.md'."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$",
+          "description": "Repo commit the plan was written against. The agent re-validates the plan if the tree has moved past this commit."
+        }
+      },
+      "required": ["path", "commit"],
+      "additionalProperties": false,
+      "description": "Orchestrator-written implementation plan. The dispatch prompt MUST instruct the agent to validate this plan against the code as step 1; a disproved plan is a kill condition (halt + failed receipt), never an invitation to improvise."
+    },
     "approved_by": {
       "type": "string",
       "enum": ["walsh-explicit", "convergence-list"],
@@ -134,6 +151,7 @@
     "properties": { "environment": { "const": "headless-vm" } }
   },
   "then": {
+    "required": ["plan_artifact"],
     "properties": {
       "scope": {
         "properties": {

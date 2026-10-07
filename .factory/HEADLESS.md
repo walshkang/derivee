@@ -79,20 +79,32 @@ These carry forward from `80H-PROVING-PLAN.md` and are **non-negotiable**:
 
 ---
 
-## 4. Recon-First, Code-Second
+## 4. Plan-First, Code-Second
 
-Before any code-modifying dispatch, the orchestrator should run a **free recon pass**:
+The headless agent's judgment is unreliable on open exploration (evidence:
+geocode 300k burned its budget viewing one file 6x, zero code; Oct 4 retry
+chain re-dispatched twice instead of stopping). So the orchestrator plans,
+the agent executes:
 
-1. Agent reads the codebase, maps the blast radius, identifies symbols.
-2. Agent writes `recon_output` into the execution brief:
-   - `blast_radius_files`: files that will need modification
-   - `symbols_mapped`: key functions/types/modules involved
-   - `open_questions`: anything requiring Walsh's judgment call
-3. Walsh reviews the brief (30 seconds), greenlights or kills.
-4. **Only then** does the code-modifying wave dispatch.
+1. Orchestrator runs a **free recon pass** (repo map, symbol grep, git log,
+   prior run dirs — zero agy spend) and writes the implementation plan to
+   `<audits>/plans/<wave>-plan.md` (`loops/templates/implementation-plan.md`:
+   goal, touchpoint map with file:line citations, change shape with signatures,
+   tests, non-goals, unknowns, kill conditions).
+2. The execution brief references the plan in `plan_artifact` (path + the
+   commit the plan was written against). Schema requires it for `headless-vm`.
+3. The dispatch prompt instructs the agent: **step 1 is validating the plan
+   against the code** — two independent reads instead of one. A disproved plan
+   is a kill condition (halt + failed receipt), never an invitation to
+   improvise. If the tree moved past the plan's commit, re-validate before
+   trusting any citation.
+4. Walsh reviews the brief (30 seconds), greenlights or kills.
+5. **Only then** does the code-modifying wave dispatch.
 
-This prevents the #1 burn pattern: agents exploring the codebase on the clock while
-simultaneously trying to write code.
+This prevents the #1 burn pattern: agents exploring the codebase on the clock
+while simultaneously trying to write code. The expensive "figure out what to
+touch" work moves to the unmetered orchestrator; the metered agent starts from
+a validated plan.
 
 ---
 
@@ -101,6 +113,8 @@ simultaneously trying to write code.
 Before dispatching any wave (headless or local), the orchestrator must verify:
 
 - [ ] `active_brief.json` validates against `schemas/execution_brief.schema.json`
+- [ ] `plan_artifact.path` exists and `plan_artifact.commit` matches the tree
+  (or the agent is instructed to re-validate on drift)
 - [ ] `environment` matches the actual execution context
 - [ ] `scope.tier` is `mechanically-computable` if `environment` is `headless-vm`
 - [ ] `branch_policy` is `wave-branch` or `patch-only` if `environment` is `headless-vm`
