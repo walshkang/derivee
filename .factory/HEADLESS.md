@@ -109,6 +109,15 @@ Before dispatching any wave (headless or local), the orchestrator must verify:
 - [ ] `kill_conditions` list is non-empty
 - [ ] `approved_by` is set (`walsh-explicit` or `convergence-list`)
 
+### 5b. Post-Dispatch Verification (orchestrator)
+- [ ] `git ls-remote origin wave/<wave_id>` shows the branch — the agent's push
+  actually landed (observed 2026-10-06: agent committed locally but never
+  pushed; the orchestrator pushed it). A wave-branch wave without a remote
+  branch is incomplete.
+- [ ] Working tree is back on `main` with no stray uncommitted files from the
+  wave (agents work in an isolated worktree; the orchestrator's tree is never
+  the agent's workspace).
+
 ---
 
 ## 6. Receipt Protocol
