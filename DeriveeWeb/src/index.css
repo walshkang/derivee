@@ -2156,6 +2156,31 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   border-radius: 4px;
 }
 
+.place-suggestion-item {
+  border-left: 2px solid #38bdf8;
+}
+
+.place-suggestion-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.place-suggestion-type {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.place-icon {
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
 .trip-swap-container {
   display: flex;
   justify-content: center;
@@ -3430,6 +3455,12 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
 [data-theme="light"] .stop-suggestion-item:hover,
 [data-theme="light"] .stop-suggestion-item[aria-selected="true"] {
   background-color: rgba(56, 189, 248, 0.08);
+}
+
+[data-theme="light"] .place-suggestion-type {
+  color: #0284c7;
+  background-color: rgba(2, 132, 199, 0.1);
+  border-color: rgba(2, 132, 199, 0.25);
 }
 
 [data-theme="light"] .transit-state-overlay {

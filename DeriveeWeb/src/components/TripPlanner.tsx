@@ -725,8 +725,12 @@ export function TripPlanner({
                 const val = (e.target as HTMLInputElement).value;
                 setOriginInput(val);
                 setShowOriginDropdown(true);
-                if (selectedOrigin && val !== selectedOrigin.name) {
+                if (
+                  (selectedOrigin && val !== selectedOrigin.name) ||
+                  (selectedOriginPlace && val !== selectedOriginPlace.displayName)
+                ) {
                   setSelectedOrigin(null);
+                  setSelectedOriginPlace(null);
                   resetRoutes();
                 }
               }}
@@ -739,6 +743,8 @@ export function TripPlanner({
                 onClick={() => {
                   setOriginInput('');
                   setSelectedOrigin(null);
+                  setSelectedOriginPlace(null);
+                  setOriginPlaces([]);
                   resetRoutes();
                 }}
                 aria-label="Clear origin"
@@ -748,7 +754,7 @@ export function TripPlanner({
             )}
           </div>
 
-          {showOriginDropdown && originSuggestions.length > 0 && (
+          {showOriginDropdown && (originSuggestions.length > 0 || originPlaces.length > 0) && (
             <div class="stop-autocomplete-dropdown" role="listbox">
               {originSuggestions.map((stop) => (
                 <button
@@ -756,11 +762,27 @@ export function TripPlanner({
                   type="button"
                   class="stop-suggestion-item"
                   role="option"
-                  aria-selected={selectedOrigin?.id === stop.id}
+                  aria-selected={selectedOrigin?.id === stop.id && !selectedOriginPlace}
                   onClick={() => handleSelectOrigin(stop)}
                 >
                   <span class="stop-suggestion-name">{stop.name}</span>
                   <span class="stop-suggestion-type">Station</span>
+                </button>
+              ))}
+              {originPlaces.map((place, idx) => (
+                <button
+                  key={`orig-place-${place.placeId ?? idx}`}
+                  type="button"
+                  class="stop-suggestion-item place-suggestion-item"
+                  role="option"
+                  aria-selected={selectedOriginPlace?.placeId === place.placeId}
+                  onClick={() => handleSelectOriginPlace(place)}
+                >
+                  <span class="stop-suggestion-name place-suggestion-name">
+                    <span class="place-icon" aria-hidden="true">📍</span>
+                    {place.displayName}
+                  </span>
+                  <span class="stop-suggestion-type place-suggestion-type">Place</span>
                 </button>
               ))}
             </div>
@@ -797,8 +819,12 @@ export function TripPlanner({
                 const val = (e.target as HTMLInputElement).value;
                 setDestInput(val);
                 setShowDestDropdown(true);
-                if (selectedDest && val !== selectedDest.name) {
+                if (
+                  (selectedDest && val !== selectedDest.name) ||
+                  (selectedDestPlace && val !== selectedDestPlace.displayName)
+                ) {
                   setSelectedDest(null);
+                  setSelectedDestPlace(null);
                   resetRoutes();
                 }
               }}
@@ -811,6 +837,8 @@ export function TripPlanner({
                 onClick={() => {
                   setDestInput('');
                   setSelectedDest(null);
+                  setSelectedDestPlace(null);
+                  setDestPlaces([]);
                   resetRoutes();
                 }}
                 aria-label="Clear destination"
@@ -820,7 +848,7 @@ export function TripPlanner({
             )}
           </div>
 
-          {showDestDropdown && destSuggestions.length > 0 && (
+          {showDestDropdown && (destSuggestions.length > 0 || destPlaces.length > 0) && (
             <div class="stop-autocomplete-dropdown" role="listbox">
               {destSuggestions.map((stop) => (
                 <button
@@ -828,11 +856,27 @@ export function TripPlanner({
                   type="button"
                   class="stop-suggestion-item"
                   role="option"
-                  aria-selected={selectedDest?.id === stop.id}
+                  aria-selected={selectedDest?.id === stop.id && !selectedDestPlace}
                   onClick={() => handleSelectDest(stop)}
                 >
                   <span class="stop-suggestion-name">{stop.name}</span>
                   <span class="stop-suggestion-type">Station</span>
+                </button>
+              ))}
+              {destPlaces.map((place, idx) => (
+                <button
+                  key={`dest-place-${place.placeId ?? idx}`}
+                  type="button"
+                  class="stop-suggestion-item place-suggestion-item"
+                  role="option"
+                  aria-selected={selectedDestPlace?.placeId === place.placeId}
+                  onClick={() => handleSelectDestPlace(place)}
+                >
+                  <span class="stop-suggestion-name place-suggestion-name">
+                    <span class="place-icon" aria-hidden="true">📍</span>
+                    {place.displayName}
+                  </span>
+                  <span class="stop-suggestion-type place-suggestion-type">Place</span>
                 </button>
               ))}
             </div>
