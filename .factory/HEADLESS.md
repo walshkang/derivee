@@ -113,6 +113,9 @@ a validated plan.
 Before dispatching any wave (headless or local), the orchestrator must verify:
 
 - [ ] `active_brief.json` validates against `schemas/execution_brief.schema.json`
+- [ ] prompt uses `{{WORKTREE}}`, never a hardcoded worktree path (the launcher
+  derives `derivee-worktrees/<wave_id>` on `wave/<wave_id>`, refuses a dirty
+  tree, and warns on stranded uncommitted work — 2026-10-07)
 - [ ] `plan_artifact.path` exists and `plan_artifact.commit` matches the tree
   (or the agent is instructed to re-validate on drift)
 - [ ] `environment` matches the actual execution context
