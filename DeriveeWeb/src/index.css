@@ -98,6 +98,39 @@ html, body {
   background: radial-gradient(circle at 50% 0%, var(--bg-gradient-top) 0%, var(--bg-primary) 70%);
 }
 
+/* Service worker update toast */
+.sw-update-toast {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #1a1a2e;
+  color: #fff;
+  border-radius: 24px;
+  font-size: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+.sw-update-toast button {
+  border: none;
+  border-radius: 16px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #4a90d9;
+  color: #fff;
+}
+.sw-update-toast button[aria-label="Dismiss"] {
+  background: transparent;
+  color: #999;
+  padding: 6px 8px;
+}
+
 /* User text input selection preservation */
 input, textarea, [contenteditable="true"], .user-selectable {
   -webkit-user-select: text;

@@ -23,17 +23,20 @@ export function App() {
   const [packState, setPackState] = useState<InstalledPackState | null>(null);
   const [packDismissed, setPackDismissedState] = useState<boolean>(() => isPackDismissed());
   const [packExpanded, setPackExpanded] = useState<boolean>(false);
+  const [swUpdateAvailable, setSwUpdateAvailable] = useState<(() => void) | null>(null);
   const [mapInstance, setMapInstance] = useState<Map | null>(null);
   const [focusedRouteId, setFocusedRouteId] = useState<string | null>(null);
   const [sheetDetent, setSheetDetent] = useState<number>(15);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      registerSW({
+      const updateSW = registerSW({
         immediate: true,
         onNeedRefresh() {
-          // eslint-disable-next-line no-console
-          console.info('[Dérivée PWA] New content available');
+          // New version available — show update prompt instead of just logging
+          setSwUpdateAvailable(() => () => {
+            updateSW(true).then(() => window.location.reload());
+          });
         },
         onOfflineReady() {
           // eslint-disable-next-line no-console
@@ -67,6 +70,18 @@ export function App() {
 
   return (
     <div class="app-layout">
+      {/* Service worker update prompt */}
+      {swUpdateAvailable && (
+        <div class="sw-update-toast" role="alert">
+          <span>New version available</span>
+          <button type="button" onClick={() => swUpdateAvailable()}>
+            Update
+          </button>
+          <button type="button" aria-label="Dismiss" onClick={() => setSwUpdateAvailable(null)}>
+            ✕
+          </button>
+        </div>
+      )}
       {/* Full-screen offline vector basemap base layer */}
       <BasemapView theme={resolvedTheme} onMapLoaded={setMapInstance} />
 
