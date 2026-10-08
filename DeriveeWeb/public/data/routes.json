@@ -54,6 +54,671 @@
     "color": "EB6800",
     "textColor": "FFFFFF"
   },
+  "B1": {
+    "shortName": "B1",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "B100": {
+    "shortName": "B100",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "B101": {
+    "shortName": "B101",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B102": {
+    "shortName": "B102",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B103": {
+    "shortName": "B103",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "B106": {
+    "shortName": "B106",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B11": {
+    "shortName": "B11",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "B111": {
+    "shortName": "B111",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B116": {
+    "shortName": "B116",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B12": {
+    "shortName": "B12",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B13": {
+    "shortName": "B13",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "B14": {
+    "shortName": "B14",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "B15": {
+    "shortName": "B15",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "B16": {
+    "shortName": "B16",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "B17": {
+    "shortName": "B17",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "B2": {
+    "shortName": "B2",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "B20": {
+    "shortName": "B20",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B24": {
+    "shortName": "B24",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "B25": {
+    "shortName": "B25",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B26": {
+    "shortName": "B26",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "B3": {
+    "shortName": "B3",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B31": {
+    "shortName": "B31",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "B32": {
+    "shortName": "B32",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "B35": {
+    "shortName": "B35",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B36": {
+    "shortName": "B36",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "B37": {
+    "shortName": "B37",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "B38": {
+    "shortName": "B38",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "B39": {
+    "shortName": "B39",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "B4": {
+    "shortName": "B4",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B41": {
+    "shortName": "B41",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "B42": {
+    "shortName": "B42",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "B43": {
+    "shortName": "B43",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B44": {
+    "shortName": "B44",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "B44+": {
+    "shortName": "B44-SBS",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "B45": {
+    "shortName": "B45",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B46": {
+    "shortName": "B46",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B46+": {
+    "shortName": "B46-SBS",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B47": {
+    "shortName": "B47",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "B48": {
+    "shortName": "B48",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B49": {
+    "shortName": "B49",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B52": {
+    "shortName": "B52",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B54": {
+    "shortName": "B54",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B57": {
+    "shortName": "B57",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B6": {
+    "shortName": "B6",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B60": {
+    "shortName": "B60",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "B61": {
+    "shortName": "B61",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B62": {
+    "shortName": "B62",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "B63": {
+    "shortName": "B63",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "B64": {
+    "shortName": "B64",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B65": {
+    "shortName": "B65",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "B67": {
+    "shortName": "B67",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B68": {
+    "shortName": "B68",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B69": {
+    "shortName": "B69",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "B7": {
+    "shortName": "B7",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B70": {
+    "shortName": "B70",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "B74": {
+    "shortName": "B74",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B8": {
+    "shortName": "B8",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "B82": {
+    "shortName": "B82",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B82+": {
+    "shortName": "B82-SBS",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B83": {
+    "shortName": "B83",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B84": {
+    "shortName": "B84",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "B9": {
+    "shortName": "B9",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B90": {
+    "shortName": "B90",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "B93": {
+    "shortName": "B93",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B94": {
+    "shortName": "B94",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B96": {
+    "shortName": "B96",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B98": {
+    "shortName": "B98",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "B99": {
+    "shortName": "B99",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "BM1": {
+    "shortName": "BM1",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BM2": {
+    "shortName": "BM2",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BM3": {
+    "shortName": "BM3",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BM4": {
+    "shortName": "BM4",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BM5": {
+    "shortName": "BM5",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BX1": {
+    "shortName": "Bx1",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "BX10": {
+    "shortName": "Bx10",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "BX11": {
+    "shortName": "Bx11",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX12": {
+    "shortName": "Bx12",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "BX12+": {
+    "shortName": "Bx12-SBS",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "BX13": {
+    "shortName": "Bx13",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "BX15": {
+    "shortName": "Bx15",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX16": {
+    "shortName": "Bx16",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "BX17": {
+    "shortName": "Bx17",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "BX18A": {
+    "shortName": "Bx18A",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "BX18B": {
+    "shortName": "Bx18B",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "BX19": {
+    "shortName": "Bx19",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "BX2": {
+    "shortName": "Bx2",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX20": {
+    "shortName": "Bx20",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "BX21": {
+    "shortName": "Bx21",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "BX22": {
+    "shortName": "Bx22",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX23": {
+    "shortName": "Bx23",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "BX24": {
+    "shortName": "Bx24",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "BX25": {
+    "shortName": "Bx25",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX26": {
+    "shortName": "Bx26",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX27": {
+    "shortName": "Bx27",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "BX28": {
+    "shortName": "Bx28",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "BX29": {
+    "shortName": "Bx29",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "BX3": {
+    "shortName": "Bx3",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX30": {
+    "shortName": "Bx30",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX31": {
+    "shortName": "Bx31",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX32": {
+    "shortName": "Bx32",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "BX33": {
+    "shortName": "Bx33",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "BX34": {
+    "shortName": "Bx34",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "BX35": {
+    "shortName": "Bx35",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "BX36": {
+    "shortName": "Bx36",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "BX38": {
+    "shortName": "Bx38",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX39": {
+    "shortName": "Bx39",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX4": {
+    "shortName": "Bx4",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX40": {
+    "shortName": "Bx40",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "BX41": {
+    "shortName": "Bx41",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX41+": {
+    "shortName": "Bx41-SBS",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX42": {
+    "shortName": "Bx42",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX46": {
+    "shortName": "Bx46",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX4A": {
+    "shortName": "Bx4A",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX5": {
+    "shortName": "Bx5",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX6": {
+    "shortName": "Bx6",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX6+": {
+    "shortName": "Bx6-SBS",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX7": {
+    "shortName": "Bx7",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX8": {
+    "shortName": "Bx8",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX9": {
+    "shortName": "Bx9",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "BX90": {
+    "shortName": "Bx90",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "BX92": {
+    "shortName": "BX92",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "BX95": {
+    "shortName": "BX95",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "BXM1": {
+    "shortName": "BxM1",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM10": {
+    "shortName": "BxM10",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM11": {
+    "shortName": "BxM11",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM18": {
+    "shortName": "BxM18",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM2": {
+    "shortName": "BxM2",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM3": {
+    "shortName": "BxM3",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM4": {
+    "shortName": "BxM4",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM6": {
+    "shortName": "BxM6",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM7": {
+    "shortName": "BxM7",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM8": {
+    "shortName": "BxM8",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "BXM9": {
+    "shortName": "BxM9",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
   "C": {
     "shortName": "C",
     "color": "0062CF",
@@ -64,6 +729,16 @@
     "color": "EB6800",
     "textColor": "FFFFFF"
   },
+  "D90": {
+    "shortName": "D90",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "D99": {
+    "shortName": "D99",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
   "E": {
     "shortName": "E",
     "color": "0062CF",
@@ -72,6 +747,11 @@
   "F": {
     "shortName": "F",
     "color": "EB6800",
+    "textColor": "FFFFFF"
+  },
+  "F1": {
+    "shortName": "F1",
+    "color": "EE352E",
     "textColor": "FFFFFF"
   },
   "FS": {
@@ -104,14 +784,274 @@
     "color": "8E5C33",
     "textColor": "FFFFFF"
   },
+  "J90": {
+    "shortName": "J90",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "J99": {
+    "shortName": "J99",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
   "L": {
     "shortName": "L",
     "color": "7C858C",
     "textColor": "FFFFFF"
   },
+  "L0202": {
+    "shortName": "MW-ML",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "L0719": {
+    "shortName": "BEDLOOP",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "L1227": {
+    "shortName": "BJ-MW",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "L90": {
+    "shortName": "L90",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "L91": {
+    "shortName": "L91",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "L92": {
+    "shortName": "L92",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
   "M": {
     "shortName": "M",
     "color": "EB6800",
+    "textColor": "FFFFFF"
+  },
+  "M1": {
+    "shortName": "M1",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "M10": {
+    "shortName": "M10",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "M100": {
+    "shortName": "M100",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "M101": {
+    "shortName": "M101",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "M102": {
+    "shortName": "M102",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "M103": {
+    "shortName": "M103",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "M104": {
+    "shortName": "M104",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "M106": {
+    "shortName": "M106",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "M11": {
+    "shortName": "M11",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "M116": {
+    "shortName": "M116",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "M12": {
+    "shortName": "M12",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "M125": {
+    "shortName": "M125",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "M14A+": {
+    "shortName": "M14A-SBS",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "M14D+": {
+    "shortName": "M14D-SBS",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "M15": {
+    "shortName": "M15",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "M15+": {
+    "shortName": "M15-SBS",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "M191": {
+    "shortName": "M191",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "M2": {
+    "shortName": "M2",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "M20": {
+    "shortName": "M20",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "M21": {
+    "shortName": "M21",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "M22": {
+    "shortName": "M22",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "M23+": {
+    "shortName": "M23-SBS",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "M3": {
+    "shortName": "M3",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "M31": {
+    "shortName": "M31",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "M34+": {
+    "shortName": "M34-SBS",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "M34A+": {
+    "shortName": "M34A-SBS",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "M35": {
+    "shortName": "M35",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "M4": {
+    "shortName": "M4",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "M42": {
+    "shortName": "M42",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "M5": {
+    "shortName": "M5",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "M50": {
+    "shortName": "M50",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "M55": {
+    "shortName": "M55",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "M57": {
+    "shortName": "M57",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "M60+": {
+    "shortName": "M60-SBS",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "M66": {
+    "shortName": "M66",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "M7": {
+    "shortName": "M7",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "M72": {
+    "shortName": "M72",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "M79+": {
+    "shortName": "M79-SBS",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "M8": {
+    "shortName": "M8",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "M86+": {
+    "shortName": "M86-SBS",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "M9": {
+    "shortName": "M9",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "M90": {
+    "shortName": "M90",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "M96": {
+    "shortName": "M96",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "M98": {
+    "shortName": "M98",
+    "color": "EE352E",
     "textColor": "FFFFFF"
   },
   "N": {
@@ -124,20 +1064,1075 @@
     "color": "F6BC26",
     "textColor": "000000"
   },
+  "Q06": {
+    "shortName": "Q6",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q07": {
+    "shortName": "Q7",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q08": {
+    "shortName": "Q8",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q09": {
+    "shortName": "Q9",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q1": {
+    "shortName": "Q1",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q10": {
+    "shortName": "Q10",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q100": {
+    "shortName": "Q100",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q101": {
+    "shortName": "Q101",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q102": {
+    "shortName": "Q102",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q103": {
+    "shortName": "Q103",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q104": {
+    "shortName": "Q104",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q107": {
+    "shortName": "Q107",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q108": {
+    "shortName": "Q108",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q109": {
+    "shortName": "Q109",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q11": {
+    "shortName": "Q11",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q110": {
+    "shortName": "Q110",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q111": {
+    "shortName": "Q111",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q112": {
+    "shortName": "Q112",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q113": {
+    "shortName": "Q113",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q114": {
+    "shortName": "Q114",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q115": {
+    "shortName": "Q115",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q12": {
+    "shortName": "Q12",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q121": {
+    "shortName": "Q121",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q13": {
+    "shortName": "Q13",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q14": {
+    "shortName": "Q14",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "Q15": {
+    "shortName": "Q15",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q16": {
+    "shortName": "Q16",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q17": {
+    "shortName": "Q17",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q18": {
+    "shortName": "Q18",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q19": {
+    "shortName": "Q19",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q2": {
+    "shortName": "Q2",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q20": {
+    "shortName": "Q20",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q22": {
+    "shortName": "Q22",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q23": {
+    "shortName": "Q23",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q24": {
+    "shortName": "Q24",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "Q25": {
+    "shortName": "Q25",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q26": {
+    "shortName": "Q26",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q27": {
+    "shortName": "Q27",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q28": {
+    "shortName": "Q28",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q29": {
+    "shortName": "Q29",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q3": {
+    "shortName": "Q3",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "Q30": {
+    "shortName": "Q30",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q31": {
+    "shortName": "Q31",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q32": {
+    "shortName": "Q32",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q33": {
+    "shortName": "Q33",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q35": {
+    "shortName": "Q35",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "Q36": {
+    "shortName": "Q36",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q37": {
+    "shortName": "Q37",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "Q38": {
+    "shortName": "Q38",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q39": {
+    "shortName": "Q39",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q4": {
+    "shortName": "Q4",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q40": {
+    "shortName": "Q40",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q41": {
+    "shortName": "Q41",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q42": {
+    "shortName": "Q42",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "Q43": {
+    "shortName": "Q43",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q44+": {
+    "shortName": "Q44-SBS",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q45": {
+    "shortName": "Q45",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q46": {
+    "shortName": "Q46",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q47": {
+    "shortName": "Q47",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q48": {
+    "shortName": "Q48",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "Q49": {
+    "shortName": "Q49",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q5": {
+    "shortName": "Q5",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q50": {
+    "shortName": "Q50",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q51": {
+    "shortName": "Q51",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q52+": {
+    "shortName": "Q52-SBS",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "Q53+": {
+    "shortName": "Q53-SBS",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "Q54": {
+    "shortName": "Q54",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q55": {
+    "shortName": "Q55",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q56": {
+    "shortName": "Q56",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q58": {
+    "shortName": "Q58",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q59": {
+    "shortName": "Q59",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q60": {
+    "shortName": "Q60",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q61": {
+    "shortName": "Q61",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q63": {
+    "shortName": "Q63",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q64": {
+    "shortName": "Q64",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q65": {
+    "shortName": "Q65",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q66": {
+    "shortName": "Q66",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q67": {
+    "shortName": "Q67",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q69": {
+    "shortName": "Q69",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q70+": {
+    "shortName": "Q70-SBS",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "Q72": {
+    "shortName": "Q72",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q74": {
+    "shortName": "Q74",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q75": {
+    "shortName": "Q75",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "Q76": {
+    "shortName": "Q76",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q77": {
+    "shortName": "Q77",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q80": {
+    "shortName": "Q80",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q82": {
+    "shortName": "Q82",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q83": {
+    "shortName": "Q83",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q84": {
+    "shortName": "Q84",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q85": {
+    "shortName": "Q85",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q86": {
+    "shortName": "Q86",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q87": {
+    "shortName": "Q87",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q88": {
+    "shortName": "Q88",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "Q89": {
+    "shortName": "Q89",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "Q90": {
+    "shortName": "Q90",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "Q92": {
+    "shortName": "Q92",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "Q93": {
+    "shortName": "Q93",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q96": {
+    "shortName": "Q96",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q97": {
+    "shortName": "Q97",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "Q98": {
+    "shortName": "Q98",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "QM1": {
+    "shortName": "QM1",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM10": {
+    "shortName": "QM10",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM11": {
+    "shortName": "QM11",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM12": {
+    "shortName": "QM12",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM15": {
+    "shortName": "QM15",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM16": {
+    "shortName": "QM16",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM17": {
+    "shortName": "QM17",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM18": {
+    "shortName": "QM18",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM2": {
+    "shortName": "QM2",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM20": {
+    "shortName": "QM20",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM21": {
+    "shortName": "QM21",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM24": {
+    "shortName": "QM24",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM25": {
+    "shortName": "QM25",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM31": {
+    "shortName": "QM31",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM32": {
+    "shortName": "QM32",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM34": {
+    "shortName": "QM34",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM35": {
+    "shortName": "QM35",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM36": {
+    "shortName": "QM36",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM4": {
+    "shortName": "QM4",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM40": {
+    "shortName": "QM40",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM42": {
+    "shortName": "QM42",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM44": {
+    "shortName": "QM44",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM5": {
+    "shortName": "QM5",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM6": {
+    "shortName": "QM6",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM63": {
+    "shortName": "QM63",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM64": {
+    "shortName": "QM64",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM65": {
+    "shortName": "QM65",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM68": {
+    "shortName": "QM68",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM7": {
+    "shortName": "QM7",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "QM8": {
+    "shortName": "QM8",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
   "R": {
     "shortName": "R",
     "color": "F6BC26",
     "textColor": "000000"
+  },
+  "S40": {
+    "shortName": "S40",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "S42": {
+    "shortName": "S42",
+    "color": "00AEEF",
+    "textColor": "FFFFFF"
+  },
+  "S44": {
+    "shortName": "S44",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "S46": {
+    "shortName": "S46",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "S48": {
+    "shortName": "S48",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S51": {
+    "shortName": "S51",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "S52": {
+    "shortName": "S52",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "S53": {
+    "shortName": "S53",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S54": {
+    "shortName": "S54",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "S55": {
+    "shortName": "S55",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "S56": {
+    "shortName": "S56",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "S57": {
+    "shortName": "S57",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "S59": {
+    "shortName": "S59",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S61": {
+    "shortName": "S61",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S62": {
+    "shortName": "S62",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "S66": {
+    "shortName": "S66",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "S74": {
+    "shortName": "S74",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S76": {
+    "shortName": "S76",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "S78": {
+    "shortName": "S78",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "S79+": {
+    "shortName": "S79-SBS",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "S81": {
+    "shortName": "S81",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "S84": {
+    "shortName": "S84",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S86": {
+    "shortName": "S86",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "S89": {
+    "shortName": "S89",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S90": {
+    "shortName": "S90",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "S91": {
+    "shortName": "S91",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S92": {
+    "shortName": "S92",
+    "color": "B933AD",
+    "textColor": "FFFFFF"
+  },
+  "S93": {
+    "shortName": "S93",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S94": {
+    "shortName": "S94",
+    "color": "FAA61A",
+    "textColor": "FFFFFF"
+  },
+  "S96": {
+    "shortName": "S96",
+    "color": "006CB7",
+    "textColor": "FFFFFF"
+  },
+  "S96B1": {
+    "shortName": "S96B1",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S96B2": {
+    "shortName": "S96B2",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S96B3": {
+    "shortName": "S96B3",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "S98": {
+    "shortName": "S98",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
   },
   "SI": {
     "shortName": "SIR",
     "color": "08179C",
     "textColor": "FFFFFF"
   },
+  "SIM1": {
+    "shortName": "SIM1",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM10": {
+    "shortName": "SIM10",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM11": {
+    "shortName": "SIM11",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM15": {
+    "shortName": "SIM15",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM1C": {
+    "shortName": "SIM1C",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM2": {
+    "shortName": "SIM2",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM22": {
+    "shortName": "SIM22",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM23": {
+    "shortName": "SIM23",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM24": {
+    "shortName": "SIM24",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM25": {
+    "shortName": "SIM25",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM26": {
+    "shortName": "SIM26",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM3": {
+    "shortName": "SIM3",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM30": {
+    "shortName": "SIM30",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM31": {
+    "shortName": "SIM31",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM32": {
+    "shortName": "SIM32",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM33": {
+    "shortName": "SIM33",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM33C": {
+    "shortName": "SIM33C",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM34": {
+    "shortName": "SIM34",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM35": {
+    "shortName": "SIM35",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM3C": {
+    "shortName": "SIM3C",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM4": {
+    "shortName": "SIM4",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM4C": {
+    "shortName": "SIM4C",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM4X": {
+    "shortName": "SIM4X",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM5": {
+    "shortName": "SIM5",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM6": {
+    "shortName": "SIM6",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM7": {
+    "shortName": "SIM7",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM8": {
+    "shortName": "SIM8",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM8X": {
+    "shortName": "SIM8X",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "SIM9": {
+    "shortName": "SIM9",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "T113": {
+    "shortName": "T113",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "T117": {
+    "shortName": "T117",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "T127": {
+    "shortName": "T127",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "T232": {
+    "shortName": "T232",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "T260": {
+    "shortName": "T260",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "T320": {
+    "shortName": "T320",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "T321": {
+    "shortName": "T321",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "T323": {
+    "shortName": "T323",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "T354": {
+    "shortName": "T354",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "T403": {
+    "shortName": "T403",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "T426": {
+    "shortName": "T426",
+    "color": "6CBE45",
+    "textColor": "FFFFFF"
+  },
+  "T430": {
+    "shortName": "T430",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "T433": {
+    "shortName": "T433",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
+  "T464": {
+    "shortName": "T464",
+    "color": "EE352E",
+    "textColor": "FFFFFF"
+  },
   "W": {
     "shortName": "W",
     "color": "F6BC26",
     "textColor": "000000"
+  },
+  "X27": {
+    "shortName": "X27",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "X28": {
+    "shortName": "X28",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "X37": {
+    "shortName": "X37",
+    "color": "00933C",
+    "textColor": "FFFFFF"
+  },
+  "X38": {
+    "shortName": "X38",
+    "color": "00933C",
+    "textColor": "FFFFFF"
   },
   "Z": {
     "shortName": "Z",
