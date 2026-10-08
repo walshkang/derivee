@@ -13,10 +13,11 @@ import type {
 import {
   ROUTING_FLAG_NONE,
   ROUTING_FLAG_AVOID_TRANSFERS,
+  ROUTING_FLAG_MINIMIZE_WALKING,
 } from '../types/routing.ts';
 
 
-export { ROUTING_FLAG_NONE, ROUTING_FLAG_AVOID_TRANSFERS };
+export { ROUTING_FLAG_NONE, ROUTING_FLAG_AVOID_TRANSFERS, ROUTING_FLAG_MINIMIZE_WALKING };
 export const TRIP_TRANSFER = 0xFFFFFFFF;
 export const ROUTE_TRANSFER = 0xFFFF;
 
@@ -356,8 +357,10 @@ export function createRoutingWorkerHandler(options: WorkerOrchestrationOptions) 
           }
           const flags = msg.flags !== undefined
             ? msg.flags
-            : (msg.profile === 'fewest_transfers' ? ROUTING_FLAG_AVOID_TRANSFERS : ROUTING_FLAG_NONE);
-          const profile: RoutingProfile = msg.profile ?? (flags === ROUTING_FLAG_AVOID_TRANSFERS ? 'fewest_transfers' : 'fastest');
+            : (msg.profile === 'fewest_transfers' ? ROUTING_FLAG_AVOID_TRANSFERS
+              : msg.profile === 'less_walking' ? ROUTING_FLAG_MINIMIZE_WALKING
+              : ROUTING_FLAG_NONE);
+          const profile: RoutingProfile = msg.profile ?? (flags === ROUTING_FLAG_AVOID_TRANSFERS ? 'fewest_transfers' : flags === ROUTING_FLAG_MINIMIZE_WALKING ? 'less_walking' : 'fastest');
           const segments = computeJourneySegments(
             wasmModule,
             enginePtr,

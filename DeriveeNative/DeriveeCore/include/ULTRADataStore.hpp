@@ -124,6 +124,7 @@ public:
         uint64_t end_idx = indptr_[from_stop_id + 1];
 
         bool require_wheelchair = (query_flags & ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE) != 0;
+        bool minimize_walking = (query_flags & ROUTING_FLAG_MINIMIZE_WALKING) != 0;
 
         for (uint64_t i = start_idx; i < end_idx; ++i) {
             uint32_t target_stop = target_stops_[i];
@@ -142,7 +143,15 @@ public:
                 continue;
             }
 
-            uint32_t transfer_arrival = current_arrival_sec + duration;
+            // MINIMIZE_WALKING: cap walk distance (est. 1.3 m/s), penalize remainder
+            uint32_t eff_duration = duration;
+            if (minimize_walking) {
+                uint32_t est_meters = static_cast<uint32_t>(duration * 1.3f);
+                if (est_meters > MAX_WALK_METERS_MINIMIZE) continue;
+                eff_duration = duration * WALK_PENALTY_MULTIPLIER;
+            }
+
+            uint32_t transfer_arrival = current_arrival_sec + eff_duration;
 
             // Early pruning check
             if (transfer_arrival >= best_tau[target_stop] && transfer_arrival >= tau_k[target_stop]) {

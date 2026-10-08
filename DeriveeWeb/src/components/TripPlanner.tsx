@@ -12,6 +12,7 @@ import { RouteComparisonView } from './RouteComparisonView';
 import {
   executeDualProfileRouting,
   buildRankedItineraries,
+  createRankedItinerary,
   computeDepartureSeconds,
 } from '../utils/routeComparison';
 import { RoutingQueryWatchdog } from '../utils/tabSuspension';
@@ -71,6 +72,7 @@ export function TripPlanner({
   const [isRouting, setIsRouting] = useState<boolean>(false);
   const [fastestSegments, setFastestSegments] = useState<RoutingSegment[] | null>(null);
   const [fewestTransfersSegments, setFewestTransfersSegments] = useState<RoutingSegment[] | null>(null);
+  const [lessWalkingSegments, setLessWalkingSegments] = useState<RoutingSegment[] | null>(null);
   const [activeProfile, setActiveProfile] = useState<RoutingProfile>('fastest');
   const [hasQueried, setHasQueried] = useState<boolean>(false);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -392,6 +394,7 @@ export function TripPlanner({
   const resetRoutes = () => {
     setFastestSegments(null);
     setFewestTransfersSegments(null);
+    setLessWalkingSegments(null);
     setRouteError(null);
     setHasQueried(false);
     setSelectedLeg(null);
@@ -492,6 +495,7 @@ export function TripPlanner({
     setIsRouting(true);
     setFastestSegments(null);
     setFewestTransfersSegments(null);
+    setLessWalkingSegments(null);
     setRouteError(null);
     setHasQueried(true);
 
@@ -506,7 +510,7 @@ export function TripPlanner({
     const depSec = computeDepartureSeconds(mode, time);
 
     try {
-      const { fastest, fewestTransfers } = await executeDualProfileRouting(
+      const { fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
         worker,
         selectedOrigin.id,
         selectedDest.id,
@@ -515,6 +519,7 @@ export function TripPlanner({
 
       setFastestSegments(fastest);
       setFewestTransfersSegments(fewestTransfers);
+      setLessWalkingSegments(lessWalking);
       setRouteError(null);
       if (fastest.length > 0 || fewestTransfers.length > 0) {
         onRoutesFound?.();
@@ -536,8 +541,13 @@ export function TripPlanner({
   };
 
   const rankedCards = useMemo(() => {
+    if (activeProfile === 'less_walking') {
+      if (!lessWalkingSegments || lessWalkingSegments.length === 0) return [];
+      // Direct display for less_walking (no comparison dedup)
+      return [createRankedItinerary(lessWalkingSegments, 'less_walking', ['less_walking'], false)];
+    }
     return buildRankedItineraries(fastestSegments, fewestTransfersSegments, activeProfile);
-  }, [fastestSegments, fewestTransfersSegments, activeProfile]);
+  }, [fastestSegments, fewestTransfersSegments, lessWalkingSegments, activeProfile]);
 
 
   return (

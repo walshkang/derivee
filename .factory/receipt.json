@@ -1,1 +1,23 @@
-{"$schema":"./schemas/execution_receipt.schema.json","wave_id":"factory-receipt-protocol","status":"complete","environment":"local-mac","branch":null,"branch_policy":"direct-main","git_commit":"5f2a089","diff_stat":{"files_changed":5,"insertions":98,"deletions":0},"patch_file":".factory/diffs/factory-receipt-protocol.patch","test_verdict":"NOT_RUN","token_burn":{"input":185402,"output":28407},"blocker_reason":null,"kill_reason":null,"attempts_used":1}
+{
+  "$schema": "./schemas/execution_receipt.schema.json",
+  "wave_id": "receipt-tooling",
+  "status": "complete",
+  "environment": "headless-vm",
+  "branch": "wave/receipt-tooling",
+  "branch_policy": "wave-branch",
+  "git_commit": "9c5da30",
+  "diff_stat": {
+    "files_changed": 4,
+    "insertions": 1801,
+    "deletions": 0
+  },
+  "patch_file": ".factory/diffs/receipt-tooling.patch",
+  "test_verdict": "PASS",
+  "token_burn": {
+    "input": 52000,
+    "output": 3500
+  },
+  "blocker_reason": null,
+  "kill_reason": null,
+  "attempts_used": 1
+}

@@ -255,7 +255,14 @@ void RaptorEngine::relax_intra_transfers(
 
         if (!is_stop_active(target_stop)) continue;
 
-        uint32_t tr_arrival = current_arrival_sec + tr.duration_sec;
+        // MINIMIZE_WALKING: cap walk distance, penalize remaining walks
+        uint32_t walk_duration = tr.duration_sec;
+        if (query_flags & ROUTING_FLAG_MINIMIZE_WALKING) {
+            if (tr.distance_meters > MAX_WALK_METERS_MINIMIZE) continue;
+            walk_duration = tr.duration_sec * WALK_PENALTY_MULTIPLIER;
+        }
+
+        uint32_t tr_arrival = current_arrival_sec + walk_duration;
 
         if (tr_arrival >= best_tau[target_stop] && tr_arrival >= tau_k[target_stop]) {
             continue;

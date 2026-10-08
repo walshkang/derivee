@@ -24,6 +24,7 @@ import type {
 import {
   ROUTING_FLAG_NONE,
   ROUTING_FLAG_AVOID_TRANSFERS,
+  ROUTING_FLAG_MINIMIZE_WALKING,
 } from '../types/routing.ts';
 
 
@@ -265,6 +266,7 @@ export async function executeDualProfileRouting(
 ): Promise<{
   fastest: RoutingSegment[];
   fewestTransfers: RoutingSegment[];
+  lessWalking: RoutingSegment[];
 }> {
   const timeoutMs = options?.timeoutMs ?? 8000;
 
@@ -340,7 +342,15 @@ export async function executeDualProfileRouting(
     'query-transfers'
   );
 
-  return { fastest, fewestTransfers };
+  // 3. Query Less Walking (flags: 4) sequentially
+  options?.onProgress?.('less_walking');
+  const lessWalking = await runSingleQuery(
+    'less_walking',
+    ROUTING_FLAG_MINIMIZE_WALKING,
+    'query-walking'
+  );
+
+  return { fastest, fewestTransfers, lessWalking };
 }
 
 export type RouteComparisonUIStateKind =

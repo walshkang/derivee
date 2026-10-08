@@ -154,6 +154,16 @@ export function RouteComparisonView({
           <span class="profile-pill-icon">🔄</span>
           <span class="profile-pill-label">Fewest Transfers</span>
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeProfile === 'less_walking'}
+          class={`profile-pill ${activeProfile === 'less_walking' ? 'profile-pill-active' : ''}`}
+          onClick={() => onSelectProfile('less_walking')}
+        >
+          <span class="profile-pill-icon">🚶</span>
+          <span class="profile-pill-label">Less Walking</span>
+        </button>
       </div>
 
       {/* 2. Ranked Itinerary Cards (design.md §12.3) */}

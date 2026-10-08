@@ -98,6 +98,10 @@ static_assert(sizeof(StochasticWeight) == 4, "StochasticWeight layout must be ex
 constexpr uint16_t ROUTING_FLAG_NONE                  = 0;
 constexpr uint16_t ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE = 1 << 0;
 constexpr uint16_t ROUTING_FLAG_AVOID_TRANSFERS       = 1 << 1;
+constexpr uint16_t ROUTING_FLAG_MINIMIZE_WALKING      = 1 << 2;
+// Walk penalty tuning for MINIMIZE_WALKING: cap + multiplier
+constexpr uint16_t MAX_WALK_METERS_MINIMIZE          = 400;
+constexpr uint16_t WALK_PENALTY_MULTIPLIER           = 3;
 constexpr uint32_t TRIP_TRANSFER                      = 0xFFFFFFFF;
 constexpr uint16_t ROUTE_TRANSFER                     = 0xFFFF;
 
