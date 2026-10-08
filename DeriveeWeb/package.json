@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --configLoader native",
-    "build": "python3 DeriveeCoreWasm/scripts/gen_stops.py && python3 DeriveeCoreWasm/scripts/gen_routes.py && tsc && vite build --configLoader native && node scripts/verify-precache.js",
+    "build": "TRANSIT_SQLITE_PATH=/home/hatch/workspace/bus-build/current/transit.sqlite python3 DeriveeCoreWasm/scripts/gen_stops.py && TRANSIT_SQLITE_PATH=/home/hatch/workspace/bus-build/current/transit.sqlite python3 DeriveeCoreWasm/scripts/gen_routes.py && tsc && vite build --configLoader native && node scripts/verify-precache.js",
     "preview": "vite preview --configLoader native",
     "test": "node --test src/workers/__tests__/*.test.ts src/utils/__tests__/*.test.ts scripts/__tests__/*.test.mjs",
     "harness": "node scripts/diagnostic-harness.mjs",

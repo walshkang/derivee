@@ -28,8 +28,9 @@ def find_transit_db(repo_root):
     db_candidates = [
         sys.argv[1] if len(sys.argv) > 1 else None,
         os.environ.get('TRANSIT_SQLITE_PATH'),
-        '/home/hatch/workspace/derivee-audits/t1/transit.sqlite',
-        os.path.join(repo_root, '../derivee-audits/t1/transit.sqlite'),
+        # NOTE: no audit fallbacks — the T1-era subway-only snapshot
+        # (derivee-audits/t1/transit.sqlite) silently clobbered production
+        # bus data on 2026-10-08. Pass the production sqlite explicitly.
         os.path.join(repo_root, 'transit.sqlite'),
         os.path.join(repo_root, 'DeriveeNative/Derivee/transit.sqlite'),
     ]
