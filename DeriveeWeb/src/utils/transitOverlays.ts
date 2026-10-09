@@ -110,7 +110,8 @@ export function buildStationGeoJSON(stops: StopItem[]): StationGeoJSON {
         properties: {
           id: stop.id,
           name: typeof stop.name === 'string' ? stop.name : '',
-          t: stop.t || 'b',
+          // Default to station ('s') if type missing — fail open, never hide all stops
+          t: stop.t || 's',
         },
       });
     }
