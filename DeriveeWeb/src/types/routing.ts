@@ -4,6 +4,8 @@ export interface StopItem {
   lat: number;
   lon: number;
   gtfs_id?: string;
+  /** Stop type: 's' = subway station, 'r' = rail, 'b' = bus stop */
+  t?: string;
 }
 
 export interface RouteItem {

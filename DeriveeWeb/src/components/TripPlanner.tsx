@@ -345,6 +345,26 @@ export function TripPlanner({
   }, []);
 
   // Filter autocomplete suggestions (deduped by stop name)
+  // Apple Maps pattern: subway/rail stations rank above bus stops; bus results capped
+  const rankSuggestions = (query: string): StopItem[] => {
+    const q = query.trim().toLowerCase();
+    const stations: StopItem[] = [];
+    const busStops: StopItem[] = [];
+    const seen = new Set<string>();
+    for (const s of stops) {
+      if (!s.name.toLowerCase().includes(q)) continue;
+      if (seen.has(s.name)) continue;
+      seen.add(s.name);
+      if (s.t === 'b') {
+        if (busStops.length < 3) busStops.push(s);
+      } else {
+        if (stations.length < 8) stations.push(s);
+      }
+      if (stations.length >= 8 && busStops.length >= 3) break;
+    }
+    return [...stations, ...busStops].slice(0, 8);
+  };
+
   const originSuggestions = useMemo(() => {
     if (
       !originInput ||
@@ -353,19 +373,7 @@ export function TripPlanner({
     ) {
       return [];
     }
-    const q = originInput.trim().toLowerCase();
-    const matches: StopItem[] = [];
-    const seen = new Set<string>();
-    for (const s of stops) {
-      if (s.name.toLowerCase().includes(q)) {
-        if (!seen.has(s.name)) {
-          seen.add(s.name);
-          matches.push(s);
-          if (matches.length >= 8) break;
-        }
-      }
-    }
-    return matches;
+    return rankSuggestions(originInput);
   }, [originInput, stops, selectedOrigin]);
 
   const destSuggestions = useMemo(() => {
@@ -376,19 +384,7 @@ export function TripPlanner({
     ) {
       return [];
     }
-    const q = destInput.trim().toLowerCase();
-    const matches: StopItem[] = [];
-    const seen = new Set<string>();
-    for (const s of stops) {
-      if (s.name.toLowerCase().includes(q)) {
-        if (!seen.has(s.name)) {
-          seen.add(s.name);
-          matches.push(s);
-          if (matches.length >= 8) break;
-        }
-      }
-    }
-    return matches;
+    return rankSuggestions(destInput);
   }, [destInput, stops, selectedDest]);
 
   const resetRoutes = () => {
@@ -644,7 +640,7 @@ export function TripPlanner({
                   onClick={() => handleSelectOrigin(stop)}
                 >
                   <span class="stop-suggestion-name">{stop.name}</span>
-                  <span class="stop-suggestion-type">Station</span>
+                  <span class="stop-suggestion-type">{stop.t === 'b' ? 'Bus stop' : 'Station'}</span>
                 </button>
               ))}
             </div>
@@ -716,7 +712,7 @@ export function TripPlanner({
                   onClick={() => handleSelectDest(stop)}
                 >
                   <span class="stop-suggestion-name">{stop.name}</span>
-                  <span class="stop-suggestion-type">Station</span>
+                  <span class="stop-suggestion-type">{stop.t === 'b' ? 'Bus stop' : 'Station'}</span>
                 </button>
               ))}
             </div>

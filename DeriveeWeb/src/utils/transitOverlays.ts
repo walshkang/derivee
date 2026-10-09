@@ -57,6 +57,7 @@ export const CASING_PAINT_LINE_WIDTH = [
 export interface StationFeatureProperties {
   id: number;
   name: string;
+  t?: string;
 }
 
 export interface StationPointFeature {
@@ -109,6 +110,7 @@ export function buildStationGeoJSON(stops: StopItem[]): StationGeoJSON {
         properties: {
           id: stop.id,
           name: typeof stop.name === 'string' ? stop.name : '',
+          t: stop.t || 'b',
         },
       });
     }
@@ -154,11 +156,32 @@ export function getTransitStationsLayerConfig(): CircleLayerSpecification {
     id: TRANSIT_STATIONS_LAYER_ID,
     type: 'circle',
     source: TRANSIT_STATIONS_SOURCE_ID,
+    // Subway/rail stations only — visible at all zooms
+    filter: ['!=', ['get', 't'], 'b'],
     paint: {
       'circle-color': '#ffffff',
       'circle-stroke-color': '#000000',
       'circle-stroke-width': 2,
       'circle-radius': 4,
+    },
+  };
+}
+
+export const TRANSIT_BUS_STOPS_LAYER_ID = 'transit-bus-stops-layer';
+
+export function getTransitBusStopsLayerConfig(): CircleLayerSpecification {
+  return {
+    id: TRANSIT_BUS_STOPS_LAYER_ID,
+    type: 'circle',
+    source: TRANSIT_STATIONS_SOURCE_ID,
+    // Bus stops only — street-level zoom to avoid clutter (Apple Maps pattern)
+    filter: ['==', ['get', 't'], 'b'],
+    minzoom: 15,
+    paint: {
+      'circle-color': '#3b82f6',
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 1,
+      'circle-radius': 3,
     },
   };
 }
