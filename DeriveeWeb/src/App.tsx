@@ -44,6 +44,39 @@ export function App() {
         }
       });
     }
+
+    // Backup version check: poll index.html for new JS bundle (doesn't rely on SW)
+    // Catches cases where SW update detection fails silently
+    let versionCheckInterval: ReturnType<typeof setInterval> | null = null;
+    const checkForUpdate = async () => {
+      try {
+        const res = await fetch('/index.html', { cache: 'no-store' });
+        if (!res.ok) return;
+        const html = await res.text();
+        const match = html.match(/\/assets\/index-([A-Za-z0-9_-]+)\.js/);
+        if (!match) return;
+        const serverBundle = match[1];
+        // Get current bundle from the loaded scripts
+        const scripts = Array.from(document.querySelectorAll('script[src*="/assets/index-"]'));
+        const currentSrc = scripts[0]?.getAttribute('src') || '';
+        const currentMatch = currentSrc.match(/index-([A-Za-z0-9_-]+)\.js/);
+        const currentBundle = currentMatch ? currentMatch[1] : null;
+        if (currentBundle && serverBundle !== currentBundle) {
+          // New version on server — show update prompt
+          setSwUpdateAvailable(() => () => window.location.reload());
+          if (versionCheckInterval) clearInterval(versionCheckInterval);
+        }
+      } catch {
+        // Offline or fetch failed — ignore
+      }
+    };
+    // Check every 60s (and once after 10s)
+    const initialCheck = setTimeout(checkForUpdate, 10000);
+    versionCheckInterval = setInterval(checkForUpdate, 60000);
+    return () => {
+      clearTimeout(initialCheck);
+      if (versionCheckInterval) clearInterval(versionCheckInterval);
+    };
   }, []);
 
   const handleDismissPack = () => {
