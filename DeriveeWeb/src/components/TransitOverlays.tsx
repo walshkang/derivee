@@ -13,8 +13,6 @@ import {
   getTransitLinesCasingLayerConfig,
   getTransitLinesLayerConfig,
   getTransitStationsLayerConfig,
-  getTransitBusStopsLayerConfig,
-  TRANSIT_BUS_STOPS_LAYER_ID,
   escapeHtml,
   highlightRouteOnMap,
   clipRouteShapeToStops,
@@ -104,10 +102,6 @@ export function TransitOverlays({
             data: stationsGeojson as unknown as GeoJSON.GeoJSON,
           });
           map.addLayer(getTransitStationsLayerConfig());
-          // Bus stops: separate layer, only at street-level zoom
-          if (!map.getLayer(TRANSIT_BUS_STOPS_LAYER_ID)) {
-            map.addLayer(getTransitBusStopsLayerConfig());
-          }
         }
 
         // 3. Tappable stations: select on click & display popup
