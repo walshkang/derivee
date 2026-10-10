@@ -45,8 +45,10 @@ export function App() {
       });
     }
 
-    // Backup version check: poll index.html for new JS bundle (doesn't rely on SW)
-    // Catches cases where SW update detection fails silently
+    // Version check: poll index.html for new JS bundle (doesn't rely on SW)
+    // Checks on load, when tab becomes visible, and every 5 min as backup.
+    // Single-contributor codebase: updates only happen on push, so no need
+    // for aggressive polling.
     let versionCheckInterval: ReturnType<typeof setInterval> | null = null;
     const checkForUpdate = async () => {
       try {
@@ -65,17 +67,23 @@ export function App() {
           // New version on server — show update prompt
           setSwUpdateAvailable(() => () => window.location.reload());
           if (versionCheckInterval) clearInterval(versionCheckInterval);
+          document.removeEventListener('visibilitychange', onVisibility);
         }
       } catch {
         // Offline or fetch failed — ignore
       }
     };
-    // Check every 60s (and once after 10s)
-    const initialCheck = setTimeout(checkForUpdate, 10000);
-    versionCheckInterval = setInterval(checkForUpdate, 60000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') checkForUpdate();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    // Check on load (after 5s), on visibility change, and every 5 min backup
+    const initialCheck = setTimeout(checkForUpdate, 5000);
+    versionCheckInterval = setInterval(checkForUpdate, 5 * 60 * 1000);
     return () => {
       clearTimeout(initialCheck);
       if (versionCheckInterval) clearInterval(versionCheckInterval);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
