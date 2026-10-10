@@ -80,12 +80,15 @@ function basemapDevMiddleware() {
 }
 
 export const workboxConfig = {
-  // Precache only app shell assets (including zstd.wasm and stops.json)
+  // Precache app shell assets. index.html is EXCLUDED so the version poll
+  // in App.tsx always gets the fresh bundle hash (else updates never detect).
+  // Navigations use NetworkFirst runtime caching (below) for offline fallback.
   globPatterns: [
-    '**/*.{js,css,html,ico,pbf,woff,woff2,wasm,json}'
+    '**/*.{js,css,ico,pbf,woff,woff2,wasm,json}'
   ],
   // Explicitly exclude any data packs, binary archives, or large data payloads
   globIgnores: [
+    '**/index.html',
     '**/*.pack*',
     '**/*.zst',
     '**/*.pmtiles',
