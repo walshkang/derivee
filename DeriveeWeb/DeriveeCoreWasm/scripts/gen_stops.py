@@ -37,8 +37,8 @@ def main():
     cur = conn.cursor()
 
     # Note: Sorting by stop_id ASC matches the exact index order in timetable.bin
-    # Include routes for stop type classification (subway vs bus)
-    cur.execute("SELECT stop_id, stop_name, stop_lat, stop_lon, routes FROM stops ORDER BY stop_id ASC")
+    # Include routes and location_type for stop type classification
+    cur.execute("SELECT stop_id, stop_name, stop_lat, stop_lon, routes, location_type FROM stops ORDER BY stop_id ASC")
     rows = cur.fetchall()
 
     # Build route_type lookup for classification
@@ -46,10 +46,13 @@ def main():
     route_types = {r[0]: r[1] for r in cur.fetchall()}
 
     stops = []
-    for idx, (stop_id, name, lat, lon, routes_str) in enumerate(rows):
+    for idx, (stop_id, name, lat, lon, routes_str, loc_type) in enumerate(rows):
         # Classify: 's' = subway/rail station, 'b' = bus stop
+        # location_type=1 marks parent stations (their routes field is often empty)
         stop_type = 'b'
-        if routes_str:
+        if loc_type == 1:
+            stop_type = 's'
+        elif routes_str:
             types = {route_types.get(r.strip()) for r in routes_str.split(',')}
             if 1 in types or 2 in types:
                 stop_type = 's'
