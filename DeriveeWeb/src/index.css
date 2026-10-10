@@ -902,6 +902,21 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   font-family: var(--font-mono);
 }
 
+.check-update-btn {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.check-update-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .meta-dot {
   width: 4px;
   height: 4px;

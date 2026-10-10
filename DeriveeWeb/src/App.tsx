@@ -27,6 +27,34 @@ export function App() {
   const [mapInstance, setMapInstance] = useState<Map | null>(null);
   const [focusedRouteId, setFocusedRouteId] = useState<string | null>(null);
   const [sheetDetent, setSheetDetent] = useState<number>(15);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  // Manual update check: fetch index.html, compare bundle hash with running version.
+  // Returns true if an update is available (and shows the toast).
+  const checkForUpdate = async (): Promise<boolean> => {
+    try {
+      setCheckingUpdate(true);
+      const res = await fetch('/index.html', { cache: 'no-store' });
+      if (!res.ok) return false;
+      const html = await res.text();
+      const match = html.match(/\/assets\/index-([A-Za-z0-9_-]+)\.js/);
+      if (!match) return false;
+      const serverBundle = match[1];
+      const scripts = Array.from(document.querySelectorAll('script[src*="/assets/index-"]'));
+      const currentSrc = scripts[0]?.getAttribute('src') || '';
+      const currentMatch = currentSrc.match(/index-([A-Za-z0-9_-]+)\.js/);
+      const currentBundle = currentMatch ? currentMatch[1] : null;
+      if (currentBundle && serverBundle !== currentBundle) {
+        setSwUpdateAvailable(() => () => window.location.reload());
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -45,46 +73,18 @@ export function App() {
       });
     }
 
-    // Version check: poll index.html for new JS bundle (doesn't rely on SW)
-    // Checks on load, when tab becomes visible, and every 5 min as backup.
-    // Single-contributor codebase: updates only happen on push, so no need
-    // for aggressive polling.
-    let versionCheckInterval: ReturnType<typeof setInterval> | null = null;
-    const checkForUpdate = async () => {
-      try {
-        const res = await fetch('/index.html', { cache: 'no-store' });
-        if (!res.ok) return;
-        const html = await res.text();
-        const match = html.match(/\/assets\/index-([A-Za-z0-9_-]+)\.js/);
-        if (!match) return;
-        const serverBundle = match[1];
-        // Get current bundle from the loaded scripts
-        const scripts = Array.from(document.querySelectorAll('script[src*="/assets/index-"]'));
-        const currentSrc = scripts[0]?.getAttribute('src') || '';
-        const currentMatch = currentSrc.match(/index-([A-Za-z0-9_-]+)\.js/);
-        const currentBundle = currentMatch ? currentMatch[1] : null;
-        if (currentBundle && serverBundle !== currentBundle) {
-          // New version on server — show update prompt
-          setSwUpdateAvailable(() => () => window.location.reload());
-          if (versionCheckInterval) clearInterval(versionCheckInterval);
-          document.removeEventListener('visibilitychange', onVisibility);
-        }
-      } catch {
-        // Offline or fetch failed — ignore
-      }
-    };
+    // Automatic checks: on load and when tab becomes visible.
+    // No interval polling — manual check button covers the rest.
     const onVisibility = () => {
       if (document.visibilityState === 'visible') checkForUpdate();
     };
     document.addEventListener('visibilitychange', onVisibility);
-    // Check on load (after 5s), on visibility change, and every 5 min backup
     const initialCheck = setTimeout(checkForUpdate, 5000);
-    versionCheckInterval = setInterval(checkForUpdate, 5 * 60 * 1000);
     return () => {
       clearTimeout(initialCheck);
-      if (versionCheckInterval) clearInterval(versionCheckInterval);
       document.removeEventListener('visibilitychange', onVisibility);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDismissPack = () => {
@@ -175,6 +175,8 @@ export function App() {
         isOnline={isOnline}
         packState={packState}
         onOpenTransitPack={handleOpenTransitPack}
+        onCheckForUpdate={checkForUpdate}
+        checkingUpdate={checkingUpdate}
       />
 
       <InstallModal

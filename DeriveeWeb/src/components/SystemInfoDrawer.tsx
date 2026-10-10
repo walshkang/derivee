@@ -5,12 +5,16 @@ interface SystemInfoDrawerProps {
   isOnline: boolean;
   packState?: InstalledPackState | null;
   onOpenTransitPack?: () => void;
+  onCheckForUpdate?: () => Promise<boolean>;
+  checkingUpdate?: boolean;
 }
 
 export function SystemInfoDrawer({
   isOnline,
   packState,
   onOpenTransitPack,
+  onCheckForUpdate,
+  checkingUpdate,
 }: SystemInfoDrawerProps) {
   const isInstalled = Boolean(packState?.isInstalled);
   const buildInfo = formatBuildInfo();
@@ -43,6 +47,16 @@ export function SystemInfoDrawer({
         <div class="footer-meta-item footer-build-item" title={`Build: ${buildInfo}`}>
           <span class="meta-dot standby-dot" />
           <span>Build: <span class="footer-build-hash">{buildInfo}</span></span>
+          {onCheckForUpdate && (
+            <button
+              type="button"
+              class="check-update-btn"
+              onClick={() => onCheckForUpdate()}
+              disabled={checkingUpdate}
+            >
+              {checkingUpdate ? 'Checking…' : 'Check for update'}
+            </button>
+          )}
         </div>
       </div>
     </footer>
