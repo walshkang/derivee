@@ -476,6 +476,16 @@ export function TripPlanner({
 
   const handleRoute = async (modeOverride?: 'now' | 'depart_at', timeOverride?: string) => {
     if (!worker || !selectedOrigin || !selectedDest || engineStatus !== 'ready') {
+      // Show why routing is blocked instead of silently returning
+      if (engineStatus !== 'ready') {
+        setRouteError(
+          engineStatus === 'warming_up'
+            ? 'Engine still loading — please wait.'
+            : `Engine error: ${engineError || 'unknown'}. Try reopening the planner.`
+        );
+      } else if (!selectedOrigin || !selectedDest) {
+        setRouteError('Select both origin and destination.');
+      }
       return;
     }
 
