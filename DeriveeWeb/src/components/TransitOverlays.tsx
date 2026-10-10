@@ -13,6 +13,8 @@ import {
   getTransitLinesCasingLayerConfig,
   getTransitLinesLayerConfig,
   getTransitStationsLayerConfig,
+  getTransitBusStopsLayerConfig,
+  TRANSIT_BUS_STOPS_LAYER_ID,
   escapeHtml,
   highlightRouteOnMap,
   clipRouteShapeToStops,
@@ -102,6 +104,10 @@ export function TransitOverlays({
             data: stationsGeojson as unknown as GeoJSON.GeoJSON,
           });
           map.addLayer(getTransitStationsLayerConfig());
+          // Bus stops: separate layer, only at street-level zoom
+          if (!map.getLayer(TRANSIT_BUS_STOPS_LAYER_ID)) {
+            map.addLayer(getTransitBusStopsLayerConfig());
+          }
         }
 
         // 3. Tappable stations: select on click & display popup
@@ -149,13 +155,25 @@ export function TransitOverlays({
           map.getCanvas().style.cursor = '';
         };
 
-        if (clickHandler) map.off('click', TRANSIT_STATIONS_LAYER_ID, clickHandler);
-        if (enterHandler) map.off('mouseenter', TRANSIT_STATIONS_LAYER_ID, enterHandler);
-        if (leaveHandler) map.off('mouseleave', TRANSIT_STATIONS_LAYER_ID, leaveHandler);
+        if (clickHandler) {
+          map.off('click', TRANSIT_STATIONS_LAYER_ID, clickHandler);
+          map.off('click', TRANSIT_BUS_STOPS_LAYER_ID, clickHandler);
+        }
+        if (enterHandler) {
+          map.off('mouseenter', TRANSIT_STATIONS_LAYER_ID, enterHandler);
+          map.off('mouseenter', TRANSIT_BUS_STOPS_LAYER_ID, enterHandler);
+        }
+        if (leaveHandler) {
+          map.off('mouseleave', TRANSIT_STATIONS_LAYER_ID, leaveHandler);
+          map.off('mouseleave', TRANSIT_BUS_STOPS_LAYER_ID, leaveHandler);
+        }
 
         map.on('click', TRANSIT_STATIONS_LAYER_ID, clickHandler);
+        map.on('click', TRANSIT_BUS_STOPS_LAYER_ID, clickHandler);
         map.on('mouseenter', TRANSIT_STATIONS_LAYER_ID, enterHandler);
+        map.on('mouseenter', TRANSIT_BUS_STOPS_LAYER_ID, enterHandler);
         map.on('mouseleave', TRANSIT_STATIONS_LAYER_ID, leaveHandler);
+        map.on('mouseleave', TRANSIT_BUS_STOPS_LAYER_ID, leaveHandler);
 
         setTransitState('ready');
       } catch (err) {
