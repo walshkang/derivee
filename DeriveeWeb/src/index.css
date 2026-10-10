@@ -2094,6 +2094,88 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   opacity: 0.4;
 }
 
+.station-arrivals-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-color, white);
+  border-top: 1px solid var(--border-color, #ddd);
+  border-radius: 16px 16px 0 0;
+  padding: 16px;
+  max-height: 50vh;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
+}
+.station-arrivals-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.station-arrivals-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.station-arrivals-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.station-arrivals-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.station-arrival-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color, #eee);
+}
+.arrival-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.arrival-live-dot.live {
+  background: #34C759;
+  animation: pulse 1.5s infinite;
+}
+.arrival-live-dot.scheduled {
+  background: #8E8E93;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.arrival-route {
+  font-weight: 600;
+  min-width: 32px;
+}
+.arrival-dest {
+  flex: 1;
+  color: var(--text-secondary, #666);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arrival-time {
+  font-weight: 600;
+  font-size: 14px;
+}
+.station-arrivals-loading, .station-arrivals-error, .station-arrivals-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary, #666);
+}
+
 .stop-input-group {
   position: relative;
   display: flex;

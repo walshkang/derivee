@@ -11,6 +11,7 @@ import { SystemInfoDrawer } from './components/SystemInfoDrawer';
 import { InstallModal } from './components/InstallModal';
 import { BottomSheet } from './components/BottomSheet';
 import { TransitOverlays } from './components/TransitOverlays';
+import { StationArrivals } from './components/StationArrivals';
 import type { InstalledPackState } from './types/pack';
 import { isPackDismissed, setPackDismissed } from './utils/opfs';
 import { useTheme } from './hooks/useTheme';
@@ -28,6 +29,7 @@ export function App() {
   const [focusedRouteId, setFocusedRouteId] = useState<string | null>(null);
   const [sheetDetent, setSheetDetent] = useState<number>(15);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [selectedStation, setSelectedStation] = useState<{ id: number; name: string } | null>(null);
 
   // Manual update check: fetch index.html, compare bundle hash with running version.
   // Returns true if an update is available (and shows the toast).
@@ -130,7 +132,16 @@ export function App() {
         map={mapInstance}
         isPackInstalled={Boolean(packState?.isInstalled)}
         focusedRouteId={focusedRouteId}
+        onSelectStation={(station) => setSelectedStation(station)}
       />
+
+      {selectedStation && (
+        <StationArrivals
+          stationId={selectedStation.id}
+          stationName={selectedStation.name}
+          onClose={() => setSelectedStation(null)}
+        />
+      )}
 
       <Header
         isOnline={isOnline}
