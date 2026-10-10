@@ -597,6 +597,18 @@ export function TripPlanner({
       />
 
       {/* Origin & Destination Inputs */}
+      {/* Mode filter pills: Subway active for MVP, Bus/Bike disabled */}
+      <div class="mode-filter-pills">
+        <button type="button" class="mode-pill mode-pill-active" disabled>
+          🚇 Subway
+        </button>
+        <button type="button" class="mode-pill mode-pill-disabled" title="Coming soon" disabled>
+          🚌 Bus
+        </button>
+        <button type="button" class="mode-pill mode-pill-disabled" title="Coming soon" disabled>
+          🚲 Bike
+        </button>
+      </div>
       <div class="trip-inputs-container">
         {/* Origin Input */}
         <div class="stop-input-group" ref={originContainerRef}>

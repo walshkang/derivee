@@ -330,25 +330,15 @@ export async function executeDualProfileRouting(
     });
   }
 
-  // 1. Query Fastest (flags: 0)
+  // Run all three profile queries in PARALLEL (not sequential).
+  // Each has its own queryId for message routing. Total time = max(query times),
+  // not sum — fixes the watchdog timeout risk of sequential queries.
   options?.onProgress?.('fastest');
-  const fastest = await runSingleQuery('fastest', ROUTING_FLAG_NONE, 'query-fastest');
-
-  // 2. Query Fewest Transfers (flags: 2) sequentially
-  options?.onProgress?.('fewest_transfers');
-  const fewestTransfers = await runSingleQuery(
-    'fewest_transfers',
-    ROUTING_FLAG_AVOID_TRANSFERS,
-    'query-transfers'
-  );
-
-  // 3. Query Less Walking (flags: 4) sequentially
-  options?.onProgress?.('less_walking');
-  const lessWalking = await runSingleQuery(
-    'less_walking',
-    ROUTING_FLAG_MINIMIZE_WALKING,
-    'query-walking'
-  );
+  const [fastest, fewestTransfers, lessWalking] = await Promise.all([
+    runSingleQuery('fastest', ROUTING_FLAG_NONE, 'query-fastest'),
+    runSingleQuery('fewest_transfers', ROUTING_FLAG_AVOID_TRANSFERS, 'query-transfers'),
+    runSingleQuery('less_walking', ROUTING_FLAG_MINIMIZE_WALKING, 'query-walking'),
+  ]);
 
   return { fastest, fewestTransfers, lessWalking };
 }

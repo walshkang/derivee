@@ -2072,6 +2072,28 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
   position: relative;
 }
 
+.mode-filter-pills {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 8px;
+}
+.mode-pill {
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  border: 1px solid var(--border-color, #ddd);
+  background: transparent;
+  cursor: default;
+}
+.mode-pill-active {
+  background: #007AFF;
+  color: white;
+  border-color: #007AFF;
+}
+.mode-pill-disabled {
+  opacity: 0.4;
+}
+
 .stop-input-group {
   position: relative;
   display: flex;
