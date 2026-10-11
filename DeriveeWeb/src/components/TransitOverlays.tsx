@@ -34,7 +34,7 @@ interface TransitOverlaysProps {
   map: MapLibreMap | null;
   slug?: string;
   isPackInstalled?: boolean;
-  onSelectStation?: (station: { id: number; name: string }) => void;
+  onSelectStation?: (station: { id: string; name: string }) => void;
   focusedRouteId?: string | null;
   journeyHighlight?: JourneyHighlightState | null;
 }
@@ -48,7 +48,7 @@ export function TransitOverlays({
   journeyHighlight = null,
 }: TransitOverlaysProps) {
   const [transitState, setTransitState] = useState<UIState>('ready');
-  const [selectedStation, setSelectedStation] = useState<{ id: number; name: string } | null>(null);
+  const [selectedStation, setSelectedStation] = useState<{ id: string; name: string } | null>(null);
   const popupRef = useRef<Popup | null>(null);
   const linesGeojsonRef = useRef<any>(null);
 
@@ -115,7 +115,7 @@ export function TransitOverlays({
           if (!e.features || e.features.length === 0) return;
           const feat = e.features[0];
           const props = feat.properties || {};
-          const id = Number(props.id);
+          const id = String(props.id ?? '');
           const name = String(props.name || 'Station');
           const geom = feat.geometry as GeoJSON.Point;
           const coords = geom.coordinates.slice() as [number, number];

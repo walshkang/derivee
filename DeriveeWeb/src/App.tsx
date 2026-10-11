@@ -29,7 +29,7 @@ export function App() {
   const [focusedRouteId, setFocusedRouteId] = useState<string | null>(null);
   const [sheetDetent, setSheetDetent] = useState<number>(15);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [selectedStation, setSelectedStation] = useState<{ id: number; name: string } | null>(null);
+  const [selectedStation, setSelectedStation] = useState<{ id: string; name: string } | null>(null);
 
   // Manual update check: fetch index.html, compare bundle hash with running version.
   // Returns true if an update is available (and shows the toast).

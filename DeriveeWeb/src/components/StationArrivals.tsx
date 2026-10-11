@@ -11,7 +11,7 @@ interface Arrival {
 }
 
 interface StationArrivalsProps {
-  stationId: number;
+  stationId: string;
   stationName: string;
   onClose: () => void;
 }
