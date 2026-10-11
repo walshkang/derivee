@@ -6,7 +6,7 @@ interface Arrival {
   headsign?: string;
   destination?: string;
   arrival_time?: number;
-  minutes_away?: number;
+  minutesAway?: number;
   is_realtime: boolean;
 }
 
@@ -85,7 +85,7 @@ export function StationArrivals({ stationId, stationName, onClose }: StationArri
               <span className="arrival-route">{a.route_short_name || a.route_id}</span>
               <span className="arrival-dest">{a.headsign || a.destination || ''}</span>
               <span className="arrival-time">
-                {a.minutes_away !== undefined ? `${a.minutes_away} min` : '—'}
+                {a.minutesAway !== undefined ? `${a.minutesAway} min` : '—'}
               </span>
             </li>
           ))}
