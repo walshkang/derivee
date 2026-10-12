@@ -4005,3 +4005,11 @@ button, a, .bottom-sheet-handle-container, .map-viewport-canvas, .basemap-view-w
 .bike-comparison-banner strong {
   color: #14b8a6;
 }
+
+.place-suggestion-item .stop-suggestion-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+  display: inline-block;
+}

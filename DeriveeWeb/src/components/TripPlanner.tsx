@@ -463,11 +463,12 @@ export function TripPlanner({
   };
 
   const handleSelectOriginPlace = (place: GeocodedPlace) => {
-    // Resolve place to nearest station via haversine on stops list
-    const nearest = findNearestStopByCoordinates(place.lat, place.lon, stops);
+    // Resolve place to nearest SUBWAY station (not bus stop — engine is subway-only for now)
+    const subwayStops = stops.filter(s => s.t === 's');
+    const nearest = findNearestStopByCoordinates(place.lat, place.lon, subwayStops.length > 0 ? subwayStops : stops);
     if (nearest) {
       setSelectedOrigin(nearest);
-      setOriginInput(place.displayName.split(',').slice(0, 2).join(','));
+      setOriginInput(place.displayName);
       setShowOriginDropdown(false);
       setOriginPlaces([]);
       resetRoutes();
@@ -483,10 +484,11 @@ export function TripPlanner({
   };
 
   const handleSelectDestPlace = (place: GeocodedPlace) => {
-    const nearest = findNearestStopByCoordinates(place.lat, place.lon, stops);
+    const subwayStops = stops.filter(s => s.t === 's');
+    const nearest = findNearestStopByCoordinates(place.lat, place.lon, subwayStops.length > 0 ? subwayStops : stops);
     if (nearest) {
       setSelectedDest(nearest);
-      setDestInput(place.displayName.split(',').slice(0, 2).join(','));
+      setDestInput(place.displayName);
       setShowDestDropdown(false);
       setDestPlaces([]);
       resetRoutes();
@@ -839,7 +841,7 @@ export function TripPlanner({
                   role="option"
                   onClick={() => handleSelectOriginPlace(place)}
                 >
-                  <span class="stop-suggestion-name">📍 {place.displayName.split(',').slice(0, 2).join(',')}</span>
+                  <span class="stop-suggestion-name">📍 {place.displayName}</span>
                   <span class="stop-suggestion-type">Place</span>
                 </button>
               ))}
@@ -923,7 +925,7 @@ export function TripPlanner({
                   role="option"
                   onClick={() => handleSelectDestPlace(place)}
                 >
-                  <span class="stop-suggestion-name">📍 {place.displayName.split(',').slice(0, 2).join(',')}</span>
+                  <span class="stop-suggestion-name">📍 {place.displayName}</span>
                   <span class="stop-suggestion-type">Place</span>
                 </button>
               ))}
