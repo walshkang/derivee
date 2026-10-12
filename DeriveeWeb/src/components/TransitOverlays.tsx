@@ -212,6 +212,33 @@ export function TransitOverlays({
         map.on('mouseleave', TRANSIT_STATIONS_LAYER_ID, leaveHandler);
         map.on('mouseleave', TRANSIT_BUS_STOPS_LAYER_ID, leaveHandler);
 
+        // Bike dock tap: show popup with name and capacity
+        // (Live availability via /api/bikeshare/status comes in follow-up)
+        const dockClickHandler = (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
+          if (!e.features || e.features.length === 0) return;
+          const feat = e.features[0];
+          const props = feat.properties || {};
+          const name = String(props.name || 'Bike Dock');
+          const capacity = props.capacity ? ` · ${props.capacity} docks` : '';
+          const geom = feat.geometry as GeoJSON.Point;
+          const coords = geom.coordinates.slice() as [number, number];
+
+          if (popupRef.current) {
+            popupRef.current.remove();
+          }
+          const popup = new Popup({
+            closeButton: true,
+            closeOnClick: false,
+            offset: 8,
+            className: 'bike-dock-popup',
+          })
+            .setLngLat(coords)
+            .setHTML(`<div><strong>🚲 ${escapeHtml(name)}</strong><br/><span>${escapeHtml(capacity)}</span></div>`)
+            .addTo(map);
+          popupRef.current = popup;
+        };
+        map.on('click', BIKE_DOCKS_LAYER_ID, dockClickHandler);
+
         setTransitState('ready');
       } catch (err) {
         if (!isCancelled) {
