@@ -3,7 +3,6 @@ import { registerSW } from 'virtual:pwa-register';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useIsIOSInstallable } from './hooks/useIsIOSInstallable';
 import { Header } from './components/Header';
-import { SearchBar } from './components/SearchBar';
 import { PackInstaller } from './components/PackInstaller';
 import { BasemapView } from './components/BasemapView';
 import { TripPlanner } from './components/TripPlanner';
@@ -159,7 +158,6 @@ export function App() {
         theme={theme}
         onThemeChange={setTheme}
       >
-        <SearchBar />
         <PackInstaller
           onPackStateChange={setPackState}
           isOnline={isOnline}
