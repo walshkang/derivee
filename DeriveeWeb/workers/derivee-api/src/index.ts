@@ -100,6 +100,26 @@ export default {
       }
     }
 
+    // 2.6 Bike-share status: GET /api/bikeshare/status (GBFS station_status proxy)
+    if (url.pathname === '/api/bikeshare/status' && request.method === 'GET') {
+      try {
+        const resp = await fetch('https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_status.json', {
+          headers: { 'User-Agent': 'Derivee/1.0' },
+        });
+        if (!resp.ok) {
+          return jsonResponse({ error: 'gbfs_unavailable' }, 503, origin);
+        }
+        const data = await resp.json();
+        // Pass through with short cache (GBFS TTL is 60s)
+        return jsonResponse(data, 200, origin, {
+          'Cache-Control': 'public, max-age=30, stale-while-revalidate=30',
+        });
+      } catch (err: any) {
+        console.warn('[BikeShare] GBFS fetch failed:', err?.message || err);
+        return jsonResponse({ error: 'gbfs_unavailable' }, 503, origin);
+      }
+    }
+
     // 3. Authenticated session check: GET /api/me
     if (url.pathname === '/api/me' && request.method === 'GET') {
       const userEmail =
