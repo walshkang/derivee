@@ -62,6 +62,7 @@ export function TripPlanner({
   const [selectedDest, setSelectedDest] = useState<StopItem | null>(null);
   const [showOriginDropdown, setShowOriginDropdown] = useState<boolean>(false);
   const [showDestDropdown, setShowDestDropdown] = useState<boolean>(false);
+  const [includeBike, setIncludeBike] = useState<boolean>(false);
   const [departureTime, setDepartureTime] = useState<string>(() => {
     const d = new Date();
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -597,7 +598,7 @@ export function TripPlanner({
       />
 
       {/* Origin & Destination Inputs */}
-      {/* Mode filter pills: Subway active for MVP, Bus/Bike disabled */}
+      {/* Mode filter pills: Subway active for MVP, Bus disabled. Bike is a supplement toggle. */}
       <div class="mode-filter-pills">
         <button type="button" class="mode-pill mode-pill-active" disabled>
           🚇 Subway
@@ -605,8 +606,13 @@ export function TripPlanner({
         <button type="button" class="mode-pill mode-pill-disabled" title="Coming soon" disabled>
           🚌 Bus
         </button>
-        <button type="button" class="mode-pill mode-pill-disabled" title="Coming soon" disabled>
-          🚲 Bike
+        <button
+          type="button"
+          class={`mode-pill ${includeBike ? 'mode-pill-active' : ''}`}
+          title="Include bike-share for access/egress"
+          onClick={() => setIncludeBike(!includeBike)}
+        >
+          🚲 Bike{includeBike ? ' ✓' : ''}
         </button>
       </div>
       <div class="trip-inputs-container">
