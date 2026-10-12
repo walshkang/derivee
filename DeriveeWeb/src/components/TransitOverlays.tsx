@@ -214,18 +214,20 @@ export function TransitOverlays({
 
         // Bike dock tap: show popup with name and capacity
         // (Live availability via /api/bikeshare/status comes in follow-up)
-        const dockClickHandler = (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
+        const dockClickHandler = async (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
           if (!e.features || e.features.length === 0) return;
           const feat = e.features[0];
           const props = feat.properties || {};
+          const stationId = String(props.id || '');
           const name = String(props.name || 'Bike Dock');
-          const capacity = props.capacity ? ` · ${props.capacity} docks` : '';
           const geom = feat.geometry as GeoJSON.Point;
           const coords = geom.coordinates.slice() as [number, number];
 
           if (popupRef.current) {
             popupRef.current.remove();
           }
+
+          // Show loading popup immediately
           const popup = new Popup({
             closeButton: true,
             closeOnClick: false,
@@ -233,9 +235,40 @@ export function TransitOverlays({
             className: 'bike-dock-popup',
           })
             .setLngLat(coords)
-            .setHTML(`<div><strong>🚲 ${escapeHtml(name)}</strong><br/><span>${escapeHtml(capacity)}</span></div>`)
+            .setHTML(`<div><strong>🚲 ${escapeHtml(name)}</strong><br/><span>Loading availability…</span></div>`)
             .addTo(map);
           popupRef.current = popup;
+
+          // Fetch live availability (worker endpoint, fallback to direct GBFS)
+          try {
+            let statusData = null;
+            try {
+              const res = await fetch('/api/bikeshare/status');
+              if (res.ok) statusData = await res.json();
+            } catch { /* worker not deployed yet */ }
+
+            if (!statusData) {
+              const res = await fetch('https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_status.json');
+              if (res.ok) statusData = await res.json();
+            }
+
+            if (statusData?.data?.stations) {
+              const station = statusData.data.stations.find((s: any) => String(s.station_id) === stationId);
+              if (station) {
+                const bikes = station.num_bikes_available ?? 0;
+                const docks = station.num_docks_available ?? 0;
+                const renting = station.is_renting ? '' : ' (not renting)';
+                popup.setHTML(
+                  `<div><strong>🚲 ${escapeHtml(name)}</strong><br/>` +
+                  `<span>${bikes} bikes · ${docks} docks${renting}</span></div>`
+                );
+                return;
+              }
+            }
+            popup.setHTML(`<div><strong>🚲 ${escapeHtml(name)}</strong><br/><span>Availability unavailable</span></div>`);
+          } catch {
+            popup.setHTML(`<div><strong>🚲 ${escapeHtml(name)}</strong><br/><span>Availability unavailable</span></div>`);
+          }
         };
         map.on('click', BIKE_DOCKS_LAYER_ID, dockClickHandler);
 
