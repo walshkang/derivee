@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -46,6 +48,7 @@ func main() {
 	uploadR2 := flag.Bool("upload-r2", false, "Upload built pack and manifest to Cloudflare R2")
 	forceBuild := flag.Bool("force", false, "Force compilation even if delta check indicates no change")
 	mtaStationsPath := flag.String("mta-stations", "", "Optional path or URL to MTA Stations.csv for complex mapping")
+	gbfsURL := flag.String("gbfs-url", "", "Optional GBFS station_information URL (e.g., Citi Bike) to bundle bikestations.json in pack")
 	flag.Parse()
 
 	if *configPath == "" || *gtfsSources == "" || *outputPath == "" {
@@ -401,6 +404,17 @@ func main() {
 		}
 	}
 
+	// GBFS bike station locations (optional)
+	if *gbfsURL != "" {
+		log.Printf("Fetching GBFS station_information from %s...", *gbfsURL)
+		bikePath := filepath.Join(tempDir, "bikestations.json")
+		if err := fetchGBFSStations(*gbfsURL, bikePath); err != nil {
+			log.Fatalf("Failed to fetch GBFS stations: %v", err)
+		}
+		extraAssets["bikestations.json"] = bikePath
+		log.Printf("Bundling bike stations from %s", bikePath)
+	}
+
 	// 11. Package into .pack.zst
 	log.Printf("Packaging city pack to %s...", *outputPath)
 	if err := os.MkdirAll(filepath.Dir(*outputPath), 0755); err != nil {
@@ -526,6 +540,54 @@ func copyFile(src, dst string) error {
 
 	_, err = io.Copy(out, in)
 	return err
+}
+
+// fetchGBFSStations downloads GBFS station_information and saves the stations array to outputPath
+func fetchGBFSStations(gbfsURL, outputPath string) error {
+	resp, err := http.Get(gbfsURL)
+	if err != nil {
+		return fmt.Errorf("HTTP GET failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read body failed: %w", err)
+	}
+
+	// Parse GBFS envelope: { "data": { "stations": [...] } }
+	var envelope struct {
+		Data struct {
+			Stations []json.RawMessage `json:"stations"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return fmt.Errorf("parse GBFS failed: %w", err)
+	}
+
+	if len(envelope.Data.Stations) == 0 {
+		return fmt.Errorf("no stations in GBFS feed")
+	}
+
+	// Write stations array directly
+	out, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	enc := json.NewEncoder(out)
+	// Re-marshal as { "stations": [...] } for compactness
+	if err := enc.Encode(map[string]interface{}{"stations": envelope.Data.Stations}); err != nil {
+		return err
+	}
+
+	log.Printf("Fetched %d bike stations", len(envelope.Data.Stations))
+	return nil
 }
 
 func createDummyZip() []byte {
