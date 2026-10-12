@@ -18,6 +18,8 @@ import {
 import { RoutingQueryWatchdog } from '../utils/tabSuspension';
 import { createRoutesMap } from '../utils/routeBadge';
 import { CityPicker } from './CityPicker';
+import { findBikeCandidates, type BikeStation, type TransitStop } from '../utils/bikeCatchment';
+import { getCityDirectory } from '../utils/opfs';
 import type { CityPickerState } from '../types/cityPicker';
 import { reduceCityPickerState, fetchCitiesManifest } from '../utils/cityPicker';
 import type { WorkerToMainMessage } from '../types/pack';
@@ -517,17 +519,83 @@ export function TripPlanner({
     const depSec = computeDepartureSeconds(mode, time);
 
     try {
-      const { fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
-        worker,
-        selectedOrigin.id,
-        selectedDest.id,
-        depSec
-      );
+      let fastest: RoutingSegment[];
+      let fewestTransfers: RoutingSegment[];
+      let lessWalking: RoutingSegment[];
+      let bikeInfo: string | null = null;
+
+      if (includeBike) {
+        // Bike-share enabled: find best transit stop via bike, route from there
+        try {
+          const [stopsRes, bikeData] = await Promise.all([
+            fetch('/data/stops.json'),
+            (async () => {
+              const dir = await getCityDirectory('nyc');
+              if (!dir) return null;
+              try {
+                const handle = await dir.getFileHandle('bikestations.json');
+                const file = await handle.getFile();
+                return JSON.parse(await file.text());
+              } catch { return null; }
+            })(),
+          ]);
+
+          if (stopsRes.ok && bikeData?.stations) {
+            const allStops = (await stopsRes.json()) as StopItem[];
+            const bikeStations: BikeStation[] = bikeData.stations;
+            const transitStops: TransitStop[] = allStops
+              .filter(s => s.t === 's')
+              .map(s => ({ id: String(s.id), name: s.name, lat: s.lat, lon: s.lon }));
+
+            const candidates = findBikeCandidates(
+              selectedOrigin.lat,
+              selectedOrigin.lon,
+              bikeStations,
+              transitStops
+            ).slice(0, 3);
+
+            if (candidates.length > 0) {
+              const best = candidates[0];
+              // Route from the bike-accessible station (depart later to account for bike time)
+              const bikeDepSec = depSec + Math.round(best.bikeTimeSeconds);
+              ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
+                worker,
+                typeof best.stopId === 'string' ? parseInt(best.stopId) : best.stopId,
+                selectedDest.id,
+                bikeDepSec
+              ));
+              bikeInfo = `🚲 Bike ${Math.round(best.bikeTimeSeconds / 60)} min to ${best.stopName} via ${best.pickupDockName}`;
+            } else {
+              ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
+                worker, selectedOrigin.id, selectedDest.id, depSec
+              ));
+            }
+          } else {
+            ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
+              worker, selectedOrigin.id, selectedDest.id, depSec
+            ));
+          }
+        } catch (bikeErr) {
+          console.warn('[Bike] Routing failed, falling back to transit-only:', bikeErr);
+          ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
+            worker, selectedOrigin.id, selectedDest.id, depSec
+          ));
+        }
+      } else {
+        ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
+          worker,
+          selectedOrigin.id,
+          selectedDest.id,
+          depSec
+        ));
+      }
 
       setFastestSegments(fastest);
       setFewestTransfersSegments(fewestTransfers);
       setLessWalkingSegments(lessWalking);
       setRouteError(null);
+      // TODO: Display bikeInfo in the UI (v1: log it)
+      if (bikeInfo) console.log('[Bike]', bikeInfo);
       if (fastest.length > 0 || fewestTransfers.length > 0) {
         onRoutesFound?.();
       }
