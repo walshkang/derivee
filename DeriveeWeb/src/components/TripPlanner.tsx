@@ -87,6 +87,8 @@ export function TripPlanner({
     savingsMin: number; // positive = saves time, negative = slower
     walkTotalMin: number;
     bikeTotalMin: number;
+    bikeOnlyMin?: number; // direct bike origin→dest (no transit)
+    ebikeAccessMin?: number; // e-bike time for comparison
   } | null>(null);
   const [departureTime, setDepartureTime] = useState<string>(() => {
     const d = new Date();
@@ -653,8 +655,48 @@ export function TripPlanner({
               transitStops
             ).slice(0, 3);
 
+            // Also compute e-bike candidates for time/cost comparison
+            const ebikeCandidates = findBikeCandidates(
+              selectedOrigin.lat,
+              selectedOrigin.lon,
+              bikeStations,
+              transitStops,
+              true // useEbike
+            ).slice(0, 3);
+
             if (candidates.length > 0) {
-              const best = candidates[0];
+              // Check live dock availability before suggesting bike.
+              // Skip candidates where pickup has no bikes or dropoff has no open docks.
+              let best: typeof candidates[0] | null = null;
+              try {
+                const statusRes = await fetch('/api/bikeshare/status');
+                if (statusRes.ok) {
+                  const statusData = await statusRes.json();
+                  const statusById = new Map<string, { bikes: number; docks: number }>();
+                  for (const s of statusData.data?.stations || []) {
+                    statusById.set(s.station_id, {
+                      bikes: s.num_bikes_available || 0,
+                      docks: s.num_docks_available || 0,
+                    });
+                  }
+                  // Find first candidate with available bikes AND open dropoff docks
+                  for (const cand of candidates) {
+                    const pickup = statusById.get(cand.pickupDockId);
+                    const dropoff = statusById.get(cand.dropoffDockId);
+                    if (pickup && pickup.bikes > 0 && dropoff && dropoff.docks > 0) {
+                      best = cand;
+                      break;
+                    }
+                  }
+                }
+              } catch {
+                // If status check fails, fall back to first candidate (no availability info)
+              }
+              // If no candidate has availability, skip bike entirely
+              if (!best) {
+                ({ fastest, fewestTransfers, lessWalking } = walkResult);
+                setBikeComparison(null);
+              } else {
               const bikeAccessSec = Math.round(best.bikeTimeSeconds);
               const bikeDepSec = depSec + bikeAccessSec;
               // Map bike candidate stopId (numeric string) to timetable index via stopsMap
@@ -680,7 +722,42 @@ export function TripPlanner({
                 // Hassle threshold: don't suggest bike unless it saves 5+ minutes.
                 // Below that, the unlock/walk-to-dock/dock hassle isn't worth it.
                 const HASSLE_THRESHOLD_SEC = 300;
+
+                // Compute bike-only (direct bike origin→dest, no transit) for comparison
+                let bikeOnlyMin: number | undefined;
+                try {
+                  // Find pickup dock (from best candidate) and dropoff dock near destination
+                  const pickupDock = bikeStations.find(d => d.station_id === best.pickupDockId);
+                  // Find nearest dock to destination within 400m
+                  let destDock: typeof pickupDock | null = null;
+                  let destDockDist = Infinity;
+                  for (const d of bikeStations) {
+                    const dist = Math.sqrt(
+                      Math.pow(d.lat - selectedDest.lat, 2) + Math.pow(d.lon - selectedDest.lon, 2)
+                    ) * 111000; // approx meters
+                    if (dist < destDockDist && dist <= 400) {
+                      destDockDist = dist;
+                      destDock = d;
+                    }
+                  }
+                  if (pickupDock && destDock) {
+                    const walkToPickupM = Math.sqrt(
+                      Math.pow(pickupDock.lat - selectedOrigin.lat, 2) + 
+                      Math.pow(pickupDock.lon - selectedOrigin.lon, 2)
+                    ) * 111000 * 1.32;
+                    const bikeRideM = Math.sqrt(
+                      Math.pow(destDock.lat - pickupDock.lat, 2) + 
+                      Math.pow(destDock.lon - pickupDock.lon, 2)
+                    ) * 111000 * 1.32;
+                    const walkFromDropoffM = destDockDist * 1.32;
+                    const bikeOnlySec = (walkToPickupM / 1.4) + 60 + (bikeRideM / 3.58) + 30 + (walkFromDropoffM / 1.4);
+                    bikeOnlyMin = Math.round(bikeOnlySec / 60);
+                  }
+                } catch { /* skip bike-only if calc fails */ }
+
                 if (savingsSec >= HASSLE_THRESHOLD_SEC) {
+                  // Get e-bike time for the same station (if available)
+                  const ebikeBest = ebikeCandidates.find(c => c.stopName === best.stopName);
                   setBikeComparison({
                     bikeStationName: best.stopName,
                     bikeAccessMin: Math.round(bikeAccessSec / 60),
@@ -688,6 +765,8 @@ export function TripPlanner({
                     savingsMin: Math.round(savingsSec / 60),
                     walkTotalMin: Math.round(walkTotalSec / 60),
                     bikeTotalMin: Math.round(bikeTotalSec / 60),
+                    bikeOnlyMin,
+                    ebikeAccessMin: ebikeBest ? Math.round(ebikeBest.bikeTimeSeconds / 60) : undefined,
                   });
                 } else {
                   setBikeComparison(null);
@@ -703,6 +782,7 @@ export function TripPlanner({
               } else {
                 ({ fastest, fewestTransfers, lessWalking } = walkResult);
               }
+              } // close else (best available)
             } else {
               ({ fastest, fewestTransfers, lessWalking } = walkResult);
             }
@@ -1080,10 +1160,16 @@ export function TripPlanner({
       ) : (
         <>
           {bikeComparison && (
-            <div class="bike-comparison-banner">
+            <div className="bike-comparison-banner">
               {bikeComparison.savingsMin > 0 ? (
                 <span>
                   🚲 Bike {bikeComparison.bikeAccessMin} min to {bikeComparison.bikeStationName} via {bikeComparison.pickupDockName} — <strong>saves {bikeComparison.savingsMin} min</strong> vs walking ({bikeComparison.walkTotalMin} min → {bikeComparison.bikeTotalMin} min)
+                  {bikeComparison.ebikeAccessMin !== undefined && (
+                    <span> · ⚡ E-bike: {bikeComparison.ebikeAccessMin} min</span>
+                  )}
+                  {bikeComparison.bikeOnlyMin !== undefined && (
+                    <span> · 🚲 Direct bike: {bikeComparison.bikeOnlyMin} min (no transit)</span>
+                  )}
                 </span>
               ) : bikeComparison.savingsMin < 0 ? (
                 <span>
