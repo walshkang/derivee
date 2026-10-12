@@ -54,6 +54,18 @@ export function TripPlanner({
   // Stop data from stops.json
   const [stops, setStops] = useState<StopItem[]>([]);
   const [stopsMap, setStopsMap] = useState<Map<number, StopItem>>(new Map());
+  // GTFS ID -> timetable index mapping (engine uses sorted GTFS ID order)
+  const [stopIndexMap, setStopIndexMap] = useState<Map<string, number>>(new Map());
+
+  // Helper: get timetable index for a stop (engine expects sorted GTFS ID order)
+  const getTimetableIndex = (stop: StopItem): number => {
+    if (stop.gtfs_id) {
+      const idx = stopIndexMap.get(stop.gtfs_id);
+      if (idx !== undefined) return idx;
+    }
+    // Fallback to numeric id (may not match, but better than crashing)
+    return stop.id;
+  };
 
   // Route metadata from routes.json
   const [routesMap, setRoutesMap] = useState<Map<string, RouteItem>>(new Map());
@@ -148,6 +160,21 @@ export function TripPlanner({
       .catch((err) => {
         // eslint-disable-next-line no-console
         console.error('[TripPlanner] Failed to load stops.json:', err);
+      });
+
+    // Load stop_index.json (GTFS ID -> timetable index)
+    fetch('/data/stop_index.json')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: Record<string, number>) => {
+        if (!isMounted) return;
+        setStopIndexMap(new Map(Object.entries(data)));
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error('[TripPlanner] Failed to load stop_index.json:', err);
       });
 
     fetch('/data/routes.json')
@@ -609,7 +636,7 @@ export function TripPlanner({
 
           // Always run walk routing first (baseline)
           const walkResult = await executeDualProfileRouting(
-            worker, selectedOrigin.id, selectedDest.id, depSec
+            worker, getTimetableIndex(selectedOrigin), getTimetableIndex(selectedDest), depSec
           );
 
           if (stopsRes.ok && bikeData?.stations) {
@@ -630,10 +657,14 @@ export function TripPlanner({
               const best = candidates[0];
               const bikeAccessSec = Math.round(best.bikeTimeSeconds);
               const bikeDepSec = depSec + bikeAccessSec;
+              // Map bike candidate stopId (numeric string) to timetable index via stopsMap
+              const bikeStopIdNum = typeof best.stopId === 'string' ? parseInt(best.stopId) : best.stopId;
+              const bikeStopItem = stopsMap.get(bikeStopIdNum);
+              const bikeTimetableIdx = bikeStopItem ? getTimetableIndex(bikeStopItem) : bikeStopIdNum;
               const bikeResult = await executeDualProfileRouting(
                 worker,
-                typeof best.stopId === 'string' ? parseInt(best.stopId) : best.stopId,
-                selectedDest.id,
+                bikeTimetableIdx,
+                getTimetableIndex(selectedDest),
                 bikeDepSec
               );
 
@@ -673,15 +704,15 @@ export function TripPlanner({
         } catch (bikeErr) {
           console.warn('[Bike] Routing failed, falling back to transit-only:', bikeErr);
           ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
-            worker, selectedOrigin.id, selectedDest.id, depSec
+            worker, getTimetableIndex(selectedOrigin), getTimetableIndex(selectedDest), depSec
           ));
         }
       } else {
         setBikeComparison(null);
         ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
           worker,
-          selectedOrigin.id,
-          selectedDest.id,
+          getTimetableIndex(selectedOrigin),
+          getTimetableIndex(selectedDest),
           depSec
         ));
       }
