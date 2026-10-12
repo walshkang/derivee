@@ -54,6 +54,7 @@ export type MainToWorkerMessage = {
   type: 'START_INSTALL';
   slug?: string;
   packUrl?: string;
+  expectedVersion?: number;
 };
 
 export type WorkerToMainMessage =

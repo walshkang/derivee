@@ -293,6 +293,16 @@ export function PackInstaller({
 
   const startInstall = async (expectedTotalBytes?: number) => {
     setErrorMessage(null);
+    // Resolve the remote pack version for accurate installed-version tracking.
+    // (The pack's internal config.version is the build schema, not the release version.)
+    let remoteVersion: number | undefined = availableUpdate?.version;
+    if (remoteVersion === undefined) {
+      try {
+        const info = await fetchPackInfo('nyc');
+        remoteVersion = info?.version;
+      } catch { /* fall back to config version */ }
+    }
+
     setIsInstalling(true);
     setInstallStage('downloading');
     setProgress({
@@ -391,6 +401,7 @@ export function PackInstaller({
         type: 'START_INSTALL',
         slug: 'nyc',
         packUrl: '/api/pack',
+        expectedVersion: remoteVersion,
       });
     } catch (err) {
       watchdogRef.current?.stop();

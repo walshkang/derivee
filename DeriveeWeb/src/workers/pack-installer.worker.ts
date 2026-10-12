@@ -87,7 +87,7 @@ async function readFullText(
   return await file.text();
 }
 
-async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pack'): Promise<void> {
+async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pack', expectedVersion?: number): Promise<void> {
   let rootHandle: FileSystemDirectoryHandle | null = null;
 
   try {
@@ -301,7 +301,9 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     const packState: InstalledPackState = {
       isInstalled: true,
       slug,
-      version: config.version,
+      // Prefer the remote version metadata over the pack's internal config version
+      // (config.version is the build schema version like 2.0.0, not the pack release version)
+      version: expectedVersion ?? Number(config.version) ?? 0,
       displayName: config.displayName || 'New York City',
       seasonLabel: config.transit?.scheduleValidity?.seasonLabel || 'Summer 2026 Timetable',
       installedAt: new Date().toISOString(),
@@ -353,8 +355,8 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
 }
 
 self.onmessage = async (event: MessageEvent<MainToWorkerMessage>) => {
-  const { type, slug = 'nyc', packUrl = '/api/pack' } = event.data;
+  const { type, slug = 'nyc', packUrl = '/api/pack', expectedVersion } = event.data;
   if (type === 'START_INSTALL') {
-    await runInstallation(slug, packUrl);
+    await runInstallation(slug, packUrl, expectedVersion);
   }
 };
