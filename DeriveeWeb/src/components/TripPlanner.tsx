@@ -20,6 +20,7 @@ import { createRoutesMap } from '../utils/routeBadge';
 import { CityPicker } from './CityPicker';
 import { findBikeCandidates, type BikeStation, type TransitStop } from '../utils/bikeCatchment';
 import { getCityDirectory } from '../utils/opfs';
+import { searchPlaces, findNearestStopByCoordinates, type GeocodedPlace } from '../utils/geocoder';
 import type { CityPickerState } from '../types/cityPicker';
 import { reduceCityPickerState, fetchCitiesManifest } from '../utils/cityPicker';
 import type { WorkerToMainMessage } from '../types/pack';
@@ -64,6 +65,8 @@ export function TripPlanner({
   const [selectedDest, setSelectedDest] = useState<StopItem | null>(null);
   const [showOriginDropdown, setShowOriginDropdown] = useState<boolean>(false);
   const [showDestDropdown, setShowDestDropdown] = useState<boolean>(false);
+  const [originPlaces, setOriginPlaces] = useState<GeocodedPlace[]>([]);
+  const [destPlaces, setDestPlaces] = useState<GeocodedPlace[]>([]);
   const [includeBike, setIncludeBike] = useState<boolean>(false);
   const [bikeComparison, setBikeComparison] = useState<{
     bikeStationName: string;
@@ -78,6 +81,35 @@ export function TripPlanner({
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   });
   const [departureMode, setDepartureMode] = useState<'now' | 'depart_at'>('now');
+
+  // Debounced place search (Nominatim) for origin/destination inputs
+  useEffect(() => {
+    if (!originInput || originInput.trim().length < 3) {
+      setOriginPlaces([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const places = await searchPlaces(originInput, { limit: 3 });
+        setOriginPlaces(places);
+      } catch { setOriginPlaces([]); }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [originInput]);
+
+  useEffect(() => {
+    if (!destInput || destInput.trim().length < 3) {
+      setDestPlaces([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const places = await searchPlaces(destInput, { limit: 3 });
+        setDestPlaces(places);
+      } catch { setDestPlaces([]); }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [destInput]);
 
   // Screen 4B Dual-Profile Routing State
   const [isRouting, setIsRouting] = useState<boolean>(false);
@@ -426,14 +458,39 @@ export function TripPlanner({
     setSelectedOrigin(stop);
     setOriginInput(stop.name);
     setShowOriginDropdown(false);
+    setOriginPlaces([]);
     resetRoutes();
+  };
+
+  const handleSelectOriginPlace = (place: GeocodedPlace) => {
+    // Resolve place to nearest station via haversine on stops list
+    const nearest = findNearestStopByCoordinates(place.lat, place.lon, stops);
+    if (nearest) {
+      setSelectedOrigin(nearest);
+      setOriginInput(place.displayName.split(',').slice(0, 2).join(','));
+      setShowOriginDropdown(false);
+      setOriginPlaces([]);
+      resetRoutes();
+    }
   };
 
   const handleSelectDest = (stop: StopItem) => {
     setSelectedDest(stop);
     setDestInput(stop.name);
     setShowDestDropdown(false);
+    setDestPlaces([]);
     resetRoutes();
+  };
+
+  const handleSelectDestPlace = (place: GeocodedPlace) => {
+    const nearest = findNearestStopByCoordinates(place.lat, place.lon, stops);
+    if (nearest) {
+      setSelectedDest(nearest);
+      setDestInput(place.displayName.split(',').slice(0, 2).join(','));
+      setShowDestDropdown(false);
+      setDestPlaces([]);
+      resetRoutes();
+    }
   };
 
   const handleSwapStops = () => {
@@ -759,7 +816,7 @@ export function TripPlanner({
             )}
           </div>
 
-          {showOriginDropdown && originSuggestions.length > 0 && (
+          {showOriginDropdown && (originSuggestions.length > 0 || originPlaces.length > 0) && (
             <div class="stop-autocomplete-dropdown" role="listbox">
               {originSuggestions.map((stop) => (
                 <button
@@ -772,6 +829,18 @@ export function TripPlanner({
                 >
                   <span class="stop-suggestion-name">{stop.name}</span>
                   <span class="stop-suggestion-type">{stop.t === 'b' ? 'Bus stop' : 'Station'}</span>
+                </button>
+              ))}
+              {originPlaces.map((place, i) => (
+                <button
+                  key={`place-${i}`}
+                  type="button"
+                  class="stop-suggestion-item place-suggestion-item"
+                  role="option"
+                  onClick={() => handleSelectOriginPlace(place)}
+                >
+                  <span class="stop-suggestion-name">📍 {place.displayName.split(',').slice(0, 2).join(',')}</span>
+                  <span class="stop-suggestion-type">Place</span>
                 </button>
               ))}
             </div>
@@ -831,7 +900,7 @@ export function TripPlanner({
             )}
           </div>
 
-          {showDestDropdown && destSuggestions.length > 0 && (
+          {showDestDropdown && (destSuggestions.length > 0 || destPlaces.length > 0) && (
             <div class="stop-autocomplete-dropdown" role="listbox">
               {destSuggestions.map((stop) => (
                 <button
@@ -844,6 +913,18 @@ export function TripPlanner({
                 >
                   <span class="stop-suggestion-name">{stop.name}</span>
                   <span class="stop-suggestion-type">{stop.t === 'b' ? 'Bus stop' : 'Station'}</span>
+                </button>
+              ))}
+              {destPlaces.map((place, i) => (
+                <button
+                  key={`place-${i}`}
+                  type="button"
+                  class="stop-suggestion-item place-suggestion-item"
+                  role="option"
+                  onClick={() => handleSelectDestPlace(place)}
+                >
+                  <span class="stop-suggestion-name">📍 {place.displayName.split(',').slice(0, 2).join(',')}</span>
+                  <span class="stop-suggestion-type">Place</span>
                 </button>
               ))}
             </div>
