@@ -116,36 +116,39 @@ export async function searchPlaces(
     return [];
   }
 
-  const endpoint = options?.endpoint ?? NOMINATIM_ENDPOINT;
-  const limit = options?.limit ?? 5;
-  const minInterval = options?.minIntervalMs ?? 1000;
   const fetchFn = options?.fetchFn ?? (typeof fetch !== 'undefined' ? fetch : undefined);
 
   if (!fetchFn) {
     return [];
   }
 
+  // In the browser, route through our worker (/api/geocode) which proxies
+  // Nominatim. Direct browser calls fail (egress proxy blocks Chromium).
+  // In Node/tests, use the endpoint directly with the provided fetchFn.
+  const useWorkerProxy = typeof window !== 'undefined' && !options?.endpoint;
+
   try {
-    if (minInterval > 0) {
-      await throttleNominatimRequest(minInterval);
+    if (!useWorkerProxy && (options?.minIntervalMs ?? 1000) > 0) {
+      await throttleNominatimRequest(options?.minIntervalMs ?? 1000);
     }
 
-    const url = new URL(endpoint);
-    url.searchParams.set('q', trimmed);
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('limit', String(limit));
-    url.searchParams.set('addressdetails', '1');
-
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-    };
-    // User-Agent is a forbidden header in browsers (set automatically).
-    // Only set it in non-browser environments (Node tests, etc.)
-    if (typeof window === 'undefined') {
-      if (options?.userAgent) {
-        headers['User-Agent'] = options.userAgent;
-      } else {
-        headers['User-Agent'] = DEFAULT_USER_AGENT;
+    let url: URL;
+    let headers: Record<string, string>;
+    if (useWorkerProxy) {
+      url = new URL('/api/geocode', window.location.origin);
+      url.searchParams.set('q', trimmed);
+      headers = { Accept: 'application/json' };
+    } else {
+      const endpoint = options?.endpoint ?? NOMINATIM_ENDPOINT;
+      const limit = options?.limit ?? 5;
+      url = new URL(endpoint);
+      url.searchParams.set('q', trimmed);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('limit', String(limit));
+      url.searchParams.set('addressdetails', '1');
+      headers = { Accept: 'application/json' };
+      if (typeof window === 'undefined') {
+        headers['User-Agent'] = options?.userAgent ?? DEFAULT_USER_AGENT;
       }
     }
 

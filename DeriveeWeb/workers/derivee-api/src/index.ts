@@ -120,6 +120,39 @@ export default {
       }
     }
 
+    // 2.7 Geocode: GET /api/geocode?q=... (Nominatim proxy)
+    // Browser can't reach Nominatim directly (egress proxy blocks Chromium),
+    // so the worker proxies it. Also gives us rate limiting + caching.
+    if (url.pathname === '/api/geocode' && request.method === 'GET') {
+      const q = url.searchParams.get('q');
+      if (!q || q.trim().length < 2) {
+        return jsonResponse({ error: 'missing_query' }, 400, origin);
+      }
+      try {
+        const nominatimUrl = `https://nominatim.openstreetmap.org/search?${new URLSearchParams({
+          q: q.trim(),
+          format: 'json',
+          limit: '5',
+          countrycodes: 'us',
+          viewbox: '-74.3,40.9,-73.6,40.5', // NYC metro
+          bounded: '1',
+        })}`;
+        const resp = await fetch(nominatimUrl, {
+          headers: { 'User-Agent': 'Derivee/1.0 (transit routing)' },
+        });
+        if (!resp.ok) {
+          return jsonResponse({ error: 'geocode_unavailable' }, 503, origin);
+        }
+        const data = await resp.json();
+        return jsonResponse(data, 200, origin, {
+          'Cache-Control': 'public, max-age=3600', // Places don't move
+        });
+      } catch (err: any) {
+        console.warn('[Geocode] Nominatim fetch failed:', err?.message || err);
+        return jsonResponse({ error: 'geocode_unavailable' }, 503, origin);
+      }
+    }
+
     // 3. Authenticated session check: GET /api/me
     if (url.pathname === '/api/me' && request.method === 'GET') {
       const userEmail =
