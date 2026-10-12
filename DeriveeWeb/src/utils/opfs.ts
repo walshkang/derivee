@@ -9,6 +9,11 @@ export const REQUIRED_PACK_FILES = [
   'walk_graph.bin',
 ] as const;
 
+// Optional files (e.g., bikestations.json in v6+). UI degrades gracefully if missing.
+export const OPTIONAL_PACK_FILES = [
+  'bikestations.json',
+] as const;
+
 export const LOCAL_STORAGE_PACK_KEY = 'derivee_pack_nyc';
 export const LOCAL_STORAGE_PACK_DISMISSED_KEY = 'derivee_pack_dismissed';
 
