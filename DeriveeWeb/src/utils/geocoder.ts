@@ -139,10 +139,14 @@ export async function searchPlaces(
     const headers: Record<string, string> = {
       Accept: 'application/json',
     };
-    if (options?.userAgent) {
-      headers['User-Agent'] = options.userAgent;
-    } else {
-      headers['User-Agent'] = DEFAULT_USER_AGENT;
+    // User-Agent is a forbidden header in browsers (set automatically).
+    // Only set it in non-browser environments (Node tests, etc.)
+    if (typeof window === 'undefined') {
+      if (options?.userAgent) {
+        headers['User-Agent'] = options.userAgent;
+      } else {
+        headers['User-Agent'] = DEFAULT_USER_AGENT;
+      }
     }
 
     const response = await fetchFn(url.toString(), {
