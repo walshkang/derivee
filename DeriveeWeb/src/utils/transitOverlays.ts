@@ -6,6 +6,8 @@ export const TRANSIT_LINES_CASING_LAYER_ID = 'transit-lines-casing';
 export const TRANSIT_LINES_LAYER_ID = 'transit-lines-layer';
 export const TRANSIT_STATIONS_SOURCE_ID = 'transit-stations';
 export const TRANSIT_STATIONS_LAYER_ID = 'transit-stations-layer';
+export const BIKE_DOCKS_SOURCE_ID = 'bike-docks';
+export const BIKE_DOCKS_LAYER_ID = 'bike-docks-layer';
 export const TRANSIT_HIGHLIGHTED_SECTION_SOURCE_ID = 'transit-highlighted-section';
 export const TRANSIT_HIGHLIGHTED_SECTION_CASING_LAYER_ID = 'transit-highlighted-section-casing';
 export const TRANSIT_HIGHLIGHTED_SECTION_LAYER_ID = 'transit-highlighted-section-layer';
@@ -183,6 +185,26 @@ export function getTransitBusStopsLayerConfig(): CircleLayerSpecification {
       'circle-stroke-color': '#ffffff',
       'circle-stroke-width': 1,
       'circle-radius': 3,
+    },
+  };
+}
+
+export function getBikeDocksLayerConfig(): CircleLayerSpecification {
+  return {
+    id: BIKE_DOCKS_LAYER_ID,
+    type: 'circle',
+    source: BIKE_DOCKS_SOURCE_ID,
+    // Bike docks — visible at neighborhood zoom and closer
+    minzoom: 14,
+    paint: {
+      'circle-color': '#14b8a6', // Teal
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 1.5,
+      'circle-radius': [
+        'interpolate', ['linear'], ['zoom'],
+        14, 4,
+        16, 6,
+      ],
     },
   };
 }

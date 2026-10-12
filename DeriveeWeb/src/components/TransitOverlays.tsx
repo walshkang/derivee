@@ -9,11 +9,14 @@ import {
   TRANSIT_LINES_LAYER_ID,
   TRANSIT_STATIONS_SOURCE_ID,
   TRANSIT_STATIONS_LAYER_ID,
+  BIKE_DOCKS_SOURCE_ID,
+  BIKE_DOCKS_LAYER_ID,
   buildStationGeoJSON,
   getTransitLinesCasingLayerConfig,
   getTransitLinesLayerConfig,
   getTransitStationsLayerConfig,
   getTransitBusStopsLayerConfig,
+  getBikeDocksLayerConfig,
   TRANSIT_BUS_STOPS_LAYER_ID,
   escapeHtml,
   highlightRouteOnMap,
@@ -107,6 +110,40 @@ export function TransitOverlays({
           // Bus stops: separate layer, only at street-level zoom
           if (!map.getLayer(TRANSIT_BUS_STOPS_LAYER_ID)) {
             map.addLayer(getTransitBusStopsLayerConfig());
+          }
+        }
+
+        // 2b. Bike dock source & layer (from bikestations.json in OPFS, if present)
+        if (!map.getSource(BIKE_DOCKS_SOURCE_ID)) {
+          try {
+            const root = await navigator.storage.getDirectory();
+            const cityDir = await root.getDirectoryHandle('nyc', { create: false });
+            const fileHandle = await cityDir.getFileHandle('bikestations.json');
+            const file = await fileHandle.getFile();
+            const text = await file.text();
+            const data = JSON.parse(text);
+            const stations = data.stations || [];
+            const geojson = {
+              type: 'FeatureCollection',
+              features: stations.map((s: any) => ({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+                properties: {
+                  id: s.station_id,
+                  name: s.name,
+                  capacity: s.capacity,
+                },
+              })),
+            };
+            map.addSource(BIKE_DOCKS_SOURCE_ID, {
+              type: 'geojson',
+              data: geojson as unknown as GeoJSON.GeoJSON,
+            });
+            if (!map.getLayer(BIKE_DOCKS_LAYER_ID)) {
+              map.addLayer(getBikeDocksLayerConfig());
+            }
+          } catch {
+            // bikestations.json not present (v5 pack) — skip silently
           }
         }
 
