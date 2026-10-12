@@ -58,6 +58,50 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
 }
 
 /**
+ * Simple grid spatial index for fast nearby lookups.
+ * Cell size ~500m (approx 0.0045 degrees lat).
+ */
+class GridIndex<T extends { lat: number; lon: number }> {
+  private cells = new Map<string, T[]>();
+  private cellSize = 0.0045; // ~500m
+
+  constructor(items: T[]) {
+    for (const item of items) {
+      const key = this.key(item.lat, item.lon);
+      if (!this.cells.has(key)) this.cells.set(key, []);
+      this.cells.get(key)!.push(item);
+    }
+  }
+
+  private key(lat: number, lon: number): string {
+    return `${Math.floor(lat / this.cellSize)},${Math.floor(lon / this.cellSize)}`;
+  }
+
+  /** Find all items within radiusMeters of (lat, lon) */
+  nearby(lat: number, lon: number, radiusMeters: number): T[] {
+    const radiusDeg = radiusMeters / 111000; // approx degrees
+    const minLat = Math.floor((lat - radiusDeg) / this.cellSize);
+    const maxLat = Math.floor((lat + radiusDeg) / this.cellSize);
+    const minLon = Math.floor((lon - radiusDeg) / this.cellSize);
+    const maxLon = Math.floor((lon + radiusDeg) / this.cellSize);
+    const results: T[] = [];
+    for (let clat = minLat; clat <= maxLat; clat++) {
+      for (let clon = minLon; clon <= maxLon; clon++) {
+        const cell = this.cells.get(`${clat},${clon}`);
+        if (cell) {
+          for (const item of cell) {
+            if (haversineM(lat, lon, item.lat, item.lon) <= radiusMeters) {
+              results.push(item);
+            }
+          }
+        }
+      }
+    }
+    return results;
+  }
+}
+
+/**
  * Find transit stops reachable by bike from origin.
  * 
  * For each bike dock within walk range of origin:
@@ -77,27 +121,31 @@ export function findBikeCandidates(
   // Dedupe by station name (dataset has separate IDs per platform at same coords)
   const candidates = new Map<string, BikeCandidate>();
 
-  // Find docks within walk range of origin
-  const nearbyDocks = bikeStations.filter(dock => {
-    const dist = haversineM(originLat, originLon, dock.lat, dock.lon);
-    return dist <= MAX_WALK_TO_DOCK_M;
-  });
+  // Build spatial indices (fast nearby lookups)
+  const dockIndex = new GridIndex(bikeStations);
+  const stopIndex = new GridIndex(transitStops);
+
+  // Find docks within walk range of origin (via index, not O(n) scan)
+  const nearbyDocks = dockIndex.nearby(originLat, originLon, MAX_WALK_TO_DOCK_M);
 
   for (const pickupDock of nearbyDocks) {
     const walkToDockM = haversineM(originLat, originLon, pickupDock.lat, pickupDock.lon) * MANHATTAN_GRID_FACTOR;
     const walkToDockS = walkToDockM / WALK_SPEED_MS;
 
-    // For each transit stop within bike range of this dock
-    for (const stop of transitStops) {
+    // For each transit stop within bike range of this dock (via index)
+    const nearbyStops = stopIndex.nearby(pickupDock.lat, pickupDock.lon, MAX_BIKE_RIDE_M);
+    for (const stop of nearbyStops) {
       const bikeDistM = haversineM(pickupDock.lat, pickupDock.lon, stop.lat, stop.lon);
+      // (already filtered by index, but double-check for exactness)
       if (bikeDistM > MAX_BIKE_RIDE_M) continue;
 
-      // Find dropoff dock near the transit stop
+      // Find dropoff dock near the transit stop (via index)
+      const dropoffCands = dockIndex.nearby(stop.lat, stop.lon, MAX_WALK_TO_DOCK_M);
       let bestDropoff: BikeStation | null = null;
       let bestDropoffDist = Infinity;
-      for (const dock of bikeStations) {
+      for (const dock of dropoffCands) {
         const d = haversineM(stop.lat, stop.lon, dock.lat, dock.lon);
-        if (d < bestDropoffDist && d <= MAX_WALK_TO_DOCK_M) {
+        if (d < bestDropoffDist) {
           bestDropoffDist = d;
           bestDropoff = dock;
         }

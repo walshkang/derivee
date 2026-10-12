@@ -677,17 +677,25 @@ export function TripPlanner({
                 const bikeTotalSec = bikeAccessSec + bikeTransitSec;
                 const savingsSec = walkTotalSec - bikeTotalSec;
 
-                setBikeComparison({
-                  bikeStationName: best.stopName,
-                  bikeAccessMin: Math.round(bikeAccessSec / 60),
-                  pickupDockName: best.pickupDockName,
-                  savingsMin: Math.round(savingsSec / 60),
-                  walkTotalMin: Math.round(walkTotalSec / 60),
-                  bikeTotalMin: Math.round(bikeTotalSec / 60),
-                });
+                // Hassle threshold: don't suggest bike unless it saves 5+ minutes.
+                // Below that, the unlock/walk-to-dock/dock hassle isn't worth it.
+                const HASSLE_THRESHOLD_SEC = 300;
+                if (savingsSec >= HASSLE_THRESHOLD_SEC) {
+                  setBikeComparison({
+                    bikeStationName: best.stopName,
+                    bikeAccessMin: Math.round(bikeAccessSec / 60),
+                    pickupDockName: best.pickupDockName,
+                    savingsMin: Math.round(savingsSec / 60),
+                    walkTotalMin: Math.round(walkTotalSec / 60),
+                    bikeTotalMin: Math.round(bikeTotalSec / 60),
+                  });
+                } else {
+                  setBikeComparison(null);
+                }
 
-                // Use whichever is actually faster
-                if (bikeTotalSec < walkTotalSec) {
+                // Use whichever is actually faster, but respect hassle threshold:
+                // if bike saves < 5 min, stick with walk (not worth the dock hassle)
+                if (savingsSec >= HASSLE_THRESHOLD_SEC) {
                   ({ fastest, fewestTransfers, lessWalking } = bikeResult);
                 } else {
                   ({ fastest, fewestTransfers, lessWalking } = walkResult);
