@@ -1,11 +1,12 @@
 /**
  * Bike catchment expansion for Dérivée.
- * 
+ *
  * Instead of replacing walk with bike for the same stations, bike EXPANDS
- * the catchment to reach better (farther) stations with faster service.
- * 
- * Example: Bike 10 min to Atlantic Av (4/5 express) vs walk 5 min to
- * Bedford Av (L local). The bike route is faster overall.
+ * the catchment to reach stations faster than walking could.
+ *
+ * The function is deterministic: same inputs always produce same outputs.
+ * It computes access times only — transit time comparison happens via
+ * dual RAPTOR (walk route vs bike route) in the caller.
  */
 
 export interface BikeStation {
@@ -73,7 +74,8 @@ export function findBikeCandidates(
   useEbike: boolean = false
 ): BikeCandidate[] {
   const bikeSpeed = useEbike ? EBIKE_SPEED_MS : BIKE_SPEED_MS;
-  const candidates = new Map<string | number, BikeCandidate>();
+  // Dedupe by station name (dataset has separate IDs per platform at same coords)
+  const candidates = new Map<string, BikeCandidate>();
 
   // Find docks within walk range of origin
   const nearbyDocks = bikeStations.filter(dock => {
@@ -108,9 +110,9 @@ export function findBikeCandidates(
 
       const totalS = walkToDockS + PICKUP_PENALTY_S + bikeRideS + DROPOFF_PENALTY_S + walkFromDockS;
 
-      const existing = candidates.get(stop.id);
+      const existing = candidates.get(stop.name);
       if (!existing || totalS < existing.bikeTimeSeconds) {
-        candidates.set(stop.id, {
+        candidates.set(stop.name, {
           stopId: stop.id,
           stopName: stop.name,
           bikeTimeSeconds: Math.round(totalS),

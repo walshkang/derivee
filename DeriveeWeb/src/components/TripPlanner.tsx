@@ -65,6 +65,14 @@ export function TripPlanner({
   const [showOriginDropdown, setShowOriginDropdown] = useState<boolean>(false);
   const [showDestDropdown, setShowDestDropdown] = useState<boolean>(false);
   const [includeBike, setIncludeBike] = useState<boolean>(false);
+  const [bikeComparison, setBikeComparison] = useState<{
+    bikeStationName: string;
+    bikeAccessMin: number;
+    pickupDockName: string;
+    savingsMin: number; // positive = saves time, negative = slower
+    walkTotalMin: number;
+    bikeTotalMin: number;
+  } | null>(null);
   const [departureTime, setDepartureTime] = useState<string>(() => {
     const d = new Date();
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -522,10 +530,10 @@ export function TripPlanner({
       let fastest: RoutingSegment[];
       let fewestTransfers: RoutingSegment[];
       let lessWalking: RoutingSegment[];
-      let bikeInfo: string | null = null;
 
       if (includeBike) {
-        // Bike-share enabled: find best transit stop via bike, route from there
+        // Bike-share enabled: dual RAPTOR — compare walk vs bike access honestly
+        setBikeComparison(null);
         try {
           const [stopsRes, bikeData] = await Promise.all([
             fetch('/data/stops.json'),
@@ -539,6 +547,11 @@ export function TripPlanner({
               } catch { return null; }
             })(),
           ]);
+
+          // Always run walk routing first (baseline)
+          const walkResult = await executeDualProfileRouting(
+            worker, selectedOrigin.id, selectedDest.id, depSec
+          );
 
           if (stopsRes.ok && bikeData?.stations) {
             const allStops = (await stopsRes.json()) as StopItem[];
@@ -556,24 +569,47 @@ export function TripPlanner({
 
             if (candidates.length > 0) {
               const best = candidates[0];
-              // Route from the bike-accessible station (depart later to account for bike time)
-              const bikeDepSec = depSec + Math.round(best.bikeTimeSeconds);
-              ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
+              const bikeAccessSec = Math.round(best.bikeTimeSeconds);
+              const bikeDepSec = depSec + bikeAccessSec;
+              const bikeResult = await executeDualProfileRouting(
                 worker,
                 typeof best.stopId === 'string' ? parseInt(best.stopId) : best.stopId,
                 selectedDest.id,
                 bikeDepSec
-              ));
-              bikeInfo = `🚲 Bike ${Math.round(best.bikeTimeSeconds / 60)} min to ${best.stopName} via ${best.pickupDockName}`;
+              );
+
+              // Compare total journey times (honest dual RAPTOR)
+              const walkSegs = walkResult.fastest;
+              const bikeSegs = bikeResult.fastest;
+              if (walkSegs.length > 0 && bikeSegs.length > 0) {
+                const walkTotalSec = walkSegs[walkSegs.length - 1].arrival_time - walkSegs[0].departure_time;
+                const bikeTransitSec = bikeSegs[bikeSegs.length - 1].arrival_time - bikeSegs[0].departure_time;
+                const bikeTotalSec = bikeAccessSec + bikeTransitSec;
+                const savingsSec = walkTotalSec - bikeTotalSec;
+
+                setBikeComparison({
+                  bikeStationName: best.stopName,
+                  bikeAccessMin: Math.round(bikeAccessSec / 60),
+                  pickupDockName: best.pickupDockName,
+                  savingsMin: Math.round(savingsSec / 60),
+                  walkTotalMin: Math.round(walkTotalSec / 60),
+                  bikeTotalMin: Math.round(bikeTotalSec / 60),
+                });
+
+                // Use whichever is actually faster
+                if (bikeTotalSec < walkTotalSec) {
+                  ({ fastest, fewestTransfers, lessWalking } = bikeResult);
+                } else {
+                  ({ fastest, fewestTransfers, lessWalking } = walkResult);
+                }
+              } else {
+                ({ fastest, fewestTransfers, lessWalking } = walkResult);
+              }
             } else {
-              ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
-                worker, selectedOrigin.id, selectedDest.id, depSec
-              ));
+              ({ fastest, fewestTransfers, lessWalking } = walkResult);
             }
           } else {
-            ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
-              worker, selectedOrigin.id, selectedDest.id, depSec
-            ));
+            ({ fastest, fewestTransfers, lessWalking } = walkResult);
           }
         } catch (bikeErr) {
           console.warn('[Bike] Routing failed, falling back to transit-only:', bikeErr);
@@ -582,6 +618,7 @@ export function TripPlanner({
           ));
         }
       } else {
+        setBikeComparison(null);
         ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
           worker,
           selectedOrigin.id,
@@ -594,8 +631,6 @@ export function TripPlanner({
       setFewestTransfersSegments(fewestTransfers);
       setLessWalkingSegments(lessWalking);
       setRouteError(null);
-      // TODO: Display bikeInfo in the UI (v1: log it)
-      if (bikeInfo) console.log('[Bike]', bikeInfo);
       if (fastest.length > 0 || fewestTransfers.length > 0) {
         onRoutesFound?.();
       }
@@ -921,7 +956,25 @@ export function TripPlanner({
           onBack={handleBackFromLegDetail}
         />
       ) : (
-        <RouteComparisonView
+        <>
+          {bikeComparison && (
+            <div class="bike-comparison-banner">
+              {bikeComparison.savingsMin > 0 ? (
+                <span>
+                  🚲 Bike {bikeComparison.bikeAccessMin} min to {bikeComparison.bikeStationName} via {bikeComparison.pickupDockName} — <strong>saves {bikeComparison.savingsMin} min</strong> vs walking ({bikeComparison.walkTotalMin} min → {bikeComparison.bikeTotalMin} min)
+                </span>
+              ) : bikeComparison.savingsMin < 0 ? (
+                <span>
+                  🚲 Bike {bikeComparison.bikeAccessMin} min to {bikeComparison.bikeStationName} — {Math.abs(bikeComparison.savingsMin)} min slower than walking, showing walk route
+                </span>
+              ) : (
+                <span>
+                  🚲 Bike {bikeComparison.bikeAccessMin} min to {bikeComparison.bikeStationName} via {bikeComparison.pickupDockName} — same time as walking
+                </span>
+              )}
+            </div>
+          )}
+          <RouteComparisonView
           rankedCards={rankedCards}
           activeProfile={activeProfile}
           onSelectProfile={setActiveProfile}
@@ -933,6 +986,7 @@ export function TripPlanner({
           patternsMap={patterns}
           onSelectLeg={handleSelectLeg}
         />
+        </>
       )}
     </div>
   );
