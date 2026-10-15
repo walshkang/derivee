@@ -9,6 +9,7 @@
     "preview": "vite preview --configLoader native",
     "test": "node --test src/workers/__tests__/*.test.ts src/utils/__tests__/*.test.ts scripts/__tests__/*.test.mjs",
     "harness": "node scripts/diagnostic-harness.mjs",
+    "test:install-e2e": "node scripts/pack-install-e2e.mjs",
     "ledger": "node scripts/generate-test-ledger.mjs"
   },
   "dependencies": {
