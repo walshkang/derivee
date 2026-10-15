@@ -2,6 +2,7 @@ package ultra
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -11,21 +12,23 @@ import (
 
 // PrecomputeConfig specifies configuration parameters for the precomputation engine
 type PrecomputeConfig struct {
-	TauMaxSec      uint32
-	MaxSnapMeters  float64
-	TempDir        string
-	EnableWitness  bool
-	ValidateOutput bool
+	TauMaxSec             uint32
+	MaxSnapMeters         float64
+	MaxBusBusTransferMeters float64
+	TempDir               string
+	EnableWitness         bool
+	ValidateOutput        bool
 }
 
 // DefaultPrecomputeConfig returns default configuration parameters for OCI E2.1.Micro
 func DefaultPrecomputeConfig() PrecomputeConfig {
 	return PrecomputeConfig{
-		TauMaxSec:      DefaultTauMaxSec,
-		MaxSnapMeters:  DefaultMaxSnapDistanceMeters,
-		TempDir:        "",
-		EnableWitness:  true,
-		ValidateOutput: true,
+		TauMaxSec:             DefaultTauMaxSec,
+		MaxSnapMeters:         DefaultMaxSnapDistanceMeters,
+		MaxBusBusTransferMeters: 150.0,
+		TempDir:               "",
+		EnableWitness:         true,
+		ValidateOutput:        true,
 	}
 }
 
@@ -124,6 +127,30 @@ func PrecomputeUltraTransfers(
 			totalWitnessPruned += uint64(initialCandidateCount - len(candidates))
 		}
 
+		// Phase B2: Bus-bus transfer pruning (1B-Go)
+		// Nobody transfers bus->bus across 8 blocks mid-trip. Cap bus-bus
+		// footpaths at MaxBusBusTransferMeters (150m). Subway-subway and
+		// bus-subway keep the standard radius.
+		if raptor.IsBusStop(timetable.Stops[u]) {
+			filtered := candidates[:0]
+			for _, c := range candidates {
+				if raptor.IsBusStop(timetable.Stops[c.TargetStop]) {
+					// Both bus stops: check distance
+					distM := haversineMeters(
+						float64(timetable.Stops[u].Latitude),
+						float64(timetable.Stops[u].Longitude),
+						float64(timetable.Stops[c.TargetStop].Latitude),
+						float64(timetable.Stops[c.TargetStop].Longitude),
+					)
+					if distM > cfg.MaxBusBusTransferMeters {
+						continue
+					}
+				}
+				filtered = append(filtered, c)
+			}
+			candidates = filtered
+		}
+
 		// Sort surviving shortcuts by target_stop ascending for deterministic CSR ordering
 		if len(candidates) > 1 {
 			sort.Slice(candidates, func(i, j int) bool {
@@ -178,4 +205,19 @@ func PrecomputeUltraTransfers(
 	}
 
 	return stats, nil
+}
+
+// haversineMeters returns the great-circle distance in meters between two
+// lat/lon points (degrees).
+func haversineMeters(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadiusM = 6371000.0
+	const degToRad = 0.017453292519943295
+
+	dLat := (lat2 - lat1) * degToRad
+	dLon := (lon2 - lon1) * degToRad
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*degToRad)*math.Cos(lat2*degToRad)*
+			math.Sin(dLon/2)*math.Sin(dLon/2)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return earthRadiusM * c
 }

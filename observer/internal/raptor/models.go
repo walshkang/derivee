@@ -54,6 +54,54 @@ type Route struct {
 	StopCount        uint16 // Number of stops along this route sequence
 }
 
+// IsBusBit is the bit position for the is_bus flag, packed into the high bit
+// of TripCount. Max realistic TripCount < 1000, so bit 15 (0x8000) is never
+// legitimately set. v6 packs have this bit clear (all-subway).
+const IsBusBit uint16 = 0x8000
+
+// IsBusStopBit is the bit position for the is_bus_stop flag, packed into the
+// high bit of RouteCount. Max realistic RouteCount < 100, so bit 15 is never
+// legitimately set.
+const IsBusStopBit uint16 = 0x8000
+
+// SetIsBus sets or clears the is_bus flag on a Route.
+func SetIsBus(r *Route, isBus bool) {
+	if isBus {
+		r.TripCount |= IsBusBit
+	} else {
+		r.TripCount &= ^IsBusBit
+	}
+}
+
+// IsBus returns true if the Route is a bus route.
+func IsBus(r Route) bool {
+	return r.TripCount&IsBusBit != 0
+}
+
+// TripCountValue returns the TripCount with the is_bus bit masked off.
+func (r Route) TripCountValue() uint16 {
+	return r.TripCount & ^IsBusBit
+}
+
+// SetIsBusStop sets or clears the is_bus_stop flag on a Stop.
+func SetIsBusStop(s *Stop, isBusStop bool) {
+	if isBusStop {
+		s.RouteCount |= IsBusStopBit
+	} else {
+		s.RouteCount &= ^IsBusStopBit
+	}
+}
+
+// IsBusStop returns true if the Stop is a bus stop.
+func IsBusStop(s Stop) bool {
+	return s.RouteCount&IsBusStopBit != 0
+}
+
+// RouteCountValue returns the RouteCount with the is_bus_stop bit masked off.
+func (s Stop) RouteCountValue() uint16 {
+	return s.RouteCount & ^IsBusStopBit
+}
+
 // Trip represents an individual vehicle journey (8 Bytes matching C++ Trip)
 type Trip struct {
 	StopTimesOffset uint32 // Index offset into global contiguous StopTime array

@@ -52,3 +52,69 @@ func TestSlotIndexBounds(t *testing.T) {
 		t.Errorf("expected slot 168, got %d", idxRoute1)
 	}
 }
+
+func TestIsBusBitPack(t *testing.T) {
+	var r Route
+	r.TripCount = 150 // realistic trip count
+
+	// Initially not a bus
+	if IsBus(r) {
+		t.Fatal("new Route should not be bus")
+	}
+	if r.TripCountValue() != 150 {
+		t.Fatalf("TripCountValue should be 150, got %d", r.TripCountValue())
+	}
+
+	// Set bus bit
+	SetIsBus(&r, true)
+	if !IsBus(r) {
+		t.Fatal("IsBus should be true after SetIsBus(true)")
+	}
+	if r.TripCountValue() != 150 {
+		t.Fatalf("TripCountValue should still be 150 after setting bit, got %d", r.TripCountValue())
+	}
+	if r.TripCount != 150|IsBusBit {
+		t.Fatalf("TripCount should be 150|0x8000, got %d", r.TripCount)
+	}
+
+	// Clear bus bit
+	SetIsBus(&r, false)
+	if IsBus(r) {
+		t.Fatal("IsBus should be false after SetIsBus(false)")
+	}
+	if r.TripCount != 150 {
+		t.Fatalf("TripCount should be 150 after clearing, got %d", r.TripCount)
+	}
+}
+
+func TestIsBusStopBitPack(t *testing.T) {
+	var s Stop
+	s.RouteCount = 5 // realistic route count
+
+	if IsBusStop(s) {
+		t.Fatal("new Stop should not be bus stop")
+	}
+
+	SetIsBusStop(&s, true)
+	if !IsBusStop(s) {
+		t.Fatal("IsBusStop should be true after SetIsBusStop(true)")
+	}
+	if s.RouteCountValue() != 5 {
+		t.Fatalf("RouteCountValue should still be 5, got %d", s.RouteCountValue())
+	}
+
+	SetIsBusStop(&s, false)
+	if IsBusStop(s) {
+		t.Fatal("IsBusStop should be false after SetIsBusStop(false)")
+	}
+}
+
+func TestStructSizesUnchanged(t *testing.T) {
+	// Bit-packing must not change struct sizes (C++ layout compatibility)
+	if sz := unsafe.Sizeof(Route{}); sz != 12 {
+		t.Fatalf("Route size must remain 12 bytes, got %d", sz)
+	}
+	if sz := unsafe.Sizeof(Stop{}); sz != 20 {
+		t.Fatalf("Stop size must remain 20 bytes, got %d", sz)
+	}
+}

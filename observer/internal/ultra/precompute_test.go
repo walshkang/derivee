@@ -94,3 +94,25 @@ func TestPrecomputeUltraTransfersEndToEnd(t *testing.T) {
 		t.Errorf("header mismatch: stops=%d, shortcuts=%d", csr.Header.NumStops, csr.Header.NumShortcuts)
 	}
 }
+
+func TestHaversineMeters(t *testing.T) {
+	// Manhattan: Times Square (40.7580, -73.9855) to ~150m north
+	// 150m ≈ 0.00135 degrees latitude
+	dist := haversineMeters(40.7580, -73.9855, 40.75935, -73.9855)
+	if dist < 140 || dist > 160 {
+		t.Fatalf("expected ~150m, got %.1fm", dist)
+	}
+
+	// Same point = 0
+	if d := haversineMeters(40.7, -74.0, 40.7, -74.0); d != 0 {
+		t.Fatalf("expected 0, got %.1f", d)
+	}
+}
+
+func TestBusBusPruningThreshold(t *testing.T) {
+	// Verify the 150m threshold constant is sane
+	cfg := DefaultPrecomputeConfig()
+	if cfg.MaxBusBusTransferMeters != 150.0 {
+		t.Fatalf("expected 150m, got %.1f", cfg.MaxBusBusTransferMeters)
+	}
+}
