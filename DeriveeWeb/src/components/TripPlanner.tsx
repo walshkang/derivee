@@ -19,6 +19,11 @@ import { RoutingQueryWatchdog } from '../utils/tabSuspension';
 import { createRoutesMap } from '../utils/routeBadge';
 import { CityPicker } from './CityPicker';
 import { findBikeCandidates, type BikeStation, type TransitStop } from '../utils/bikeCatchment';
+import {
+  decideBikeOption,
+  selectAvailableCandidate,
+  type DockStatus,
+} from '../utils/bikeDecision';
 import { getCityDirectory } from '../utils/opfs';
 import { searchPlaces, findNearestStopByCoordinates, type GeocodedPlace } from '../utils/geocoder';
 import type { CityPickerState } from '../types/cityPicker';
@@ -666,32 +671,26 @@ export function TripPlanner({
 
             if (candidates.length > 0) {
               // Check live dock availability before suggesting bike.
-              // Skip candidates where pickup has no bikes or dropoff has no open docks.
-              let best: typeof candidates[0] | null = null;
+              // An empty map (fetch failed or no stations) means no availability
+              // info — the safe default is to walk.
+              const availability = new Map<string, DockStatus>();
               try {
                 const statusRes = await fetch('/api/bikeshare/status');
                 if (statusRes.ok) {
                   const statusData = await statusRes.json();
-                  const statusById = new Map<string, { bikes: number; docks: number }>();
                   for (const s of statusData.data?.stations || []) {
-                    statusById.set(s.station_id, {
+                    availability.set(s.station_id, {
                       bikes: s.num_bikes_available || 0,
                       docks: s.num_docks_available || 0,
                     });
                   }
-                  // Find first candidate with available bikes AND open dropoff docks
-                  for (const cand of candidates) {
-                    const pickup = statusById.get(cand.pickupDockId);
-                    const dropoff = statusById.get(cand.dropoffDockId);
-                    if (pickup && pickup.bikes > 0 && dropoff && dropoff.docks > 0) {
-                      best = cand;
-                      break;
-                    }
-                  }
                 }
               } catch {
-                // If status check fails, fall back to first candidate (no availability info)
+                // Status check failed: availability stays empty → walk below.
               }
+              // First candidate satisfying the availability buffer (≥2 bikes/docks),
+              // or null when none does.
+              const best = selectAvailableCandidate(candidates, availability);
               // If no candidate has availability, skip bike entirely
               if (!best) {
                 ({ fastest, fewestTransfers, lessWalking } = walkResult);
@@ -716,67 +715,26 @@ export function TripPlanner({
               if (walkSegs.length > 0 && bikeSegs.length > 0) {
                 const walkTotalSec = walkSegs[walkSegs.length - 1].arrival_time - walkSegs[0].departure_time;
                 const bikeTransitSec = bikeSegs[bikeSegs.length - 1].arrival_time - bikeSegs[0].departure_time;
-                const bikeTotalSec = bikeAccessSec + bikeTransitSec;
-                const savingsSec = walkTotalSec - bikeTotalSec;
 
-                // Hassle threshold: don't suggest bike unless it saves 5+ minutes.
-                // Below that, the unlock/walk-to-dock/dock hassle isn't worth it.
-                const HASSLE_THRESHOLD_SEC = 300;
+                // Pure decision: availability buffer already enforced by
+                // selectAvailableCandidate above; this applies the hassle
+                // threshold and builds the banner data.
+                const decision = decideBikeOption({
+                  candidates,
+                  ebikeCandidates,
+                  availability,
+                  walkTotalSec,
+                  bikeTransitSec,
+                  origin: selectedOrigin,
+                  destination: selectedDest,
+                  bikeStations,
+                });
 
-                // Compute bike-only (direct bike origin→dest, no transit) for comparison
-                let bikeOnlyMin: number | undefined;
-                try {
-                  // Find pickup dock (from best candidate) and dropoff dock near destination
-                  const pickupDock = bikeStations.find(d => d.station_id === best.pickupDockId);
-                  // Find nearest dock to destination within 400m
-                  let destDock: typeof pickupDock | null = null;
-                  let destDockDist = Infinity;
-                  for (const d of bikeStations) {
-                    const dist = Math.sqrt(
-                      Math.pow(d.lat - selectedDest.lat, 2) + Math.pow(d.lon - selectedDest.lon, 2)
-                    ) * 111000; // approx meters
-                    if (dist < destDockDist && dist <= 400) {
-                      destDockDist = dist;
-                      destDock = d;
-                    }
-                  }
-                  if (pickupDock && destDock) {
-                    const walkToPickupM = Math.sqrt(
-                      Math.pow(pickupDock.lat - selectedOrigin.lat, 2) + 
-                      Math.pow(pickupDock.lon - selectedOrigin.lon, 2)
-                    ) * 111000 * 1.32;
-                    const bikeRideM = Math.sqrt(
-                      Math.pow(destDock.lat - pickupDock.lat, 2) + 
-                      Math.pow(destDock.lon - pickupDock.lon, 2)
-                    ) * 111000 * 1.32;
-                    const walkFromDropoffM = destDockDist * 1.32;
-                    const bikeOnlySec = (walkToPickupM / 1.4) + 60 + (bikeRideM / 3.58) + 30 + (walkFromDropoffM / 1.4);
-                    bikeOnlyMin = Math.round(bikeOnlySec / 60);
-                  }
-                } catch { /* skip bike-only if calc fails */ }
-
-                if (savingsSec >= HASSLE_THRESHOLD_SEC) {
-                  // Get e-bike time for the same station (if available)
-                  const ebikeBest = ebikeCandidates.find(c => c.stopName === best.stopName);
-                  setBikeComparison({
-                    bikeStationName: best.stopName,
-                    bikeAccessMin: Math.round(bikeAccessSec / 60),
-                    pickupDockName: best.pickupDockName,
-                    savingsMin: Math.round(savingsSec / 60),
-                    walkTotalMin: Math.round(walkTotalSec / 60),
-                    bikeTotalMin: Math.round(bikeTotalSec / 60),
-                    bikeOnlyMin,
-                    ebikeAccessMin: ebikeBest ? Math.round(ebikeBest.bikeTimeSeconds / 60) : undefined,
-                  });
-                } else {
-                  setBikeComparison(null);
-                }
-
-                // Use whichever is actually faster, but respect hassle threshold:
-                // if bike saves < 5 min, stick with walk (not worth the dock hassle)
-                if (savingsSec >= HASSLE_THRESHOLD_SEC) {
+                if (decision.suggestion === 'bike' && decision.bannerData) {
+                  setBikeComparison(decision.bannerData);
                   ({ fastest, fewestTransfers, lessWalking } = bikeResult);
                 } else {
+                  setBikeComparison(null);
                   ({ fastest, fewestTransfers, lessWalking } = walkResult);
                 }
               } else {

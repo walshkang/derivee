@@ -37,17 +37,17 @@ export interface BikeCandidate {
   walkFromDockSeconds: number;
 }
 
-// Constants from research
-const WALK_SPEED_MS = 1.4; // 5 km/h
-const BIKE_SPEED_MS = 3.58; // ~8 mph (classic Citi Bike)
-const EBIKE_SPEED_MS = 6.71; // ~15 mph
-const MANHATTAN_GRID_FACTOR = 1.32; // Haversine to street distance
-const MAX_WALK_TO_DOCK_M = 400;
-const MAX_BIKE_RIDE_M = 5000; // 5km max
-const PICKUP_PENALTY_S = 60;
-const DROPOFF_PENALTY_S = 30;
+// Constants from research (Single Source of Truth)
+export const WALK_SPEED_MS = 1.4; // 5 km/h
+export const BIKE_SPEED_MS = 3.58; // ~8 mph (classic Citi Bike)
+export const EBIKE_SPEED_MS = 6.71; // ~15 mph
+export const MANHATTAN_GRID_FACTOR = 1.32; // Haversine to street distance
+export const MAX_WALK_TO_DOCK_M = 400;
+export const MAX_BIKE_RIDE_M = 5000; // 5km max
+export const PICKUP_PENALTY_S = 60;
+export const DROPOFF_PENALTY_S = 30;
 
-function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -61,7 +61,7 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
  * Simple grid spatial index for fast nearby lookups.
  * Cell size ~500m (approx 0.0045 degrees lat).
  */
-class GridIndex<T extends { lat: number; lon: number }> {
+export class GridIndex<T extends { lat: number; lon: number }> {
   private cells = new Map<string, T[]>();
   private cellSize = 0.0045; // ~500m
 
@@ -99,6 +99,48 @@ class GridIndex<T extends { lat: number; lon: number }> {
     }
     return results;
   }
+}
+
+/**
+ * Compute direct bike-only trip time (origin -> pickupDock -> nearest dock to dest -> dest)
+ * using the canonical catchment constants and haversine distance.
+ */
+export function computeBikeOnlySeconds(
+  originLat: number,
+  originLon: number,
+  destLat: number,
+  destLon: number,
+  pickupDockId: string,
+  bikeStations: BikeStation[],
+  useEbike: boolean = false
+): number | undefined {
+  const pickupDock = bikeStations.find(d => d.station_id === pickupDockId);
+  if (!pickupDock) return undefined;
+
+  let destDock: BikeStation | null = null;
+  let destDockDist = Infinity;
+  for (const d of bikeStations) {
+    const dist = haversineM(destLat, destLon, d.lat, d.lon);
+    if (dist < destDockDist && dist <= MAX_WALK_TO_DOCK_M) {
+      destDockDist = dist;
+      destDock = d;
+    }
+  }
+  if (!destDock) return undefined;
+
+  const bikeSpeed = useEbike ? EBIKE_SPEED_MS : BIKE_SPEED_MS;
+  const walkToPickupM = haversineM(originLat, originLon, pickupDock.lat, pickupDock.lon) * MANHATTAN_GRID_FACTOR;
+  const bikeRideM = haversineM(pickupDock.lat, pickupDock.lon, destDock.lat, destDock.lon) * MANHATTAN_GRID_FACTOR;
+  const walkFromDropoffM = destDockDist * MANHATTAN_GRID_FACTOR;
+
+  const totalSec =
+    walkToPickupM / WALK_SPEED_MS +
+    PICKUP_PENALTY_S +
+    bikeRideM / bikeSpeed +
+    DROPOFF_PENALTY_S +
+    walkFromDropoffM / WALK_SPEED_MS;
+
+  return Math.round(totalSec);
 }
 
 /**
