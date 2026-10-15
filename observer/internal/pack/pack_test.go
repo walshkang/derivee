@@ -10,6 +10,8 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/klauspost/compress/zstd"
+
 	"observer/internal/builder"
 	"observer/internal/gtfs"
 )
@@ -327,3 +329,193 @@ func TestManifestSaveLoad(t *testing.T) {
 		t.Errorf("Expected version 2.0.0, got %s", loaded.Cities[0].Version)
 	}
 }
+
+func TestUpdateManifestWithWebFork(t *testing.T) {
+	manifest := CitiesManifest{
+		Version:     2,
+		LastUpdated: "2026-09-02T12:00:00Z",
+		Cities: []CityManifestEntry{
+			{
+				Slug:                  "nyc",
+				DisplayName:           "New York City",
+				Region:                "New York, USA",
+				CompressedSizeBytes:   1841977,
+				UncompressedSizeBytes: 13355518,
+				IsBundled:             true,
+				Version:               "v6",
+				SHA256:                "legacy-v6-sha256",
+				URL:                   "https://cdn.derivee.app/packs/city-nyc-v6.pack.zst",
+			},
+		},
+	}
+
+	newEntry := CityManifestEntry{
+		Slug:           "nyc",
+		WebPackURL:     "https://cdn.derivee.app/packs/city-nyc-v7.pack.zst",
+		WebPackVersion: "v7",
+		WebPackSHA256:  "new-v7-sha256",
+	}
+
+	UpdateManifestWithWebFork(&manifest, &newEntry)
+
+	if len(manifest.Cities) != 1 {
+		t.Fatalf("expected 1 city, got %d", len(manifest.Cities))
+	}
+	entry := manifest.Cities[0]
+	// Assert legacy keys unchanged and still pointing at v6
+	if entry.Version != "v6" {
+		t.Errorf("expected legacy version 'v6', got %s", entry.Version)
+	}
+	if entry.SHA256 != "legacy-v6-sha256" {
+		t.Errorf("expected legacy sha256 'legacy-v6-sha256', got %s", entry.SHA256)
+	}
+	if entry.URL != "https://cdn.derivee.app/packs/city-nyc-v6.pack.zst" {
+		t.Errorf("expected legacy url unchanged, got %s", entry.URL)
+	}
+	if entry.CompressedSizeBytes != 1841977 {
+		t.Errorf("expected compressed size unchanged, got %d", entry.CompressedSizeBytes)
+	}
+	// Assert forked web keys written
+	if entry.WebPackVersion != "v7" {
+		t.Errorf("expected webPackVersion 'v7', got %s", entry.WebPackVersion)
+	}
+	if entry.WebPackSHA256 != "new-v7-sha256" {
+		t.Errorf("expected webPackSha256 'new-v7-sha256', got %s", entry.WebPackSHA256)
+	}
+	if entry.WebPackURL != "https://cdn.derivee.app/packs/city-nyc-v7.pack.zst" {
+		t.Errorf("expected webPackUrl 'https://cdn.derivee.app/packs/city-nyc-v7.pack.zst', got %s", entry.WebPackURL)
+	}
+}
+
+func TestZstdFrameHeader_WindowAndContentSize(t *testing.T) {
+	tempDir := t.TempDir()
+
+	cfg := CityConfig{
+		Version:     2,
+		Slug:        "headertest",
+		DisplayName: "Header Test",
+		Region:      "Test Region",
+		Bounds:      GeoBounds{MinLatitude: 40.0, MaxLatitude: 41.0, MinLongitude: -74.0, MaxLongitude: -73.0},
+		Center:      MapCenter{Latitude: 40.5, Longitude: -73.5, DefaultZoom: 13.0},
+	}
+	configPath := filepath.Join(tempDir, "city_config.json")
+	if err := SaveCityConfig(&cfg, configPath); err != nil {
+		t.Fatalf("Failed to save city config: %v", err)
+	}
+
+	geojsonPath := filepath.Join(tempDir, "transit-lines.geojson")
+	if err := os.WriteFile(geojsonPath, []byte(`{"type":"FeatureCollection","features":[]}`), 0644); err != nil {
+		t.Fatalf("Failed to write geojson: %v", err)
+	}
+
+	dbPath := filepath.Join(tempDir, "transit.sqlite")
+	db, err := builder.InitTransitDB(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to init transit DB: %v", err)
+	}
+	db.Close()
+
+	packPath := filepath.Join(tempDir, "city-headertest.pack.zst")
+	_, err = CreateCityPackWithAssets(configPath, dbPath, geojsonPath, nil, packPath)
+	if err != nil {
+		t.Fatalf("CreateCityPackWithAssets failed: %v", err)
+	}
+
+	packBytes, err := os.ReadFile(packPath)
+	if err != nil {
+		t.Fatalf("Failed to read pack file: %v", err)
+	}
+
+	var h zstd.Header
+	if err := h.Decode(packBytes); err != nil {
+		t.Fatalf("Failed to decode zstd frame header: %v", err)
+	}
+
+	if !h.HasFCS {
+		t.Errorf("Expected Frame Content Size (FCS) flag present in header")
+	}
+	if !h.SingleSegment {
+		t.Errorf("Expected SingleSegment=true in header for SwiftZSTD compatibility")
+	}
+	effectiveWindow := h.FrameContentSize
+	if !h.SingleSegment && h.WindowSize > 0 {
+		effectiveWindow = h.WindowSize
+	}
+	if effectiveWindow > 32<<20 {
+		t.Errorf("Expected effective window <= 32MB, got %d bytes (%.2f MB)", effectiveWindow, float64(effectiveWindow)/(1024*1024))
+	}
+}
+
+func TestScheduledHourlyPatterns_EmptySchema(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// 1. Database built WITH patterns (negative case)
+	dbWithPatternsPath := filepath.Join(tempDir, "with_patterns.sqlite")
+	db1, err := builder.InitTransitDB(dbWithPatternsPath)
+	if err != nil {
+		t.Fatalf("Failed to init DB: %v", err)
+	}
+	patterns := []gtfs.ScheduledHourlyPattern{
+		{
+			StopID:             "S1",
+			RouteID:            "R1",
+			DirectionID:        0,
+			HourOfDay:          8,
+			ServiceMask:        1,
+			BaselineDaysOfWeek: 1,
+			MinuteOffsets:      "10,20",
+			Headsign:           "Test",
+		},
+	}
+	if err := builder.BulkInsertPatterns(db1, patterns); err != nil {
+		t.Fatalf("BulkInsertPatterns failed: %v", err)
+	}
+	db1.Close()
+
+	dbCheck1, err := sql.Open("sqlite3", dbWithPatternsPath)
+	if err != nil {
+		t.Fatalf("Open sqlite3 failed: %v", err)
+	}
+	defer dbCheck1.Close()
+
+	var count1 int
+	if err := dbCheck1.QueryRow("SELECT COUNT(*) FROM scheduled_hourly_patterns").Scan(&count1); err != nil {
+		t.Fatalf("QueryRow failed on db with patterns: %v", err)
+	}
+	if count1 != 1 {
+		t.Errorf("Expected count 1 on db with patterns, got %d", count1)
+	}
+
+	// 2. Database built WITHOUT patterns (empty schema case --skip-hourly-patterns)
+	dbEmptyPatternsPath := filepath.Join(tempDir, "empty_patterns.sqlite")
+	db2, err := builder.InitTransitDB(dbEmptyPatternsPath)
+	if err != nil {
+		t.Fatalf("Failed to init DB: %v", err)
+	}
+	// Do NOT insert patterns, simulating --skip-hourly-patterns
+	db2.Close()
+
+	dbCheck2, err := sql.Open("sqlite3", dbEmptyPatternsPath)
+	if err != nil {
+		t.Fatalf("Open sqlite3 failed: %v", err)
+	}
+	defer dbCheck2.Close()
+
+	var tableName string
+	err = dbCheck2.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='scheduled_hourly_patterns'").Scan(&tableName)
+	if err != nil {
+		t.Fatalf("scheduled_hourly_patterns table does not exist: %v", err)
+	}
+	if tableName != "scheduled_hourly_patterns" {
+		t.Errorf("Expected table name 'scheduled_hourly_patterns', got '%s'", tableName)
+	}
+
+	var count2 int
+	if err := dbCheck2.QueryRow("SELECT COUNT(*) FROM scheduled_hourly_patterns").Scan(&count2); err != nil {
+		t.Fatalf("QueryRow failed on empty patterns db: %v", err)
+	}
+	if count2 != 0 {
+		t.Errorf("Expected 0 rows in scheduled_hourly_patterns, got %d", count2)
+	}
+}
+

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 )
 
 // GeoBounds defines the rectangular geographic envelope for camera clamping and fog math
@@ -89,6 +90,10 @@ type CityManifestEntry struct {
 	IsBundled             bool   `json:"isBundled"`
 	Version               string `json:"version"`
 	SHA256                string `json:"sha256,omitempty"`
+	URL                   string `json:"url,omitempty"`
+	WebPackURL            string `json:"webPackUrl,omitempty"`
+	WebPackVersion        string `json:"webPackVersion,omitempty"`
+	WebPackSHA256         string `json:"webPackSha256,omitempty"`
 }
 
 // CitiesManifest defines the remote catalog schema hosted at cdn.derivee.app/cities.json
@@ -264,3 +269,28 @@ func SaveCitiesManifest(manifest *CitiesManifest, filePath string) error {
 	}
 	return os.WriteFile(filePath, append(data, '\n'), 0644)
 }
+
+// UpdateManifestWithWebFork updates an existing city entry with forked webPack fields,
+// keeping legacy fields (version, sha256, url, sizes) unchanged for iOS compatibility.
+// If the city does not exist, newEntry is appended.
+func UpdateManifestWithWebFork(manifest *CitiesManifest, newEntry *CityManifestEntry) {
+	if manifest.Version == 0 {
+		manifest.Version = 2
+	}
+	manifest.LastUpdated = time.Now().UTC().Format(time.RFC3339)
+
+	found := false
+	for i, c := range manifest.Cities {
+		if c.Slug == newEntry.Slug {
+			manifest.Cities[i].WebPackURL = newEntry.WebPackURL
+			manifest.Cities[i].WebPackVersion = newEntry.WebPackVersion
+			manifest.Cities[i].WebPackSHA256 = newEntry.WebPackSHA256
+			found = true
+			break
+		}
+	}
+	if !found {
+		manifest.Cities = append(manifest.Cities, *newEntry)
+	}
+}
+

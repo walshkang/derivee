@@ -114,8 +114,10 @@ func CreateCityPackWithAssets(configPath, transitDBPath, geojsonPath string, ext
 	tarBytes := tarBuf.Bytes()
 
 	// Compress with SingleSegment=true to embed exact uncompressed frame size in ZSTD header (required by SwiftZSTD decompressFrame)
+	// and 16MB window size to keep browser WASM decompressor memory footprint bounded.
 	encoder, err := zstd.NewWriter(nil,
 		zstd.WithEncoderLevel(zstd.SpeedBestCompression),
+		zstd.WithWindowSize(16<<20),
 		zstd.WithSingleSegment(true),
 	)
 	if err != nil {

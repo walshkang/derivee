@@ -74,7 +74,12 @@ export function parseCitiesManifest(raw: unknown): CityManifestItem[] {
       ? rawBytes
       : 0;
 
-    const version = obj.version !== undefined ? obj.version : '1.0.0';
+    const webPackUrl = typeof obj.webPackUrl === 'string' ? obj.webPackUrl : undefined;
+    const webPackVersion = obj.webPackVersion !== undefined ? obj.webPackVersion : undefined;
+    const webPackSha256 = typeof obj.webPackSha256 === 'string' ? obj.webPackSha256 : undefined;
+    const packUrl = webPackUrl || (typeof obj.url === 'string' ? obj.url : undefined);
+
+    const version = webPackVersion ?? (obj.version !== undefined ? obj.version : '1.0.0');
 
     let bbox: [number, number, number, number] | null = null;
     if (Array.isArray(obj.bbox) && obj.bbox.length === 4) {
@@ -104,6 +109,10 @@ export function parseCitiesManifest(raw: unknown): CityManifestItem[] {
       pack_bytes,
       version,
       bbox,
+      webPackUrl,
+      webPackVersion,
+      webPackSha256,
+      packUrl,
     });
   }
 

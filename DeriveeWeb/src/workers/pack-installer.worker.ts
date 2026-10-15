@@ -166,28 +166,30 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     }
 
     // 3. Assemble compressed buffer
-    const compressedBuffer = new Uint8Array(loadedBytes);
+    let compressedBuffer: Uint8Array | null = new Uint8Array(loadedBytes);
     let chunkOffset = 0;
     for (const chunk of chunks) {
       compressedBuffer.set(chunk, chunkOffset);
       chunkOffset += chunk.length;
     }
+    chunks.length = 0; // Release downloaded chunk arrays
 
     // 4. Decompress Zstandard archive via @bokuweb/zstd-wasm
     self.postMessage({
       type: 'PROGRESS',
       stage: 'decompressing',
-      message: 'Decompressing 29.7 MB NYC transit archive via Zstandard WASM...',
+      message: 'Decompressing transit archive via Zstandard WASM...',
     } satisfies WorkerToMainMessage);
 
     await init();
-    const decompressed = decompress(compressedBuffer);
+    let decompressed: Uint8Array | null = decompress(compressedBuffer);
+    compressedBuffer = null; // Release compressed buffer immediately after decompression
 
     // 5. Parse Tar Archive
+    // nanotar parseTar returns ParsedTarFileItem[] with views into decompressed without copying data.
     const parsedEntries = parseTar(decompressed);
     const validFiles = parsedEntries
-      .filter((e) => (e.type === 'file' || !e.type) && e.name && e.data)
-      .map((e) => ({ ...e, data: e.data!.slice() })); // slice() copies → byteOffset 0
+      .filter((e) => (e.type === 'file' || !e.type) && e.name && e.data);
 
     if (validFiles.length === 0) {
       throw new Error('Tar archive contained no valid files.');
@@ -201,6 +203,8 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     stagingSlug = `${slug}-staging-${Date.now()}`;
     const stagingDirHandle = await rootHandle.getDirectoryHandle(stagingSlug, { create: true });
     const totalFiles = validFiles.length;
+    // Capture names before data is released: step 8 re-reads from staging by name.
+    const stagedNames: string[] = validFiles.map((entry) => entry.name as string);
     let filesWritten = 0;
 
     for (const entry of validFiles) {
@@ -214,8 +218,14 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
       } satisfies WorkerToMainMessage);
 
       await writeOpfsEntry(stagingDirHandle, entry.name, entry.data!);
+      // Release data reference immediately after write completes
+      entry.data = undefined;
       filesWritten++;
     }
+
+    // Release all tar and decompressed buffer references before verification
+    decompressed = null;
+    validFiles.length = 0;
 
     self.postMessage({
       type: 'PROGRESS',
@@ -274,10 +284,15 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     const geojsonText = await readFullText(stagingDirHandle, 'transit-lines.geojson');
     validateTransitLinesGeoJson(geojsonText);
 
-    // 8. Atomic Swap: Copy verified files to live directory /<slug>/
+    // 8. Atomic Swap: Copy verified files from staging to live directory /<slug>/
+    // NOTE: validFiles entries had their data released after the staging write
+    // (to bound peak memory), so re-read each file from staging by name.
     const destDirHandle = await rootHandle.getDirectoryHandle(slug, { create: true });
-    for (const entry of validFiles) {
-      await writeOpfsEntry(destDirHandle, entry.name, entry.data!);
+    for (const name of stagedNames) {
+      const stagedHandle = await stagingDirHandle.getFileHandle(name);
+      const stagedFile = await stagedHandle.getFile();
+      const stagedData = new Uint8Array(await stagedFile.arrayBuffer());
+      await writeOpfsEntry(destDirHandle, name, stagedData);
     }
 
     // Clean up temporary staging directory
@@ -289,12 +304,13 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     }
 
     // Collect finalized file list from live directory
+    // (validFiles was emptied to release memory; use stagedNames instead.)
     const finalizedFiles: PackFileEntry[] = [];
     let totalUncompressedBytes = 0;
-    for (const entry of validFiles) {
-      const fileHandle = await destDirHandle.getFileHandle(entry.name);
+    for (const name of stagedNames) {
+      const fileHandle = await destDirHandle.getFileHandle(name);
       const file = await fileHandle.getFile();
-      finalizedFiles.push({ name: entry.name, size: file.size });
+      finalizedFiles.push({ name, size: file.size });
       totalUncompressedBytes += file.size;
     }
 
