@@ -203,6 +203,8 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     stagingSlug = `${slug}-staging-${Date.now()}`;
     const stagingDirHandle = await rootHandle.getDirectoryHandle(stagingSlug, { create: true });
     const totalFiles = validFiles.length;
+    // Capture names before data is released: step 8 re-reads from staging by name.
+    const stagedNames: string[] = validFiles.map((entry) => entry.name as string);
     let filesWritten = 0;
 
     for (const entry of validFiles) {
@@ -282,10 +284,15 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     const geojsonText = await readFullText(stagingDirHandle, 'transit-lines.geojson');
     validateTransitLinesGeoJson(geojsonText);
 
-    // 8. Atomic Swap: Copy verified files to live directory /<slug>/
+    // 8. Atomic Swap: Copy verified files from staging to live directory /<slug>/
+    // NOTE: validFiles entries had their data released after the staging write
+    // (to bound peak memory), so re-read each file from staging by name.
     const destDirHandle = await rootHandle.getDirectoryHandle(slug, { create: true });
-    for (const entry of validFiles) {
-      await writeOpfsEntry(destDirHandle, entry.name, entry.data!);
+    for (const name of stagedNames) {
+      const stagedHandle = await stagingDirHandle.getFileHandle(name);
+      const stagedFile = await stagedHandle.getFile();
+      const stagedData = new Uint8Array(await stagedFile.arrayBuffer());
+      await writeOpfsEntry(destDirHandle, name, stagedData);
     }
 
     // Clean up temporary staging directory
@@ -297,12 +304,13 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     }
 
     // Collect finalized file list from live directory
+    // (validFiles was emptied to release memory; use stagedNames instead.)
     const finalizedFiles: PackFileEntry[] = [];
     let totalUncompressedBytes = 0;
-    for (const entry of validFiles) {
-      const fileHandle = await destDirHandle.getFileHandle(entry.name);
+    for (const name of stagedNames) {
+      const fileHandle = await destDirHandle.getFileHandle(name);
       const file = await fileHandle.getFile();
-      finalizedFiles.push({ name: entry.name, size: file.size });
+      finalizedFiles.push({ name, size: file.size });
       totalUncompressedBytes += file.size;
     }
 
