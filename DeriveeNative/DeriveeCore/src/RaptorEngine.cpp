@@ -255,6 +255,14 @@ void RaptorEngine::relax_intra_transfers(
 
         if (!is_stop_active(target_stop)) continue;
 
+        // 1B-Cpp: Skip footpaths into bus stops when allow_bus is not set.
+        // Bit 15 of route_count is the is_bus_stop flag.
+        if (!(query_flags & ROUTING_FLAG_ALLOW_BUS)) {
+            if (target_stop < stops_.size() && (stops_[target_stop].route_count & 0x8000)) {
+                continue;
+            }
+        }
+
         // MINIMIZE_WALKING: cap walk distance, penalize remaining walks
         uint32_t walk_duration = tr.duration_sec;
         if (query_flags & ROUTING_FLAG_MINIMIZE_WALKING) {
@@ -375,7 +383,7 @@ std::vector<JourneySegment> RaptorEngine::compute_journey(const QueryParams& par
             if (p >= n_stops) continue;
             const auto& s = stops_[p];
             uint32_t start_r = s.routes_offset;
-            uint32_t r_cnt = s.route_count;
+            uint32_t r_cnt = s.route_count & ~0x8000; // Mask off is_bus_stop bit
 
             for (uint32_t ri = start_r; ri < start_r + r_cnt && ri < stop_routes_.size(); ++ri) {
                 uint32_t r_id = stop_routes_[ri];
@@ -406,10 +414,18 @@ std::vector<JourneySegment> RaptorEngine::compute_journey(const QueryParams& par
         // Step 2: Route Scanning
         for (const auto& [r_id, start_seq_idx] : routes_to_scan) {
             const auto& route = routes_[r_id];
+
+            // 1B-Cpp: Skip bus routes when allow_bus is not set.
+            // Bit 15 of trip_count is the is_bus flag (see 1B-Go).
+            bool is_bus_route = (route.trip_count & 0x8000) != 0;
+            if (is_bus_route && !(params.flags & ROUTING_FLAG_ALLOW_BUS)) {
+                continue;
+            }
+
             uint32_t start_stops = route.route_stops_offset;
             uint32_t s_cnt = route.stop_count;
             uint32_t start_trips = route.trips_offset;
-            uint32_t t_cnt = route.trip_count;
+            uint32_t t_cnt = route.trip_count & ~0x8000; // Mask off is_bus bit
 
             if (t_cnt == 0 || s_cnt == 0) continue;
 
@@ -460,6 +476,15 @@ std::vector<JourneySegment> RaptorEngine::compute_journey(const QueryParams& par
                                 const auto& st = stop_times_[st_idx];
                                 int32_t delay = get_realtime_delay(boarded_trip_idx);
                                 uint32_t eff_arr = TransitTime::normalize_schedule_time(st.arrival_time_sec, delay);
+
+                                // 1B-Cpp: Add boarding penalty for bus routes.
+                                // The penalty is applied to the perceived arrival time used in
+                                // dominance comparisons, not the stored trip time.
+                                if (is_bus_route) {
+                                    eff_arr += params.bus_boarding_penalty_sec;
+                                } else {
+                                    eff_arr += params.subway_boarding_penalty_sec;
+                                }
 
                                 // Destination pruning
                                 if (eff_arr < best_tau[stop_id] || eff_arr < tau[k][stop_id]) {
@@ -723,7 +748,7 @@ std::vector<uint32_t> RaptorEngine::extract_range_departures(
 
     // Direct route departures from origin stop
     const auto& s = stops_[origin_stop_id];
-    for (uint32_t ri = s.routes_offset; ri < s.routes_offset + s.route_count && ri < stop_routes_.size(); ++ri) {
+    for (uint32_t ri = s.routes_offset; ri < s.routes_offset + (s.route_count & ~0x8000) && ri < stop_routes_.size(); ++ri) {
         uint32_t r_id = stop_routes_[ri];
         if (r_id >= routes_.size()) continue;
 
@@ -738,7 +763,7 @@ std::vector<uint32_t> RaptorEngine::extract_range_departures(
 
         if (origin_seq == UINT32_MAX) continue;
 
-        for (uint32_t ti = route.trips_offset; ti < route.trips_offset + route.trip_count && ti < trips_.size(); ++ti) {
+        for (uint32_t ti = route.trips_offset; ti < route.trips_offset + (route.trip_count & ~0x8000) && ti < trips_.size(); ++ti) {
             const auto& tr = trips_[ti];
             if (origin_seq < tr.stop_times_count) {
                 uint32_t st_idx = tr.stop_times_offset + origin_seq;
@@ -763,7 +788,7 @@ std::vector<uint32_t> RaptorEngine::extract_range_departures(
         uint32_t target_s = tr.target_stop_id;
         if (target_s >= stops_.size()) continue;
         const auto& ts = stops_[target_s];
-        for (uint32_t ri = ts.routes_offset; ri < ts.routes_offset + ts.route_count && ri < stop_routes_.size(); ++ri) {
+        for (uint32_t ri = ts.routes_offset; ri < ts.routes_offset + (ts.route_count & ~0x8000) && ri < stop_routes_.size(); ++ri) {
             uint32_t r_id = stop_routes_[ri];
             if (r_id >= routes_.size()) continue;
             const auto& route = routes_[r_id];
@@ -776,7 +801,7 @@ std::vector<uint32_t> RaptorEngine::extract_range_departures(
             }
             if (target_seq == UINT32_MAX) continue;
 
-            for (uint32_t ti = route.trips_offset; ti < route.trips_offset + route.trip_count && ti < trips_.size(); ++ti) {
+            for (uint32_t ti = route.trips_offset; ti < route.trips_offset + (route.trip_count & ~0x8000) && ti < trips_.size(); ++ti) {
                 const auto& trip = trips_[ti];
                 if (target_seq < trip.stop_times_count) {
                     uint32_t st_idx = trip.stop_times_offset + target_seq;

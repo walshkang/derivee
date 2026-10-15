@@ -99,6 +99,7 @@ constexpr uint16_t ROUTING_FLAG_NONE                  = 0;
 constexpr uint16_t ROUTING_FLAG_WHEELCHAIR_ACCESSIBLE = 1 << 0;
 constexpr uint16_t ROUTING_FLAG_AVOID_TRANSFERS       = 1 << 1;
 constexpr uint16_t ROUTING_FLAG_MINIMIZE_WALKING      = 1 << 2;
+constexpr uint16_t ROUTING_FLAG_ALLOW_BUS            = 1 << 3;
 // Walk penalty tuning for MINIMIZE_WALKING: cap + multiplier
 constexpr uint16_t MAX_WALK_METERS_MINIMIZE          = 400;
 constexpr uint16_t WALK_PENALTY_MULTIPLIER           = 3;
@@ -141,15 +142,17 @@ struct QueryParams {
     uint32_t departure_timestamp;
     uint16_t max_transfers;
     uint16_t flags;
+    uint16_t bus_boarding_penalty_sec;
+    uint16_t subway_boarding_penalty_sec;
 
     constexpr QueryParams() noexcept
-        : origin_stop_id(0), destination_stop_id(0), departure_timestamp(0), max_transfers(4), flags(ROUTING_FLAG_NONE) {}
+        : origin_stop_id(0), destination_stop_id(0), departure_timestamp(0), max_transfers(4), flags(ROUTING_FLAG_NONE), bus_boarding_penalty_sec(360), subway_boarding_penalty_sec(120) {}
 
     constexpr QueryParams(uint32_t origin, uint32_t dest, uint32_t dep, uint16_t max_t) noexcept
-        : origin_stop_id(origin), destination_stop_id(dest), departure_timestamp(dep), max_transfers(max_t), flags(ROUTING_FLAG_NONE) {}
+        : origin_stop_id(origin), destination_stop_id(dest), departure_timestamp(dep), max_transfers(max_t), flags(ROUTING_FLAG_NONE), bus_boarding_penalty_sec(360), subway_boarding_penalty_sec(120) {}
 
     constexpr QueryParams(uint32_t origin, uint32_t dest, uint32_t dep, uint16_t max_t, uint16_t f) noexcept
-        : origin_stop_id(origin), destination_stop_id(dest), departure_timestamp(dep), max_transfers(max_t), flags(f) {}
+        : origin_stop_id(origin), destination_stop_id(dest), departure_timestamp(dep), max_transfers(max_t), flags(f), bus_boarding_penalty_sec(360), subway_boarding_penalty_sec(120) {}
 };
 
 struct RangeQueryParams {
