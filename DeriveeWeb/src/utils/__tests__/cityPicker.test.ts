@@ -130,6 +130,54 @@ describe('M5c City Picker & Manifest Utilities', () => {
       assert.deepStrictEqual(parsed[0].bbox, [-74.25, 40.49, -73.7, 40.91]);
     });
 
+    it('prefers webPackVersion and webPackUrl over legacy fields when present', () => {
+      const input = {
+        version: 2,
+        cities: [
+          {
+            slug: 'nyc',
+            displayName: 'New York City',
+            compressedSizeBytes: 1841977,
+            version: 'v6',
+            url: 'https://cdn.derivee.app/packs/city-nyc-v6.pack.zst',
+            webPackUrl: 'https://cdn.derivee.app/packs/city-nyc-v7.pack.zst',
+            webPackVersion: 'v7',
+            webPackSha256: 'v7hash123',
+          },
+        ],
+      };
+
+      const parsed = parseCitiesManifest(input);
+      assert.strictEqual(parsed.length, 1);
+      assert.strictEqual(parsed[0].version, 'v7');
+      assert.strictEqual(parsed[0].webPackVersion, 'v7');
+      assert.strictEqual(parsed[0].webPackUrl, 'https://cdn.derivee.app/packs/city-nyc-v7.pack.zst');
+      assert.strictEqual(parsed[0].webPackSha256, 'v7hash123');
+      assert.strictEqual(parsed[0].packUrl, 'https://cdn.derivee.app/packs/city-nyc-v7.pack.zst');
+    });
+
+    it('falls back to legacy version and url when web* fields are absent', () => {
+      const input = {
+        version: 2,
+        cities: [
+          {
+            slug: 'bos',
+            displayName: 'Boston',
+            compressedSizeBytes: 9400000,
+            version: 'v6',
+            url: 'https://cdn.derivee.app/packs/city-bos-v6.pack.zst',
+          },
+        ],
+      };
+
+      const parsed = parseCitiesManifest(input);
+      assert.strictEqual(parsed.length, 1);
+      assert.strictEqual(parsed[0].version, 'v6');
+      assert.strictEqual(parsed[0].webPackVersion, undefined);
+      assert.strictEqual(parsed[0].webPackUrl, undefined);
+      assert.strictEqual(parsed[0].packUrl, 'https://cdn.derivee.app/packs/city-bos-v6.pack.zst');
+    });
+
     it('falls back to capitalized slug when name and displayName are missing', () => {
       const input = [{ slug: 'chi', pack_bytes: 15000000 }];
       const parsed = parseCitiesManifest(input);

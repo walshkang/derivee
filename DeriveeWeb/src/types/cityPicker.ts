@@ -4,6 +4,10 @@ export interface CityManifestItem {
   pack_bytes: number;
   version: string | number;
   bbox: [number, number, number, number] | null;
+  webPackUrl?: string;
+  webPackVersion?: string | number;
+  webPackSha256?: string;
+  packUrl?: string;
 }
 
 export type CityPickerStatus =

@@ -49,6 +49,9 @@ func main() {
 	forceBuild := flag.Bool("force", false, "Force compilation even if delta check indicates no change")
 	mtaStationsPath := flag.String("mta-stations", "", "Optional path or URL to MTA Stations.csv for complex mapping")
 	gbfsURL := flag.String("gbfs-url", "", "Optional GBFS station_information URL (e.g., Citi Bike) to bundle bikestations.json in pack")
+	skipHourlyPatterns := flag.Bool("skip-hourly-patterns", false, "Skip computing and populating scheduled_hourly_patterns (keeps empty table schema)")
+	webPackVersion := flag.String("web-pack-version", "v7", "Web pack version for cities.json manifest fork")
+	webPackURL := flag.String("web-pack-url", "", "Optional web pack URL for cities.json manifest fork")
 	flag.Parse()
 
 	if *configPath == "" || *gtfsSources == "" || *outputPath == "" {
@@ -206,9 +209,14 @@ func main() {
 	log.Printf("Generated %d complexes and %d stop_resolution rows (WITHOUT ROWID)", len(complexes), len(resolutions))
 
 	// 6. Compact Timetable into Scheduled Hourly Patterns & Route Directions
-	log.Println("Compacting schedule into scheduled_hourly_patterns (14-day calendar unrolling)...")
-	patterns := gtfs.CompactDataset(mergedDataset)
-	log.Printf("Generated %d scheduled_hourly_patterns rows", len(patterns))
+	var patterns []gtfs.ScheduledHourlyPattern
+	if !*skipHourlyPatterns {
+		log.Println("Compacting schedule into scheduled_hourly_patterns (14-day calendar unrolling)...")
+		patterns = gtfs.CompactDataset(mergedDataset)
+		log.Printf("Generated %d scheduled_hourly_patterns rows", len(patterns))
+	} else {
+		log.Println("Skipping scheduled_hourly_patterns compaction (--skip-hourly-patterns set)")
+	}
 
 	log.Println("Computing statistical mode route directions (Wave PB.5)...")
 	routeDirections := gtfs.ComputeRouteDirections(mergedDataset)
@@ -240,8 +248,10 @@ func main() {
 	if err := builder.BulkInsertStopResolution(db, resolutions); err != nil {
 		log.Fatalf("BulkInsertStopResolution failed: %v", err)
 	}
-	if err := builder.BulkInsertPatterns(db, patterns); err != nil {
-		log.Fatalf("BulkInsertPatterns failed: %v", err)
+	if !*skipHourlyPatterns {
+		if err := builder.BulkInsertPatterns(db, patterns); err != nil {
+			log.Fatalf("BulkInsertPatterns failed: %v", err)
+		}
 	}
 	if err := builder.BulkInsertRouteDirections(db, routeDirections); err != nil {
 		log.Fatalf("BulkInsertRouteDirections failed: %v", err)
@@ -438,6 +448,18 @@ func main() {
 	log.Printf("  Compressed Size:    %.2f MB (%d bytes)", float64(manifestEntry.CompressedSizeBytes)/(1024*1024), manifestEntry.CompressedSizeBytes)
 	log.Printf("  SHA-256 Hash:       %s", manifestEntry.SHA256)
 
+	manifestEntry.WebPackSHA256 = manifestEntry.SHA256
+	if *webPackVersion != "" {
+		manifestEntry.WebPackVersion = *webPackVersion
+	} else {
+		manifestEntry.WebPackVersion = "v7"
+	}
+	if *webPackURL != "" {
+		manifestEntry.WebPackURL = *webPackURL
+	} else {
+		manifestEntry.WebPackURL = fmt.Sprintf("https://cdn.derivee.app/packs/%s", filepath.Base(*outputPath))
+	}
+
 	// 12. Update manifest if requested
 	if *manifestPath != "" {
 		updateManifest(*manifestPath, manifestEntry)
@@ -501,22 +523,7 @@ func updateManifest(manifestPath string, newEntry *pack.CityManifestEntry) {
 		}
 	}
 
-	if manifest.Version == 0 {
-		manifest.Version = 1
-	}
-	manifest.LastUpdated = time.Now().UTC().Format(time.RFC3339)
-
-	found := false
-	for i, c := range manifest.Cities {
-		if c.Slug == newEntry.Slug {
-			manifest.Cities[i] = *newEntry
-			found = true
-			break
-		}
-	}
-	if !found {
-		manifest.Cities = append(manifest.Cities, *newEntry)
-	}
+	pack.UpdateManifestWithWebFork(&manifest, newEntry)
 
 	if err := pack.SaveCitiesManifest(&manifest, manifestPath); err != nil {
 		log.Printf("Warning: Failed to update manifest at %s: %v", manifestPath, err)

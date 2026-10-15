@@ -166,28 +166,30 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
     }
 
     // 3. Assemble compressed buffer
-    const compressedBuffer = new Uint8Array(loadedBytes);
+    let compressedBuffer: Uint8Array | null = new Uint8Array(loadedBytes);
     let chunkOffset = 0;
     for (const chunk of chunks) {
       compressedBuffer.set(chunk, chunkOffset);
       chunkOffset += chunk.length;
     }
+    chunks.length = 0; // Release downloaded chunk arrays
 
     // 4. Decompress Zstandard archive via @bokuweb/zstd-wasm
     self.postMessage({
       type: 'PROGRESS',
       stage: 'decompressing',
-      message: 'Decompressing 29.7 MB NYC transit archive via Zstandard WASM...',
+      message: 'Decompressing transit archive via Zstandard WASM...',
     } satisfies WorkerToMainMessage);
 
     await init();
-    const decompressed = decompress(compressedBuffer);
+    let decompressed: Uint8Array | null = decompress(compressedBuffer);
+    compressedBuffer = null; // Release compressed buffer immediately after decompression
 
     // 5. Parse Tar Archive
+    // nanotar parseTar returns ParsedTarFileItem[] with views into decompressed without copying data.
     const parsedEntries = parseTar(decompressed);
     const validFiles = parsedEntries
-      .filter((e) => (e.type === 'file' || !e.type) && e.name && e.data)
-      .map((e) => ({ ...e, data: e.data!.slice() })); // slice() copies → byteOffset 0
+      .filter((e) => (e.type === 'file' || !e.type) && e.name && e.data);
 
     if (validFiles.length === 0) {
       throw new Error('Tar archive contained no valid files.');
@@ -214,8 +216,14 @@ async function runInstallation(slug: string = 'nyc', packUrl: string = '/api/pac
       } satisfies WorkerToMainMessage);
 
       await writeOpfsEntry(stagingDirHandle, entry.name, entry.data!);
+      // Release data reference immediately after write completes
+      entry.data = undefined;
       filesWritten++;
     }
+
+    // Release all tar and decompressed buffer references before verification
+    decompressed = null;
+    validFiles.length = 0;
 
     self.postMessage({
       type: 'PROGRESS',
