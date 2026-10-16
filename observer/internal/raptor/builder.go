@@ -208,6 +208,21 @@ func CompileTimetable(ds *gtfs.Dataset, anchorDate time.Time) (*CompiledTimetabl
 			TripCount:        uint16(len(candList)),
 			StopCount:        uint16(len(stopIDStrs)),
 		}
+		// 1B-Go: Mark bus routes (GTFS route_type 3) via bit 15 of TripCount
+		if gtfsRoute, ok := ds.Routes[key.RouteID]; ok && gtfsRoute.RouteType == 3 {
+			SetIsBus(&routes[rIdx], true)
+		}
+	}
+
+	// 1B-Go: Mark bus stops (stops served by bus routes) via bit 15 of RouteCount.
+	// A stop is a bus stop if ANY serving route is a bus.
+	for sIdx, routeIndices := range stopToServingRoutes {
+		for _, rIdx := range routeIndices {
+			if IsBus(routes[rIdx]) {
+				SetIsBusStop(&stops[sIdx], true)
+				break
+			}
+		}
 	}
 
 	// 5. Build Stop-Routes Inverted Index
