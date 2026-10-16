@@ -626,6 +626,13 @@ export function TripPlanner({
       let fewestTransfers: RoutingSegment[];
       let lessWalking: RoutingSegment[];
 
+      // 1C gateway: single place where mode flags meet the worker.
+      // All routing goes through here — impossible to forget ROUTING_FLAG_ALLOW_BUS.
+      const routeProfile = (originIdx: number, destIdx: number, departureSec: number) =>
+        executeDualProfileRouting(worker, originIdx, destIdx, departureSec, {
+          baseFlags: includeBus ? ROUTING_FLAG_ALLOW_BUS : 0,
+        });
+
       if (includeBike) {
         // Bike-share enabled: dual RAPTOR — compare walk vs bike access honestly
         setBikeComparison(null);
@@ -644,9 +651,8 @@ export function TripPlanner({
           ]);
 
           // Always run walk routing first (baseline)
-          const walkResult = await executeDualProfileRouting(
-            worker, getTimetableIndex(selectedOrigin), getTimetableIndex(selectedDest), depSec,
-            { baseFlags: includeBus ? ROUTING_FLAG_ALLOW_BUS : 0 }
+          const walkResult = await routeProfile(
+            getTimetableIndex(selectedOrigin), getTimetableIndex(selectedDest), depSec
           );
 
           if (stopsRes.ok && bikeData?.stations) {
@@ -705,8 +711,7 @@ export function TripPlanner({
               const bikeStopIdNum = typeof best.stopId === 'string' ? parseInt(best.stopId) : best.stopId;
               const bikeStopItem = stopsMap.get(bikeStopIdNum);
               const bikeTimetableIdx = bikeStopItem ? getTimetableIndex(bikeStopItem) : bikeStopIdNum;
-              const bikeResult = await executeDualProfileRouting(
-                worker,
+              const bikeResult = await routeProfile(
                 bikeTimetableIdx,
                 getTimetableIndex(selectedDest),
                 bikeDepSec
@@ -752,14 +757,13 @@ export function TripPlanner({
           }
         } catch (bikeErr) {
           console.warn('[Bike] Routing failed, falling back to transit-only:', bikeErr);
-          ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
-            worker, getTimetableIndex(selectedOrigin), getTimetableIndex(selectedDest), depSec
+          ({ fastest, fewestTransfers, lessWalking } = await routeProfile(
+            getTimetableIndex(selectedOrigin), getTimetableIndex(selectedDest), depSec
           ));
         }
       } else {
         setBikeComparison(null);
-        ({ fastest, fewestTransfers, lessWalking } = await executeDualProfileRouting(
-          worker,
+        ({ fastest, fewestTransfers, lessWalking } = await routeProfile(
           getTimetableIndex(selectedOrigin),
           getTimetableIndex(selectedDest),
           depSec
