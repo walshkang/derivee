@@ -37,7 +37,7 @@ func ComputeStochasticWeights(routes []Route, trips []Trip, stopTimes []StopTime
 		}
 
 		tripStart := route.TripsOffset
-		tripEnd := tripStart + uint32(route.TripCount)
+		tripEnd := tripStart + uint32(route.TripCountValue())
 
 		for tIdx := tripStart; tIdx < tripEnd; tIdx++ {
 			trip := trips[tIdx]

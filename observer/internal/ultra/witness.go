@@ -53,7 +53,7 @@ func BuildCompactTimetable(tt *raptor.CompiledTimetable) *CompactTimetable {
 	routeTripCounts := make([]uint16, len(tt.Routes))
 	for r, route := range tt.Routes {
 		routeTripOffsets[r] = route.TripsOffset
-		routeTripCounts[r] = route.TripCount
+		routeTripCounts[r] = route.TripCountValue()
 	}
 
 	return &CompactTimetable{
@@ -80,13 +80,13 @@ func (we *WitnessEngine) EvaluateWitnessDominance(
 	}
 
 	uStop := rawTT.Stops[u]
-	if uStop.RouteCount == 0 {
+	if uStop.RouteCountValue() == 0 {
 		return false
 	}
 
 	// Find common routes serving both stop u and stop v
 	uRoutesStart := uStop.RoutesOffset
-	uRoutesEnd := uRoutesStart + uint32(uStop.RouteCount)
+	uRoutesEnd := uRoutesStart + uint32(uStop.RouteCountValue())
 
 	for rIdx := uRoutesStart; rIdx < uRoutesEnd && rIdx < uint32(len(rawTT.StopRoutes)); rIdx++ {
 		routeID := rawTT.StopRoutes[rIdx]
@@ -115,7 +115,7 @@ func (we *WitnessEngine) EvaluateWitnessDominance(
 		if uSeq != -1 && vSeq != -1 && vSeq > uSeq {
 			// Check trip durations on this route
 			tripsStart := route.TripsOffset
-			tripsEnd := tripsStart + uint32(route.TripCount)
+			tripsEnd := tripsStart + uint32(route.TripCountValue())
 
 			dominantTrips := 0
 			totalSampled := 0
