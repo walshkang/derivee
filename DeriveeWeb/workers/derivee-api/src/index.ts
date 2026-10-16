@@ -169,8 +169,10 @@ export default {
     // 3.5 Pack info route: GET /api/pack-info
     if (url.pathname === '/api/pack-info' && request.method === 'GET') {
       const city = url.searchParams.get('city') || 'nyc';
-      const packKey = `city-${city}.pack.zst`;
-      const versionKey = `city-${city}.version.json`;
+      // TEMP 1C TEST: default to v8. Revert after iPhone test.
+      const v = url.searchParams.get('v') || '8';
+      const packKey = `city-${city}-v${v}.pack.zst`;
+      const versionKey = `city-${city}-v${v}.version.json`;
 
       // Read pack object metadata without downloading pack body
       const packObj = await env.PACK.head(packKey);
@@ -243,8 +245,12 @@ export default {
         }
       }
 
+      // Optional version pin: ?v=7 serves city-nyc-v7.pack.zst (webPack fork).
+      // Without it, serves the legacy city-nyc.pack.zst (iOS stays on v6).
+      // TEMP 1C TEST: default to v8 (bus pack). Revert after iPhone test.
       const city = url.searchParams.get('city') || 'nyc';
-      const key = `city-${city}.pack.zst`;
+      const v = url.searchParams.get('v');
+      const key = v ? `city-${city}-v${v}.pack.zst` : `city-${city}-v8.pack.zst`;
 
       // Fetch pack object from R2
       const obj = await env.PACK.get(key);

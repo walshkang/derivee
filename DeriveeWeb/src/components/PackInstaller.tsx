@@ -400,7 +400,7 @@ export function PackInstaller({
       worker.postMessage({
         type: 'START_INSTALL',
         slug: 'nyc',
-        packUrl: '/api/pack',
+        packUrl: '/api/pack?v=8',
         expectedVersion: remoteVersion,
       });
     } catch (err) {
