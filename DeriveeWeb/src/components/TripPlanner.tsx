@@ -397,7 +397,7 @@ export function TripPlanner({
     installer.postMessage({
       type: 'START_INSTALL',
       slug: targetSlug,
-      packUrl: targetSlug === 'nyc' ? '/api/pack' : `/api/pack?city=${encodeURIComponent(targetSlug)}`,
+      packUrl: targetSlug === 'nyc' ? '/api/pack?v=8' : `/api/pack?city=${encodeURIComponent(targetSlug)}`,
     });
   };
 
