@@ -14,10 +14,11 @@ import {
   ROUTING_FLAG_NONE,
   ROUTING_FLAG_AVOID_TRANSFERS,
   ROUTING_FLAG_MINIMIZE_WALKING,
+  ROUTING_FLAG_ALLOW_BUS,
 } from '../types/routing.ts';
 
 
-export { ROUTING_FLAG_NONE, ROUTING_FLAG_AVOID_TRANSFERS, ROUTING_FLAG_MINIMIZE_WALKING };
+export { ROUTING_FLAG_NONE, ROUTING_FLAG_AVOID_TRANSFERS, ROUTING_FLAG_MINIMIZE_WALKING, ROUTING_FLAG_ALLOW_BUS };
 export const TRIP_TRANSFER = 0xFFFFFFFF;
 export const ROUTE_TRANSFER = 0xFFFF;
 
@@ -204,19 +205,22 @@ export function computeJourneySegments(
   departureTimestamp: number,
   flags: number = ROUTING_FLAG_NONE
 ): RoutingSegment[] {
-  // QueryParams struct: origin(4) + dest(4) + dep(4) + max_transfers(2) + flags(2) = 16 bytes
-  const qPtr = wasm._malloc(16);
+  // QueryParams struct: origin(4) + dest(4) + dep(4) + max_transfers(2) + flags(2)
+  //   + bus_penalty(2) + subway_penalty(2) = 20 bytes (1B-Cpp)
+  const qPtr = wasm._malloc(20);
   if (!qPtr) {
-    throw new Error('Failed to allocate 16 bytes for QueryParams');
+    throw new Error('Failed to allocate 20 bytes for QueryParams');
   }
 
   try {
-    const qDv = new DataView(wasm.HEAPU8.buffer, qPtr, 16);
+    const qDv = new DataView(wasm.HEAPU8.buffer, qPtr, 20);
     qDv.setUint32(0, originStopId, true);
     qDv.setUint32(4, destStopId, true);
     qDv.setUint32(8, departureTimestamp, true);
     qDv.setUint16(12, 4, true); // max_transfers: 4
-    qDv.setUint16(14, flags, true); // flags: 0 (Fastest) or 2 (Fewest Transfers)
+    qDv.setUint16(14, flags, true); // flags
+    qDv.setUint16(16, 360, true); // bus_boarding_penalty_sec
+    qDv.setUint16(18, 120, true); // subway_boarding_penalty_sec
 
 
     const resPtr = wasm._engine_compute_journey(enginePtr, qPtr);

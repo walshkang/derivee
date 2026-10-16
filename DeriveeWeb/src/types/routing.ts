@@ -37,6 +37,7 @@ export type RoutingProfile = 'fastest' | 'fewest_transfers' | 'less_walking';
 export const ROUTING_FLAG_NONE = 0;
 export const ROUTING_FLAG_AVOID_TRANSFERS = 2; // 1 << 1
 export const ROUTING_FLAG_MINIMIZE_WALKING = 4; // 1 << 2
+export const ROUTING_FLAG_ALLOW_BUS = 8; // 1 << 3 (1B-Cpp)
 
 export interface RankedItinerary {
   id: string;
