@@ -262,6 +262,7 @@ export async function executeDualProfileRouting(
   options?: {
     timeoutMs?: number;
     onProgress?: (stage: RoutingProfile) => void;
+    baseFlags?: number; // 1C: OR'd into all profile queries (e.g., ROUTING_FLAG_ALLOW_BUS)
   }
 ): Promise<{
   fastest: RoutingSegment[];
@@ -334,10 +335,11 @@ export async function executeDualProfileRouting(
   // Each has its own queryId for message routing. Total time = max(query times),
   // not sum — fixes the watchdog timeout risk of sequential queries.
   options?.onProgress?.('fastest');
+  const baseFlags = options?.baseFlags ?? 0;
   const [fastest, fewestTransfers, lessWalking] = await Promise.all([
-    runSingleQuery('fastest', ROUTING_FLAG_NONE, 'query-fastest'),
-    runSingleQuery('fewest_transfers', ROUTING_FLAG_AVOID_TRANSFERS, 'query-transfers'),
-    runSingleQuery('less_walking', ROUTING_FLAG_MINIMIZE_WALKING, 'query-walking'),
+    runSingleQuery('fastest', ROUTING_FLAG_NONE | baseFlags, 'query-fastest'),
+    runSingleQuery('fewest_transfers', ROUTING_FLAG_AVOID_TRANSFERS | baseFlags, 'query-transfers'),
+    runSingleQuery('less_walking', ROUTING_FLAG_MINIMIZE_WALKING | baseFlags, 'query-walking'),
   ]);
 
   return { fastest, fewestTransfers, lessWalking };

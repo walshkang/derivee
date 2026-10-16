@@ -15,6 +15,7 @@ import {
   createRankedItinerary,
   computeDepartureSeconds,
 } from '../utils/routeComparison';
+import { ROUTING_FLAG_ALLOW_BUS } from '../types/routing';
 import { RoutingQueryWatchdog } from '../utils/tabSuspension';
 import { createRoutesMap } from '../utils/routeBadge';
 import { CityPicker } from './CityPicker';
@@ -85,6 +86,7 @@ export function TripPlanner({
   const [originPlaces, setOriginPlaces] = useState<GeocodedPlace[]>([]);
   const [destPlaces, setDestPlaces] = useState<GeocodedPlace[]>([]);
   const [includeBike, setIncludeBike] = useState<boolean>(false);
+  const [includeBus, setIncludeBus] = useState<boolean>(false); // 1C: bus toggle (default OFF)
   const [bikeComparison, setBikeComparison] = useState<{
     bikeStationName: string;
     bikeAccessMin: number;
@@ -643,7 +645,8 @@ export function TripPlanner({
 
           // Always run walk routing first (baseline)
           const walkResult = await executeDualProfileRouting(
-            worker, getTimetableIndex(selectedOrigin), getTimetableIndex(selectedDest), depSec
+            worker, getTimetableIndex(selectedOrigin), getTimetableIndex(selectedDest), depSec,
+            { baseFlags: includeBus ? ROUTING_FLAG_ALLOW_BUS : 0 }
           );
 
           if (stopsRes.ok && bikeData?.stations) {
@@ -842,8 +845,13 @@ export function TripPlanner({
         <button type="button" class="mode-pill mode-pill-active" disabled>
           🚇 Subway
         </button>
-        <button type="button" class="mode-pill mode-pill-disabled" title="Coming soon" disabled>
-          🚌 Bus
+        <button
+          type="button"
+          class={`mode-pill ${includeBus ? 'mode-pill-active' : ''}`}
+          title="Include buses (Beta: scheduled times)"
+          onClick={() => setIncludeBus(!includeBus)}
+        >
+          🚌 Bus{includeBus ? ' ✓' : ''} <span class="beta-label">Beta</span>
         </button>
         <button
           type="button"
